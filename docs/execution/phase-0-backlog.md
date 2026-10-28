@@ -1,6 +1,6 @@
 # Phase 0 — Réduction des risques : backlog d'exécution
 
-Statut : proposition, 28/10/2026, à valider par le mainteneur. Aucun ticket n'est démarré.
+Statut : approuvé comme base d'exécution par le mainteneur le 28/10/2026 (attestation A-00 de [phase-0-decisions.md](phase-0-decisions.md)). Cette approbation ne tranche aucune décision D-xx et ne déclare aucun ticket terminé.
 Source de vérité : [plan.md](../plan.md) v3.2 (§10 Phase 0, §6.3, §6.4, §7.2, §9.2, §3, §16, §17). [specifications.md](../specifications.md) n'est qu'un historique.
 Sprint 1 : [sprint-01.md](sprint-01.md).
 
@@ -12,15 +12,15 @@ Ce document **planifie** la phase 0. Il ne contient aucun résultat de spike, d'
 
 | Id | Hypothèse | Statut | Conséquence si fausse |
 |---|---|---|---|
-| H-P1 | Une seule personne réalise l'essentiel du travail technique et toute la recherche humaine : le mainteneur, aidé d'un agent de code pour les rédactions et les prototypes | Hypothèse, à confirmer (GOV-05) | Répartir les tickets par rôle, recalculer le sprint |
+| H-P1 | Une seule personne réalise l'essentiel du travail technique et toute la recherche humaine : le mainteneur, aidé d'un agent de code pour les rédactions et les prototypes | Confirmée par D-05 (registre) : aucun autre contributeur | Répartir les tickets par rôle, recalculer le sprint |
 | H-P2 | Les timebox du plan (S1 3 j, S4 3 j, S2a 1 j) sont des **jours-personne de travail focalisé**, pas des jours calendaires | Interprétation du plan | Revoir le calendrier, pas le contenu |
-| H-P3 | Les estimations hors spikes sont des ordres de grandeur en jours-personne (j-p), non calibrés sur une vélocité observée (aucun historique : un seul commit) | Hypothèse | Réestimer à la fin du sprint 1 |
+| H-P3 | Les estimations hors spikes sont des ordres de grandeur en jours-personne (j-p), non calibrés sur une vélocité observée (aucune vélocité observée) | Hypothèse | Réestimer à la fin du sprint 1 |
 | H-P4 | Le temps calendaire de la recherche utilisateur (recrutement, disponibilités) est **inconnu** et ne dépend pas du mainteneur | Fait | La recherche est probablement le chemin critique calendaire (§5) |
 | H-P5 | Un spike qui atteint sa timebox s'arrête ; les inconnues restantes sont documentées « non mesuré » et le mainteneur décide explicitement d'une extension ou d'une conclusion partielle. Clore le ticket ne satisfait pas une porte qui exige cette mesure | Règle de travail proposée | — |
 | H-P6 | Les artefacts destinés au futur dépôt public (ADR, README, CONTRIBUTING, workflow) sont rédigés **en anglais** (§2 « Dépôt public en anglais ») ; les notes de travail (spikes, exécution, recherche) restent en français comme le plan (en-tête du plan, §16) | Interprétation | Traduire les notes au passage en public |
 | H-P7 | Les données personnelles de la recherche (noms, contacts, consentements, notes brutes, enregistrements) restent **hors du dépôt** (§2 « contenu personnel hors du dépôt ») ; le dépôt ne reçoit que des synthèses anonymisées | Règle | — |
 | H-P8 | Environnement local observé le 28/10/2026 : SDK .NET 9.0.305, 10.0.102, 10.0.201 ; `docker`, `claude`, `codex` présents dans le `PATH`. Rien n'est encore vérifié au-delà de leur présence | Observation | S1-01 et S4-01 épinglent les versions réellement utilisées |
-| H-P9 | Le remote `origin` (`github.com/toregua/hardslice`) est **public** et vide (aucune branche publiée), alors que le plan prévoit un dépôt privé jusqu'à la sortie de 1B. Aucune décision explicite du mainteneur sur cet écart n'est consignée | Observation ; décision ouverte D-01 (GOV-01) | Aucun push avant D-01 ; si le dépôt reste public, aligner le plan et traiter les conséquences sur le contenu publié (D-16, H-P7) |
+| H-P9 | Le remote `origin` (`github.com/toregua/hardslice`) est **public** et vide (aucune branche publiée), alors que le plan prévoit un dépôt privé jusqu'à la sortie de 1B. À la rédaction du backlog, aucune décision sur cet écart n'était consignée | Observation ; D-01 `DECIDED` (option (a), dépôt privé avant le premier push) ; visibilité effective encore publique ; D-16 `DEFERRED` (registre) | Aucun push avant que la visibilité privée effective du remote soit attestée ; porte D-16 avant tout passage public (H-P7) |
 
 ### Conventions d'artefacts
 
@@ -28,14 +28,15 @@ Ce document **planifie** la phase 0. Il ne contient aucun résultat de spike, d'
 |---|---|
 | Journal des décisions humaines de la phase 0 | `docs/execution/phase-0-decisions.md` |
 | Notes de spike (protocole, mesures, conclusion) | `docs/spikes/s1-roslyn.md`, `docs/spikes/s4-runner.md`, `docs/spikes/s2a-conventions.md` |
-| Code jetable et données brutes des spikes | `spikes/s1-roslyn/`, `spikes/s4-runner/`, `spikes/s2a-conventions/` (sous-dossier `results/` horodaté par exécution) |
+| Code jetable des spikes, fiches et extraits normalisés | `spikes/s1-roslyn/`, `spikes/s4-runner/`, `spikes/s2a-conventions/` ; fiches dans `results/<RUN_ID>/` |
+| Sorties brutes des spikes (logs, `.exit`, binlogs, SARIF, CSV, transcriptions, captures brutes, clones) | **Exclusivement** sous `$HS_ART/<RUN_ID>/`, hors git, référencées par SHA-256 dans un manifeste privé (D-10-A1) |
 | Recherche (versions anonymisées) | `docs/research/persona.md`, `docs/research/interview-guide.md`, `docs/research/interviews-synthesis.md`, `docs/research/outreach-log.md` |
 | Énoncés des tâches du pilote | `bench/tasks/pilot-v1/T1.md`, `bench/tasks/pilot-v1/T2.md`, justification séparée `bench/tasks/pilot-v1/RATIONALE.md` |
 | ADR | `docs/adr/0001-*.md` à `docs/adr/0005-*.md` |
 | Plan de découpage documentaire | `docs/execution/doc-split-plan.md` |
 | Revue de la porte de sortie | `docs/execution/phase-0-exit-review.md` |
 
-Chaque mesure consignée porte : date, machine ou runner, versions (SDK, Roslyn, agent, modèle), SHA du commit, commande exacte, fichier de sortie brut. Les fichiers volumineux (binlogs, transcriptions complètes) peuvent rester hors git si leur empreinte SHA-256 et leur emplacement sont notés (décision D-10).
+Chaque mesure consignée porte : date, machine ou runner, versions (SDK, Roslyn, agent, modèle), SHA du commit, commande exacte, référence (SHA-256) de la sortie brute. `<RUN_ID>` est l'identifiant immuable d'une tentative de série, jamais réutilisé (format dans le protocole S1). Depuis D-10 et son amendement D-10-A1 (registre), **toute sortie brute reste hors git** quelle que soit sa taille (binlogs, logs complets, SARIF, CSV, sorties MSBuild, transcriptions) ; elle est référencée par son SHA-256 dans un manifeste privé. Les chemins de preuve `results/<RUN_ID>/…` de ce backlog désignent exclusivement des fiches et extraits normalisés ; toute mention de logs, binlogs, CSV, SARIF, transcriptions ou captures brutes renvoie à `$HS_ART/<RUN_ID>/`. Un clone externe est identifié par URL, SHA et worktree propre.
 
 ### Règles d'intégrité des preuves
 
@@ -146,7 +147,7 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Périmètre** : sept questions expérimentales, Q1 à Q7, correspondant respectivement aux tickets S1-02 à S1-08 : détection dans une compilation, inter-assemblies, IDE/CLI, packaging et précédence, performance, exposition, frontière analyseur/`check`. S1-09 synthétise ces réponses ; ce n'est pas une huitième question. Le protocole précise pour chaque question la méthode, les mesures, les budgets cibles du §6.4 et l'artefact. Il épingle aussi les versions (SDK, `Microsoft.CodeAnalysis.CSharp` aligné sur le SDK 10.0.1xx, annexe A.3), la machine, la **grosse solution OSS** et les dépôts en slices de calibration. **Hors périmètre** : écrire l'analyseur de production.
 - **Étapes** : 1. lister Q1–Q7 et, pour chacune, la mesure, la commande, le budget et l'artefact ; 2. présélectionner les solutions et vérifier qu'elles compilent ; 3. épingler les versions ; 4. soumettre le choix au mainteneur.
 - **Critères d'acceptation** : chaque question a une méthode, une commande et un artefact attendu ; les solutions retenues compilent avec le SDK épinglé (log de build joint) ; le critère « grosse » est fixé avant mesure ; D-06 et D-07 consignées.
-- **Preuves** : `docs/spikes/s1-roslyn.md#protocole`, `spikes/s1-roslyn/results/<date>/build-baseline.log`.
+- **Preuves** : `docs/spikes/s1-roslyn.md#protocole`, fiche normalisée `spikes/s1-roslyn/results/<RUN_ID>/build-baseline.md` ; log brut sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : grosse solution non compilable en .NET 10 (R-11) ; critère « grosse » fixé après coup.
 - **Porte** : préalable à S1-02..S1-09.
 
@@ -157,7 +158,7 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Périmètre** : détection dans un même assembly ; table « forme → détecté / non détecté / faux positif / crash AD0001 ». **Hors périmètre** : message de diagnostic exemplaire (1A), fiches, tests complets de la matrice §6.5 (1A).
 - **Étapes** : 1. créer la fixture ; 2. écrire le prototype ; 3. exécuter `dotnet build` sur la fixture ; 4. remplir la table avec les diagnostics observés ; 5. noter chaque écart.
 - **Critères d'acceptation** : chaque forme listée a un résultat observé et la sortie de build correspondante ; tout faux positif ou crash est consigné, pas corrigé silencieusement ; les opérations ou symboles qui ne permettent pas la détection sont nommés.
-- **Preuves** : `spikes/s1-roslyn/` (prototype, fixture), `spikes/s1-roslyn/results/<date>/forms.md`, logs de build.
+- **Preuves** : `spikes/s1-roslyn/` (prototype, fixture), `spikes/s1-roslyn/results/<RUN_ID>/forms.md` ; logs de build bruts sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : forme non couverte par une action par opération (R-02) ; temps passé à polir le prototype.
 - **Porte** : alimente le no-go technique « faux positif connu » (S1-09).
 
@@ -168,7 +169,7 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Périmètre** : `ProjectReference` et `PackageReference` vers un assembly compilé. **Hors périmètre** : multi-targeting (1B).
 - **Étapes** : 1. fixture ; 2. build CLI ; 3. table des résultats ; 4. noter les informations perdues entre source et métadonnées (namespace, partiels, attributs).
 - **Critères d'acceptation** : la table indique pour chaque configuration détecté / non détecté avec le log de build ; toute dépendance à une information indisponible en métadonnées est nommée.
-- **Preuves** : `spikes/s1-roslyn/results/<date>/cross-assembly.md`, logs.
+- **Preuves** : `spikes/s1-roslyn/results/<RUN_ID>/cross-assembly.md` ; logs bruts sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : classification qui exige la vue de la solution → bascule vers `check` (S1-08).
 - **Porte** : Q2 de S1-09.
 
@@ -178,8 +179,8 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Résultat attendu** : comparaison IDE / `dotnet build` / `dotnet build -warnaserror` : présence du diagnostic, ID, emplacement, sévérité, délai d'apparition observé, rechargement après modification de la configuration, analyseur chargé depuis le paquet (pas depuis une `ProjectReference`).
 - **Périmètre** : l'IDE retenu par D-07 (candidat par défaut : VS Code + C# Dev Kit, à confirmer) et la CLI. **Hors périmètre** : autres IDE, test de latence statistique (S1-06).
 - **Étapes** : 1. installer le paquet local dans la fixture ; 2. ouvrir dans l'IDE ; 3. introduire puis retirer une violation ; 4. changer le niveau d'analyse ; 5. capturer.
-- **Critères d'acceptation** : pour chaque scénario, résultat IDE et CLI côte à côte, avec captures d'écran datées et logs ; versions de l'IDE et de l'extension notées ; divergences listées.
-- **Preuves** : `spikes/s1-roslyn/results/<date>/ide-cli.md`, captures `ide-*.png`.
+- **Critères d'acceptation** : pour chaque scénario, résultat IDE et CLI côte à côte, avec captures d'écran datées et logs (bruts sous `$HS_ART/<RUN_ID>/`) ; versions de l'IDE et de l'extension notées ; divergences listées.
+- **Preuves** : `spikes/s1-roslyn/results/<RUN_ID>/ide-cli.md` ; captures brutes sous `$HS_ART/<RUN_ID>/`, extraits recadrés et contrôlés seulement s'ils sont nécessaires.
 - **Risques** : cache d'analyseurs de l'IDE qui masque un changement ; IDE non représentatif du persona.
 - **Porte** : Q3 de S1-09.
 
@@ -190,7 +191,7 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Périmètre** : cas (a) sans propriété : warning ; (b) niveau 1 : erreur ; (c) `.globalconfig` utilisateur qui rétrograde ; (d) `.editorconfig` utilisateur qui rétrograde ; (e) `-warnaserror` ; (f) `-nowarn` ; (g) niveau inconnu ; (h) propriété définie hors racine. Pour chaque cas : comportement **attendu par le plan** et comportement **observé**. **Hors périmètre** : détection par `verify` (phase 4), publication nuget.org (1B).
 - **Étapes** : 1. structurer le paquet (`build`/`buildTransitive`) ; 2. `dotnet pack` vers un flux local ; 3. exécuter les huit cas ; 4. remplir la table.
 - **Critères d'acceptation** : les huit cas ont un résultat observé et un log ; tout écart avec le §6.3 est signalé comme écart, pas réinterprété ; la commande de pack et la structure du paquet sont reproductibles depuis le README du spike.
-- **Preuves** : `spikes/s1-roslyn/results/<date>/globalconfig-precedence.md`, `.nupkg` du spike (empreinte notée), logs.
+- **Preuves** : `spikes/s1-roslyn/results/<RUN_ID>/globalconfig-precedence.md` (SHA-256 du `.nupkg`) ; `.nupkg` et logs bruts sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : comportement différent entre IDE et CLI (croisé avec S1-04).
 - **Porte** : décision « packaging du `.globalconfig` » (§17) dans S1-09.
 
@@ -201,7 +202,7 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Périmètre** : la grosse solution OSS de S1-01, avec une configuration de classification qui exerce le chemin de détection (à documenter, car une solution non organisée en slices ne déclenche pas forcément le code coûteux). **Hors périmètre** : `check` sur la mini-application (≤ 30 s à chaud, ≤ 90 s à froid) : **non mesurable en phase 0**, la mini-application n'existe qu'en 1A ; ce budget est noté « reporté en 1A ».
 - **Étapes** : 1. build de référence sans analyseur HS ; 2. build avec `ReportAnalyzer` et binlog ; 3. benchmark dédié ; 4. table mesure / budget / verdict.
 - **Critères d'acceptation** : les deux mesures de phase 0 sont présentes avec leur commande, la machine et les versions ; verdict « respecté » ou « non respecté » par budget. Si leur exécution est impossible dans la timebox, « non mesuré » est consigné avec sa cause, mais S1-09 ne peut pas ouvrir la porte de phase 0. Le budget `check` porte explicitement la mention « reporté en 1A » puisqu'il n'est pas mesurable avant la mini-application.
-- **Preuves** : `spikes/s1-roslyn/results/<date>/perf.md`, CSV du benchmark, binlog (ou empreinte et emplacement si hors git).
+- **Preuves** : `spikes/s1-roslyn/results/<RUN_ID>/perf.md` ; CSV et binlogs bruts exclusivement sous `$HS_ART/<RUN_ID>/`, référencés par SHA-256.
 - **Risques** : bruit de mesure sur poste personnel ; configuration de classification peu représentative.
 - **Porte** : no-go technique « dans les budgets » (S1-09).
 
@@ -212,7 +213,7 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Périmètre** : première calibration. **Hors périmètre** : corpus externe sur ≥ 2 solutions (1B).
 - **Étapes** : 1. instrumenter le prototype ; 2. exécuter ; 3. trier ; 4. rédiger la proposition de seuil.
 - **Critères d'acceptation** : nombres bruts publiés par dépôt ; chaque diagnostic trié avec justification ; la proposition de seuil cite les nombres observés.
-- **Preuves** : `spikes/s1-roslyn/results/<date>/exposure.md`, liste de triage.
+- **Preuves** : `spikes/s1-roslyn/results/<RUN_ID>/exposure.md`, table de triage ; CSV brut sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : dépôt en slices trop petit pour être informatif ; classification de namespace mal configurée qui gonfle les opportunités.
 - **Porte** : décision « seuil d'exposition HS016 » (§17).
 
@@ -265,7 +266,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Périmètre** : image, lancement, un run trivial. **Hors périmètre** : runner `bench/run` durci (phase 2), Codex.
 - **Étapes** : 1. écrire et faire valider le protocole, les questions, mesures obligatoires et l'allocation des 3 jours ; 2. écrire le Dockerfile et le script ; 3. exécuter le run trivial ; 4. noter digest d'image et versions.
 - **Critères d'acceptation** : le protocole est validé avant le premier run payant ; deux constructions successives produisent le même environnement déclaré (versions affichées identiques) ; le run trivial se termine avec code de sortie 0 ; la clé n'apparaît ni dans l'image (`docker history`) ni dans les logs.
-- **Preuves** : `docs/spikes/s4-runner.md#protocole`, `spikes/s4-runner/Dockerfile`, `spikes/s4-runner/results/<date>/run-00-trivial/` (log, versions, digest).
+- **Preuves** : `docs/spikes/s4-runner.md#protocole`, `spikes/s4-runner/Dockerfile`, fiche normalisée `spikes/s4-runner/results/<RUN_ID>/run-00-trivial.md` (versions, digest) ; log brut sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : authentification impossible sans interaction ; fuite de secret.
 - **Porte** : préalable à S4-02..S4-06.
 
@@ -276,7 +277,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Périmètre** : sources de configuration de Claude Code. **Hors périmètre** : Codex.
 - **Étapes** : 1. inventaire du conteneur avant run ; 2. run avec un marqueur dans une configuration utilisateur **volontairement plantée** pour vérifier qu'elle est ignorée ; 3. inspection de la transcription ou du log de débogage.
 - **Critères d'acceptation** : le marqueur utilisateur planté n'apparaît pas dans la transcription ni dans les effets ; l'inventaire et la commande exacte sont publiés ; `--bare` n'est pas utilisé.
-- **Preuves** : `spikes/s4-runner/results/<date>/run-01-isolation/`.
+- **Preuves** : fiche normalisée `spikes/s4-runner/results/<RUN_ID>/run-01-isolation.md` ; inventaire et transcription bruts sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : source de configuration non documentée chargée quand même.
 - **Porte** : exigence d'isolation §9.2.
 
@@ -286,7 +287,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Résultat attendu** : fixture `spikes/s4-runner/fixture/` avec `.claude/settings.json` déclarant un hook sonde qui écrit un marqueur, et `.claude/skills/probe/SKILL.md` ; preuve que les deux sont chargés en `-p`.
 - **Périmètre** : chargement des hooks et skills du projet. **Hors périmètre** : les 2 skills du produit (phase 2).
 - **Critères d'acceptation** : le fichier marqueur du hook existe après le run ; la transcription montre l'usage ou la découverte de la skill sonde ; la commande exacte est publiée.
-- **Preuves** : `spikes/s4-runner/results/<date>/run-02-hooks-skills/`.
+- **Preuves** : fiche normalisée `spikes/s4-runner/results/<RUN_ID>/run-02-hooks-skills.md` ; transcription brute sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : confiance du projet requise de façon interactive.
 - **Porte** : exigence §10 « avec hooks et skills du projet actifs ».
 
@@ -297,7 +298,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Périmètre** : déclenchement, blocage, reprise, champ `stop_hook_active` observé, durée du hook ; observation du comportement quand le hook dépasse son timeout configuré. **Hors périmètre** : garde anti-boucle HardSlice à 5 (phase 2), `dotnet hardslice check`.
 - **Étapes** : 1. fixture ; 2. script de hook journalisé ; 3. run ; 4. variante timeout ; 5. extraction des événements.
 - **Critères d'acceptation** : le journal du hook montre au moins un blocage suivi d'une reprise de l'agent et d'un arrêt autorisé, horodatés ; ou, si le hook ne se déclenche pas, ce résultat est consigné tel quel avec la commande et la version ; le comportement de timeout est décrit d'après observation.
-- **Preuves** : `spikes/s4-runner/results/<date>/run-03-stop-hook/` (transcription, journal du hook).
+- **Preuves** : fiche normalisée `spikes/s4-runner/results/<RUN_ID>/run-03-stop-hook.md` ; transcription et journal du hook bruts sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : Stop non déclenché en `-p` (R-03) : remet en cause le bras B/C tel que défini et doit remonter en décision.
 - **Porte** : question explicite du §10 ; entrée de S4-08.
 
@@ -307,7 +308,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Résultat attendu** : script qui produit `run-metrics.json` par run : temps mur, tokens d'entrée, de sortie, de lecture et d'écriture de cache, coût rapporté par l'outil s'il existe, coût recalculé selon une grille de prix datée et sourcée, nombre et liste des appels d'outils, code de sortie, événements du hook.
 - **Périmètre** : extraction depuis la sortie structurée de l'agent (format candidat à vérifier) et depuis le chronométrage du lanceur. **Hors périmètre** : métriques du holdout (phase 3), `temps_diagnostic_vers_vert` (exige HS016 réelle).
 - **Critères d'acceptation** : sur les runs S4-01..S4-04, chaque champ est rempli ou marqué « indisponible » avec la raison ; le coût recalculé et le coût rapporté (s'il existe) sont comparés et l'écart publié ; la grille de prix porte sa date et sa source.
-- **Preuves** : `spikes/s4-runner/metrics/`, `spikes/s4-runner/results/<date>/*/run-metrics.json`.
+- **Preuves** : `spikes/s4-runner/metrics/` ; `run-metrics.json` normalisés dans `spikes/s4-runner/results/<RUN_ID>/` ; sorties brutes sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : types de tokens non exposés séparément ; coût rapporté non fondé sur la même grille.
 - **Porte** : unité de coût du §9.3.
 
@@ -317,7 +318,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Résultat attendu** : r runs complets (r fixé dans le protocole avant exécution, dans l'enveloppe D-03) de la procédure entière — conteneur neuf, prompt, hook Stop, capture des métriques, copie des sorties hors conteneur — sur une **tâche proxy** de taille comparable à celle visée pour le pilote.
 - **Périmètre** : procédure et mesures. **Hors périmètre** : runs sur les énoncés du pilote (sauf décision contraire D-08), bras C/C− (pas d'analyseur HS016 réel en phase 0), holdout.
 - **Critères d'acceptation** : r runs exécutés ou l'écart justifié ; table par run (temps, tokens par type, coût recalculé, appels d'outils, succès de la procédure) ; médiane, min, max ; toute panne classée externe ou non selon la définition du §9.2.
-- **Preuves** : `spikes/s4-runner/results/<date>/dry-run/`, `dry-run-summary.md`.
+- **Preuves** : `spikes/s4-runner/results/<RUN_ID>/dry-run-summary.md` ; sorties brutes de chaque run sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : proxy non représentatif (R-09) ; contamination si on itère sur les vrais énoncés (R-16).
 - **Porte** : entrée de S4-07.
 
@@ -346,7 +347,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Résultat attendu** : version de Codex CLI épinglée dans l'image ; sortie d'aide de la commande globale et de `exec` archivée ; ordre exact des options validé par exécution ; la candidate du plan `codex -a never -s workspace-write exec --ignore-user-config --dangerously-bypass-hook-trust "<prompt>"` est **confirmée, corrigée ou réfutée** ; commande finale publiée.
 - **Périmètre** : la commande. **Hors périmètre** : adaptateur Codex (phase 2 / E5).
 - **Critères d'acceptation** : chaque option de la commande finale apparaît dans l'aide archivée de la version épinglée ; un run non interactif aboutit sans prompt d'approbation ; les configurations utilisateur plantées sont ignorées. **Avant ce ticket, aucune commande Codex n'est considérée comme validée.**
-- **Preuves** : `spikes/s4-runner/results/<date>/codex-cli/` (aides, commande, log).
+- **Preuves** : `spikes/s4-runner/results/<RUN_ID>/codex-cli.md` (aides et commande normalisées) ; log brut sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : options renommées depuis l'annexe A.1.
 - **Porte** : §9.2 Isolation (Codex).
 
@@ -355,7 +356,7 @@ Les timeboxes indiquées dans les tickets S4-01 à S4-08 sont celles de la varia
 - **Timebox** : 0,5 j, incluse dans la timebox globale S4 de 3 j — **Dépendances** : S4-C1, S4-04 (fixture)
 - **Résultat attendu** : run Codex dans un conteneur neuf, sandbox `workspace-write`, qui modifie un fichier de la fixture ; hook Stop projet déclenché sous `exec`, blocage puis reprise observés, ou absence de déclenchement consignée.
 - **Critères d'acceptation** : `git diff` du worktree non vide et conforme à la demande ; journal du hook horodaté ; métriques capturées par le format de S4-05 ou indisponibilités notées.
-- **Preuves** : `spikes/s4-runner/results/<date>/codex-e2e/`.
+- **Preuves** : fiche normalisée `spikes/s4-runner/results/<RUN_ID>/codex-e2e.md` ; sorties brutes sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : confiance des hooks qui exige une interaction.
 - **Porte** : §10 S4 « E2E d'une modification réelle puis du hook Stop ».
 
@@ -371,7 +372,7 @@ Peut démarrer en parallèle de S1 ; **n'est figé qu'après S1-09** (S2A-05).
 - **Résultat attendu** : table « clé → besoin HS016 qu'elle couvre → type → valeur par défaut éventuelle » limitée au §7.2 : projets du périmètre applicatif ; racine et motif de namespace des slices (`<Root>.Features.<Module>.<Slice>`) ; frontières de namespace explicitement autorisées ; projets exclus ; allowlist protégée des vraies racines générées et des migrations ; version de schéma.
 - **Périmètre** : HS016. **Hors périmètre** : clés HS019 (S3, phase 1B), baseline (S2b), conventions esthétiques (HS004).
 - **Critères d'acceptation** : chaque clé renvoie à un besoin du §7.2 ou du §6.5 ligne 1A ; toute clé candidate écartée est listée avec la raison ; la classification fermée est exprimable (aucun défaut « autorisé » pour un namespace non classifiable).
-- **Preuves** : `docs/spikes/s2a-conventions.md#cles`.
+- **Preuves** : `docs/spikes/s2a-conventions.md#clés`.
 - **Risques** : glissement vers les clés HS019 (R-15).
 - **Porte** : décision §17 « clés minimales ».
 
@@ -398,8 +399,8 @@ Peut démarrer en parallèle de S1 ; **n'est figé qu'après S1-09** (S2A-05).
 - **Timebox** : 0,25 j — **Dépendances** : S2A-02, S2A-03
 - **Résultat attendu** : règles de validation écrites et vérifiées sur le prototype pour : fichier mal formé, clé inconnue, valeur invalide (motif de namespace, projet inexistant), version inconnue, namespace non classifiable dans le périmètre applicatif ; proposition d'identifiant(s) de diagnostic de configuration (décision D-09).
 - **Périmètre** : comportement et proposition d'ID. **Hors périmètre** : messages définitifs et tests complets (1A).
-- **Critères d'acceptation** : table « cas → diagnostic observé sur le prototype » avec logs ; aucun cas ne désactive HS016 sans diagnostic.
-- **Preuves** : `spikes/s2a-conventions/results/<date>/validation.md`.
+- **Critères d'acceptation** : table « cas → diagnostic observé sur le prototype », logs bruts sous `$HS_ART/<RUN_ID>/` ; aucun cas ne désactive HS016 sans diagnostic.
+- **Preuves** : `spikes/s2a-conventions/results/<RUN_ID>/validation.md`.
 - **Risques** : un ID HS alloué trop tôt puis abandonné (un ID n'est jamais réutilisé, §6.3).
 - **Porte** : §6.5 ligne 1A « Configuration invalide ».
 
@@ -796,44 +797,49 @@ Un ticket est terminé quand :
 | R-16 | Contamination des énoncés du pilote par leur usage en développement ou en répétition à blanc | Faible à moyenne / élevé | Tâche proxy distincte (D-08) ; fixtures distinctes (§9.2) | S4-06, TASK-* |
 | R-17 | Absence de gardien du holdout | Inconnue / élevé pour H1 | Démarchage dès la phase 0 ; H2 non bloquée | UXR-08 |
 
-## 10. Décisions encore ouvertes
+## 10. Décisions de la phase 0
 
-| Id | Décision | Décideur | Requise avant | Ticket |
-|---|---|---|---|---|
-| D-01 | Visibilité avant le premier push : rendre le remote privé conformément au plan, ou conserver un dépôt public non annoncé avec approbation explicite et alignement de `plan.md` | Mainteneur | Premier push, REPO-03 | GOV-01 |
-| D-02 | **Budget financier maximal du pilote** et sa couverture — **bloquante, aucun montant proposé** | Mainteneur / financeur | S4-07 (comparaison), EXIT-01 | GOV-02 |
-| D-02b | Les coûts des runs agents de 1A (5 runs) et de phase 2 sont-ils couverts par un budget ? (le plan ne fixe que la comparaison pilote) | Mainteneur | Phase 1A | — (signalé) |
-| D-03 | Enveloppe de dépense de S4 et mode d'authentification en conteneur | Mainteneur | S4-01 | GOV-03 |
-| D-04 | Codex envisagé ou non en phase 0 | Mainteneur | S4-C1 | GOV-04 |
-| D-05 | Capacité, cadence de sprint, contributeurs | Mainteneur | Sprint 1 | GOV-05 |
-| D-06 | Grosse solution OSS de mesure et dépôt(s) en slices de calibration | Mainteneur | S1-02 | S1-01 |
-| D-07 | IDE(s) couvert(s) par S1-04 (candidat : VS Code + C# Dev Kit) | Mainteneur | S1-04 | S1-01 |
-| D-08 | Tâche proxy de la répétition à blanc (recommandation : proxy distinct des énoncés) | Mainteneur | S4-06 | S4-06 |
-| D-09 | Identifiant(s) des diagnostics de configuration | Mainteneur | S2A-05 | S2A-04 |
-| D-10 | Conservation du code de spike dans le dépôt et stockage des artefacts volumineux | Mainteneur | Premier artefact | S1-01, S4-01 |
-| D-11 | Langue des notes de spike (français proposé, H-P6) | Mainteneur | S1-01 | — |
-| D-12 | Politique d'extension de timebox (qui, de combien, combien de fois) | Mainteneur | Premier spike | H-P5 |
-| D-13 | Emplacement hors dépôt des données de recherche et règles de conservation | Mainteneur | Premier contact UXR-03, UXR-07 ou UXR-08 | UXR-02 |
-| D-14 | Épinglage du SDK dans `global.json` (10.0.1xx visé par l'annexe A.3, 10.0.2xx installé localement) et sens d'un build de solution vide | Mainteneur | REPO-02 | REPO-02 |
-| D-15 | Règle de marge pour dériver les plafonds par run des mesures de S4 | Mainteneur | S4-07 | S4-07 |
-| D-16 | Si D-01 retient l'option publique, traitement du contenu personnel du spec v2 (§2), qui deviendrait public au premier push puis resterait dans l'historique selon le §16 | Mainteneur | Premier push public | GOV-01, DOC-02 |
-| D-17 | Relecteurs : énoncés du pilote (TASK-03), ADR (ADR-07) | Mainteneur | TASK-03, ADR-07 | — |
+La colonne « Statut » reflète le registre [phase-0-decisions.md](phase-0-decisions.md) au 28/10/2026 ; **le registre fait foi** et porte le contenu des décisions.
+
+| Id | Décision | Décideur | Requise avant | Ticket | Statut (registre) |
+|---|---|---|---|---|---|
+| D-01 | Visibilité avant le premier push : rendre le remote privé conformément au plan, ou conserver un dépôt public non annoncé avec approbation explicite et alignement de `plan.md` | Mainteneur | Premier push, REPO-03 | GOV-01 | `DECIDED` |
+| D-02 | **Budget financier maximal du pilote** et sa couverture — **bloquante, aucun montant proposé** | Mainteneur / financeur | S4-07 (comparaison), EXIT-01 | GOV-02 | `DEFERRED` |
+| D-02b | Les coûts des runs agents de 1A (5 runs) et de phase 2 sont-ils couverts par un budget ? (le plan ne fixe que la comparaison pilote) | Mainteneur | Phase 1A | — (signalé) | `DEFERRED` |
+| D-03 | Enveloppe de dépense de S4 et mode d'authentification en conteneur | Mainteneur | S4-01 | GOV-03 | `DEFERRED` |
+| D-04 | Codex envisagé ou non en phase 0 | Mainteneur | S4-C1 | GOV-04 | `DECIDED` |
+| D-05 | Capacité, cadence de sprint, contributeurs | Mainteneur | Sprint 1 | GOV-05 | `DECIDED` |
+| D-06 | Grosse solution OSS de mesure et dépôt(s) en slices de calibration | Mainteneur | S1-02 | S1-01 | `DECIDED` |
+| D-07 | IDE(s) couvert(s) par S1-04 (candidat : VS Code + C# Dev Kit) | Mainteneur | S1-04 | S1-01 | `DECIDED` (prérequis PRE-S1-04 `OPEN`) |
+| D-08 | Tâche proxy de la répétition à blanc (recommandation : proxy distinct des énoncés) | Mainteneur | S4-06 | S4-06 | `OPEN` |
+| D-09 | Identifiant(s) des diagnostics de configuration | Mainteneur | S2A-05 | S2A-04 | `OPEN` |
+| D-10 | Conservation du code de spike dans le dépôt et stockage des artefacts volumineux | Mainteneur | Premier artefact | S1-01, S4-01 | `DECIDED`, amendée par D-10-A1 |
+| D-11 | Langue des notes de spike (français proposé, H-P6) | Mainteneur | S1-01 | — | `DECIDED` |
+| D-12 | Politique d'extension de timebox (qui, de combien, combien de fois) | Mainteneur | Premier spike | H-P5 | `DECIDED` |
+| D-13 | Emplacement hors dépôt des données de recherche et règles de conservation | Mainteneur | Premier contact UXR-03, UXR-07 ou UXR-08 | UXR-02 | `DECIDED` |
+| D-14 | Épinglage du SDK dans `global.json` (10.0.1xx visé par l'annexe A.3, 10.0.2xx installé localement) et sens d'un build de solution vide | Mainteneur | REPO-02 | REPO-02 | `OPEN` |
+| D-15 | Règle de marge pour dériver les plafonds par run des mesures de S4 | Mainteneur | S4-07 | S4-07 | `OPEN` |
+| D-16 | Si D-01 retient l'option publique, traitement du contenu personnel du spec v2 (§2), qui deviendrait public au premier push puis resterait dans l'historique selon le §16 | Mainteneur | Premier push public | GOV-01, DOC-02 | `DEFERRED` (porte avant tout passage public) |
+| D-17 | Relecteurs : énoncés du pilote (TASK-03), ADR (ADR-07) | Mainteneur | TASK-03, ADR-07 | — | `OPEN` |
 
 Décisions du §17 tranchées en phase 0 et leur ticket : frontière analyseur / `check` (S1-08), faisabilité des budgets (S1-06, S1-09), packaging du `.globalconfig` (S1-05), seuil d'exposition HS016 (S1-07) ; isolation du runner, budgets par run, coût du pilote (S4-02, S4-07, S4-08) ; format et clés minimales (S2A-01, S2A-02, S2A-05).
 
-## 11. Inputs humains ou financiers manquants
+## 11. Inputs humains ou financiers
 
-| Id | Input manquant | Bloque |
-|---|---|---|
-| M-01 | Montant du budget maximal du pilote (D-02) | Porte de sortie |
-| M-02 | Enveloppe de dépense et clé d'accès pour S4 (D-03) | S4 entier |
-| M-03 | Capacité réelle en jours-personne et durée de sprint (D-05) | Dimensionnement des sprints |
-| M-04 | Canaux et réseau de recrutement des participants | UXR-03 |
-| M-05 | Candidats design partner | UXR-07 |
-| M-06 | Candidats gardien du holdout | UXR-08 |
-| M-07 | Relecteur(s) indépendant(s) pour les énoncés et les ADR (facultatif pour les ADR) | TASK-03, ADR-07 |
-| M-08 | Machine de référence pour les mesures de performance (poste local ou runner dédié) | S1-06 |
-| M-09 | Disponibilité d'une licence ou d'un IDE représentatif du persona si autre que VS Code | S1-04 |
+La colonne « Statut » reflète le registre [phase-0-decisions.md](phase-0-decisions.md) au 28/10/2026 ; le registre fait foi.
+
+| Id | Input | Bloque | Statut (registre) |
+|---|---|---|---|
+| M-01 | Montant du budget maximal du pilote (D-02) | Porte de sortie | Manquant : D-02 `DEFERRED` jusqu'à la planification du sprint 2 |
+| M-02 | Enveloppe de dépense et clé d'accès pour S4 (D-03) | S4 entier | Manquant : D-03 `DEFERRED` jusqu'à la revue du sprint 2 |
+| M-03 | Capacité réelle en jours-personne et durée de sprint (D-05) | Dimensionnement des sprints | Fourni : D-05 `DECIDED` |
+| M-04 | Canaux et réseau de recrutement des participants | UXR-03 | Manquant |
+| M-05 | Candidats design partner | UXR-07 | Manquant |
+| M-06 | Candidats gardien du holdout | UXR-08 | Manquant |
+| M-07 | Relecteur(s) indépendant(s) pour les énoncés et les ADR (facultatif pour les ADR) | TASK-03, ADR-07 | Manquant (D-17 `OPEN`) |
+| M-08 | Machine de référence pour les mesures de performance (poste local ou runner dédié) | S1-06 | Fourni : M-08 `DECIDED`, amendée par M-08-A1 ; attestation d'isolation OP-01 `OPEN` |
+| M-09 | Disponibilité d'une licence ou d'un IDE représentatif du persona si autre que VS Code | S1-04 | Sans objet : D-07 retient VS Code stable ; installation PRE-S1-04 `OPEN` |
+| M-10 | Second relecteur indépendant des cas de triage ambigus ou contestés (S1-07) | Clôture de S1-07 | Manquant (M-10 `OPEN`) |
 
 ## 12. Hors périmètre de la phase 0
 
@@ -854,15 +860,15 @@ Ne sont planifiés dans aucun ticket ni sprint : S2b (baseline complète), S3 (d
 
 | Livrable ou critère du plan | Ticket(s) | Preuve attendue |
 |---|---|---|
-| §10 S1 : protocole reproductible (prérequis de « notes conclues avec mesures ») | S1-01 | `docs/spikes/s1-roslyn.md#protocole`, `build-baseline.log` |
-| §10 S1 : HS016 détectable par opération | S1-02 | `spikes/s1-roslyn/results/<date>/forms.md` + logs |
-| §10 S1 : à travers les assemblies | S1-03 | `results/<date>/cross-assembly.md` |
-| §10 S1 : en IDE et en CLI | S1-04 | `results/<date>/ide-cli.md`, captures |
-| §10 S1 / §6.4 : coût sur une grosse solution (≤ 5 %, ≤ 20 ms médiane) | S1-06 | `results/<date>/perf.md`, CSV, binlog |
+| §10 S1 : protocole reproductible (prérequis de « notes conclues avec mesures ») | S1-01 | `docs/spikes/s1-roslyn.md#protocole`, `results/<RUN_ID>/build-baseline.md` |
+| §10 S1 : HS016 détectable par opération | S1-02 | `spikes/s1-roslyn/results/<RUN_ID>/forms.md` (logs bruts sous `$HS_ART`) |
+| §10 S1 : à travers les assemblies | S1-03 | `results/<RUN_ID>/cross-assembly.md` |
+| §10 S1 : en IDE et en CLI | S1-04 | `results/<RUN_ID>/ide-cli.md` (captures brutes sous `$HS_ART`) |
+| §10 S1 / §6.4 : coût sur une grosse solution (≤ 5 %, ≤ 20 ms médiane) | S1-06 | `results/<RUN_ID>/perf.md` (CSV et binlogs bruts sous `$HS_ART`) |
 | §6.4 : `check` ≤ 30 s / ≤ 90 s | S1-06 (mention « reporté en 1A ») | `perf.md` |
-| §10 S1 / §6.3 : packaging du `.globalconfig` par niveau et précédence | S1-05 | `results/<date>/globalconfig-precedence.md`, `.nupkg` |
-| §10 S1 / §6.1 : première calibration des opportunités HS016 | S1-07 | `results/<date>/exposure.md`, triage |
-| §10 S1 / §17 : frontière analyseur / `check` | S1-08 | `docs/spikes/s1-roslyn.md#frontiere` |
+| §10 S1 / §6.3 : packaging du `.globalconfig` par niveau et précédence | S1-05 | `results/<RUN_ID>/globalconfig-precedence.md` (`.nupkg` sous `$HS_ART`, SHA-256 dans la fiche) |
+| §10 S1 / §6.1 : première calibration des opportunités HS016 | S1-07 | `results/<RUN_ID>/exposure.md`, triage |
+| §10 S1 / §17 : frontière analyseur / `check` | S1-08 | `docs/spikes/s1-roslyn.md#frontière` |
 | §10 S1 / §17 : faisabilité des budgets, seuil d'exposition | S1-06, S1-07, S1-09 | `docs/spikes/s1-roslyn.md#conclusion` |
 | §10 go/no-go : no-go technique si faux positif connu ou hors budget | S1-09, EXIT-01 | Entrée D-S1, `phase-0-exit-review.md` |
 | §10 S4 : run headless dans un conteneur neuf | S4-01 | `spikes/s4-runner/Dockerfile`, `run-00-trivial/` |
@@ -874,10 +880,10 @@ Ne sont planifiés dans aucun ticket ni sprint : S2b (baseline complète), S3 (d
 | §9.2 / §9.3 : plafonds par run, plafond en dollars, coût du pilote | S4-07 | `docs/spikes/s4-runner.md#budgets` |
 | §10 S4 (si Codex) : commande exacte validée et publiée | GOV-04, S4-C1 | Entrée D-04, `codex-cli/` |
 | §10 S4 (si Codex) : E2E modification réelle + hook Stop | S4-C2 | `codex-e2e/` |
-| §10 S2a / §7.2 : clés nécessaires à HS016 | S2A-01 | `docs/spikes/s2a-conventions.md#cles` |
+| §10 S2a / §7.2 : clés nécessaires à HS016 | S2A-01 | `docs/spikes/s2a-conventions.md#clés` |
 | §7.2 : format tranché | S2A-02 | `#format`, prototype |
 | §7.2 : version de schéma dès le départ | S2A-03 | `#version` |
-| §7.2 / §6.5 : clés inconnues rejetées, configuration invalide diagnostiquée | S2A-04 | `results/<date>/validation.md` |
+| §7.2 / §6.5 : clés inconnues rejetées, configuration invalide diagnostiquée | S2A-04 | `results/<RUN_ID>/validation.md` |
 | §17 : format et clés minimales décidés | S2A-05 | Entrée D-S2a |
 | §10 : note persona | UXR-01 | `docs/research/persona.md` + validation |
 | §10 : guide d'entretien | UXR-02 | `docs/research/interview-guide.md` + date |

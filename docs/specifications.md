@@ -1,3 +1,5 @@
+> **Status: superseded, see plan.md** ([plan.md](plan.md)). Historical spec v2, kept for reference only; plan.md is the source of truth until spec v3.
+
 # Keel : spécifications du kit d'architecture .NET pour agents IA
 
 Statut : spécification v2, 27 octobre 2026. « Keel » (la quille, ce qui garde le bateau dans l'axe) est un nom provisoire, à vérifier sur NuGet et GitHub. Autres pistes : Ballast, Guardrail.
