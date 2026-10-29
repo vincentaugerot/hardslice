@@ -3,6 +3,14 @@
     <Project Path="src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" />
     <Project Path="src/HardSlice.Templates/HardSlice.Templates.csproj" />
   </Folder>
+  <Folder Name="/templates/hardslice-api/src/">
+    <Project Path="src/HardSlice.Templates/content/hardslice-api/src/MyApp.Domain/MyApp.Domain.csproj" />
+    <Project Path="src/HardSlice.Templates/content/hardslice-api/src/MyApp/MyApp.csproj" />
+  </Folder>
+  <Folder Name="/templates/hardslice-api/tests/">
+    <Project Path="src/HardSlice.Templates/content/hardslice-api/tests/MyApp.Tests/MyApp.Tests.csproj" />
+    <Project Path="src/HardSlice.Templates/content/hardslice-api/tests/MyApp.ArchitectureTests/MyApp.ArchitectureTests.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HardSlice.Analyzers.Tests/HardSlice.Analyzers.Tests.csproj" />
   </Folder>

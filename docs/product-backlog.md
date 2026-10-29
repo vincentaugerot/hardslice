@@ -75,7 +75,7 @@ Les trois commandes réussissent depuis un checkout propre.
 
 **Acceptation**
 
-Une référence d'un type de `Bookings/CancelBooking` vers un type de `Bookings/BookRoom` produit HS016. Les références autorisées vers le domaine ou le contrat public du module restent valides.
+Une référence d'un type de `Bookings/CancelBooking` vers un type de `Bookings/ConfirmBooking` produit HS016. Les références autorisées vers le domaine ou le contrat public du module restent valides.
 
 ### PB-004 — Rendre le diagnostic HS016 réparable
 
@@ -92,7 +92,7 @@ Une référence d'un type de `Bookings/CancelBooking` vers un type de `Bookings/
 Le diagnostic contient assez d'informations pour corriger la fixture sans consulter le code de l'analyseur. Forme attendue :
 
 ```text
-HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'BookRoomHandler' from slice 'Bookings/BookRoom'. Slices never reference each other. Fix: move the shared rule into the Booking aggregate, raise a domain event, or use the module public contract. Doc: ...
+HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingHandler' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into the Booking aggregate, raise a domain event, or use the module public contract. Doc: ...
 ```
 
 ### PB-005 — Packager le template local
