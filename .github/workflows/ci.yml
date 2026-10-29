@@ -30,3 +30,17 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build
+
+  # Separate job: a fresh runner and checkout, without the build job's outputs or any NuGet cache,
+  # so the template scenario cannot depend on state left by a previous build.
+  template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Test template from a clean checkout
+        run: scripts/test-template.sh
