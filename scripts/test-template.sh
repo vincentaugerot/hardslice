@@ -7,45 +7,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/hardslice-template.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-feed="$work/feed"
-hive="$work/template-hive"
 app_name="Demo"
 app="$work/$app_name"
-template_hive_args=(--debug:custom-hive "$hive")
 
-echo "==> Packing HardSlice.Analyzers and HardSlice.Templates"
-dotnet pack "$repo_root/src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" --configuration Release --output "$feed"
-dotnet pack "$repo_root/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$feed"
-
-# A private package cache guarantees the freshly packed analyzer is restored, never a stale build of the same version.
-# It is set only after packing so repository restore artifacts never point into the temporary directory.
-export NUGET_PACKAGES="$work/nuget-packages"
-
-# Parent of the generated solution: HardSlice packages come only from the local feed, everything else from nuget.org.
-cat > "$work/nuget.config" <<EOF
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="hardslice-local" value="feed" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-  <packageSourceMapping>
-    <packageSource key="hardslice-local">
-      <package pattern="HardSlice.*" />
-    </packageSource>
-    <packageSource key="nuget.org">
-      <package pattern="*" />
-    </packageSource>
-  </packageSourceMapping>
-</configuration>
-EOF
-
-echo "==> Installing the template into an isolated hive"
-dotnet new install "$feed"/HardSlice.Templates.*.nupkg "${template_hive_args[@]}"
-
-echo "==> Generating $app_name"
-dotnet new hardslice-api --name "$app_name" --output "$app" "${template_hive_args[@]}"
+"$repo_root/scripts/generate-app.sh" "$work"
 
 if ! command -v pwsh > /dev/null; then
   echo "error: pwsh is required to verify scripts/check.ps1." >&2
