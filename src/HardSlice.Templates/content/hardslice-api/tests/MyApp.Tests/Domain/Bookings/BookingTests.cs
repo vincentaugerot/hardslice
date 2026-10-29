@@ -1,5 +1,6 @@
 using MyApp.Domain;
 using MyApp.Domain.Bookings;
+using MyApp.Domain.Bookings.Events;
 
 namespace MyApp.Tests.Domain.Bookings;
 
@@ -25,6 +26,14 @@ public sealed class BookingTests
     public void Confirm_gives_each_booking_its_own_identifier()
     {
         Booking.Confirm(RoomId, Period, []).Id.ShouldNotBe(Booking.Confirm(RoomId, Period, []).Id);
+    }
+
+    [Fact]
+    public void Confirm_raises_BookingConfirmed_with_the_booking_data()
+    {
+        var booking = Booking.Confirm(RoomId, Period, []);
+
+        booking.DomainEvents.ShouldHaveSingleItem().ShouldBe(new BookingConfirmed(booking.Id, RoomId, Period));
     }
 
     [Fact]
@@ -70,6 +79,16 @@ public sealed class BookingTests
         booking.Cancel();
 
         booking.Status.ShouldBe(BookingStatus.Cancelled);
+    }
+
+    [Fact]
+    public void Cancel_raises_no_further_BookingConfirmed()
+    {
+        var booking = Booking.Confirm(RoomId, Period, []);
+
+        booking.Cancel();
+
+        booking.DomainEvents.OfType<BookingConfirmed>().ShouldHaveSingleItem().BookingId.ShouldBe(booking.Id);
     }
 
     [Fact]

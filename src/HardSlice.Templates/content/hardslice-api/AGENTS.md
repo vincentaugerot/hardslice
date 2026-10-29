@@ -7,6 +7,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 | Path | Contains |
 |---|---|
 | `src/MyApp.Domain/<Module>/` | Aggregates, value objects and business rules. Depends on the base class library only. |
+| `src/MyApp.Domain/<Module>/Events/` | Domain events raised by the module aggregates. |
 | `src/MyApp/Features/<Module>/<Slice>/` | One use case: its command or query, handler and endpoint. |
 | `src/MyApp/Features/<Module>/` | Module registration (`<Module>Module.cs`), EF Core mapping of its aggregates (`<Aggregate>Configuration.cs`) and the public contract shared by its slices. |
 | `src/MyApp/Shared/` | Cross-cutting code only, never a use case. |
@@ -34,6 +35,7 @@ Modules and slices:
 
 1. Check whether the aggregate already owns the business rule. If not, add it to the aggregate with its unit test.
    A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as an overlapping booking, throws a `ConflictException`, answered with 409.
+   When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` named in the past tense, implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`. Follow `BookingConfirmed`, recorded by `Booking.Confirm` and exposed through `Booking.DomainEvents`. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
 2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`: the command or query, an `internal` handler and an `internal` endpoint. The handler reaches aggregates through `AppDbContext.Set<T>()`. Follow `ConfirmBooking` as the example.
 3. Register the handler and map the endpoint in `<Module>Module.cs`.
 4. Add its tests in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`.

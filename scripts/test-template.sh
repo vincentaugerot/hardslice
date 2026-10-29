@@ -29,6 +29,9 @@ pwsh -NoProfile -File "$app/scripts/check.ps1"
 echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
 (
   cd "$app"
+  # The restored tool lives under $work: keep its resolver cache there too, so
+  # deleting this run cannot leave stale tool paths in the user's shared cache.
+  export DOTNET_CLI_HOME="$work/dotnet-cli"
   dotnet tool restore
   dotnet ef migrations has-pending-model-changes --project "src/$app_name" --no-build
 )

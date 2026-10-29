@@ -27,5 +27,7 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.Property(booking => booking.Status)
             .HasConversion<string>()
             .HasMaxLength(16);
+
+        builder.Ignore(booking => booking.DomainEvents);
     }
 }
