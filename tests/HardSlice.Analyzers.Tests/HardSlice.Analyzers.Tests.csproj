@@ -8,12 +8,29 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Test compilations reference the running shared frameworks, including ASP.NET Core for the Bookings reference. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Shouldly" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <BookingsReferenceDir>../../src/HardSlice.Templates/content/hardslice-api/src/</BookingsReferenceDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(BookingsReferenceDir)**/*.cs"
+          Exclude="$(BookingsReferenceDir)**/bin/**;$(BookingsReferenceDir)**/obj/**"
+          LinkBase="BookingsReference"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
