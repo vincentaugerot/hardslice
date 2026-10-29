@@ -6,7 +6,7 @@ Source de vérité produit : [specifications.md](specifications.md).
 
 Roadmap : [plan.md](plan.md).
 
-Ce document décrit les incréments qui construisent HardSlice. Les protocoles de spike, de recherche et de benchmark sont des références annexes ; ils ne peuvent ni réduire le périmètre produit ni bloquer le premier incrément de code.
+Ce document décrit les incréments qui construisent HardSlice. Aucun autre document ne peut réduire le périmètre produit ni ajouter une porte au premier incrément sans décision explicite du mainteneur.
 
 ## 1. Règles du backlog
 
@@ -16,7 +16,7 @@ Ce document décrit les incréments qui construisent HardSlice. Les protocoles d
 - Un livrable peut être différé, mais il n'est retiré de la roadmap que par une décision explicite du mainteneur.
 - Le code produit n'est pas du code jetable.
 - HardSlice n'ajoute aucune dépendance au runtime de l'application générée.
-- Les identifiants actifs sont `HardSlice`, `HSxxx` et `dotnet hardslice`. Les noms `Keel`, `KEELxxx` et `keel` n'existent que dans l'historique.
+- Les identifiants actifs sont `HardSlice`, `HSxxx` et `dotnet hardslice`.
 
 ## 2. Incrément actif — première boucle verticale, pré-v0.1
 
@@ -31,6 +31,7 @@ Le travail commence par PB-001. PB-002 ne débute qu'une fois les commandes d'ac
 **Livrables**
 
 - solution et configuration .NET 10 ;
+- `HardSlice.Analyzers` cible `netstandard2.0` ; les tests et l'outillage ciblent `net10.0` lorsque pertinent ;
 - projets `HardSlice.Analyzers`, `HardSlice.Analyzers.Tests` et `HardSlice.Templates` ;
 - propriétés et versions centralisées ;
 - CI minimale exécutant restore, build et tests.
@@ -67,7 +68,9 @@ Les trois commandes réussissent depuis un checkout propre.
 - analyseur Roslyn faisant partie du produit ;
 - détection entre slices d'un même assembly, forme nécessaire au premier scénario ;
 - identification déterministe des modules et des slices selon la convention du template ;
-- tests positifs, négatifs et cas limites pertinents repris de la note S1 ;
+- tests positifs, négatifs et cas limites couvrant au minimum : déclarations et signatures, génériques, héritage, attributs, construction, membres statiques, `typeof`, `nameof`, casts, méthodes d'extension et types imbriqués ;
+- alias, global usings et classes partielles sans diagnostic en double ;
+- cas autorisés : même slice, Domain et contrat public du module ;
 - aucun faux positif connu dans la référence Bookings.
 
 **Acceptation**
@@ -159,14 +162,14 @@ Cette démonstration n'est pas un benchmark statistique et ne prétend pas prouv
 
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-001 à PB-008 sont satisfaits depuis un checkout propre. Les documents de l'ancienne phase 0 ne constituent aucune porte supplémentaire.
+L'incrément est terminé lorsque PB-001 à PB-008 sont satisfaits depuis un checkout propre. Aucune porte documentaire supplémentaire ne s'applique.
 
 ## 3. Incréments suivants
 
 | Incrément | Résultat produit | Contenu principal | Acceptation globale |
 |---|---|---|---|
 | **2 — Fondation v0.1** | Le template génère une application Bookings représentative | Invariant complet de chevauchement, PostgreSQL, EF Core, Testcontainers, premières règles et tests d'architecture | Le projet généré démontre domaine riche, commandes, projections de requêtes et frontières architecturales ; build et tests verts |
-| **3 — Analyseurs v0.2** | Les dérives principales sont détectées par des diagnostics réparables | HS003 à HS011 et HS015, détection inter-assemblies, API bannies, fiches, `check`, `explain`, niveaux d'analyse, faux positifs et performance | Chaque règle possède fixtures conforme/fautive, tests et fiche ; aucun faux positif connu sur la référence |
+| **3 — Analyseurs v0.2** | Les dérives principales sont détectées par des diagnostics réparables | HS003 à HS011 et HS015, détection inter-assemblies, diagnostic de configuration pour les types applicatifs non classifiables, API bannies, fiches, `check`, `explain`, niveaux d'analyse, faux positifs et performance | Chaque règle possède fixtures conforme/fautive, tests et fiche ; aucun faux positif connu sur la référence |
 | **4 — Boucle agent v0.3** | Un agent génère puis corrige par les chemins officiels | Templates d'éléments, six skills, fichiers de guidage des quatre agents, hooks après édition et de fin de tâche, scripts uniques pour hooks/pre-commit/CI, scénarios E2E | Une slice est générée, complétée et vérifiée sans recréer manuellement sa structure ; les quatre agents ciblés disposent d'un adaptateur natif ou du fallback documenté |
 | **5 — Benchmark v0.4** | L'effet des garde-fous est mesuré et publié | Configurations A/B/C, tâches Bookings, runner, répétitions, coûts et qualité | Protocole, prompts, versions, résultats bruts et analyse sont publiables et reproductibles |
 | **6 — Adoption v0.5** | Une équipe ajoute HardSlice sans corriger toute sa dette | `init`, `map`, conventions, baseline, cliquet, `report`, `verify`, mode couches applicable | Les violations existantes sont baselinées, une nouvelle violation est bloquée et une correction réduit la baseline |
@@ -187,4 +190,4 @@ L'incrément est terminé lorsque PB-001 à PB-008 sont satisfaits depuis un che
 | Benchmark couches contre slices | 7 |
 | Paquets stables et site public | 8 |
 
-Ne sont pas des prérequis au premier code : entretiens utilisateurs, holdout indépendant, registre RUN_ID, isolation durcie du runner, comptes superviseur/runner, benchmark pré-enregistré, budget financier du benchmark et support simultané de quatre agents.
+La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis au premier incrément.

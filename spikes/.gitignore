@@ -1,7 +1,0 @@
-# Raw outputs never enter git (D-10-A1): they live only under $HS_ART/<RUN_ID>/.
-*.log
-*.exit
-*.binlog
-*.sarif
-*.csv
-raw/
