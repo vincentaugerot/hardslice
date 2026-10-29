@@ -95,6 +95,8 @@ Le diagnostic contient assez d'informations pour corriger la fixture sans consul
 HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingHandler' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into the Booking aggregate, raise a domain event, or use the module public contract. Doc: ...
 ```
 
+Dans le premier incrément, le chemin documentaire local est garanti par le template `hardslice-api`. L'installation directe du seul paquet `HardSlice.Analyzers`, hors d'une solution générée, n'est pas encore un parcours supporté ; elle recevra une référence documentaire publique stable avec le kit d'adoption.
+
 ### PB-005 — Packager le template local
 
 **Livrables**
@@ -103,6 +105,7 @@ HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBoo
 - commande `dotnet new hardslice-api` ;
 - application Bookings minimale incluse ;
 - analyseur HS016 installé et actif dans le projet généré ;
+- fiche `docs/rules/HS016.md` présente au chemin annoncé par le diagnostic ;
 - `scripts/test-template.sh`, qui construit et installe le paquet, génère une application dans un répertoire temporaire puis lance ses tests.
 
 **Acceptation**
@@ -111,7 +114,7 @@ HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBoo
 scripts/test-template.sh
 ```
 
-La solution générée compile et ses tests passent sans modification manuelle.
+La solution générée compile et ses tests passent sans modification manuelle. Le script vérifie également que le chemin `Doc:` annoncé par HS016 existe depuis la racine de la solution générée.
 
 ### PB-006 — Ajouter la vérification et le guidage agent
 

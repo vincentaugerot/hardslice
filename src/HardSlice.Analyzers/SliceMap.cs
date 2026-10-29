@@ -19,6 +19,8 @@ internal sealed class SliceMap(Compilation compilation)
             ? _slices.GetOrAdd(ns, ComputeSlice)
             : null;
 
+    public static string ModuleOf(string slice) => slice.Substring(0, slice.IndexOf('/'));
+
     private string? ComputeSlice(INamespaceSymbol ns)
     {
         var segments = new List<string>();

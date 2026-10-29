@@ -397,8 +397,8 @@ public sealed class SliceReferenceAnalyzerTests
 
         diagnostics.Select(diagnostic => diagnostic.GetMessage()).ShouldBe(
         [
-            "'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingCommand' from slice 'Bookings/ConfirmBooking'",
-            "'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'CapturePaymentCommand' from slice 'Payments/CapturePayment'"
+            Message("CancelBookingHandler", "Bookings/CancelBooking", "ConfirmBookingCommand", "Bookings/ConfirmBooking", "Bookings"),
+            Message("CancelBookingHandler", "Bookings/CancelBooking", "CapturePaymentCommand", "Payments/CapturePayment", "Payments")
         ]);
         diagnostics.Select(diagnostic => diagnostic.Location.SourceSpan).Distinct().ShouldHaveSingleItem();
         var span = diagnostics[0].Location.SourceSpan;
@@ -732,10 +732,15 @@ public sealed class SliceReferenceAnalyzerTests
 
         messages.ShouldBe(
         [
-            "'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingEndpoint' from slice 'Bookings/ConfirmBooking'",
-            "'CancelBookingHandler.Inner' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingBase' from slice 'Bookings/ConfirmBooking'"
+            Message("CancelBookingHandler", "Bookings/CancelBooking", "ConfirmBookingEndpoint", "Bookings/ConfirmBooking", "Bookings"),
+            Message("CancelBookingHandler.Inner", "Bookings/CancelBooking", "ConfirmBookingBase", "Bookings/ConfirmBooking", "Bookings")
         ], ignoreOrder: true);
     }
+
+    private static string Message(string source, string sourceSlice, string target, string targetSlice, string targetModule) =>
+        $"'{source}' in slice '{sourceSlice}' uses '{target}' from slice '{targetSlice}'. Slices never reference each other. "
+        + $"Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module '{targetModule}'. "
+        + "Doc: 'docs/rules/HS016.md'.";
 
     [Fact]
     public void Reports_an_error_by_default()

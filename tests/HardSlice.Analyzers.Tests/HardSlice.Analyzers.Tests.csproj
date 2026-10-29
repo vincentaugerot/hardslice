@@ -23,13 +23,17 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <BookingsReferenceDir>../../src/HardSlice.Templates/content/hardslice-api/src/</BookingsReferenceDir>
+    <TemplateContentDir>../../src/HardSlice.Templates/content/hardslice-api/</TemplateContentDir>
+    <BookingsReferenceDir>$(TemplateContentDir)src/</BookingsReferenceDir>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="$(BookingsReferenceDir)**/*.cs"
           Exclude="$(BookingsReferenceDir)**/bin/**;$(BookingsReferenceDir)**/obj/**"
           LinkBase="BookingsReference"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(TemplateContentDir)docs/**/*.md"
+          LinkBase="TemplateDocs"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

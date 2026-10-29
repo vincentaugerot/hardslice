@@ -18,7 +18,10 @@ public sealed class SliceReferenceAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A slice uses a type from another slice",
-        messageFormat: "'{0}' in slice '{1}' uses '{2}' from slice '{3}'",
+        // One line an agent can act on: offending symbol, both slices, the rule, the expected fix and the rule doc.
+        messageFormat: "'{0}' in slice '{1}' uses '{2}' from slice '{3}'. Slices never reference each other. "
+            + "Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module '{4}'. "
+            + "Doc: 'docs/rules/HS016.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -663,7 +666,8 @@ public sealed class SliceReferenceAnalyzer : DiagnosticAnalyzer
             sourceType.ToDisplayString(DisplayFormat),
             sourceSlice,
             target.ToDisplayString(DisplayFormat),
-            targetSlice));
+            targetSlice,
+            SliceMap.ModuleOf(targetSlice)));
     }
 
     // In 'ConfirmBookingHandler.Create()' or 'ConfirmBookingHandler.Result', the qualifier is already reported.
