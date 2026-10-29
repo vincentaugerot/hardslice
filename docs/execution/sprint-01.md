@@ -84,8 +84,8 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 | OP-UXR-01 | ~30 min | Vérifier et attester le stockage de recherche (synchronisation cloud, permissions, sauvegardes) | Conditionne tout contact |
 | UXR-03 | ~1 h | Choisir les canaux de recrutement, sans contact | Chemin critique calendaire probable (R-04) |
 | UXR-08 | ~30 min | Relire et valider la fiche de rôle du gardien | Préalable au démarchage |
-| D-18 | ~30 min | Choisir l'option A ou B ; si A, faire amender le protocole avant V-S1-01 | Bloque V-S1-01 et tout run S1 |
-| OP-01 | selon préparation | Préparer et attester le compte macOS dédié (M-08-A1) | Préalable au premier restore OSS de S1-06 et S1-07 |
+| V-S1-01 | ~1 h | Relire le protocole S1 amendé pour D-18-A (décidée, A-08), statuer sur l'observation IDE de Q3, valider ou non V-S1-01 | Bloque le commit de baseline et tout run S1 |
+| OP-01 | selon préparation | Préparer et attester les comptes superviseur et runner, la règle de délégation et les chemins (M-08-A1, D-18-A) | Préalable à toute série S1 (Q1 à Q6), puis fin de série après chacune |
 | PRE-S1-04 | selon installation | Installer VS Code stable et C# Dev Kit stable, relever les versions | Préalable à S1-04 |
 | M-10 | selon disponibilités | Identifier un second relecteur indépendant pour les cas de triage ambigus | Évite de bloquer S1-07 |
 
@@ -111,10 +111,10 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 |---|---|---|
 | D-06 : grosse solution OSS compilable avec le SDK épinglé, dépôt en slices pour la calibration | `DECIDED` | S1-06 ou S1-07 « non mesuré » → sprint partiel |
 | D-07 : IDE retenu ; PRE-S1-04 : IDE installé, versions relevées | D-07 `DECIDED` ; PRE-S1-04 `OPEN` | S1-04 « non mesuré » → sprint partiel |
-| M-08, M-08-A1 : machine de mesure, isolation des builds OSS ; OP-01 : attestation | M-08, M-08-A1 `DECIDED` ; OP-01 `OPEN` | Sans OP-01, aucun restore OSS : S1-06 et S1-07 « non mesuré » |
+| M-08, M-08-A1 : machine de mesure, isolation des builds OSS ; OP-01 : attestation | M-08, M-08-A1 `DECIDED` ; OP-01 `OPEN` | Sans OP-01, aucune série S1 sous le runner (D-18-A) : S1-02 à S1-07 « non mesuré » |
 | D-12 : politique d'extension de timebox | `DECIDED` | — |
 | D-13 : emplacement hors dépôt des données de recherche ; OP-UXR-01 : attestation | D-13 `DECIDED` ; OP-UXR-01 `OPEN` | Sans OP-UXR-01, aucun contact |
-| D-18, V-S1-01 et baseline AUT-01 | D-18 et V-S1-01 `OPEN` ; AUT-01 `DECIDED`, baseline absente | Aucun run S1 avant la chaîne D-18 → éventuel amendement → V-S1-01 → baseline |
+| D-18, V-S1-01 et baseline AUT-01 | D-18 `DECIDED` (option A, A-08), protocole amendé ; V-S1-01 `OPEN` ; AUT-01 `DECIDED`, baseline absente | Aucun run S1 avant la chaîne V-S1-01 → baseline |
 | M-10 : second relecteur du triage S1-07 | `OPEN` | Un cas ambigu ou contesté laisse Q6 « non mesuré » |
 | Participants, design partners, gardiens | Personnes externes | N'affecte pas l'objectif ; affecte le calendrier de la phase |
 
@@ -122,7 +122,7 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 
 - **Piste S1** (mainteneur + agent) : S1-01 → S1-09.
 - **Piste rédaction** (agent, validation du mainteneur) : UXR-01, UXR-02, S2A-01, DOC-01, et en marge ADR-01.
-- **Piste humaine** (mainteneur, capacité du §3.2) : visibilité effective : remote privé depuis le 28/10/2026 (A-04), après un premier push fait alors qu'il était public (écart historique à D-01) ; chaîne S1 D-18 → éventuel amendement → V-S1-01 → baseline ; prérequis OP-01, PRE-S1-04, OP-UXR-01, M-10, puis UXR-03, UXR-07, UXR-08.
+- **Piste humaine** (mainteneur, capacité du §3.2) : visibilité effective : remote privé depuis le 28/10/2026 (A-04), après un premier push fait alors qu'il était public (écart historique à D-01) ; chaîne S1 V-S1-01 (D-18-A décidée et protocole amendé) → baseline ; prérequis OP-01, PRE-S1-04, OP-UXR-01, M-10, puis UXR-03, UXR-07, UXR-08.
 - Dans S1 : S1-03 et S1-05 peuvent avancer en parallèle une fois S1-02 fait ; **S1-07 attend S1-03** (Q2 conforme pour X1 et X2), il n'est donc pas parallélisable avec S1-03.
 
 ## 6. Preuves attendues à la fin du sprint
@@ -139,7 +139,7 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 | Compteur de recrutement anonymisé | `docs/research/outreach-log.md` |
 | Bannière du spec v2 | diff de `docs/specifications.md` |
 
-État au 28/10/2026 : des **artefacts préparatoires** existent : registre, protocole S1 (`DRAFT`), wrapper `run-logged.sh`, inventaire S2a provisoire, version précédente de la note persona validée mais amendement D-UXR-01-A1 `OPEN`, guide d'entretien (`DRAFT`), journal de démarchage à zéro, messages non envoyés, bannière du spec v2. Les **décisions, validations et prérequis incomplets** sont D-18, V-S1-01, baseline AUT-01, D-UXR-01-A1, D-UXR-02, OP-01, PRE-S1-04 et OP-UXR-01. Aucune mesure n'a été exécutée, aucune donnée brute n'existe et aucune sollicitation n'a été envoyée.
+État au 29/10/2026 : des **artefacts préparatoires** existent : registre, protocole S1 (`DRAFT`), wrapper `run-logged.sh`, inventaire S2a provisoire, version précédente de la note persona validée mais amendement D-UXR-01-A1 `OPEN`, guide d'entretien (`DRAFT`), journal de démarchage à zéro, messages non envoyés, bannière du spec v2. Les **décisions, validations et prérequis incomplets** sont V-S1-01, baseline AUT-01, D-UXR-01-A1, D-UXR-02, OP-01, PRE-S1-04 et OP-UXR-01. Aucune mesure n'a été exécutée, aucune donnée brute n'existe et aucune sollicitation n'a été envoyée.
 
 ## 7. Critères de fin de sprint
 

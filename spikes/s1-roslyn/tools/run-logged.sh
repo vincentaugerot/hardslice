@@ -13,7 +13,9 @@
 # error (the command is not run) and on ANY recording or integrity failure after the command ran, whatever
 # the command returned. The command's code is then still written to stderr and, when possible, to the
 # footer, but it must not be used as a result.
-# This guards against accidents, not against a hostile command running under the same UID (decision D-18).
+# On its own this guards against accidents, not against a hostile command running under the same UID. Under
+# decision D-18 (option A) the supervisor runs this wrapper and passes runner commands through as-runner.sh, so
+# the log and its .exit live where the runner cannot write.
 set -u
 umask 077
 

@@ -823,7 +823,7 @@ La colonne « Statut » reflète le registre [phase-0-decisions.md](phase-0-deci
 | D-15 | Règle de marge pour dériver les plafonds par run des mesures de S4 | Mainteneur | S4-07 | S4-07 | `OPEN` |
 | D-16 | Si D-01 retient l'option publique, traitement du contenu personnel du spec v2 (§2), qui deviendrait public au premier push puis resterait dans l'historique selon le §16 | Mainteneur | Premier push public | GOV-01, DOC-02 | `DEFERRED` (porte avant toute remise en public ; exposition passée pendant la période publique consignée, A-04) |
 | D-17 | Relecteurs : énoncés du pilote (TASK-03), ADR (ADR-07) | Mainteneur | TASK-03, ADR-07 | — | `OPEN` |
-| D-18 | Protection des preuves et de la copie source face au code exécuté (superviseur + export minimal, ou limites d'intégrité et de confidentialité explicitement acceptées) | Mainteneur | V-S1-01, donc premier run S1 | S1-01 | `OPEN` |
+| D-18 | Protection des preuves et de la copie source face au code exécuté (superviseur + export minimal, ou limites d'intégrité et de confidentialité explicitement acceptées) | Mainteneur | V-S1-01, donc premier run S1 | S1-01 | `DECIDED` (option A, A-08) ; protocole amendé, V-S1-01 `OPEN` |
 
 Décisions du §17 tranchées en phase 0 et leur ticket : frontière analyseur / `check` (S1-08), faisabilité des budgets (S1-06, S1-09), packaging du `.globalconfig` (S1-05), seuil d'exposition HS016 (S1-07) ; isolation du runner, budgets par run, coût du pilote (S4-02, S4-07, S4-08) ; format et clés minimales (S2A-01, S2A-02, S2A-05).
 
