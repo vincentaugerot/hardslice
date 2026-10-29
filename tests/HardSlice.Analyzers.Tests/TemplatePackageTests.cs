@@ -33,6 +33,29 @@ public sealed class TemplatePackageTests
             "The template must reference the same HardSlice.Analyzers version that the repository packs.");
     }
 
+    [Fact]
+    public void Agent_guidance_is_short_and_every_path_it_cites_exists_in_the_template()
+    {
+        var templateRoot = Path.Combine(FindRepositoryRoot(), "src", "HardSlice.Templates", "content", "hardslice-api");
+        var agentsPath = Path.Combine(templateRoot, "AGENTS.md");
+        var agents = File.ReadAllText(agentsPath);
+
+        File.ReadAllLines(agentsPath).Length.ShouldBeLessThan(150, "AGENTS.md must stay short enough for an agent to keep in context.");
+
+        // Placeholder paths such as 'src/MyApp/Features/<Module>/' are conventions, not files.
+        var citedPaths = Regex.Matches(agents, @"`(?<path>(?:src|tests|docs|scripts)/[^`<>\s]*|[\w.]+\.props)`")
+            .Select(match => match.Groups["path"].Value)
+            .Distinct()
+            .ToArray();
+
+        citedPaths.ShouldContain("scripts/check.sh");
+        citedPaths.ShouldContain("scripts/check.ps1");
+        citedPaths.ShouldContain("docs/rules/HS016.md");
+        citedPaths
+            .Where(path => !File.Exists(Path.Combine(templateRoot, path)) && !Directory.Exists(Path.Combine(templateRoot, path)))
+            .ShouldBeEmpty("AGENTS.md cites paths that the generated solution does not contain.");
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Packs HardSlice, installs the hardslice-api template, generates a solution in a temporary directory,
-# runs its tests, then proves HS016 is active and points to a rule doc that exists in the generated solution.
+# verifies it with scripts/check.sh and check.ps1, then proves HS016 fails both and points to a rule doc that exists.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,7 +11,6 @@ feed="$work/feed"
 hive="$work/template-hive"
 app_name="Demo"
 app="$work/$app_name"
-app_project="src/$app_name/$app_name.csproj"
 template_hive_args=(--debug:custom-hive "$hive")
 
 echo "==> Packing HardSlice.Analyzers and HardSlice.Templates"
@@ -48,15 +47,20 @@ dotnet new install "$feed"/HardSlice.Templates.*.nupkg "${template_hive_args[@]}
 echo "==> Generating $app_name"
 dotnet new hardslice-api --name "$app_name" --output "$app" "${template_hive_args[@]}"
 
-echo "==> Building and testing the generated solution"
-(
-  cd "$app"
-  dotnet restore
-  dotnet build --no-restore
-  dotnet test --no-build
-)
+if ! command -v pwsh > /dev/null; then
+  echo "error: pwsh is required to verify scripts/check.ps1." >&2
+  exit 1
+fi
 
-echo "==> Checking that HS016 is active and its Doc path exists"
+# The check scripts are run from another directory: they must locate the solution themselves.
+# dotnet new does not preserve the executable bit, hence the documented 'bash scripts/check.sh' form.
+echo "==> Verifying the generated solution with scripts/check.sh"
+bash "$app/scripts/check.sh"
+
+echo "==> Verifying the generated solution with scripts/check.ps1"
+pwsh -NoProfile -File "$app/scripts/check.ps1"
+
+echo "==> Checking that HS016 is active, fails both check scripts and its Doc path exists"
 cat > "$app/src/$app_name/Features/Bookings/CancelBooking/Hs016Probe.cs" <<EOF
 namespace $app_name.Features.Bookings.CancelBooking;
 
@@ -66,15 +70,26 @@ internal static class Hs016Probe
 }
 EOF
 
-if build_output="$(cd "$app" && dotnet build "$app_project" --no-restore 2>&1)"; then
-  echo "error: the generated solution built despite a cross-slice reference: HS016 is not active." >&2
+if check_output="$(bash "$app/scripts/check.sh" 2>&1)"; then
+  echo "error: scripts/check.sh passed despite a cross-slice reference: HS016 is not active." >&2
   exit 1
 fi
 
-doc_path="$(printf '%s\n' "$build_output" | sed -n "s/.*error HS016:.* Doc: '\([^']*\)'.*/\1/p" | head -n 1)"
+doc_path="$(printf '%s\n' "$check_output" | sed -n "s/.*error HS016:.* Doc: '\([^']*\)'.*/\1/p" | head -n 1)"
 if [[ -z "$doc_path" ]]; then
-  printf '%s\n' "$build_output" >&2
-  echo "error: the build failed without an HS016 diagnostic announcing a Doc path." >&2
+  printf '%s\n' "$check_output" >&2
+  echo "error: scripts/check.sh failed without an HS016 diagnostic announcing a Doc path." >&2
+  exit 1
+fi
+
+if check_output="$(pwsh -NoProfile -File "$app/scripts/check.ps1" 2>&1)"; then
+  echo "error: scripts/check.ps1 passed despite a cross-slice reference." >&2
+  exit 1
+fi
+
+if ! printf '%s\n' "$check_output" | grep -q "error HS016:"; then
+  printf '%s\n' "$check_output" >&2
+  echo "error: scripts/check.ps1 failed without an HS016 diagnostic." >&2
   exit 1
 fi
 
@@ -83,4 +98,4 @@ if [[ ! -f "$app/$doc_path" ]]; then
   exit 1
 fi
 
-echo "==> Template OK: $app_name builds, its tests pass and HS016 points to $doc_path"
+echo "==> Template OK: $app_name passes both check scripts, which fail on HS016 pointing to $doc_path"
