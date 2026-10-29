@@ -4,6 +4,15 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <!--#if (false)
+  The repository builds the template content without HardSlice.Analyzers: dotnet new uncomments the next block in generated solutions.
+  #endif -->
+  <!--#if (true)
+  <ItemGroup Label="Analyzers">
+    <GlobalPackageReference Include="HardSlice.Analyzers" Version="0.1.0" />
+  </ItemGroup>
+  #endif -->
+
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />

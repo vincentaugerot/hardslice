@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Vincent Augerot",
+  "classifications": ["Web", "API", "Vertical Slices", "DDD"],
+  "identity": "HardSlice.Templates.Api",
+  "name": "HardSlice API",
+  "description": "ASP.NET Core API in vertical slices with a rich domain, enforced at build time by HardSlice.Analyzers.",
+  "shortName": "hardslice-api",
+  "sourceName": "MyApp",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  }
+}
