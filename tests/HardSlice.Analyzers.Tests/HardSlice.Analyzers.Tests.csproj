@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <!-- Real dependencies of the Bookings reference, which BookingsReferenceTests compiles. -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="FluentValidation" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Shouldly" />
   </ItemGroup>

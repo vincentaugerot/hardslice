@@ -8,18 +8,20 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 |---|---|
 | `src/MyApp.Domain/<Module>/` | Aggregates, value objects and business rules. Depends on the base class library only. |
 | `src/MyApp.Domain/<Module>/Events/` | Domain events raised by the module aggregates. |
-| `src/MyApp/Features/<Module>/<Slice>/` | One use case: its command or query, handler and endpoint. |
+| `src/MyApp/Features/<Module>/<Slice>/` | One use case: its command or query, validator, handler and endpoint. |
 | `src/MyApp/Features/<Module>/` | Module registration (`<Module>Module.cs`), EF Core mapping of its aggregates (`<Aggregate>Configuration.cs`) and the public contract shared by its slices. |
 | `src/MyApp/Shared/` | Cross-cutting code only, never a use case. |
+| `src/MyApp/Shared/Messaging/` | The in-house mediator: `IMediator`, `ICommand<T>`, `IQuery<T>`, `IRequestHandler<,>`, `IPipelineBehavior<,>`. |
+| `src/MyApp/Shared/Behaviors/` | The pipeline every request goes through, in order: logs, validation, then one transaction per command. Also the HTTP answers to validation and domain errors. |
 | `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations. It declares no module type. |
-| `tests/MyApp.Tests/` | Unit tests of the domain, at the same path as the code they test. |
+| `tests/MyApp.Tests/` | Unit tests of the domain, the validators and `Shared`, at the same path as the code they test. |
 | `tests/MyApp.IntegrationTests/` | Tests on a real PostgreSQL (Testcontainers), at the same path as the slice they test. |
 | `tests/MyApp.ArchitectureTests/` | Architecture tests. |
 | `docs/rules/` | One sheet per HardSlice rule: what it forbids and how to fix it. |
 
 Modules and slices:
 
-- `Bookings`: `ConfirmBooking`, `CancelBooking`. Mapping: `BookingConfiguration`. Public contract: none yet.
+- `Bookings`: `ConfirmBooking`, `CancelBooking` (commands). Mapping: `BookingConfiguration`. Public contract: none yet.
 
 ## Golden rules
 
@@ -36,9 +38,13 @@ Modules and slices:
 1. Check whether the aggregate already owns the business rule. If not, add it to the aggregate with its unit test.
    A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as an overlapping booking, throws a `ConflictException`, answered with 409.
    When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` named in the past tense, implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`. Follow `BookingConfirmed`, recorded by `Booking.Confirm` and exposed through `Booking.DomainEvents`. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
-2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`: the command or query, an `internal` handler and an `internal` endpoint. The handler reaches aggregates through `AppDbContext.Set<T>()`. Follow `ConfirmBooking` as the example.
-3. Register the handler and map the endpoint in `<Module>Module.cs`.
-4. Add its tests in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`.
+2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`. Follow `ConfirmBooking` as the example:
+   - a public request: an `ICommand<TResponse>` when it changes state, an `IQuery<TResponse>` when it only reads. The response type is exact (invariant), matching its handler and pipeline;
+   - an `internal` validator, an `AbstractValidator<TRequest>` that checks the shape of the input (required fields, formats, lengths). A failure is answered with 400 naming the fields, before the handler runs. Business rules stay in the aggregate;
+   - an `internal` handler, an `IRequestHandler<TRequest, TResponse>` that reaches aggregates through `AppDbContext.Set<T>()`. It never calls `SaveChangesAsync`: each command runs in one transaction that the pipeline saves and commits, and any exception rolls it back. A failed transaction also detaches tracked entities: later commands in the same scope must reload them. Save early only to translate a database error, as `ConfirmBooking` does;
+   - an `internal` endpoint that sends the request through `IMediator` and returns `TypedResults`. It never calls a handler.
+3. In `<Module>Module.cs`, register the handler and the validator by their contracts (`IRequestHandler<,>`, `IValidator<>`) and map the endpoint.
+4. Add the validator tests in `tests/MyApp.Tests/Features/<Module>/<Slice>/` and the integration tests, an invalid request included, in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`.
 5. Add the slice to the map above, then verify.
 
 ## Changing the database

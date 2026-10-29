@@ -1,14 +1,23 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Demo.Domain;
 using Demo.Domain.Bookings;
 using Demo.Features.Bookings.ConfirmBooking;
+using Demo.Shared.Messaging;
 using Demo.Shared.Persistence;
 
 namespace Demo.Features.Bookings.CancelBooking;
 
-public sealed record CancelBookingCommand(Guid BookingId);
+public sealed record CancelBookingCommand(Guid BookingId) : ICommand<bool>;
 
-internal sealed class CancelBookingHandler(AppDbContext db, TimeProvider clock)
+internal sealed class CancelBookingValidator : AbstractValidator<CancelBookingCommand>
+{
+    public CancelBookingValidator() =>
+        RuleFor(command => command.BookingId).NotEmpty();
+}
+
+// Changes the aggregate only: TransactionBehavior saves and commits it.
+internal sealed class CancelBookingHandler(AppDbContext db, TimeProvider clock) : IRequestHandler<CancelBookingCommand, bool>
 {
     public async Task<bool> Handle(CancelBookingCommand command, CancellationToken cancellationToken)
     {
@@ -20,7 +29,6 @@ internal sealed class CancelBookingHandler(AppDbContext db, TimeProvider clock)
             throw new DomainException($"Booking '{booking.Id}' cannot be cancelled once it has started.");
 
         booking.Cancel();
-        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 }
@@ -28,6 +36,6 @@ internal sealed class CancelBookingHandler(AppDbContext db, TimeProvider clock)
 internal static class CancelBookingEndpoint
 {
     public static void Map(RouteGroupBuilder group) =>
-        group.MapPost("/{id:guid}/cancel", async Task<Results<NoContent, NotFound>> (Guid id, CancelBookingHandler handler, CancellationToken cancellationToken) =>
-            await handler.Handle(new CancelBookingCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
+        group.MapPost("/{id:guid}/cancel", async Task<Results<NoContent, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+            await mediator.Send(new CancelBookingCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
 }

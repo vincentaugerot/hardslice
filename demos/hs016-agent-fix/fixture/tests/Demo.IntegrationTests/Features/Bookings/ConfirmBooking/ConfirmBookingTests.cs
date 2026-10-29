@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Demo.Domain;
 using Demo.Domain.Bookings;
 using Demo.Features.Bookings.ConfirmBooking;
+using Demo.Shared.Messaging;
 
 namespace Demo.IntegrationTests.Features.Bookings.ConfirmBooking;
 
@@ -15,12 +18,11 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     public async Task Stores_a_confirmed_booking_and_returns_its_identifier()
     {
         var command = new ConfirmBookingCommand(Guid.NewGuid(), Start, Start.AddHours(1));
+
+        var id = await SendAsync(command, _beforeStart);
+
         await using var db = database.CreateDbContext();
-
-        var id = await new ConfirmBookingHandler(db, _beforeStart).Handle(command, TestContext.Current.CancellationToken);
-
-        await using var readDb = database.CreateDbContext();
-        var booking = await readDb.Set<Booking>().SingleOrDefaultAsync(booking => booking.Id == id, TestContext.Current.CancellationToken);
+        var booking = await db.Set<Booking>().SingleOrDefaultAsync(booking => booking.Id == id, TestContext.Current.CancellationToken);
         booking.ShouldNotBeNull();
         booking.RoomId.ShouldBe(command.RoomId);
         booking.Period.ShouldBe(new BookingPeriod(command.Start, command.End));
@@ -31,19 +33,24 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     public async Task Rejects_a_period_that_does_not_end_after_its_start()
     {
         var command = new ConfirmBookingCommand(Guid.NewGuid(), Start, Start);
-        await using var db = database.CreateDbContext();
 
-        await Should.ThrowAsync<DomainException>(
-            () => new ConfirmBookingHandler(db, _beforeStart).Handle(command, TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<DomainException>(() => SendAsync(command, _beforeStart));
     }
 
     [Fact]
     public async Task Rejects_a_period_that_has_already_started()
     {
         var command = new ConfirmBookingCommand(Guid.NewGuid(), Start, Start.AddHours(1));
-        await using var db = database.CreateDbContext();
 
-        await Should.ThrowAsync<DomainException>(
-            () => new ConfirmBookingHandler(db, new FixedClock(Start)).Handle(command, TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<DomainException>(() => SendAsync(command, new FixedClock(Start)));
+    }
+
+    // Through the application's pipeline, as its endpoint sends it, at the time the clock gives.
+    private async Task<TResponse> SendAsync<TResponse>(ICommand<TResponse> command, TimeProvider clock)
+    {
+        await using var factory = new DemoFactory(database);
+        await using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton(clock)));
+        await using var scope = app.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IMediator>().Send(command, TestContext.Current.CancellationToken);
     }
 }

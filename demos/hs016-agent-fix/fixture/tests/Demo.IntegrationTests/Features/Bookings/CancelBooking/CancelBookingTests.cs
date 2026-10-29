@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Demo.Domain;
 using Demo.Domain.Bookings;
 using Demo.Features.Bookings.CancelBooking;
+using Demo.Shared.Messaging;
 
 namespace Demo.IntegrationTests.Features.Bookings.CancelBooking;
 
@@ -17,10 +20,8 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     public async Task Cancels_an_existing_booking()
     {
         var booking = await StoreAsync(Booking.Confirm(Guid.NewGuid(), Period, []));
-        await using var db = database.CreateDbContext();
 
-        var cancelled = await new CancelBookingHandler(db, _beforeStart).Handle(
-            new CancelBookingCommand(booking.Id.Value), TestContext.Current.CancellationToken);
+        var cancelled = await SendAsync(new CancelBookingCommand(booking.Id.Value), _beforeStart);
 
         cancelled.ShouldBeTrue();
         (await StoredStatusAsync(booking.Id)).ShouldBe(BookingStatus.Cancelled);
@@ -29,10 +30,7 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Reports_an_unknown_booking()
     {
-        await using var db = database.CreateDbContext();
-
-        var cancelled = await new CancelBookingHandler(db, _beforeStart).Handle(
-            new CancelBookingCommand(Guid.NewGuid()), TestContext.Current.CancellationToken);
+        var cancelled = await SendAsync(new CancelBookingCommand(Guid.NewGuid()), _beforeStart);
 
         cancelled.ShouldBeFalse();
     }
@@ -41,12 +39,19 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     public async Task Rejects_a_booking_that_has_started()
     {
         var booking = await StoreAsync(Booking.Confirm(Guid.NewGuid(), Period, []));
-        await using var db = database.CreateDbContext();
 
-        await Should.ThrowAsync<DomainException>(() => new CancelBookingHandler(db, new FixedClock(Period.Start)).Handle(
-            new CancelBookingCommand(booking.Id.Value), TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<DomainException>(() => SendAsync(new CancelBookingCommand(booking.Id.Value), new FixedClock(Period.Start)));
 
         (await StoredStatusAsync(booking.Id)).ShouldBe(BookingStatus.Confirmed);
+    }
+
+    // Through the application's pipeline, as its endpoint sends it, at the time the clock gives.
+    private async Task<TResponse> SendAsync<TResponse>(ICommand<TResponse> command, TimeProvider clock)
+    {
+        await using var factory = new DemoFactory(database);
+        await using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton(clock)));
+        await using var scope = app.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IMediator>().Send(command, TestContext.Current.CancellationToken);
     }
 
     private async Task<Booking> StoreAsync(Booking booking)

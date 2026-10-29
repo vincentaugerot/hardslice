@@ -25,6 +25,9 @@ public sealed class BookingsReferenceTests
 
     private static readonly string TemplateDocsDirectory = Path.Combine(AppContext.BaseDirectory, "TemplateDocs");
 
+    // Packages of the Bookings reference, restored for this test project at the template's versions.
+    private static readonly string[] PackageAssemblyPrefixes = ["Microsoft.EntityFrameworkCore", "Npgsql", "FluentValidation"];
+
     [Fact]
     public async Task Reports_no_HS016_on_the_Bookings_reference()
     {
@@ -122,15 +125,14 @@ public sealed class BookingsReferenceTests
             .Append(("Usings.cs", ImplicitUsings))
             .Append(("WebUsings.cs", WebImplicitUsings));
 
-        return Compile("MyApp", application, [domain.ToMetadataReference(), .. PersistenceReferences()], OutputKind.ConsoleApplication);
+        return Compile("MyApp", application, [domain.ToMetadataReference(), .. PackageReferences()], OutputKind.ConsoleApplication);
     }
 
-    // EF Core and Npgsql, as restored for this test project at the template's versions.
-    private static IEnumerable<MetadataReference> PersistenceReferences() =>
+    private static IEnumerable<MetadataReference> PackageReferences() =>
         ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
             .Where(path => Path.GetFileName(path) is var name
-                && (name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) || name.StartsWith("Npgsql", StringComparison.Ordinal)))
+                && PackageAssemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal)))
             .Select(path => MetadataReference.CreateFromFile(path));
 
     private static IEnumerable<(string Path, string Source)> SourceFiles(string project)

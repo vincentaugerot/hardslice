@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MyApp.Domain.Bookings;
 using MyApp.Features.Bookings.ConfirmBooking;
@@ -45,6 +46,19 @@ public sealed class CancelBookingTests(PostgresDatabase database)
         var response = await app.CreateClient().PostAsync($"/bookings/{Guid.NewGuid()}/cancel", null, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Rejects_an_empty_booking_id_with_a_validation_problem()
+    {
+        await using var app = new MyAppFactory(database);
+
+        var response = await app.CreateClient().PostAsync($"/bookings/{Guid.Empty}/cancel", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<HttpValidationProblemDetails>(TestContext.Current.CancellationToken);
+        problem.ShouldNotBeNull();
+        problem.Errors.Keys.ShouldBe(["bookingId"]);
     }
 
     private static async Task<BookingId> ConfirmAsync(HttpClient client)

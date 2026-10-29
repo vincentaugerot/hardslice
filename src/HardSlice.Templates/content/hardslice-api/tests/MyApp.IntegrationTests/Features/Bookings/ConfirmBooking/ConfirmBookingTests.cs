@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyApp.Domain.Bookings;
@@ -38,6 +39,28 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await StoredCountAsync(command.RoomId)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Rejects_a_command_without_room_with_a_validation_problem_before_its_handler()
+    {
+        await using var app = new MyAppFactory(database);
+
+        // Valid for the domain: only validation keeps this booking of an empty room from being stored.
+        var response = await ConfirmAsync(app.CreateClient(), Guid.Empty, Start, Start.AddHours(1));
+
+        (await ValidationErrorsAsync(response)).Keys.ShouldBe(["roomId"]);
+        (await StoredCountAsync(Guid.Empty)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Names_every_missing_field_of_a_command()
+    {
+        await using var app = new MyAppFactory(database);
+
+        var response = await app.CreateClient().PostAsJsonAsync("/bookings", new { }, TestContext.Current.CancellationToken);
+
+        (await ValidationErrorsAsync(response)).Keys.ShouldBe(["roomId", "start", "end"], ignoreOrder: true);
     }
 
     [Fact]
@@ -142,6 +165,15 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(TestContext.Current.CancellationToken);
         problem.ShouldNotBeNull();
         problem.Detail.ShouldBe(new BookingConflictException(roomId, period).Message);
+    }
+
+    private static async Task<IDictionary<string, string[]>> ValidationErrorsAsync(HttpResponseMessage response)
+    {
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        var problem = await response.Content.ReadFromJsonAsync<HttpValidationProblemDetails>(TestContext.Current.CancellationToken);
+        problem.ShouldNotBeNull();
+        return problem.Errors;
     }
 
     private async Task WaitUntilAnInsertIsBlockedAsync()

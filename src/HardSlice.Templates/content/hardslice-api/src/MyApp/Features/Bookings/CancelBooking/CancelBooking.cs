@@ -1,12 +1,21 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 using MyApp.Domain.Bookings;
+using MyApp.Shared.Messaging;
 using MyApp.Shared.Persistence;
 
 namespace MyApp.Features.Bookings.CancelBooking;
 
-public sealed record CancelBookingCommand(Guid BookingId);
+public sealed record CancelBookingCommand(Guid BookingId) : ICommand<bool>;
 
-internal sealed class CancelBookingHandler(AppDbContext db)
+internal sealed class CancelBookingValidator : AbstractValidator<CancelBookingCommand>
+{
+    public CancelBookingValidator() =>
+        RuleFor(command => command.BookingId).NotEmpty();
+}
+
+// Changes the aggregate only: TransactionBehavior saves and commits it.
+internal sealed class CancelBookingHandler(AppDbContext db) : IRequestHandler<CancelBookingCommand, bool>
 {
     public async Task<bool> Handle(CancelBookingCommand command, CancellationToken cancellationToken)
     {
@@ -15,7 +24,6 @@ internal sealed class CancelBookingHandler(AppDbContext db)
             return false;
 
         booking.Cancel();
-        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 }
@@ -23,6 +31,6 @@ internal sealed class CancelBookingHandler(AppDbContext db)
 internal static class CancelBookingEndpoint
 {
     public static void Map(RouteGroupBuilder group) =>
-        group.MapPost("/{id:guid}/cancel", async Task<Results<NoContent, NotFound>> (Guid id, CancelBookingHandler handler, CancellationToken cancellationToken) =>
-            await handler.Handle(new CancelBookingCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
+        group.MapPost("/{id:guid}/cancel", async Task<Results<NoContent, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+            await mediator.Send(new CancelBookingCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
 }

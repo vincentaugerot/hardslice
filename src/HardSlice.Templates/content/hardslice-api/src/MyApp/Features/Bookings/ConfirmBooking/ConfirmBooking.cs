@@ -1,13 +1,26 @@
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using MyApp.Domain.Bookings;
+using MyApp.Shared.Messaging;
 using MyApp.Shared.Persistence;
 using Npgsql;
 
 namespace MyApp.Features.Bookings.ConfirmBooking;
 
-public sealed record ConfirmBookingCommand(Guid RoomId, DateTimeOffset Start, DateTimeOffset End);
+public sealed record ConfirmBookingCommand(Guid RoomId, DateTimeOffset Start, DateTimeOffset End) : ICommand<BookingId>;
 
-internal sealed class ConfirmBookingHandler(AppDbContext db)
+// Checks the shape of the input only: business rules, such as a period that ends after its start, stay in the domain.
+internal sealed class ConfirmBookingValidator : AbstractValidator<ConfirmBookingCommand>
+{
+    public ConfirmBookingValidator()
+    {
+        RuleFor(command => command.RoomId).NotEmpty();
+        RuleFor(command => command.Start).NotEmpty();
+        RuleFor(command => command.End).NotEmpty();
+    }
+}
+
+internal sealed class ConfirmBookingHandler(AppDbContext db) : IRequestHandler<ConfirmBookingCommand, BookingId>
 {
     // Created by the AddBookingNoOverlapConstraint migration.
     private const string NoOverlapConstraint = "EX_Bookings_RoomId_Period";
@@ -26,6 +39,8 @@ internal sealed class ConfirmBookingHandler(AppDbContext db)
         db.Set<Booking>().Add(booking);
         try
         {
+            // Saved early, inside the command transaction, only to translate the database's rejection.
+            // TransactionBehavior commits; handlers that translate no database error never save.
             await db.SaveChangesAsync(cancellationToken);
         }
         catch (Exception exception) when (IsOverlapRejectedByDatabase(exception))
@@ -48,6 +63,6 @@ internal sealed class ConfirmBookingHandler(AppDbContext db)
 internal static class ConfirmBookingEndpoint
 {
     public static void Map(RouteGroupBuilder group) =>
-        group.MapPost("/", async (ConfirmBookingCommand command, ConfirmBookingHandler handler, CancellationToken cancellationToken) =>
-            TypedResults.Created($"/bookings/{await handler.Handle(command, cancellationToken)}"));
+        group.MapPost("/", async (ConfirmBookingCommand command, IMediator mediator, CancellationToken cancellationToken) =>
+            TypedResults.Created($"/bookings/{await mediator.Send(command, cancellationToken)}"));
 }
