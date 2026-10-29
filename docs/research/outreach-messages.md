@@ -1,6 +1,6 @@
 # Messages de démarchage (brouillons non envoyés)
 
-Statut : **DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 (A-01, A-02). **Aucun de ces messages n'a été envoyé.** Les envois sont des actions du mainteneur, après les préalables de [outreach-log.md](outreach-log.md), et chaque envoi est attesté dans ce journal.
+Statut : **DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 (A-01, A-02, A-06). **Aucun de ces messages n'a été envoyé.** Les envois sont des actions du mainteneur, après les préalables de [outreach-log.md](outreach-log.md), et chaque envoi est attesté dans ce journal.
 
 Les crochets `[...]` sont à remplir par le mainteneur au moment de l'envoi, hors dépôt.
 
@@ -14,9 +14,11 @@ Contraintes : ne mentionner ni les agents de code ni les dérives d'architecture
 >
 > Je mène une petite recherche sur la façon dont les équipes .NET font évoluer et maintiennent leurs API ASP.NET Core au fil du temps. Je cherche à parler 45 minutes, en visio, avec des leads techniques ou des développeurs seniors qui fixent les conventions de code dans une équipe de 3 à 15 développeurs.
 >
-> Ce n'est pas une démarche commerciale : je cherche à comprendre votre façon de travailler. Les notes sont anonymisées et rien d'identifiable n'est publié.
+> Ce n'est pas une démarche commerciale : je cherche à comprendre votre façon de travailler. Les éléments éventuellement publiés sont minimisés et anonymisés ; les limites de cette anonymisation et votre droit de suppression sont expliqués avant l'entretien.
 >
 > Si cela vous intéresse, pourriez-vous répondre à sept questions rapides ([lien ou questions en réponse]) ? Je vous proposerai ensuite un créneau.
+>
+> Vos coordonnées et vos réponses de présélection restent dans un dossier privé, hors dépôt. Si nous ne faisons pas d'entretien, elles sont supprimées à la clôture du recrutement ou au plus tard 90 jours après notre dernier échange. Vous pouvez demander leur suppression à tout moment : [moyen de contact pour les demandes de suppression].
 >
 > Merci, [signature]
 
@@ -26,9 +28,11 @@ Contraintes : ne mentionner ni les agents de code ni les dérives d'architecture
 >
 > I'm running a small research study on how .NET teams evolve and maintain their ASP.NET Core APIs over time. I'd like a 45-minute video call with tech leads or senior developers who set code conventions in a team of 3 to 15 developers.
 >
-> This isn't a sales pitch: I want to understand how you work. Notes are anonymized and nothing identifiable is published.
+> This isn't a sales pitch: I want to understand how you work. Anything that may be published is minimized and anonymized; the limits of that anonymization and your right to deletion are explained before the interview.
 >
 > If you're interested, could you answer seven quick questions ([link or questions inline])? I'll then suggest a time slot.
+>
+> Your contact details and screening answers remain in a private folder outside the repository. If we do not hold an interview, they are deleted when recruitment closes or no later than 90 days after our last exchange. You may ask for their deletion at any time: [contact for deletion requests].
 >
 > Thanks, [signature]
 

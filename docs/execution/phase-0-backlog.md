@@ -20,7 +20,7 @@ Ce document **planifie** la phase 0. Il ne contient aucun résultat de spike, d'
 | H-P6 | Les artefacts destinés au futur dépôt public (ADR, README, CONTRIBUTING, workflow) sont rédigés **en anglais** (§2 « Dépôt public en anglais ») ; les notes de travail (spikes, exécution, recherche) restent en français comme le plan (en-tête du plan, §16) | Interprétation | Traduire les notes au passage en public |
 | H-P7 | Les données personnelles de la recherche (noms, contacts, consentements, notes brutes, enregistrements) restent **hors du dépôt** (§2 « contenu personnel hors du dépôt ») ; le dépôt ne reçoit que des synthèses anonymisées | Règle | — |
 | H-P8 | Environnement local observé le 28/10/2026 : SDK .NET 9.0.305, 10.0.102, 10.0.201 ; `docker`, `claude`, `codex` présents dans le `PATH`. Rien n'est encore vérifié au-delà de leur présence | Observation | S1-01 et S4-01 épinglent les versions réellement utilisées |
-| H-P9 | Le remote `origin` (`github.com/toregua/hardslice`) est **public** et vide (aucune branche publiée), alors que le plan prévoit un dépôt privé jusqu'à la sortie de 1B. À la rédaction du backlog, aucune décision sur cet écart n'était consignée | Observation ; D-01 `DECIDED` (option (a), dépôt privé avant le premier push) ; visibilité effective encore publique ; D-16 `DEFERRED` (registre) | Aucun push avant que la visibilité privée effective du remote soit attestée ; porte D-16 avant tout passage public (H-P7) |
+| H-P9 | À la rédaction du backlog, le remote `origin` (`github.com/toregua/hardslice`) était **public** et vide. **État au 28/10/2026 (A-04)** : remote **privé**, non vide, `origin/main` publié à `40a2763`. Le premier push a eu lieu alors que le remote était encore public ; le dépôt a été rendu privé ensuite | Observation ; D-01 `DECIDED` (option (a)) mais non respectée avant le premier push (écart historique consigné au registre) ; D-16 `DEFERRED` | L'exposition publique passée n'est pas effacée ; porte D-16 obligatoire avant toute remise en public (H-P7) ; aucun push par l'agent sans autorisation explicite |
 
 ### Conventions d'artefacts
 
@@ -76,7 +76,7 @@ Priorités : **P1** = sur le chemin critique ou conditionne un no-go ; **P2** = 
 - **Estimation** : 0,1 j-p — **Dépendances** : aucune
 - **Résultat attendu** : `docs/execution/phase-0-decisions.md` avec un gabarit d'entrée (id, date, décideur, décision, alternatives écartées, preuve, tickets débloqués) et la liste des décisions ouvertes du §10.
 - **Périmètre** : le fichier et son gabarit. **Hors périmètre** : prendre une décision.
-- **Étapes** : 1. créer le fichier ; 2. reprendre les identifiants D-01 à D-17 du §10 avec le statut « ouverte » ; 3. indiquer que seules les entrées signées par le mainteneur font foi.
+- **Étapes** : 1. créer le fichier ; 2. reprendre tous les identifiants du §10 (actuellement D-01 à D-18) avec le statut « ouverte » ; 3. indiquer que seules les entrées signées par le mainteneur font foi.
 - **Critères d'acceptation** : le fichier existe ; chaque décision du §10 y figure avec le statut « ouverte » ; aucune entrée n'est pré-remplie avec une décision.
 - **Preuves** : `docs/execution/phase-0-decisions.md`.
 - **Risques** : registre non tenu à jour → preuves dispersées.
@@ -85,17 +85,18 @@ Priorités : **P1** = sur le chemin critique ou conditionne un no-go ; **P2** = 
 #### GOV-01 — La visibilité du dépôt avant le premier push est décidée et consignée
 - **Type** : décision — **Priorité** : P1 — **Owner** : [Mainteneur]
 - **Estimation** : < 30 min — **Dépendances** : GOV-00
-- **Résultat attendu** : entrée D-01 qui choisit explicitement entre : (a) rendre le remote privé jusqu'à la sortie de 1B, conformément au §10 et au §16 ; ou (b) le conserver public mais non annoncé dès la phase 0, avec README « experimental », après alignement du plan. Aucune option n'est présumée par ce backlog.
+- **Résultat attendu initial** : entrée D-01 qui choisit explicitement entre : (a) rendre le remote privé jusqu'à la sortie de 1B, conformément au §10 et au §16 ; ou (b) le conserver public mais non annoncé dès la phase 0, avec README « experimental », après alignement du plan. Aucune option n'était présumée par ce backlog.
 - **Périmètre** : constater la visibilité réelle, décider, puis consigner les conséquences. Si l'option publique est retenue, le plan de travail en français, le spec v2 et les notes de phase 0 deviennent publics au premier push ; les données de recherche restent hors dépôt (H-P7) et D-16 doit être tranchée. **Hors périmètre** : protections de branche et CODEOWNERS (phase 4).
 - **Étapes** : 1. noter la visibilité (`gh repo view --json visibility`) ; 2. choisir et consigner l'une des deux options ; 3. si l'option publique est retenue, aligner `plan.md` avant le premier push et trancher D-16 ; 4. si l'option privée est retenue, modifier la visibilité du remote avant le premier push.
-- **Critères d'acceptation** : D-01 est signée par le mainteneur, la visibilité effective correspond à la décision et tout écart résiduel avec le plan est nul avant le premier push.
+- **Critère initial, non atteint** : D-01 signée, visibilité conforme et écart nul avant le premier push. **Critère de clôture après A-04** : D-01 signée ; remote privé attesté ; non-respect historique consigné sans prétendre l'effacer ; exposition passée reportée dans R-06 et D-16 ; porte D-16 maintenue avant toute remise en public. GOV-01 peut alors être clos **avec écart historique**, sans être déclaré rétroactivement conforme.
 - **Preuves** : entrée D-01.
 - **Risques** : publication involontaire de contenu personnel ou de données de recherche (R-06).
-- **Porte** : bloque tout premier push et REPO-03.
+- **Porte** : le premier push est historique ; bloque désormais toute remise en public avant D-16 et tout push de l'agent sans autorisation explicite. REPO-03 conserve ces conditions.
+- **État au 28/10/2026 (registre, A-04)** : D-01 décidée (option (a)), mais le critère « écart nul avant le premier push » **n'a pas été atteint** : le premier push a eu lieu alors que le remote était public, puis le dépôt a été rendu privé. Écart historique consigné ; l'exposition passée n'est pas effacée ; porte D-16 avant toute remise en public.
 
 #### GOV-02 — Le budget financier maximal du pilote est fixé par une décision humaine
 - **Type** : décision — **Priorité** : P1 (**bloquante** pour la porte de sortie) — **Owner** : [Mainteneur / financeur]
-- **Estimation** : < 1 h de décision ; latence inconnue — **Dépendances** : GOV-00. **Recommandation** : décider **avant** de lire le résultat de S4-07 pour éviter d'ajuster le budget à l'estimation.
+- **Estimation** : < 1 h de décision ; latence inconnue — **Dépendances** : GOV-00. **Échéance décidée (D-02, registre)** : revue de planification du sprint 2, **avant D-03, avant S4-01 et avant tout travail ou résultat S4**, pour éviter d'ajuster le budget à l'estimation (R-12).
 - **Résultat attendu** : D-02 consignée : montant maximal en dollars pour le pilote de phase 3 (24 tentatives au plus, §9.3), devise, ce qu'il couvre (tokens du pilote seuls, ou aussi répétitions et contrôle de manipulation) et ce qu'il exclut.
 - **Périmètre** : le montant et sa couverture. **Hors périmètre** : la grille de prix figée (pré-enregistrement, phase 3) ; les coûts des runs 1A et phase 2 (voir D-02b).
 - **Étapes** : 1. préciser la couverture ; 2. fixer le montant ; 3. consigner.
@@ -106,7 +107,7 @@ Priorités : **P1** = sur le chemin critique ou conditionne un no-go ; **P2** = 
 
 #### GOV-03 — Une enveloppe de dépense et des accès dédiés permettent d'exécuter S4
 - **Type** : décision — **Priorité** : P1 pour S4 — **Owner** : [Mainteneur]
-- **Estimation** : < 1 h + provisionnement — **Dépendances** : GOV-00
+- **Estimation** : < 1 h + provisionnement — **Dépendances** : GOV-00, **GOV-02** (D-02 décidée avant D-03, à la même revue du sprint 2)
 - **Résultat attendu** : D-03 consignée : dépense maximale autorisée pour les runs de S4 (et S4-C2 si Codex), mode d'authentification de Claude Code dans un conteneur (clé API dédiée ou autre), plafond de dépense configuré côté fournisseur si disponible, règle de rotation ou révocation de la clé après le spike.
 - **Périmètre** : accès et enveloppe du spike. **Hors périmètre** : budget du pilote (GOV-02).
 - **Étapes** : 1. choisir le mode d'authentification ; 2. fixer l'enveloppe ; 3. provisionner la clé hors dépôt ; 4. consigner sans secret.
@@ -171,7 +172,7 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 - **Critères d'acceptation** : la table indique pour chaque configuration détecté / non détecté avec le log de build ; toute dépendance à une information indisponible en métadonnées est nommée.
 - **Preuves** : `spikes/s1-roslyn/results/<RUN_ID>/cross-assembly.md` ; logs bruts sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : classification qui exige la vue de la solution → bascule vers `check` (S1-08).
-- **Porte** : Q2 de S1-09.
+- **Porte** : Q2 de S1-09 ; **préalable obligatoire de S1-07**.
 
 #### S1-04 — Q3 : on connaît le comportement de HS016 dans l'IDE retenu et en CLI, à partir d'un paquet local
 - **Type** : spike — **Priorité** : P1 — **Owner** : [Mainteneur] (manipulation IDE humaine)
@@ -208,11 +209,11 @@ Objet : déterminer, mesures à l'appui, si HS016 est détectable par opération
 
 #### S1-07 — Q6 : une première calibration du nombre d'opportunités HS016 est disponible
 - **Type** : spike — **Priorité** : P1 — **Owner** : [Mainteneur]
-- **Timebox** : 0,25 j — **Dépendances** : S1-02, S1-01 (dépôt en slices)
+- **Timebox** : 0,25 j (0,5 j proposé dans le protocole S1 §9, sous réserve de V-S1-01) — **Dépendances** : S1-02, **S1-03 (Q2 conforme pour X1 et X2)**, S1-01 (dépôt en slices)
 - **Résultat attendu** : compteur interne « opportunités évaluées » / « diagnostics émis » (§6.1) sur la fixture et sur au moins un dépôt OSS organisé en slices ; triage de **tous** les diagnostics émis (vrai / faux positif, justification) ; proposition argumentée d'un seuil minimal d'opportunités pour le corpus de 1B (200 est la cible initiale du §10, pas un seuil imposé).
 - **Périmètre** : première calibration. **Hors périmètre** : corpus externe sur ≥ 2 solutions (1B).
 - **Étapes** : 1. instrumenter le prototype ; 2. exécuter ; 3. trier ; 4. rédiger la proposition de seuil.
-- **Critères d'acceptation** : nombres bruts publiés par dépôt ; chaque diagnostic trié avec justification ; la proposition de seuil cite les nombres observés.
+- **Critères d'acceptation** : S1-03 terminé avec X1 et X2 conformes à leur oracle, sinon S1-07 est `non mesuré` ; nombres bruts publiés par dépôt ; chaque diagnostic trié avec justification ; zéro `SPKCFG` non résolu ; la proposition de seuil cite les nombres observés.
 - **Preuves** : `spikes/s1-roslyn/results/<RUN_ID>/exposure.md`, table de triage ; CSV brut sous `$HS_ART/<RUN_ID>/`.
 - **Risques** : dépôt en slices trop petit pour être informatif ; classification de namespace mal configurée qui gonfle les opportunités.
 - **Porte** : décision « seuil d'exposition HS016 » (§17).
@@ -417,14 +418,14 @@ Peut démarrer en parallèle de S1 ; **n'est figé qu'après S1-09** (S2A-05).
 
 ### Epic UXR — Recherche utilisateur
 
-Tous les tickets UXR-03 à UXR-08 sont des **actions humaines**. L'agent peut préparer des supports ; il ne peut ni simuler un entretien, ni rédiger une synthèse sans notes réelles, ni déclarer un accord.
+Tous les tickets UXR-03 à UXR-08 sont des **actions humaines**. L'agent peut préparer des supports ; il ne peut ni simuler un entretien, ni déclarer un accord. **L'agent ne reçoit jamais les notes réelles ni aucune donnée brute de recherche** (notes, enregistrements, consentements, identités, tracker) ; il ne peut travailler qu'à partir d'une synthèse déjà anonymisée et revue par le mainteneur.
 
 #### UXR-01 — La note persona fixe qui interroger et comment le reconnaître
 - **Type** : documentation — **Priorité** : P1 (latence calendaire) — **Owner** : [Mainteneur] (brouillon [Agent] possible)
 - **Estimation** : 0,25 j — **Dépendances** : aucune
 - **Résultat attendu** : `docs/research/persona.md` : persona prioritaire du §3 (lead technique, équipe .NET de 3 à 15, API ASP.NET Core en feature folders ou slices, agent de code déjà utilisé), critères de sélection observables, critères d'exclusion, personas secondaires écartés pour cette série, hypothèses à tester.
-- **Critères d'acceptation** : chaque critère de sélection est vérifiable par une question de présélection ; la note est validée par le mainteneur (D-UXR-01).
-- **Preuves** : fichier + entrée de validation.
+- **Critères d'acceptation** : chaque critère de sélection est vérifiable par une question de présélection ; la version initiale est validée par D-UXR-01 et l'amendement courant est revalidé par D-UXR-01-A1.
+- **Preuves** : fichier + entrées D-UXR-01 et D-UXR-01-A1.
 - **Risques** : persona trop large → signal dilué.
 - **Porte** : critère de sortie (note persona).
 
@@ -439,8 +440,8 @@ Tous les tickets UXR-03 à UXR-08 sont des **actions humaines**. L'agent peut pr
 
 #### UXR-03 — Le recrutement fournit trois participants planifiés et maintient un pipeline vers cinq
 - **Type** : recherche humaine — **Priorité** : P1 — **Owner** : [Mainteneur]
-- **Estimation** : ~1 h de lancement + suivi hebdomadaire ; latence inconnue — **Dépendances** : UXR-01 pour préparer les canaux et messages ; UXR-02 et D-13 avant tout contact, toute collecte nominative ou toute planification
-- **Résultat attendu** : canaux de recrutement choisis, messages envoyés, présélection, créneaux ; tracker nominatif **hors dépôt** ; compteur anonymisé dans `docs/research/outreach-log.md` (contactés, qualifiés, planifiés, réalisés). Le premier jalon porte sur trois participants ; le pipeline continue ensuite vers cinq avant 1B.
+- **Estimation** : ~1 h de lancement + suivi hebdomadaire ; latence inconnue — **Dépendances** : UXR-01 pour préparer les canaux et messages ; avant tout contact, toute collecte nominative ou toute planification : D-UXR-01-A1 et D-UXR-02 validées, D-13, OP-UXR-01 attestée et moyen de suppression opérationnel renseigné
+- **Résultat attendu** : canaux de recrutement choisis, messages envoyés, présélection, créneaux ; tracker nominatif **hors dépôt** ; compteur anonymisé dans `docs/research/outreach-log.md` (contactés, qualifiés, planifiés, réalisés, disqualifications agrégées C1/C4 à la présélection et à la vérification). Le premier jalon porte sur trois participants ; le pipeline continue ensuite vers cinq avant 1B.
 - **Critères d'acceptation** : au moins 3 participants qualifiés sont planifiés pour le jalon de phase 0 ; le pipeline vers les participants 4 et 5 est visible, sans exiger qu'ils soient déjà planifiés ; aucune donnée personnelle n'entre dans le dépôt.
 - **Preuves** : compteur anonymisé daté ; attestation du mainteneur.
 - **Risques** : réseau insuffisant (R-04) ; recrutement dans un cercle trop favorable.
@@ -448,8 +449,8 @@ Tous les tickets UXR-03 à UXR-08 sont des **actions humaines**. L'agent peut pr
 
 #### UXR-04 — Trois entretiens réels sont menés avec des participants qualifiés
 - **Type** : recherche humaine — **Priorité** : P1 — **Owner** : [Mainteneur]
-- **Estimation** : 3 × (45 min + préparation + 30 min de notes) ; calendrier inconnu — **Dépendances** : UXR-02, D-13 et jalon « 3 participants planifiés » d'UXR-03
-- **Résultat attendu** : trois entretiens P1, P2, P3 réalisés ; notes brutes hors dépôt ; ligne anonymisée par entretien (code, date, durée, correspondance persona, consentement obtenu oui/non, code du signal selon la règle UXR-02).
+- **Estimation** : 3 × (45 min + préparation + 30 min de notes) ; calendrier inconnu — **Dépendances** : porte « premier contact UXR » ouverte ; participant qualifié C1–C7 ; preuve de consentement préparée ; jalon « 3 participants planifiés » d'UXR-03
+- **Résultat attendu** : trois entretiens P1, P2, P3 réalisés ; notes brutes hors dépôt ; ligne anonymisée par entretien (code, **période généralisée** au mois ou au trimestre, jamais la date exacte, qui reste uniquement dans les dossiers privés hors dépôt ; durée, correspondance persona, consentement obtenu oui/non, code du signal selon la règle UXR-02).
 - **Critères d'acceptation** : trois lignes attestées par le mainteneur ; chaque ligne renvoie à des notes brutes existantes hors dépôt (référence non nominative).
 - **Preuves** : `docs/research/interviews-synthesis.md#journal`, attestation dans `phase-0-decisions.md`.
 - **Risques** : annulations ; un participant hors persona compté quand même.
@@ -475,7 +476,7 @@ Tous les tickets UXR-03 à UXR-08 sont des **actions humaines**. L'agent peut pr
 
 #### UXR-07 — Un design partner potentiel est démarché, sans biaiser les entretiens
 - **Type** : recherche humaine — **Priorité** : P2 (livrable obligatoire de phase 0, latence longue) — **Owner** : [Mainteneur]
-- **Estimation** : ~2 h + relances — **Dépendances** : UXR-01 pour préparer le support ; D-13 avant tout contact ; pour un participant d'entretien, **après** son entretien
+- **Estimation** : ~2 h + relances — **Dépendances** : UXR-01 pour préparer le support ; tout contact exige la porte « premier contact UXR » ouverte ; pour un participant d'entretien, **après** son entretien
 - **Résultat attendu** : description écrite de l'engagement demandé (dépôt réel, 1 h toutes les deux semaines, accord pour mesurer faux positifs, churn et rétention, §3) ; démarchages consignés de façon anonymisée ; statut (contacté, intéressé, refus, accord écrit).
 - **Critères d'acceptation** : au moins un démarchage réel attesté par le mainteneur ; un « accord » n'est consigné qu'avec une trace écrite du partenaire conservée hors dépôt.
 - **Preuves** : `docs/research/outreach-log.md#design-partner`, attestation.
@@ -484,7 +485,7 @@ Tous les tickets UXR-03 à UXR-08 sont des **actions humaines**. L'agent peut pr
 
 #### UXR-08 — Un gardien indépendant du holdout est démarché sur un rôle écrit
 - **Type** : recherche humaine — **Priorité** : P2 (livrable obligatoire de phase 0, exigé avant la phase 3) — **Owner** : [Mainteneur]
-- **Estimation** : ~2 h + relances — **Dépendances** : aucune pour rédiger la fiche de rôle ; D-13 et fiche validée avant tout contact
+- **Estimation** : ~2 h + relances — **Dépendances** : aucune pour rédiger la fiche de rôle ; tout contact exige la fiche validée et la porte « premier contact UXR » ouverte
 - **Résultat attendu** : fiche de rôle (§9.2 : écrire en 1B une suite fonctionnelle et structurelle à partir des énoncés figés, sans code HardSlice ; la sceller et publier son empreinte SHA-256 ; la conserver ; ne rien révéler avant la fin des runs ; indépendance vis-à-vis du mainteneur) ; démarchages consignés ; statut.
 - **Critères d'acceptation** : au moins un démarchage réel attesté ; un accord n'est consigné qu'avec une trace écrite du tiers ; l'indépendance est décrite (absence de lien hiérarchique ou d'accès partagé).
 - **Preuves** : `docs/research/outreach-log.md#gardien`, attestation.
@@ -622,7 +623,7 @@ Les ADR sont **préparés** par un agent ou le mainteneur avec le statut `propos
 - **Périmètre** : Linux. **Hors périmètre** : Windows (1A), macOS (avant v1 core), CodeQL, Dependabot, protections de branche.
 - **Critères d'acceptation** : aucune référence `uses:` sans SHA de 40 caractères (vérifiable par `grep`) ; un run sur la branche par défaut est vert ; son URL est consignée.
 - **Preuves** : fichier workflow, URL du run vert dans D-REPO.
-- **Risques** : si D-01 retient un dépôt public, un workflow mal restreint (déclencheurs, permissions) est exposé aux PR externes ; s'en tenir à `pull_request` et aux permissions minimales.
+- **Risques** : si le dépôt redevient public (après la porte D-16), un workflow mal restreint (déclencheurs, permissions) est exposé aux PR externes ; s'en tenir à `pull_request` et aux permissions minimales.
 - **Porte** : critère de sortie « CI verte ».
 
 ---
@@ -667,7 +668,7 @@ Les ADR sont **préparés** par un agent ou le mainteneur avec le statut `propos
 
 | Ordre | Tickets | Raison |
 |---|---|---|
-| 1 | GOV-00, GOV-01, GOV-05 | Registre de preuves ; trancher la visibilité avant tout push ; capacité |
+| 1 | GOV-00, GOV-01, GOV-05 | Registre de preuves ; visibilité privée attestée, écart historique A-04 documenté et D-16 avant toute remise en public ; capacité |
 | 2 | UXR-01, UXR-02, puis UXR-03, UXR-08 | Latence calendaire la plus longue ; aucune dépendance technique |
 | 3 | GOV-02, GOV-03, GOV-04 | Décisions humaines qui bloquent S4 et la porte ; à lancer tôt |
 | 4 | S1-01 → S1-09 (en parallèle : S2A-01) | Seul no-go technique de la phase ; débloque S2a, ADR 0001, tâches |
@@ -685,13 +686,14 @@ Les ADR sont **préparés** par un agent ou le mainteneur avec le statut `propos
 ```mermaid
 flowchart LR
   GOV00[GOV-00] --> GOV01[GOV-01]
-  GOV00 --> GOV02[GOV-02] --> S407
+  GOV00 --> GOV02[GOV-02] --> GOV03
+  GOV02 --> S401
   GOV00 --> GOV03[GOV-03] --> S401
   GOV00 --> GOV04[GOV-04] --> S401
   GOV04 -.si envisagé.-> S4C1[S4-C1] --> S4C2[S4-C2] --> S408
   S101[S1-01] --> S102[S1-02] --> S103[S1-03] --> S106[S1-06]
   S102 --> S105[S1-05] --> S104[S1-04]
-  S102 --> S107[S1-07]
+  S103 --> S107[S1-07]
   S103 --> S108[S1-08]
   S105 --> S108
   S106 --> S108
@@ -718,7 +720,7 @@ flowchart LR
 ```
 
 **Chemins de porte par effort** : il n'existe pas encore de chemin critique unique, car la capacité et les latences externes ne sont pas confirmées. Les chaînes bloquantes à suivre séparément sont :
-- technique S1 : S1-01 → S1-02 → S1-03 → S1-06 → S1-08 → S1-09 ;
+- technique S1 : S1-01 → S1-02 → S1-03 → S1-06 → S1-08 → S1-09 ; calibration : S1-01 → S1-02 → S1-03 → S1-07 → S1-09 (S1-07 dépend de S1-03) ;
 - conventions : S2A-01 → S2A-02 → S2A-03 → S2A-04 → S2A-05, avec S1-09 avant le gel ;
 - runner et coût : GOV-02/GOV-03/GOV-04 → S4-01..08 → S4-07 → TASK-03 ;
 - décisions d'architecture : ADR-01 → ADR-02..06 → ADR-07, avec S1-09 pour ADR 0001 ;
@@ -759,7 +761,7 @@ Un ticket peut démarrer quand :
 3. sa timebox ou son estimation est acceptée ;
 4. ses critères d'acceptation et ses chemins de preuve sont écrits ;
 5. pour un ticket qui dépense de l'argent (S4-*), l'enveloppe correspondante est décidée (GOV-03) ;
-6. pour une action humaine externe, le support pertinent et D-13 existent avant tout contact ou toute collecte nominative : UXR-03 peut préparer canaux et messages après UXR-01, puis contacter après UXR-02 et D-13 ; UXR-08 peut rédiger sa fiche de rôle avant D-13, puis démarcher après validation de la fiche et de D-13 ;
+6. pour une action humaine externe, la porte complète « premier contact UXR » est ouverte avant tout contact ou toute collecte nominative : D-UXR-01-A1 et D-UXR-02 validées, moyen de suppression renseigné et OP-UXR-01 attestée. UXR-03 peut préparer canaux et messages après UXR-01 ; UXR-08 peut rédiger sa fiche avant l'ouverture de la porte, mais exige en plus sa validation avant tout démarchage ; un participant d'entretien n'est sollicité comme design partner qu'après son entretien ;
 7. S1-01 et S4-01 créent leur protocole et sont donc exemptés de l'exiger à leur propre démarrage ; les tickets de mesure suivants exigent sa validation. S2A-01 est le ticket de cadrage initial de S2a, pas un protocole préalable.
 
 ## 8. Definition of Done
@@ -784,13 +786,13 @@ Un ticket est terminé quand :
 | R-03 | Le hook Stop ne se déclenche pas en `-p` | Inconnue / élevé pour la branche H1 | Résultat consigné tel quel, remonté en décision ; la branche H2 n'en dépend pas | S4-04, S4-08 |
 | R-04 | Recrutement lent ou réseau insuffisant | Moyenne / élevé (calendrier) | Lancement en sprint 1 ; plusieurs canaux ; sur-recrutement | UXR-03 |
 | R-05 | Entretiens orientés ou signal codé après coup | Moyenne / élevé (décision persona faussée) | Guide non orienté, règle de codage datée avant le premier entretien, démarchage partenaire après l'entretien | UXR-02, UXR-05, UXR-07 |
-| R-06 | Si D-01 retient un dépôt public dès la phase 0, publication de données personnelles ou du contenu personnel du spec v2 | Moyenne / élevé | Aucun push avant D-01 et D-16 ; données de recherche hors dépôt ; relecture de chaque fichier de `docs/research/` avant commit | GOV-01, UXR-*, DOC-02 |
+| R-06 | **Réalisé en partie** : l'historique, dont le contenu personnel du spec v2, a été poussé pendant que le remote était public (A-04), puis le dépôt a été rendu privé ; des copies antérieures peuvent exister. Risque restant : remise en public sans assainissement, ou entrée de données de recherche dans le dépôt | Exposition passée : avérée, ampleur inconnue ; futur : moyenne / élevé | Porte D-16 obligatoire avant toute remise en public ; données de recherche hors dépôt ; relecture de chaque fichier de `docs/research/` avant commit ; aucun push par l'agent sans autorisation | GOV-01, UXR-*, DOC-02 |
 | R-07 | Dépense API supérieure à l'enveloppe pendant S4 | Moyenne / moyen | Enveloppe et plafond côté fournisseur (GOV-03) ; r runs fixés à l'avance | S4-06 |
 | R-08 | Versions d'agents et options CLI changées depuis l'annexe A | Élevée / moyen | Épinglage, aide archivée, commandes « candidates » jusqu'à S4 | S4-01, S4-C1 |
 | R-09 | Tâche proxy non représentative du pilote | Moyenne / élevé (coût sous-estimé) | Comparabilité écrite et réévaluée au gel et à EXIT-01 | S4-06, S4-07, TASK-03 |
 | R-10 | Capacité d'un mainteneur unique | Élevée / élevé | Sprints ajustables, spikes bornés, agent pour les rédactions | GOV-05 |
 | R-11 | Grosse solution OSS non compilable avec le SDK épinglé | Moyenne / moyen | Présélection de plusieurs candidates dans S1-01 | S1-01 |
-| R-12 | Budget du pilote ajusté à l'estimation (ancrage) | Moyenne / moyen | GOV-02 décidé avant S4-07 | GOV-02 |
+| R-12 | Budget du pilote ajusté à l'estimation (ancrage) | Moyenne / moyen | D-02 décidée à la revue de planification du sprint 2, avant D-03, S4-01 et tout travail ou résultat S4 | GOV-02 |
 | R-13 | ADR générés acceptés sans revue réelle ou rédigés comme si S1 avait réussi | Moyenne / moyen | Statut `proposed` obligatoire ; acceptation humaine attestée ; ADR 0001 après S1-09 | ADR-* |
 | R-14 | S2a figé avant les conclusions de S1 | Moyenne / moyen | S2A-05 dépend de S1-09 | S2A-05 |
 | R-15 | Glissement de périmètre (S2b, S3, HS019, phase 1A, adaptateur Codex) | Moyenne / moyen | Hors-périmètre explicite par ticket ; §12 | tous |
@@ -804,7 +806,7 @@ La colonne « Statut » reflète le registre [phase-0-decisions.md](phase-0-deci
 | Id | Décision | Décideur | Requise avant | Ticket | Statut (registre) |
 |---|---|---|---|---|---|
 | D-01 | Visibilité avant le premier push : rendre le remote privé conformément au plan, ou conserver un dépôt public non annoncé avec approbation explicite et alignement de `plan.md` | Mainteneur | Premier push, REPO-03 | GOV-01 | `DECIDED` |
-| D-02 | **Budget financier maximal du pilote** et sa couverture — **bloquante, aucun montant proposé** | Mainteneur / financeur | S4-07 (comparaison), EXIT-01 | GOV-02 | `DEFERRED` |
+| D-02 | **Budget financier maximal du pilote** et sa couverture — **bloquante, aucun montant proposé** | Mainteneur / financeur | Revue de planification du sprint 2 : avant D-03, S4-01 et tout travail ou résultat S4 ; utilisée par S4-07 et EXIT-01 | GOV-02 | `DEFERRED` |
 | D-02b | Les coûts des runs agents de 1A (5 runs) et de phase 2 sont-ils couverts par un budget ? (le plan ne fixe que la comparaison pilote) | Mainteneur | Phase 1A | — (signalé) | `DEFERRED` |
 | D-03 | Enveloppe de dépense de S4 et mode d'authentification en conteneur | Mainteneur | S4-01 | GOV-03 | `DEFERRED` |
 | D-04 | Codex envisagé ou non en phase 0 | Mainteneur | S4-C1 | GOV-04 | `DECIDED` |
@@ -819,8 +821,9 @@ La colonne « Statut » reflète le registre [phase-0-decisions.md](phase-0-deci
 | D-13 | Emplacement hors dépôt des données de recherche et règles de conservation | Mainteneur | Premier contact UXR-03, UXR-07 ou UXR-08 | UXR-02 | `DECIDED` |
 | D-14 | Épinglage du SDK dans `global.json` (10.0.1xx visé par l'annexe A.3, 10.0.2xx installé localement) et sens d'un build de solution vide | Mainteneur | REPO-02 | REPO-02 | `OPEN` |
 | D-15 | Règle de marge pour dériver les plafonds par run des mesures de S4 | Mainteneur | S4-07 | S4-07 | `OPEN` |
-| D-16 | Si D-01 retient l'option publique, traitement du contenu personnel du spec v2 (§2), qui deviendrait public au premier push puis resterait dans l'historique selon le §16 | Mainteneur | Premier push public | GOV-01, DOC-02 | `DEFERRED` (porte avant tout passage public) |
+| D-16 | Si D-01 retient l'option publique, traitement du contenu personnel du spec v2 (§2), qui deviendrait public au premier push puis resterait dans l'historique selon le §16 | Mainteneur | Premier push public | GOV-01, DOC-02 | `DEFERRED` (porte avant toute remise en public ; exposition passée pendant la période publique consignée, A-04) |
 | D-17 | Relecteurs : énoncés du pilote (TASK-03), ADR (ADR-07) | Mainteneur | TASK-03, ADR-07 | — | `OPEN` |
+| D-18 | Protection des preuves et de la copie source face au code exécuté (superviseur + export minimal, ou limites d'intégrité et de confidentialité explicitement acceptées) | Mainteneur | V-S1-01, donc premier run S1 | S1-01 | `OPEN` |
 
 Décisions du §17 tranchées en phase 0 et leur ticket : frontière analyseur / `check` (S1-08), faisabilité des budgets (S1-06, S1-09), packaging du `.globalconfig` (S1-05), seuil d'exposition HS016 (S1-07) ; isolation du runner, budgets par run, coût du pilote (S4-02, S4-07, S4-08) ; format et clés minimales (S2A-01, S2A-02, S2A-05).
 
@@ -867,7 +870,7 @@ Ne sont planifiés dans aucun ticket ni sprint : S2b (baseline complète), S3 (d
 | §10 S1 / §6.4 : coût sur une grosse solution (≤ 5 %, ≤ 20 ms médiane) | S1-06 | `results/<RUN_ID>/perf.md` (CSV et binlogs bruts sous `$HS_ART`) |
 | §6.4 : `check` ≤ 30 s / ≤ 90 s | S1-06 (mention « reporté en 1A ») | `perf.md` |
 | §10 S1 / §6.3 : packaging du `.globalconfig` par niveau et précédence | S1-05 | `results/<RUN_ID>/globalconfig-precedence.md` (`.nupkg` sous `$HS_ART`, SHA-256 dans la fiche) |
-| §10 S1 / §6.1 : première calibration des opportunités HS016 | S1-07 | `results/<RUN_ID>/exposure.md`, triage |
+| §10 S1 / §6.1 : première calibration des opportunités HS016 | S1-07 (après S1-03) | `results/<RUN_ID>/exposure.md`, triage HS016 et `SPKCFG`, renvoi à `cross-assembly.md` (X1, X2) |
 | §10 S1 / §17 : frontière analyseur / `check` | S1-08 | `docs/spikes/s1-roslyn.md#frontière` |
 | §10 S1 / §17 : faisabilité des budgets, seuil d'exposition | S1-06, S1-07, S1-09 | `docs/spikes/s1-roslyn.md#conclusion` |
 | §10 go/no-go : no-go technique si faux positif connu ou hors budget | S1-09, EXIT-01 | Entrée D-S1, `phase-0-exit-review.md` |
@@ -885,7 +888,7 @@ Ne sont planifiés dans aucun ticket ni sprint : S2b (baseline complète), S3 (d
 | §7.2 : version de schéma dès le départ | S2A-03 | `#version` |
 | §7.2 / §6.5 : clés inconnues rejetées, configuration invalide diagnostiquée | S2A-04 | `results/<RUN_ID>/validation.md` |
 | §17 : format et clés minimales décidés | S2A-05 | Entrée D-S2a |
-| §10 : note persona | UXR-01 | `docs/research/persona.md` + validation |
+| §10 : note persona | UXR-01 | `docs/research/persona.md` + D-UXR-01 + D-UXR-01-A1 |
 | §10 : guide d'entretien | UXR-02 | `docs/research/interview-guide.md` + date |
 | §3 / §10 : ≥ 3 entretiens | UXR-03, UXR-04 | Journal anonymisé + attestations |
 | Critère de sortie : ≥ 3 entretiens synthétisés | UXR-05 | `interviews-synthesis.md#synthese-1-3` |

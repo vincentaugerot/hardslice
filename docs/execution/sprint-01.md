@@ -47,7 +47,7 @@ La capacité totale est donc de **44 h 30 ≈ 6,36 j-p**, dont 5 j-p focalisés.
 |---|---|---|---|---|
 | 1 | GOV-00 — Journal des décisions | 0,1 j | Mainteneur (+ agent) | — |
 | 2 | GOV-05 — Capacité et cadence confirmées | < 30 min | Mainteneur | — |
-| 3 | GOV-01 — Visibilité avant le premier push décidée et alignée avec le plan | < 30 min | Mainteneur | GOV-00 |
+| 3 | GOV-01 — Visibilité désormais privée ; décision et écart historique A-04 consignés | < 30 min | Mainteneur | GOV-00 |
 | 4 | UXR-01 — Note persona | 0,25 j | Mainteneur (+ agent) | — |
 | 5 | S1-01 — Protocole S1 et choix des solutions (D-06, D-07) | 0,25 j | Mainteneur (+ agent) | GOV-00 |
 | 6 | UXR-02 — Guide d'entretien et règle de codage | 0,5 j | Mainteneur | UXR-01 |
@@ -57,7 +57,7 @@ La capacité totale est donc de **44 h 30 ≈ 6,36 j-p**, dont 5 j-p focalisés.
 | 10 | S1-05 — `.globalconfig` par niveau et précédence | 0,5 j | Mainteneur + agent | S1-02 |
 | 11 | S1-04 — IDE et CLI depuis le paquet local | 0,25 j | Mainteneur | S1-02, S1-05 |
 | 12 | S1-06 — Coût sur la grosse solution | 0,5 j | Mainteneur + agent | S1-01, S1-02, S1-03 |
-| 13 | S1-07 — Première calibration des opportunités | 0,25 j | Mainteneur | S1-02 |
+| 13 | S1-07 — Première calibration des opportunités | 0,25 j | Mainteneur | S1-02, **S1-03** (X1 et X2 conformes) |
 | 14 | S1-08 — Frontière analyseur / `check` | 0,25 j | Mainteneur | S1-03, S1-05, S1-06 |
 | 15 | S1-09 — Conclusion S1 et décision D-S1 | 0,25 j | Mainteneur | S1-02 à S1-08 |
 | 16 | DOC-01 — Bannière du spec v2 | 0,05 j | Agent | — |
@@ -80,9 +80,11 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 | Ticket ou prérequis | Charge initiale | Action | Pourquoi maintenant |
 |---|---:|---|---|
 | UXR-02 | ~30 min | Relire le guide corrigé, fournir le moyen de demande de suppression, valider ou non D-UXR-02 | Conditionne tout contact |
+| D-UXR-01-A1 | ~15 min | Relire et revalider ou non l'amendement de la note persona (relances C1/C4, remplacement) | Conditionne tout contact de recrutement |
 | OP-UXR-01 | ~30 min | Vérifier et attester le stockage de recherche (synchronisation cloud, permissions, sauvegardes) | Conditionne tout contact |
 | UXR-03 | ~1 h | Choisir les canaux de recrutement, sans contact | Chemin critique calendaire probable (R-04) |
 | UXR-08 | ~30 min | Relire et valider la fiche de rôle du gardien | Préalable au démarchage |
+| D-18 | ~30 min | Choisir l'option A ou B ; si A, faire amender le protocole avant V-S1-01 | Bloque V-S1-01 et tout run S1 |
 | OP-01 | selon préparation | Préparer et attester le compte macOS dédié (M-08-A1) | Préalable au premier restore OSS de S1-06 et S1-07 |
 | PRE-S1-04 | selon installation | Installer VS Code stable et C# Dev Kit stable, relever les versions | Préalable à S1-04 |
 | M-10 | selon disponibilités | Identifier un second relecteur indépendant pour les cas de triage ambigus | Évite de bloquer S1-07 |
@@ -102,7 +104,7 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 
 ## 4. Dépendances
 
-**Internes au sprint** : S1-01 → S1-02 → {S1-03, S1-05, S1-07} ; S1-05 → S1-04 ; {S1-02, S1-03} → S1-06 ; {S1-03, S1-05, S1-06} → S1-08 ; tout S1 → S1-09. UXR-01 → UXR-02. GOV-00 → GOV-01, S1-01.
+**Internes au sprint** : S1-01 → S1-02 → {S1-03, S1-05} ; S1-03 → S1-07 ; S1-05 → S1-04 ; {S1-02, S1-03} → S1-06 ; {S1-03, S1-05, S1-06} → S1-08 ; tout S1 → S1-09. UXR-01 → UXR-02. GOV-00 → GOV-01, S1-01.
 
 **Externes au sprint**
 | Dépendance | Statut (registre) | Effet si absente |
@@ -112,6 +114,7 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 | M-08, M-08-A1 : machine de mesure, isolation des builds OSS ; OP-01 : attestation | M-08, M-08-A1 `DECIDED` ; OP-01 `OPEN` | Sans OP-01, aucun restore OSS : S1-06 et S1-07 « non mesuré » |
 | D-12 : politique d'extension de timebox | `DECIDED` | — |
 | D-13 : emplacement hors dépôt des données de recherche ; OP-UXR-01 : attestation | D-13 `DECIDED` ; OP-UXR-01 `OPEN` | Sans OP-UXR-01, aucun contact |
+| D-18, V-S1-01 et baseline AUT-01 | D-18 et V-S1-01 `OPEN` ; AUT-01 `DECIDED`, baseline absente | Aucun run S1 avant la chaîne D-18 → éventuel amendement → V-S1-01 → baseline |
 | M-10 : second relecteur du triage S1-07 | `OPEN` | Un cas ambigu ou contesté laisse Q6 « non mesuré » |
 | Participants, design partners, gardiens | Personnes externes | N'affecte pas l'objectif ; affecte le calendrier de la phase |
 
@@ -119,32 +122,32 @@ Statuts tirés du registre [phase-0-decisions.md](phase-0-decisions.md), qui fai
 
 - **Piste S1** (mainteneur + agent) : S1-01 → S1-09.
 - **Piste rédaction** (agent, validation du mainteneur) : UXR-01, UXR-02, S2A-01, DOC-01, et en marge ADR-01.
-- **Piste humaine** (mainteneur, capacité du §3.2) : alignement de la visibilité effective (GOV-01, autorisation GitHub distincte), prérequis OP-01, PRE-S1-04, OP-UXR-01, M-10, puis UXR-03, UXR-07, UXR-08.
-- Dans S1 : S1-03, S1-05 et S1-07 sont indépendants une fois S1-02 fait.
+- **Piste humaine** (mainteneur, capacité du §3.2) : visibilité effective : remote privé depuis le 28/10/2026 (A-04), après un premier push fait alors qu'il était public (écart historique à D-01) ; chaîne S1 D-18 → éventuel amendement → V-S1-01 → baseline ; prérequis OP-01, PRE-S1-04, OP-UXR-01, M-10, puis UXR-03, UXR-07, UXR-08.
+- Dans S1 : S1-03 et S1-05 peuvent avancer en parallèle une fois S1-02 fait ; **S1-07 attend S1-03** (Q2 conforme pour X1 et X2), il n'est donc pas parallélisable avec S1-03.
 
 ## 6. Preuves attendues à la fin du sprint
 
 | Preuve | Chemin |
 |---|---|
-| Journal des décisions avec D-01, D-05 (et D-02, D-03, D-04 si décidées), D-06, D-07, D-S1 | `docs/execution/phase-0-decisions.md` |
+| Journal des décisions avec D-01, D-05 (et D-02, D-03, D-04 si décidées), D-06, D-07, D-18, V-S1-01 et D-S1 | `docs/execution/phase-0-decisions.md` |
 | Note S1 : protocole, résultats Q1–Q7, frontière, conclusion | `docs/spikes/s1-roslyn.md` |
 | Code jetable et fixtures de S1 ; fiches et extraits normalisés ; sorties brutes hors git (D-10-A1) | `spikes/s1-roslyn/` ; `spikes/s1-roslyn/results/<RUN_ID>/` (fiches et extraits normalisés seulement) ; sorties brutes exclusivement sous `$HS_ART/<RUN_ID>/`, manifeste privé |
 | Table des formes, cross-assembly, IDE/CLI, précédence, perf, exposition | `spikes/s1-roslyn/results/<RUN_ID>/forms.md`, `cross-assembly.md`, `ide-cli.md`, `globalconfig-precedence.md`, `perf.md`, `exposure.md`, chacun dans le dossier de sa tentative |
 | Inventaire provisoire des clés S2a | `docs/spikes/s2a-conventions.md#clés` |
-| Note persona validée | `docs/research/persona.md` + entrée de validation |
+| Note persona amendée et revalidée | `docs/research/persona.md` + D-UXR-01-A1 |
 | Guide d'entretien et règle de codage, datés | `docs/research/interview-guide.md` + entrée de validation |
 | Compteur de recrutement anonymisé | `docs/research/outreach-log.md` |
 | Bannière du spec v2 | diff de `docs/specifications.md` |
 
-État au 28/10/2026 : des **artefacts préparatoires** existent : registre, protocole S1 (`DRAFT`), wrapper `run-logged.sh`, inventaire S2a provisoire, note persona validée, guide d'entretien (`DRAFT`), journal de démarchage à zéro, messages non envoyés, bannière du spec v2. Les **validations sont incomplètes** (V-S1-01, D-UXR-02, OP-01, PRE-S1-04, OP-UXR-01). Aucune mesure n'a été exécutée, aucune donnée brute n'existe et aucune sollicitation n'a été envoyée.
+État au 28/10/2026 : des **artefacts préparatoires** existent : registre, protocole S1 (`DRAFT`), wrapper `run-logged.sh`, inventaire S2a provisoire, version précédente de la note persona validée mais amendement D-UXR-01-A1 `OPEN`, guide d'entretien (`DRAFT`), journal de démarchage à zéro, messages non envoyés, bannière du spec v2. Les **décisions, validations et prérequis incomplets** sont D-18, V-S1-01, baseline AUT-01, D-UXR-01-A1, D-UXR-02, OP-01, PRE-S1-04 et OP-UXR-01. Aucune mesure n'a été exécutée, aucune donnée brute n'existe et aucune sollicitation n'a été envoyée.
 
 ## 7. Critères de fin de sprint
 
 | Statut | Conditions |
 |---|---|
-| **Réussi** | D-S1 signée (go, go sous conditions **non bloquantes** ou no-go) ; `s1-roslyn.md` répond à Q1–Q7, chaque mesure obligatoire de phase 0 a été exécutée et chaque réponse est liée à un artefact ; un faux positif connu non résolu ou un budget mesurable dépassé produit obligatoirement un no-go, qui reste un résultat réussi du sprint ; UXR-01 et UXR-02 validés ; UXR-03 lancé après l'ouverture de la porte « premier contact UXR » (premières sollicitations attestées) ; GOV-00, GOV-01 et GOV-05 faits |
-| **Partiel** | S1 conclue mais au moins un critère de no-go reste « non mesuré » (par exemple la mesure sur la grosse solution), **ou** la décision D-S1 n'est pas encore signée ; **ou** UXR-01 / UXR-02 non validés ; **ou** aucune sollicitation de recrutement envoyée |
-| **Bloqué** | S1 n'a pas pu exécuter ses mesures (aucune solution OSS compilable, SDK ou Roslyn inutilisable, capacité focalisée confirmée sous 3,25 j-p sans replanification) ; ou une décision humaine nécessaire à S1 (D-06) n'a pas été prise |
+| **Réussi** | D-S1 signée (go, go sous conditions **non bloquantes** ou no-go) ; `s1-roslyn.md` répond à Q1–Q7, chaque mesure obligatoire de phase 0 a été exécutée et chaque réponse est liée à un artefact ; un faux positif connu non résolu ou un budget mesurable dépassé produit obligatoirement un no-go, qui reste un résultat réussi du sprint ; D-UXR-01-A1 et D-UXR-02 validées ; UXR-03 lancé après l'ouverture de la porte « premier contact UXR » (premières sollicitations attestées) ; GOV-00, GOV-01 et GOV-05 faits |
+| **Partiel** | S1 conclue mais au moins un critère de no-go reste « non mesuré » (par exemple la mesure sur la grosse solution), **ou** la décision D-S1 n'est pas encore signée ; **ou** D-UXR-01-A1 / D-UXR-02 non validées ; **ou** aucune sollicitation de recrutement envoyée |
+| **Bloqué** | S1 n'a pas pu exécuter ses mesures (aucune solution OSS compilable, SDK ou Roslyn inutilisable, capacité focalisée confirmée sous 3,25 j-p sans replanification) ; ou une décision ou validation humaine nécessaire à S1 (D-06, D-18 ou V-S1-01) n'a pas été prise |
 
 GOV-02 et GOV-03 sont `DEFERRED` jusqu'au sprint 2 et GOV-04 est décidé (registre). Le nombre d'entretiens planifiés est **suivi** mais ne conditionne pas le statut du sprint, car il ne fait pas partie de son objectif S1.
 

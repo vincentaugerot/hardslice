@@ -36,6 +36,9 @@ Statut : registre ouvert le 28/10/2026. Backlog : [phase-0-backlog.md](phase-0-b
 | A-01 | 2026-10-28 | Le mainteneur consigne les décisions D-01, D-02, D-02b, D-03, D-04, D-05, D-06, D-07, D-10, D-11, D-12, D-13, D-16, M-08 et AUT-01, refuse de valider à ce stade V-S1-01, D-UXR-01 et D-UXR-02, et demande une passe corrective. Aucune mesure S1, aucun contact externe, aucun push, aucun changement GitHub, aucune installation et aucun commit de baseline avant sa nouvelle validation | Instruction du mainteneur, session Claude Code du 28/10/2026 (deuxième instruction) |
 | A-02 | 2026-10-28 | Le mainteneur valide D-UXR-01, amende M-08 (M-08-A1) et D-10 (D-10-A1), laisse V-S1-01 et D-UXR-02 `OPEN` et demande une dernière passe corrective. Aucune mesure, aucun contact, aucun commit de baseline, aucun push et aucune modification GitHub avant sa nouvelle validation | Instruction du mainteneur, session Claude Code du 28/10/2026 (troisième instruction) |
 | A-03 | 2026-10-28 | Le mainteneur demande une dernière passe corrective limitée (wrapper, classes de commandes, bootstrap Q5/Q6, métrique Q5(2), triage SPKCFG, D-10-A1, UXR, cohérence documentaire, OP-01), aligne l'échéance de D-02 sur la revue du sprint 2 avant D-03 et S4-01, et maintient V-S1-01 et D-UXR-02 `OPEN`. Seuls les tests triviaux et automatisés du wrapper sont autorisés ; aucune mesure, aucun contact, aucune installation, aucune modification système ou GitHub, aucun commit, push ou changement de remote | Instruction du mainteneur, session Claude Code du 28/10/2026 (quatrième instruction) |
+| A-04 | 2026-10-28 | Fait déclaré par le mainteneur : il a créé le commit `40a2763`, l'a poussé alors que le remote était public, puis a rendu le dépôt **privé** le 28/10/2026. Vérification en lecture seule par l'agent le 28/10/2026 : `gh repo view toregua/hardslice --json visibility,isEmpty,defaultBranchRef,pushedAt` → `visibility: PRIVATE`, `isEmpty: false`, `defaultBranchRef: main`, `pushedAt: 2026-10-28T19:08:52Z` ; `git ls-remote origin` → `refs/heads/main` = `40a2763096f4a3688bf00c25c66c233206b45f62`. L'heure exacte du passage en privé n'est pas connue de l'agent | Déclaration du mainteneur (cinquième instruction) ; sorties de commandes ci-contre |
+| A-05 | 2026-10-28 | Le mainteneur demande une passe corrective ciblée à partir de `40a2763` : état GitHub, wrapper (panne d'enregistrement → 70), limite du même UID (D-18), métrique Q5(2), `SPKCFG` bloquant, X5, dépendance S1-07 → S1-03, P0 et fin de série, UXR, échéance D-02. Il fusionnera ou squashera lui-même les commits. Interdits : commit, push, amend, rebase, réécriture d'historique, modification de remote ou de visibilité, mesure S1, restore ou build OSS, contact, installation ; V-S1-01 et D-UXR-02 restent `OPEN` | Instruction du mainteneur, session Claude Code du 28/10/2026 (cinquième instruction) |
+| A-06 | 2026-10-28 | Le mainteneur demande à Codex d'appliquer directement la passe corrective issue de la revue de `40a2763`, de la vérifier, puis de créer un commit local à la fin. Cette instruction lève uniquement l'interdiction de commit correctif d'A-05 ; elle n'autorise aucun push, amend, rebase, changement GitHub, mesure S1, restore ou build OSS, contact, installation ou décision humaine implicite. D-18, V-S1-01, D-UXR-01-A1 et D-UXR-02 restent `OPEN` | Instruction du mainteneur, session Codex du 28/10/2026 (sixième instruction) |
 
 ## Portes
 
@@ -43,9 +46,9 @@ Les portes sont indépendantes : une porte ouverte n'en ouvre aucune autre.
 
 | Porte | Entrées requises | État au 28/10/2026 |
 |---|---|---|
-| **Exécution technique de S1** (mesures S1-02 à S1-08) | D-05, D-06, D-10 + D-10-A1, D-11, D-12, M-08 + M-08-A1, **V-S1-01**, AUT-01 + commit de baseline ; **OP-01** avant le premier restore de nopCommerce ou de FSH ; **PRE-S1-04** avant S1-04 ; Q2 conforme (X1, X2) avant Q6 ; M-10 si un cas de triage S1-07 est ambigu ou contesté | **Fermée** : V-S1-01 `OPEN` ; commit de baseline non créé ; OP-01 et PRE-S1-04 non attestés |
-| **Premier push** | D-01 ; visibilité privée **effective et attestée** du remote, après une autorisation GitHub distincte ; porte D-16 avant toute publication | **Fermée** : D-01 = (a), mais le remote est encore public et aucune action GitHub n'est autorisée ; recommandation REC-01 |
-| **Premier contact UXR** | D-UXR-01, **D-UXR-02**, moyen de demande de suppression renseigné, **OP-UXR-01** (stockage vérifié) | **Fermée** : D-UXR-02 `OPEN` ; placeholder de contact non remplacé ; OP-UXR-01 non attestée |
+| **Exécution technique de S1** (mesures S1-02 à S1-08) | D-05, D-06, D-10 + D-10-A1, D-11, D-12, M-08 + M-08-A1, **V-S1-01** (elle-même subordonnée à **D-18**), AUT-01 + commit de baseline ; **OP-01** avant le premier restore de nopCommerce ou de FSH ; **PRE-S1-04** avant S1-04 ; Q2 conforme (X1, X2) avant Q6 ; M-10 si un cas de triage S1-07 est ambigu ou contesté | **Fermée** : D-18 et V-S1-01 `OPEN` ; commit de baseline non créé ; OP-01 et PRE-S1-04 non attestés |
+| **Push** | Remote privé attesté ; autorisation explicite du mainteneur pour tout push fait par l'agent ; porte D-16 avant toute remise en public | Le premier push a eu lieu **alors que le remote était public** (écart à D-01, voir D-01) ; remote **privé** depuis (A-04). Aucun push n'est autorisé à l'agent |
+| **Premier contact UXR** | D-UXR-01 et son amendement **D-UXR-01-A1**, **D-UXR-02**, moyen de demande de suppression renseigné, **OP-UXR-01** (stockage vérifié) | **Fermée** : D-UXR-01-A1 et D-UXR-02 `OPEN` ; placeholder de contact non remplacé ; OP-UXR-01 non attestée |
 | **Entretien UXR** | Porte « premier contact » ouverte ; participant qualifié C1–C7 ; preuve de consentement préparée | **Fermée** |
 
 D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
@@ -63,15 +66,16 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 - Recommandation (agent, non engageante) : (a).
 - Décision humaine : « option (a), dépôt privé avant le premier push. Cette décision n'autorise pas encore le changement de visibilité GitHub et ne bloque ni les corrections locales ni S1. Demande une autorisation distincte avant toute action GitHub. »
 - Justification : conformité au plan (§10, §16).
-- Conséquences : aucun alignement de `plan.md`. **Aucun push tant que le remote n'est pas effectivement privé** : pousser aujourd'hui publierait l'historique. Le changement de visibilité (`gh repo edit --visibility private`) sera demandé comme autorisation distincte. Voir REC-01.
-- Preuves : A-01.
-- Tickets débloqués : GOV-01 (décision consignée ; la visibilité effective reste à aligner) ; aucun push.
+- Conséquences : aucun alignement de `plan.md`. Le changement de visibilité relevait du mainteneur.
+- **Écart historique (A-04)** : D-01 **n'a pas été respectée « avant le premier push »**. Le premier push (`50112a3`, `b8f5b0e`, `40a2763`, dernier push à `2026-10-28T19:08:52Z`) a eu lieu alors que le remote était public. Le mainteneur a ensuite rendu le dépôt privé le 28/10/2026. L'historique, dont le contenu personnel du spec v2, a donc été accessible publiquement pendant une durée que l'agent ne connaît pas. Rendre le dépôt privé n'efface ni une éventuelle copie, ni un clone, ni un fork, ni une mise en cache faits pendant cette période (voir D-16).
+- Preuves : A-01 ; A-04.
+- Tickets débloqués : GOV-01 : visibilité effective désormais privée (A-04), avec l'écart historique ci-dessus.
 
 ### D-02 — Budget financier maximal du pilote
 - Statut : DEFERRED
 - Responsable : Mainteneur / financeur
 - Date : 2026-10-28
-- Contexte : critère de sortie « coût estimé du pilote ≤ budget » (EXIT-01). Le backlog ne propose aucun montant. À décider avant S4-07 pour éviter l'ancrage (R-12).
+- Contexte : critère de sortie « coût estimé du pilote ≤ budget » (EXIT-01). Le backlog ne propose aucun montant. Échéance décidée : revue de planification du sprint 2, avant D-03, avant S4-01 et avant tout travail ou résultat S4, ce qui évite l'ancrage (R-12).
 - Options : montant en dollars ; couverture : (i) tokens des 24 tentatives du pilote seuls, (ii) (i) + contrôle de manipulation, (iii) (ii) + répétitions éventuelles d'une nouvelle expérience.
 - Recommandation (agent, non engageante) : aucun montant. Couverture (ii).
 - Décision humaine : « DEFERRED jusqu'à la planification du sprint 2, avant tout travail ou résultat S4. Aucun calcul ni signal de coût S4 ne doit être présenté avant cette décision. » Précision du mainteneur (A-03) : « Aligner D-02 sur la revue du sprint 2, avant D-03/S4-01. »
@@ -207,13 +211,14 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 - Décision humaine : « toutes les sorties brutes restent hors git, quelle que soit leur taille : binlogs, logs complets, SARIF, CSV et sorties MSBuild ; le dépôt ne reçoit que des résumés ou extraits normalisés après contrôle de secrets et remplacement du nom utilisateur, de $HOME et des chemins locaux ; les commandes versionnées utilisent des variables symboliques ; leur expansion locale exacte reste dans le manifeste privé ; un clone est identifié par URL, SHA et état propre, pas par le SHA-256 de chacun de ses fichiers. »
 - Justification : —
 - Conséquences :
-  1. Toute sortie brute (binlog, log complet, `.exit`, SARIF, CSV, sortie MSBuild, capture brute, clone) va **exclusivement** sous `$HS_ART/<RUN_ID>/` (`$HS_RUN`), hors git ; `<RUN_ID>` est un identifiant immuable de tentative (protocole S1 §3.2).
+  1. Toute sortie brute (export de travail, `bin/obj`, binlog, log complet, `.exit`, SARIF, CSV, sortie MSBuild, capture brute, clone) va **exclusivement** sous `$HS_ART/<RUN_ID>/` (`$HS_RUN`), hors git ; `<RUN_ID>` est un identifiant immuable de tentative, généré par P0 avec un UUID (protocole S1 §3.2).
   2. `spikes/<spike>/results/<RUN_ID>/` ne reçoit que des fiches et des extraits normalisés ; `spikes/.gitignore` ignore `*.log`, `*.exit`, `*.binlog`, `*.sarif`, `*.csv` et `raw/` comme garde-fou.
-  3. Les commandes versionnées emploient `$HS_REPO`, `$HS_ART`, `$HS_RUN`, `$HS_CLONES` ; leur expansion exacte est consignée dans le manifeste privé `$HS_RUN/manifest.private.md`, hors git, avec le SHA-256 de chaque sortie brute.
+  3. Les commandes versionnées emploient `$HS_REPO`, `$HS_ART`, `$HS_RUN`, `$HS_CLONES`, `$HS_SPIKE` ; leur expansion exacte est consignée dans le manifeste privé `$HS_RUN/manifest.private.md`, hors git, avec le SHA-256 de chaque sortie brute. `$HS_SPIKE` est un export `git archive` exact du spike au commit mesuré sous `$HS_RUN/work/` ; aucune compilation ne travaille dans `$HS_REPO`.
   4. Un clone est attesté par son URL, son SHA de `HEAD` et un `git status --porcelain` vide, archivés avant et après chaque série.
-  5. Recommandation : la normalisation remplace le nom d'utilisateur, `$HOME` et tout chemin absolu local par `<USER>`, `<HOME>`, `<HS_ART>`, `<HS_CLONES>`, `<HS_REPO>`, puis un contrôle de secrets (motifs de clés et de jetons connus) précède tout ajout au dépôt ; un extrait qui échoue au contrôle n'est pas versionné.
+  5. Recommandation : la normalisation remplace le nom d'utilisateur, `$HOME` et tout chemin absolu local par `<USER>`, `<HOME>`, `<HS_ART>`, `<HS_RUN>`, `<HS_CLONES>`, `<HS_SPIKE>`, `<HS_REPO>`, puis un contrôle de secrets (motifs de clés et de jetons connus) précède tout ajout au dépôt ; un extrait qui échoue au contrôle n'est pas versionné.
   6. Recommandation : `~/Documents` est le périmètre par défaut de la synchronisation iCloud « Bureau et Documents ». OP-01 vérifie donc que l'emplacement D-10 n'est pas synchronisé.
-  7. Recommandation : un compte dédié ne peut normalement pas lire le dossier personnel du mainteneur. Les sorties sont donc produites sous un `$HS_ART` accessible au compte dédié, puis rangées par le mainteneur sous l'emplacement D-10, avec vérification des SHA-256 du manifeste.
+  7. Recommandation : un compte dédié ne peut normalement pas lire le dossier personnel du mainteneur. Les sorties sont donc produites sous un `$HS_ART` accessible au compte dédié, puis rangées par le mainteneur sous l'emplacement D-10, avec vérification des SHA-256 du manifeste et refus d'écraser un dossier `<RUN_ID>` existant.
+  8. Application opérationnelle : P0 refuse un `$HS_ART` situé dans un dépôt ou worktree Git ; pour toute série Q1 à Q6, la fiche atteste aussi que `$HS_ART` n'est synchronisé par aucun fournisseur cloud. P0 génère le `RUN_ID` (heure UTC, question, SHA, tentative et UUID) et le réserve exclusivement dans `$HS_ART/.run-ids/`. Ce garde local ne contient aucune sortie brute et est conservé après le rangement des tentatives ; l'UUID couvre les racines d'artefacts distinctes.
 - Preuves : A-02.
 - Tickets débloqués : premier artefact S1 (sous réserve de V-S1-01).
 
@@ -292,7 +297,8 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 - Décision humaine : « DEFERRED jusqu'à DOC-02, mais ajoute une porte obligatoire avant tout passage public : le contenu personnel du spec v2 ne doit pas rester accessible dans l'historique public. Prévoir assainissement ou réécriture de l'historique avant publication. »
 - Justification : —
 - Conséquences : **porte obligatoire avant tout passage public** (visibilité publique du remote, push vers un remote public, publication d'une archive) : le contenu personnel du spec v2 est retiré de tout l'historique publié, par assainissement ou réécriture de l'historique, et la vérification est consignée. DOC-02 décrit la méthode. Un historique privé poussé puis rendu public reste soumis à cette porte.
-- Preuves : A-01.
+- **Exposition passée (A-04)** : l'historique contenant ce contenu a été poussé pendant que le remote était public, puis le dépôt a été rendu privé. Cette exposition n'est pas effacée : une copie antérieure (clone, fork, cache, archive) peut exister hors du contrôle du mainteneur. La porte D-16 reste obligatoire avant **toute future remise en public** ; elle ne peut pas corriger l'exposition passée.
+- Preuves : A-01 ; A-04.
 - Tickets débloqués : aucun ; ajoute une condition à DOC-02 et au passage en public (§16).
 
 ### D-17 — Relecteurs des énoncés et des ADR
@@ -308,6 +314,21 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 - Preuves : —
 - Tickets débloqués : TASK-03 ; ADR-07.
 
+
+### D-18 — Protection des preuves et de la copie source contre le code exécuté
+- Statut : OPEN
+- Responsable : Mainteneur
+- Date : —
+- Contexte : dans la variante actuelle du protocole S1, le code OSS, les outils de build et le wrapper `run-logged.sh` s'exécutent sous le même compte. Une commande peut donc modifier ses propres logs, sidecars, binaires ou configurations. Pendant un restore avec réseau limité, elle peut aussi lire tout contenu accessible dans la copie `$HS_REPO` et tenter de l'exfiltrer vers une destination autorisée. Les contrôles d'inode, d'en-tête et de sidecar du wrapper détectent les erreurs et écrasements accidentels ; ils ne résolvent ni l'intégrité face au même UID, ni la confidentialité de la copie source (protocole S1 §3.3, §3.4).
+- Options :
+  - **(A)** superviseur et logger sous une identité distincte du runner ; répertoire de preuves non inscriptible par le runner ; stdout et stderr capturés par pipe par le superviseur ; entrées et binaires en lecture seule pour le runner ; sorties du runner écrites dans un staging, puis copiées et hachées par le superviseur. Le runner reçoit un export minimal du commit limité à `spikes/s1-roslyn/`, sans `.git` ni `docs/`, avec SHA source et manifeste SHA-256 ; le dépôt complet lui reste inaccessible ;
+  - **(B)** accepter explicitement que les preuves protègent contre les erreurs et les écrasements accidentels, mais pas contre une commande malveillante exécutée sous le même UID, et accepter le risque de lecture ou d'exfiltration de tout contenu accessible dans `$HS_REPO` pendant la fenêtre réseau.
+- Recommandation (agent, non engageante) : (A). Elle demande une seconde identité locale, un export minimal et une préparation système, que seul le mainteneur peut réaliser et attester.
+- Décision humaine : —
+- Justification : —
+- Conséquences : tant que D-18 est `OPEN`, V-S1-01 reste `OPEN`. Si (A) est retenue, le protocole S1 est amendé (invocation du wrapper par le superviseur, répartition des répertoires, attestation dédiée), puis soumis de nouveau à V-S1-01.
+- Preuves : —
+- Tickets débloqués : V-S1-01.
 ---
 
 ## Validations, autorisations, prérequis opérationnels et inputs du sprint 1
@@ -349,14 +370,19 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
   3. Aucun trousseau personnel, agent SSH (`SSH_AUTH_SOCK` vide), credential cloud, jeton GitHub, configuration Claude/Codex, variable d'environnement de secret ni donnée UXR accessible depuis ce compte. Le dossier personnel du mainteneur n'est pas lisible depuis le compte.
   4. Configuration NuGet : seule(s) la ou les sources publiques requises (sortie de `/usr/local/share/dotnet/dotnet /usr/local/share/dotnet/sdk/10.0.102/dotnet.dll nuget list source` archivée), y compris celles déclarées par les `nuget.config` des clones.
   5. **Cache NuGet dédié à la tentative** (`NUGET_PACKAGES`, `NUGET_HTTP_CACHE_PATH`, `NUGET_PLUGINS_CACHE_PATH` sous `$HS_RUN/nuget/`), jamais partagé avec le compte du mainteneur.
-  6. **Environnement en liste blanche** appliqué par le script de série (`env -i`, liste du protocole S1 §3.4) ; inventaire effectif archivé dans `$HS_RUN/environment.txt`.
-  7. Accès limité à une copie du commit HardSlice mesuré (`$HS_REPO`, SHA consigné) et au dossier d'artefacts (`$HS_ART`, `$HS_RUN`, `$HS_CLONES`).
-  8. Dossiers `$HS_ART` et emplacement D-10 hors synchronisation iCloud, Dropbox ou OneDrive.
+  6. **Environnement en liste blanche dès le lancement du prologue** : commande obligatoire `env -i` du protocole S1 §6.5.1, sans `BASH_ENV` ni fonction exportée, puis second `env -i` avant le corps de série ; inventaire effectif archivé dans `$HS_RUN/environment.txt`.
+  7. Accès limité aux entrées autorisées par D-18 et au dossier d'artefacts (`$HS_ART`, `$HS_RUN`, `$HS_CLONES`). Si D-18-A est retenue : export minimal attesté, sans `.git` ni `docs/`, et dépôt complet inaccessible. Si D-18-B est retenue : copie du commit (`$HS_REPO`, SHA consigné) et acceptation explicite du risque de lecture ou d'exfiltration pendant la fenêtre réseau.
+  8. `$HS_ART` est un dossier dédié appartenant au compte d'exécution, en `0700`, sans ACL accordant un accès, situé strictement sous son `HOME` ; `$HS_ART` et l'emplacement D-10 sont hors synchronisation iCloud, Dropbox ou OneDrive ; registre `$HS_ART/.run-ids/` en `0700`, hors Git, préservé entre les séries et après leur rangement.
   9. **Réseau** : pendant le bootstrap, LAN bloqué et sortie limitée aux flux nécessaires (`api.nuget.org` et ses CDN, `github.com` pour les clones) ; coupure complète après le bootstrap ; méthode consignée. Si ce filtrage n'est pas réalisable, le **risque résiduel** est décrit (ce qui reste joignable, par quel code) et **accepté explicitement** par le mainteneur dans cette attestation. Un échec dû à l'absence de réseau est publié ; toute réactivation est consignée avec sa raison.
   10. Conditions M-08 : sur secteur, applications lourdes fermées.
+- **Fin de série**, à réaliser et attester par le mainteneur après chaque série Q5 ou Q6, avant toute réutilisation du compte dédié. L'agent n'exécute aucune de ces opérations système :
+  11. Arrêt des processus du compte dédié : serveurs de build (`/usr/local/share/dotnet/dotnet /usr/local/share/dotnet/sdk/10.0.102/dotnet.dll build-server shutdown`, lancé dans ce compte), puis plus aucun processus de ce compte (`ps -U <compte>` vide), heure consignée.
+  12. Inventaire des processus et des fichiers persistants hors `$HS_RUN` : fichiers créés ou modifiés dans `HOME` pendant la série, agents ou démons de lancement (`~/Library/LaunchAgents`), tâches planifiées ; l'inventaire est archivé dans le manifeste privé.
+  13. Rangement des sorties de `$HS_RUN` sous l'emplacement D-10, avec vérification des SHA-256 du manifeste et création exclusive du dossier cible (aucun écrasement), puis suppression de `$HS_RUN` ; `$HS_ART/.run-ids/` n'est jamais supprimé.
+  14. Remise à zéro du `HOME` dédié et de tous les caches dédiés (NuGet, `dotnet-home`, caches de build) ; inventaire `ls -la ~` final archivé, identique à l'état vide du point 2.
 - Décision humaine (attestation) : —
 - Preuves : —
-- Tickets débloqués : premier restore de nopCommerce (S1-06) et de FSH (S1-07).
+- Tickets débloqués : premier restore de nopCommerce (S1-06) et de FSH (S1-07) ; réutilisation du compte dédié après une série (points 11 à 14).
 
 ### PRE-S1-04 — Prérequis opérationnel IDE
 - Statut : OPEN
@@ -385,7 +411,7 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 - Statut : OPEN
 - Responsable : Mainteneur
 - Date : —
-- Contexte : [s1-roslyn.md §Protocole](../spikes/s1-roslyn.md#protocole), corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02, A-03), y compris les classes de commandes, la répartition de la timebox (§9), le wrapper `spikes/s1-roslyn/tools/run-logged.sh` et son test `test-run-logged.sh`. Refus de validation consignés dans A-01, A-02 et A-03.
+- Contexte : [s1-roslyn.md §Protocole](../spikes/s1-roslyn.md#protocole), corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02, A-03, A-05, A-06), y compris les classes de commandes, la répartition de la timebox (§9), le wrapper `spikes/s1-roslyn/tools/run-logged.sh` et son test `test-run-logged.sh`. Refus de validation consignés dans A-01, A-02, A-03 et A-05. **Reste `OPEN` tant que D-18 n'est pas décidée.**
 - Options : valider ; valider avec modifications ; refuser.
 - Recommandation (agent, non engageante) : —
 - Décision humaine : —
@@ -403,22 +429,35 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 - Recommandation (agent, non engageante) : —
 - Décision humaine : « D-UXR-01 est validée : consigne-la comme DECIDED à la date de cette instruction. »
 - Justification : —
-- Conséquences : la note persona est validée dans sa version du 28/10/2026 (critères C1–C7) ; toute modification ultérieure exige une nouvelle validation.
+- Conséquences : la note persona est validée dans sa version du 28/10/2026 contenue dans `40a2763` (critères C1–C7) ; toute modification ultérieure exige une nouvelle validation. Elle a été amendée par la suite : voir D-UXR-01-A1.
 - Preuves : A-02.
 - Tickets débloqués : UXR-02 ; UXR-03 (préparation des canaux).
+
+### D-UXR-01-A1 — Revalidation de la note persona amendée
+- Statut : OPEN
+- Responsable : Mainteneur
+- Date : —
+- Contexte : [persona.md](../research/persona.md) amendée le 28/10/2026 à la demande du mainteneur (A-05) : relances conditionnelles de présélection pour C1 et C4, règle « indéterminé = non qualifié », remplacement des participants disqualifiés. La version précédemment validée (D-UXR-01) est celle de `40a2763` ; **l'amendement n'est pas couvert par D-UXR-01**.
+- Options : valider l'amendement ; le valider avec modifications ; le refuser (retour à la version de `40a2763`).
+- Recommandation (agent, non engageante) : —
+- Décision humaine : —
+- Justification : —
+- Conséquences : —
+- Preuves : —
+- Tickets débloqués : porte « premier contact UXR », avec D-UXR-02, moyen de suppression renseigné et OP-UXR-01.
 
 ### D-UXR-02 — Validation du guide d'entretien et de la règle de codage
 - Statut : OPEN
 - Responsable : Mainteneur
 - Date : —
-- Contexte : [interview-guide.md](../research/interview-guide.md), brouillon `DRAFT` corrigé le 28/10/2026 (A-01, A-02, A-03). Reste `OPEN` tant que le mainteneur n'a pas fourni le contact pour les demandes de suppression et n'a pas validé le document. Doit être daté avant le premier entretien.
+- Contexte : [interview-guide.md](../research/interview-guide.md), brouillon `DRAFT` corrigé le 28/10/2026 (A-01, A-02, A-03, A-05, A-06). Reste `OPEN` tant que le mainteneur n'a pas fourni le contact pour les demandes de suppression et n'a pas validé le document. Doit être daté avant le premier entretien.
 - Options : valider ; valider avec modifications ; refuser.
 - Recommandation (agent, non engageante) : —
 - Décision humaine : —
 - Justification : —
 - Conséquences : —
 - Preuves : —
-- Tickets débloqués : porte « premier contact UXR » (avec OP-UXR-01) ; UXR-04.
+- Tickets débloqués : porte « premier contact UXR », avec D-UXR-01-A1, moyen de suppression renseigné et OP-UXR-01 ; ne débloque pas UXR-04 à elle seule.
 
 ### OP-UXR-01 — Attestation du stockage de recherche avant tout contact
 - Statut : OPEN
@@ -431,9 +470,14 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
   3. Hors de tout dépôt git ; preuve de consentement et table identité ↔ pseudonyme dans deux fichiers distincts.
   4. Sauvegardes : soit le dossier est exclu de Time Machine et de toute autre sauvegarde, soit les sauvegardes respectent les échéances de D-13 ; méthode consignée.
   5. Moyen de demande de suppression opérationnel et renseigné dans le guide.
+  6. **Chemin canonique** : `cd ~/Documents/hardslice-research && pwd -P` donne le chemin attendu, consigné ; aucun composant du chemin n'est un lien symbolique.
+  7. **Propriétaire** : le dossier et chaque fichier appartiennent au compte du mainteneur (`stat -f '%Su %N'`).
+  8. **Aucun lien symbolique** dans le dossier : `find ~/Documents/hardslice-research -type l` ne renvoie rien.
+  9. **ACL macOS** : `ls -led` sur le dossier et `ls -le` sur son contenu ne montrent aucune entrée d'ACL qui accorde un accès à un autre utilisateur ou groupe.
+  10. **Attributs de synchronisation** : `xattr -lr ~/Documents/hardslice-research` ne montre aucun attribut de fournisseur de fichiers ou de synchronisation (par exemple `com.apple.fileprovider.*`, `com.apple.icloud.*`, `com.dropbox.*`, `com.microsoft.OneDrive.*`) ; la sortie est consignée.
 - Décision humaine (attestation) : —
 - Preuves : —
-- Tickets débloqués : porte « premier contact UXR » (avec D-UXR-02).
+- Tickets débloqués : porte « premier contact UXR », avec D-UXR-01-A1, D-UXR-02 et moyen de suppression renseigné.
 
 ### AUT-01 — Commits locaux atomiques
 - Statut : DECIDED
@@ -444,8 +488,8 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 - Recommandation (agent, non engageante) : (a).
 - Décision humaine : « commits locaux atomiques autorisés, sans push. Toutefois, ne crée pas encore le commit de baseline : présente d'abord le diff de cette passe corrective. Le baseline sera créé après validation explicite de V-S1-01. »
 - Justification : —
-- Conséquences : aucun push. Ordre : diff de la passe corrective présenté → validation explicite de V-S1-01 → commit(s) local(aux) atomique(s) de baseline → premier run mesuré, dont la fiche cite le SHA du commit.
-- Preuves : A-01 ; A-02 (aucun commit de baseline avant nouvelle validation).
+- Conséquences : aucun push. A-06 autorise le commit local de la présente passe corrective, qui **n'est pas** le commit de baseline. L'ordre de mesure reste : D-18 décidée → éventuel amendement → validation explicite de V-S1-01 → commit(s) local(aux) atomique(s) de baseline → premier run mesuré, dont la fiche cite le SHA du commit.
+- Preuves : A-01 ; A-02 (aucun commit de baseline avant nouvelle validation) ; A-06 (commit correctif seulement).
 - Tickets débloqués : commit de baseline après V-S1-01.
 
 ### D-S1 — Décision go / no-go technique de S1
@@ -467,4 +511,4 @@ D-01, D-13 et les validations UXR ne bloquent pas l'exécution technique de S1.
 
 | Id | Date | Recommandation | Statut |
 |---|---|---|---|
-| REC-01 | 2026-10-28 | Tant que le remote `origin` reste public, désactiver localement le push vers `origin`, par exemple `git remote set-url --push origin DISABLED` (réversible avec `git remote set-url --push origin https://github.com/toregua/hardslice.git`) ou un hook `pre-push` qui refuse `origin`. **Non appliquée** : aucun hook installé, aucun remote modifié (A-02) | En attente d'une décision du mainteneur |
+| REC-01 | 2026-10-28 | Tant que le remote `origin` reste public, désactiver localement le push vers `origin`, par exemple `git remote set-url --push origin DISABLED` (réversible avec `git remote set-url --push origin https://github.com/toregua/hardslice.git`) ou un hook `pre-push` qui refuse `origin`. **Non appliquée** : aucun hook installé, aucun remote modifié (A-02) | Sans objet tant que le remote reste privé (A-04) ; peut rester non appliquée. À réexaminer avant toute remise en public |

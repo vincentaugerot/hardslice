@@ -1,17 +1,17 @@
 # Guide d'entretien et règle de codage (UXR-02)
 
-Statut : **DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02, A-03), non validé (D-UXR-02 `OPEN` dans [phase-0-decisions.md](../execution/phase-0-decisions.md)). La règle de codage ne vaut que si elle est validée et datée **avant le premier entretien**. Notes internes en français ; script et questions destinés au participant en français et en anglais (D-11), même contenu dans les deux langues.
+Statut : **DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02, A-03, A-05, A-06), non validé (D-UXR-02 `OPEN` dans [phase-0-decisions.md](../execution/phase-0-decisions.md)). La règle de codage ne vaut que si elle est validée et datée **avant le premier entretien**. Notes internes en français ; script et questions destinés au participant en français et en anglais (D-11), même contenu dans les deux langues.
 Sources : [plan.md](../plan.md) §3 ; [persona.md](persona.md) ; backlog UXR-02, R-05 ; D-13.
 
 **Porte avant tout premier contact** (recrutement, design partner, gardien) :
-- D-UXR-01 validée (fait le 28/10/2026) ;
+- D-UXR-01 validée (fait le 28/10/2026, version de `40a2763`) et son amendement D-UXR-01-A1 revalidé (`OPEN` à ce jour) ;
 - D-UXR-02 **doit être validée** par le mainteneur (script corrigé, D-13) ; elle est `OPEN` à ce jour ;
 - moyen de demande de suppression renseigné à la place du placeholder du §2 ;
 - stockage vérifié et attesté (OP-UXR-01 : hors synchronisation iCloud, Dropbox et OneDrive ; permissions `0700` sur le dossier, `0600` sur les fichiers ; sauvegardes conformes à D-13).
 
 **Porte avant tout entretien** :
 - porte « premier contact » ouverte ;
-- participant qualifié selon les critères C1 à C7 de [persona.md](persona.md) §2 ;
+- participant qualifié selon les critères C1 à C7 de [persona.md](persona.md) §2, relances conditionnelles comprises ; une réponse indéterminée ne qualifie pas ;
 - preuve de consentement préparée (fichier hors dépôt, séparé de la table identité ↔ pseudonyme).
 
 **Stockage (D-13)** : notes brutes, enregistrements, preuve de consentement, table identité ↔ pseudonyme et tracker dans `~/Documents/hardslice-research/`, hors git, hors synchronisation cloud, sur le disque chiffré par FileVault. La preuve de consentement et la table identité ↔ pseudonyme sont deux fichiers séparés. Le dépôt ne reçoit que la ligne anonymisée du §10, après la revue de divulgation du §9 si elle doit être publiée.
@@ -22,7 +22,7 @@ Sources : [plan.md](../plan.md) §3 ; [persona.md](persona.md) ; backlog UXR-02,
 
 **Preuve de consentement : conservation et suppression** :
 - La preuve de consentement est conservée tant qu'il existe une donnée du participant (notes, enregistrement, table identité ↔ pseudonyme). Elle est supprimée en même temps que la dernière de ces données, donc au plus tard à la fin de la recherche de la phase 4 ou 12 mois après l'entretien. Les sauvegardes suivent les mêmes échéances.
-- Si le participant demande la suppression, toutes ses données et sa preuve de consentement sont supprimées. Seule subsiste, hors dépôt, une mention sans identité : pseudonyme, date de la demande, date d'exécution.
+- Si le participant demande la suppression, toutes ses données, sa preuve de consentement et sa ligne dans la table identité ↔ pseudonyme sont supprimées, ainsi que sa ligne anonymisée du §10 si elle n'a pas encore été publiée. Ne subsiste, hors dépôt, qu'un **compteur agrégé** du nombre de demandes de suppression exécutées, sans pseudonyme, sans date et sans identifiant corrélable. Ce compteur est supprimé à la fin de la recherche de la phase 4. Une ligne publiée a été minimisée et revue selon le §9, mais un risque résiduel de réidentification par recoupement subsiste. Sur demande, elle est retirée des supports sous le contrôle du mainteneur à leur prochaine révision ; les copies tierces déjà diffusées peuvent rester hors de son contrôle, ce qui est expliqué au participant.
 - Sans consentement à l'entretien, aucune preuve n'est conservée ; ses données de contact suivent la règle des prospects non interviewés de D-13 (suppression à la clôture du recrutement, ou au plus tard 90 jours après le dernier contact).
 
 ## 1. Principes
@@ -44,7 +44,7 @@ Script FR :
 >
 > Mes notes et le lien entre votre nom et le pseudonyme qui vous désigne dans mon analyse sont supprimés à la fin de cette recherche, et au plus tard 12 mois après aujourd'hui. Les sauvegardes suivent les mêmes délais.
 >
-> Ce qui pourra être publié est anonymisé : une synthèse, et éventuellement de **courtes citations anonymisées**, sans nom, sans entreprise et sans détail permettant de vous identifier.
+> Ce qui pourra être publié est minimisé et anonymisé : une synthèse, et éventuellement de **courtes citations anonymisées**, sans nom ni entreprise. Je relis chaque élément pour réduire le risque de vous identifier, mais une réidentification par recoupement ne peut pas être exclue complètement. Sur demande, je retire ces éléments des supports que je contrôle à leur prochaine révision ; des copies déjà diffusées par des tiers peuvent rester hors de mon contrôle.
 >
 > Vous pouvez refuser une question, arrêter à tout moment, ou me demander plus tard de supprimer vos données en écrivant à [moyen de contact pour les demandes de suppression, à fournir par le mainteneur].
 >
@@ -62,7 +62,7 @@ Script EN :
 >
 > My notes, and the link between your name and the pseudonym used in my analysis, are deleted at the end of this research, and no later than 12 months from today. Backups follow the same deadlines.
 >
-> What may be published is anonymized: a summary, and possibly **short anonymized quotes**, with no name, no company and no detail that could identify you.
+> What may be published is minimized and anonymized: a summary, and possibly **short anonymized quotes**, with no name or company. I review every item to reduce the risk of identifying you, but re-identification through cross-referencing cannot be ruled out completely. On request, I remove these items from materials I control at their next revision; copies already shared by third parties may remain outside my control.
 >
 > You can skip any question, stop at any time, or later ask me to delete your data by writing to [contact for deletion requests, to be provided by the maintainer].
 >
@@ -156,11 +156,12 @@ Avant toute publication (synthèse, article, rapport, ligne du §10 rendue publi
 - **dates** : réduites au mois, au trimestre ou supprimées si la date exacte permet de relier un entretien à une personne ou à un événement ;
 - **citations distinctives** (tournure, anecdote, chiffre, nom d'outil interne, taille ou secteur d'équipe qui permettraient de reconnaître la personne ou son entreprise) : supprimées ou paraphrasées ;
 - **combinaisons** : aucune combinaison de rôle, taille d'équipe, technologie et date qui isole un participant ;
+- **minimisation** : tout champ non indispensable est supprimé ou agrégé si sa combinaison avec les autres peut isoler un participant ;
 - la revue est datée et consignée hors dépôt ; un élément retenu sans modification est noté comme tel.
 
 ## 10. Ligne anonymisée versée au dépôt (UXR-04)
 
-| Code | Date | Durée | Correspondance persona (C1–C7, vérification C1/C4 en entretien) | Consentement entretien / enregistrement / citations | Signal (positif / négatif / ambigu) | Section où le signal est apparu | Référence des notes hors dépôt (non nominative) |
+| Code | Période (mois ou trimestre ; jamais la date exacte, conservée uniquement dans les dossiers privés hors dépôt) | Durée | Correspondance persona (C1–C7, vérification C1/C4 en entretien) | Consentement entretien / enregistrement / citations | Signal (positif / négatif / ambigu) | Section où le signal est apparu | Référence des notes hors dépôt (non nominative) |
 |---|---|---|---|---|---|---|---|
 
 Aucune ligne n'est remplie avant un entretien réel attesté par le mainteneur.

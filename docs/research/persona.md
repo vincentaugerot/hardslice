@@ -1,6 +1,6 @@
 # Note persona (UXR-01)
 
-Statut : **validée** par le mainteneur le 28/10/2026 (D-UXR-01 `DECIDED` dans [phase-0-decisions.md](../execution/phase-0-decisions.md)), dans sa version corrigée du 28/10/2026 (A-01). Toute modification exige une nouvelle validation. Note interne en français ; questions de présélection destinées aux participants en français et en anglais (D-11).
+Statut : **version précédemment validée, amendement en attente de revalidation.** La version validée par le mainteneur le 28/10/2026 (D-UXR-01 `DECIDED` dans [phase-0-decisions.md](../execution/phase-0-decisions.md)) est celle du commit `40a2763`. L'amendement A1 du 28/10/2026 (A-05 : relances conditionnelles C1 et C4, règle « indéterminé = non qualifié », remplacement des participants disqualifiés) **n'est pas couvert par D-UXR-01** : il attend D-UXR-01-A1 (`OPEN`). Note interne en français ; questions de présélection destinées aux participants en français et en anglais (D-11).
 Source : [plan.md](../plan.md) §3, §10 ; backlog UXR-01.
 
 ## 1. Persona prioritaire
@@ -23,7 +23,7 @@ Chaque critère est vérifié par une question de présélection neutre. Les que
 | C6 | Implication dans la revue | Au moins une fois par semaine |
 | C7 | Équipe produit responsable de l'API | L'équipe développe et fait évoluer ce service elle-même |
 
-Un participant est **qualifié** s'il satisfait C1 à C7. Une réponse « mélange » à C4 est qualifiante si des dossiers par fonctionnalité existent dans le service cité.
+Un participant est **qualifié** s'il satisfait C1 à C7, y compris après les relances conditionnelles ci-dessous. Une réponse « mélange » à C4 n'est qualifiante que si la relance C4 confirme qu'une organisation par fonctionnalité existe dans le service cité. **Une réponse indéterminée ne qualifie pas.**
 
 Justification de C3 : le premier cas d'usage est l'adoption sur un **dépôt existant** (§3 du plan) ; « en production » garantit un code existant, avec des utilisateurs et un historique de changements. Aucune durée minimale n'est imposée : un seuil n'aurait pas de fondement dans le plan.
 
@@ -38,6 +38,19 @@ Justification de C3 : le premier cas d'usage est l'adoption sur un **dépôt exi
 | Q-C5 | Quels outils l'équipe utilise-t-elle au moins une fois par semaine pour écrire ou modifier du code ? (plusieurs réponses) | Which tools does your team use at least weekly to write or change code? (select all) | IDE, complétion IA dans l'IDE, agent en ligne de commande (Claude Code, Codex, Copilot CLI…), mode agent dans l'IDE (Cursor, Copilot agent…), générateurs de code, aucun outil d'IA, autre / IDE, AI completion in the IDE, command-line agent (Claude Code, Codex, Copilot CLI…), agent mode in the IDE (Cursor, Copilot agent…), code generators, no AI tools, other |
 | Q-C6 | À quelle fréquence relisez-vous des pull requests sur ce service ? | How often do you review pull requests on this service? | plusieurs fois par semaine, une fois par semaine, moins souvent, jamais / several times a week, once a week, less often, never |
 | Q-C7 | Quelle est la responsabilité de votre équipe vis-à-vis de ce service ? | What is your team's responsibility for this service? | nous le développons et le faisons évoluer, nous fournissons une plateforme ou des outils à d'autres équipes, nous l'auditons ou le conseillons de l'extérieur, autre / we build and evolve it, we provide a platform or tools to other teams, we audit or advise on it from outside, other |
+
+### Relances conditionnelles de présélection (avant l'entretien)
+
+Posées par écrit ou de vive voix, avant la planification, seulement dans les cas indiqués. Comme les questions de présélection, elles ne mentionnent ni les agents ni l'IA.
+
+| Critère | Condition | FR | EN | Qualifie si |
+|---|---|---|---|---|
+| C1 | Réponse « développeur senior », « autre », ou rôle dont l'autorité sur les conventions n'est pas évidente | Fixez-vous ou tranchez-vous vous-même les conventions de code de l'équipe ? Donnez un exemple récent où vous l'avez fait. | Do you yourself set or decide your team's code conventions? Give a recent example where you did. | Oui, avec un exemple concret où la personne a fixé ou tranché une convention |
+| C4 | Réponse « mélange » ou « je ne sais pas » | Dans ce service, existe-t-il des dossiers ou des projets regroupés par fonctionnalité ou par cas d'usage ? Pouvez-vous en citer un ? | In this service, are there folders or projects grouped by feature or use case? Can you name one? | Oui, avec au moins un exemple nommé d'organisation par fonctionnalité |
+
+Règles :
+- **Une réponse indéterminée, évasive ou sans exemple ne qualifie pas.** Le doute vaut « non qualifié ».
+- **Remplacement** : un candidat disqualifié à la présélection n'est pas planifié, et le recrutement continue jusqu'à obtenir le nombre de participants qualifiés visé (3 pour le jalon de phase 0, puis 5). Un participant disqualifié pendant l'entretien par la vérification du guide (« non qualifié à la vérification ») est exclu des décomptes ≤ 1/3 et ≥ 3/5 et remplacé de la même manière. Le nombre de disqualifications et leur critère (C1 ou C4) sont comptés dans le journal anonymisé, sans autre détail.
 
 ## 3. Critères d'exclusion
 
