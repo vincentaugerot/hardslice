@@ -50,7 +50,7 @@ Chaque case est cochée dans la fiche de la première tentative de la série con
 | 5 | Inventaire de l'environnement effectif archivé (étape B0a) | Script de série | Toute tentative |
 | 6 | `/usr/local/share/dotnet/dotnet /usr/local/share/dotnet/sdk/10.0.102/dotnet.dll --version` = `10.0.102` (étape `must_succeed` dont la sortie est comparée) | Script de série | Toute tentative |
 | 7 | Journal humain : heure de début déclarée par le mainteneur | Mainteneur | Tout ticket S1 |
-| 8 | OP-01 attestée (compte dédié, `HOME` vide, aucun secret ni donnée UXR, environnement en liste blanche, cache NuGet dédié, NuGet public, réseau limité, accès limité, conditions M-08) | Mainteneur | Premier restore de nopCommerce ou de FSH |
+| 8 | OP-01 attestée (compte dédié, `HOME` à l'état de référence propre avec `.run-ids` comme seul état HardSlice persistant, aucun secret ni donnée UXR, environnement en liste blanche, cache NuGet dédié, NuGet public, réseau limité, accès limité, conditions M-08) | Mainteneur | Premier restore de nopCommerce ou de FSH |
 | 9 | Bootstrap Q5/Q6 (§6.5.1) terminé, empreintes des binaires enregistrées, **avant** la coupure réseau | Script de série, lancé par le mainteneur | Q5, Q6 |
 | 10 | Clones vérifiés : URL, SHA, `git status --porcelain` vide, avant et après la série | Script de série | Q5, Q6 |
 | 11 | **Q5** : algorithme et outil `classify-worst-case` commités avant le run ; classification nopCommerce générée en C1 puis hachée en C2 avant toute mesure. **Q6** : `config/fsh.globalconfig` commitée et hachée avant le run | Agent | Q5, Q6 |
@@ -58,7 +58,7 @@ Chaque case est cochée dans la fiche de la première tentative de la série con
 | 13 | PRE-S1-04 attestée (versions exactes de VS Code stable, C# Dev Kit, extension C#, runtime) | Mainteneur | S1-04 |
 | 14 | M-10 identifié, ou risque accepté que tout cas ambigu laisse Q6 `non mesuré` | Mainteneur | Triage S1-07 |
 | 15 | D-18 décidée, et protocole amendé en conséquence si l'option A est retenue | Mainteneur | V-S1-01, donc tout run |
-| 16 | Fin de série OP-01 (arrêt des processus, inventaire, remise à zéro) attestée pour la série précédente avant toute réutilisation du compte dédié | Mainteneur | Toute nouvelle série Q5/Q6 |
+| 16 | Fin de série OP-01 (arrêt des processus, inventaire, retour à l'état de référence et préservation append-only de `.run-ids`) attestée pour la série précédente avant toute réutilisation du compte dédié | Mainteneur | Toute nouvelle série Q5/Q6 |
 | 17 | `$HS_ART` hors synchronisation iCloud, Dropbox, OneDrive ou autre ; emplacement attesté dans la fiche. P0 contrôle la partie Git, cette attestation couvre la synchronisation | Mainteneur | Toute tentative (Q1 à Q6) |
 
 ### 3. Environnement épinglé
@@ -92,7 +92,7 @@ Vérification préalable du 28/10/2026, hors mesure : sur le clone nopCommerce, 
 
 #### 3.2 Identifiant de tentative et variables symboliques (D-10-A1)
 
-**`<RUN_ID>`** identifie une tentative de façon immuable : `<AAAAMMJJ>T<HHMMSS>Z-<Qn>-<SHA court de 12 caractères du commit HardSlice>-a<NN>-u<UUID sans tirets, 32 hexadécimaux minuscules>`, par exemple `20261030T091500Z-Q1-0123456789ab-a01-u2393e983a9c1489c9fbc780a231f1cb4`. Le mainteneur fournit seulement `ATTEMPT=<NN>`, étiquette humaine à deux chiffres consignée dans la fiche et qui n'est pas le mécanisme d'unicité ; P0 la valide, relève lui-même l'heure UTC, la question et le SHA, génère l'UUID, valide chacun de ces composants puis compose le `RUN_ID`. L'UUID rend les collisions opérationnellement négligeables même entre deux racines d'artefacts ; la réservation exclusive `$HS_ART/.run-ids/<RUN_ID>/` interdit en plus toute réutilisation locale. Ce registre est hors Git, ne contient aucune sortie brute et n'est jamais supprimé, y compris après le rangement ou le nettoyage d'une tentative. Le dossier versionnable `results/<RUN_ID>/` n'est créé qu'au moment de publier la fiche et les extraits normalisés, avec refus s'il existe déjà : le créer avant la mesure salirait le worktree dont P0 doit attester la propreté. Une tentative interrompue garde sa réservation, et la suivante reçoit un nouvel identifiant.
+**`<RUN_ID>`** identifie une tentative de façon immuable : `<AAAAMMJJ>T<HHMMSS>Z-<Qn>-<SHA court de 12 caractères du commit HardSlice>-a<NN>-u<UUID sans tirets, 32 hexadécimaux minuscules>`, par exemple `20261030T091500Z-Q1-0123456789ab-a01-u2393e983a9c1489c9fbc780a231f1cb4`. Le mainteneur fournit seulement `ATTEMPT=<NN>`, étiquette humaine à deux chiffres consignée dans la fiche et qui n'est pas le mécanisme d'unicité ; P0 la valide, relève lui-même l'heure UTC, la question et le SHA, génère l'UUID, valide chacun de ces composants puis compose le `RUN_ID`. L'UUID rend les collisions opérationnellement négligeables même entre deux racines d'artefacts ; la réservation exclusive `$HS_ART/.run-ids/<RUN_ID>/` interdit en plus toute réutilisation locale. Ce registre est hors Git, ne contient aucune sortie brute et n'est jamais supprimé, y compris après le rangement ou le nettoyage d'une tentative. Dans le compte dédié Q5/Q6, il constitue le seul état HardSlice persistant autorisé par l'état de référence OP-01 ; ses réservations sont append-only. Cette propriété est procédurale sous D-18-B et n'est protégée face au code exécuté que par le superviseur distinct de D-18-A. Le dossier versionnable `results/<RUN_ID>/` n'est créé qu'au moment de publier la fiche et les extraits normalisés, avec refus s'il existe déjà : le créer avant la mesure salirait le worktree dont P0 doit attester la propreté. Une tentative interrompue garde sa réservation, et la suivante reçoit un nouvel identifiant.
 
 Les commandes versionnées n'emploient que ces variables ; leur expansion exacte est écrite dans le manifeste privé `$HS_RUN/manifest.private.md`, hors git.
 
@@ -154,7 +154,7 @@ Résultat du 28/10/2026, hors mesure : `passed=45 failed=0`.
 #### 3.4 Isolation et environnement d'exécution (M-08-A1, OP-01)
 
 Tout restore, build ou benchmark de **nopCommerce et de FSH** s'exécute sur le M4 Max, sous un compte macOS local **dédié et non privilégié**, préparé par le mainteneur et attesté par **OP-01** avant le premier restore :
-- `HOME` dédié et vide ;
+- `HOME` dédié dans l'état de référence propre défini par OP-01 : éléments macOS indispensables et `$HS_ART/.run-ids/` seulement, sans autre état HardSlice ; avant la série, `$HS_ART` ne contient que ce registre append-only ;
 - aucun secret, trousseau, agent SSH, credential cloud ou donnée UXR accessible ;
 - configuration NuGet limitée aux sources publiques requises ;
 - cache NuGet dédié à la tentative ;
@@ -561,7 +561,7 @@ exec /usr/bin/env -i \
   /bin/bash "$HS_SPIKE/tools/series-$SERIES.sh"
 ```
 
-Toute sortie non nulle de P0 est une panne d'infrastructure : aucune étape métier ne s'exécute. Dès que `$HS_ART/.run-ids/<RUN_ID>/` a été créé, la réservation reste conservée même si `$HS_RUN` ou l'export n'a pas pu être créé ; la tentative est publiée comme invalide. Le registre `.run-ids` est préservé par la fin de série OP-01. L'archive source, son empreinte et tous les `bin/obj` produits depuis `$HS_SPIKE` restent sous `$HS_RUN` : aucune compilation ne travaille dans `$HS_REPO`.
+Une sortie non nulle de P0 est une panne d'infrastructure : aucune étape métier ne s'exécute. Trois cas sont distingués. **Avant la création de `$HS_ART/.run-ids/<RUN_ID>/`**, c'est un échec de lancement sans tentative ni publication, consigné dans l'attestation opérationnelle. **Après la réservation mais avant `manifest.private.md`**, la réservation reste conservée et la tentative est invalide ; le mainteneur crée un manifeste privé de récupération dans le dossier D-10 exclusif de ce RUN_ID, avec l'étape d'échec et les empreintes de tout artefact partiel. **Après la création du manifeste P0**, la tentative invalide suit le rangement normal. Avant toute nouvelle série, un `$HS_RUN` partiel est rangé ou quarantainé selon OP-01, ou son absence est attestée ; `$HS_ART` doit de nouveau ne contenir que `.run-ids/`. Le registre `.run-ids` est préservé par la fin de série OP-01. L'archive source, son empreinte et tous les `bin/obj` produits depuis `$HS_SPIKE` restent sous `$HS_RUN` : aucune compilation ne travaille dans `$HS_REPO`.
 
 **Contrôles communs Q1 à Q6, après P0** :
 
@@ -612,7 +612,7 @@ Toute sortie non nulle de P0 est une panne d'infrastructure : aucune étape mét
 
 Les mêmes vérifications N8 et F8 sont rejouées en fin de série (étapes `N8a′` à `N8c′`, `F8a′` à `F8c′`, logs suffixés `-end`). Après B11, aucune commande ne restaure ni ne compile le prototype : les builds externes utilisent `--no-restore`, et l'hôte est lancé depuis `$HS_RUN/bin/bench/HardSlice.Spike.Bench.dll`. Les targets d'injection reçoivent `-p:HardSliceSpikeAnalyzerPath=$HS_RUN/bin/analyzer/HardSlice.Spike.Analyzer.dll`.
 
-**Fin de série** : la procédure OP-01 « fin de série » (arrêt des processus du compte dédié, inventaire, remise à zéro) est exécutée et attestée par le mainteneur après le rangement des sorties. L'agent n'exécute aucune opération système.
+**Fin de série** : la procédure OP-01 « fin de série » (arrêt des processus du compte dédié, inventaire, rangement et suppression de `$HS_RUN`, suppression des caches, retour à l'état de référence avec croissance append-only de `.run-ids`) est exécutée et attestée par le mainteneur après le rangement des sorties. L'agent n'exécute aucune opération système.
 
 ##### 6.5.2 Restore, injection et classification pour nopCommerce
 
@@ -802,6 +802,7 @@ Aucune entrée : les durées sont fournies par le mainteneur ; l'agent n'en insc
 | 2026-10-28 | 19:31 CET | 19:40 CET | ≈ 10 min | S1-01 | Passe corrective demandée par A-03 : wrapper durci, test versionné (`passed=34 failed=0`), protocole, hors mesure. Premier horodatage : copie de l'état de la passe précédente à 19:31:04 CET |
 | 2026-10-28 | non relevé (postérieur à 20:08:52 CET) | 20:26 CET | inconnue, au plus ≈ 17 min | S1-01 | Passe corrective demandée par A-05, à partir du commit `40a2763` : wrapper (panne d'enregistrement → 70, identité du log, ancêtres canoniques), test versionné (`passed=43 failed=0`), D-18, métrique Q5(2), SPKCFG bloquant, X5, P0 et sous-séquences N/F, hors mesure. Premier horodatage relevé : 20:23 CET, en cours de passe |
 | 2026-10-28 → 2026-10-29 | 20:34 CET | 01:06 CET | ≈ 4 h 32 | S1-01 | Passe corrective directe autorisée par A-06 : revue croisée gouvernance/protocole/sécurité, wrapper et test du descendant asynchrone (`passed=45 failed=0`), P0 assaini dès le lancement, `RUN_ID`, confinement de l'export et des `bin/obj`, contrôle Roslyn des documents, portes UXR et consentement ; hors mesure, sans restore ni build OSS |
+| 2026-10-29 | non relevé (premier horodatage 09:24:58 CET) | 09:29 CET | inconnue, au moins ≈ 4 min | S1-01 | Correction A-07 : état de référence propre du compte dédié, registre `.run-ids` persistant et append-only, preuve structurelle, récupération des échecs P0 et quarantaine d'une racine compromise ; deux contre-relectures ciblées, hors mesure |
 
 ### 9. Répartition de la timebox (proposition soumise à V-S1-01)
 
