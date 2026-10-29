@@ -6,7 +6,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
-  <!-- Analyzers and the adoption tool ship with the same version. -->
+  <!-- Distributable HardSlice packages share the same version and metadata. -->
   <PropertyGroup>
     <VersionPrefix>0.1.0</VersionPrefix>
     <Authors>Vincent Augerot</Authors>

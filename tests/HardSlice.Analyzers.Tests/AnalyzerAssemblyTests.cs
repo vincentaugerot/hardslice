@@ -16,11 +16,17 @@ public sealed class AnalyzerAssemblyTests
         targetFramework.FrameworkName.ShouldBe(".NETStandard,Version=v2.0");
     }
 
-    // The compiler host provides Microsoft.CodeAnalysis; any other dependency would fail to load at build time.
+    // Analyzer dependencies must be provided by the compiler host. Add host assemblies explicitly when required.
     [Fact]
-    public void References_only_netstandard_and_the_compiler_apis()
+    public void References_only_framework_and_compiler_host_assemblies()
     {
-        string[] allowed = ["netstandard", "Microsoft.CodeAnalysis", "Microsoft.CodeAnalysis.CSharp"];
+        string[] allowed =
+        [
+            "netstandard",
+            "Microsoft.CodeAnalysis",
+            "Microsoft.CodeAnalysis.CSharp",
+            "System.Collections.Immutable"
+        ];
 
         AnalyzerAssembly.GetReferencedAssemblies()
             .Select(reference => reference.Name)
