@@ -16,7 +16,7 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Cancels_an_existing_booking()
     {
-        var booking = await StoreAsync(Booking.Confirm(Guid.NewGuid(), Period));
+        var booking = await StoreAsync(Booking.Confirm(Guid.NewGuid(), Period, []));
         await using var db = database.CreateDbContext();
 
         var cancelled = await new CancelBookingHandler(db, _beforeStart).Handle(
@@ -40,7 +40,7 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_a_booking_that_has_started()
     {
-        var booking = await StoreAsync(Booking.Confirm(Guid.NewGuid(), Period));
+        var booking = await StoreAsync(Booking.Confirm(Guid.NewGuid(), Period, []));
         await using var db = database.CreateDbContext();
 
         await Should.ThrowAsync<DomainException>(() => new CancelBookingHandler(db, new FixedClock(Period.Start)).Handle(

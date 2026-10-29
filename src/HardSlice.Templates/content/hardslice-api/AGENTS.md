@@ -33,6 +33,7 @@ Modules and slices:
 ## Adding a slice
 
 1. Check whether the aggregate already owns the business rule. If not, add it to the aggregate with its unit test.
+   A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as an overlapping booking, throws a `ConflictException`, answered with 409.
 2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`: the command or query, an `internal` handler and an `internal` endpoint. The handler reaches aggregates through `AppDbContext.Set<T>()`. Follow `ConfirmBooking` as the example.
 3. Register the handler and map the endpoint in `<Module>Module.cs`.
 4. Add its tests in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`.
@@ -41,7 +42,7 @@ Modules and slices:
 ## Changing the database
 
 1. Map a new aggregate in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`: an `internal` `IEntityTypeConfiguration<T>` in fluent API. Never add EF Core attributes or references to the domain, and never declare module types in `AppDbContext`.
-2. After any mapping change, add a migration. Never edit a migration that may already be applied.
+2. After any mapping change, add a migration. A constraint EF Core cannot model, such as the exclusion constraint that keeps confirmed bookings of a room from overlapping, goes in a migration through `migrationBuilder.Sql`. Never edit a migration that may already be applied.
 
    ```text
    dotnet tool restore

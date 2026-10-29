@@ -26,7 +26,15 @@ public sealed class Booking
 
     public BookingStatus Status => _status;
 
-    public static Booking Confirm(Guid roomId, BookingPeriod period) => new(BookingId.New(), roomId, period);
+    // A room cannot hold two confirmed bookings whose periods overlap. existingBookings must include every
+    // confirmed booking of the room that may overlap the period; the database enforces the same rule under concurrency.
+    public static Booking Confirm(Guid roomId, BookingPeriod period, IEnumerable<Booking> existingBookings)
+    {
+        if (existingBookings.Any(other => other.RoomId == roomId && other.Status == BookingStatus.Confirmed && other.Period.Overlaps(period)))
+            throw new BookingConflictException(roomId, period);
+
+        return new(BookingId.New(), roomId, period);
+    }
 
     public void Cancel()
     {

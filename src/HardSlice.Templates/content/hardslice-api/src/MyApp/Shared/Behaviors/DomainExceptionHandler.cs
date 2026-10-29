@@ -10,12 +10,16 @@ internal sealed class DomainExceptionHandler(IProblemDetailsService problemDetai
         if (exception is not DomainException)
             return ValueTask.FromResult(false);
 
-        httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+        var (status, title) = exception is ConflictException
+            ? (StatusCodes.Status409Conflict, "The request conflicts with the current state.")
+            : (StatusCodes.Status400BadRequest, "A business rule was violated.");
+
+        httpContext.Response.StatusCode = status;
         return problemDetails.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,
             Exception = exception,
-            ProblemDetails = { Title = "A business rule was violated.", Detail = exception.Message }
+            ProblemDetails = { Title = title, Detail = exception.Message }
         });
     }
 }

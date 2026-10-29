@@ -14,7 +14,7 @@ public sealed class BookingTests
     [Fact]
     public void Confirm_creates_a_confirmed_booking_for_the_room_and_period()
     {
-        var booking = Booking.Confirm(RoomId, Period);
+        var booking = Booking.Confirm(RoomId, Period, []);
 
         booking.RoomId.ShouldBe(RoomId);
         booking.Period.ShouldBe(Period);
@@ -24,13 +24,48 @@ public sealed class BookingTests
     [Fact]
     public void Confirm_gives_each_booking_its_own_identifier()
     {
-        Booking.Confirm(RoomId, Period).Id.ShouldNotBe(Booking.Confirm(RoomId, Period).Id);
+        Booking.Confirm(RoomId, Period, []).Id.ShouldNotBe(Booking.Confirm(RoomId, Period, []).Id);
+    }
+
+    [Fact]
+    public void Confirm_rejects_a_period_overlapping_a_confirmed_booking_of_the_room()
+    {
+        var existing = Booking.Confirm(RoomId, Period, []);
+        var overlapping = new BookingPeriod(Period.Start.AddMinutes(30), Period.End.AddMinutes(30));
+
+        Should.Throw<BookingConflictException>(() => Booking.Confirm(RoomId, overlapping, [existing]));
+    }
+
+    [Fact]
+    public void Confirm_accepts_a_period_adjacent_to_a_confirmed_booking_of_the_room()
+    {
+        var existing = Booking.Confirm(RoomId, Period, []);
+        var adjacent = new BookingPeriod(Period.End, Period.End.AddHours(1));
+
+        Booking.Confirm(RoomId, adjacent, [existing]).Period.ShouldBe(adjacent);
+    }
+
+    [Fact]
+    public void Confirm_ignores_a_cancelled_booking_of_the_room()
+    {
+        var cancelled = Booking.Confirm(RoomId, Period, []);
+        cancelled.Cancel();
+
+        Booking.Confirm(RoomId, Period, [cancelled]).Status.ShouldBe(BookingStatus.Confirmed);
+    }
+
+    [Fact]
+    public void Confirm_ignores_a_booking_of_another_room()
+    {
+        var otherRoom = Booking.Confirm(Guid.NewGuid(), Period, []);
+
+        Booking.Confirm(RoomId, Period, [otherRoom]).RoomId.ShouldBe(RoomId);
     }
 
     [Fact]
     public void Cancel_marks_a_confirmed_booking_as_cancelled()
     {
-        var booking = Booking.Confirm(RoomId, Period);
+        var booking = Booking.Confirm(RoomId, Period, []);
 
         booking.Cancel();
 
@@ -40,7 +75,7 @@ public sealed class BookingTests
     [Fact]
     public void Cancel_rejects_a_booking_that_is_already_cancelled()
     {
-        var booking = Booking.Confirm(RoomId, Period);
+        var booking = Booking.Confirm(RoomId, Period, []);
         booking.Cancel();
 
         Should.Throw<DomainException>(booking.Cancel);

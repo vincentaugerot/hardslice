@@ -1,3 +1,3 @@
 namespace MyApp.Domain;
 
-public sealed class DomainException(string message) : Exception(message);
+public class DomainException(string message) : Exception(message);
