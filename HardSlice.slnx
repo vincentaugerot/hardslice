@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" />
+    <Project Path="src/HardSlice.Templates/HardSlice.Templates.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HardSlice.Analyzers.Tests/HardSlice.Analyzers.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageType>Template</PackageType>
+    <PackageId>HardSlice.Templates</PackageId>
+    <Description>dotnet new templates for HardSlice: vertical slices with a rich domain, enforced by the build.</Description>
+    <PackageTags>dotnet-new;templates;architecture;vertical-slices;ddd;cqrs</PackageTags>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="content/**/*" Exclude="content/**/bin/**;content/**/obj/**" />
+    <Compile Remove="**/*" />
+  </ItemGroup>
+
+</Project>
