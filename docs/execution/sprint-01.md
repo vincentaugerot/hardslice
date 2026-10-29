@@ -1,3 +1,5 @@
+> **Statut : historique — sprint arrêté avant toute mesure S1 le 29/10/2026.** Aucun ticket de ce document n'est actif. Les préparations déjà réalisées sont conservées pour retracer l'ancien protocole de phase 0 ; le prochain travail est défini dans le [backlog produit](../product-backlog.md).
+
 # Sprint 1 — Phase 0
 
 Statut : approuvé comme base d'exécution par le mainteneur le 28/10/2026 (attestation A-00 de [phase-0-decisions.md](phase-0-decisions.md)). Cette approbation ne tranche aucune décision D-xx et ne déclare aucun ticket terminé.

@@ -1,7 +1,9 @@
+> **Statut : référence technique provisoire.** Cet inventaire peut alimenter la conception de la configuration HardSlice ; il ne constitue ni la spécification active du format ni une porte préalable au premier incrément.
+
 # S2a — Conventions minimales pour HS016
 
 Statut : **inventaire provisoire (S2A-01), non figé**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02). Le format (S2A-02), la version (S2A-03), la validation (S2A-04) et le gel après D-S1 (S2A-05) relèvent du sprint 2. Les noms de clés sont des libellés de travail, indépendants du format qui sera choisi.
-Sources : [plan.md](../plan.md) §6.5 (lignes 1A), §7.2, §7.3 ; backlog S2A-01.
+Sources historiques : [evidence-first-plan.md](../evidence-first-plan.md) §6.5 (lignes 1A), §7.2, §7.3 ; backlog S2A-01.
 
 ## Principes
 

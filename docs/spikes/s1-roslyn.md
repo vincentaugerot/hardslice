@@ -1,7 +1,9 @@
+> **Statut : référence technique non exécutée.** Ce protocole historique peut alimenter l'implémentation et les tests de HS016, mais il n'est plus une porte préalable au développement. Aucune mesure S1 n'a été réalisée.
+
 # S1 — Spike Roslyn (HS016)
 
 Statut : **protocole DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02, A-03, A-05, A-06), puis le 29/10/2026 (A-07 ; A-08 : amendement D-18-A), **non validé** (V-S1-01 `OPEN` dans [phase-0-decisions.md](../execution/phase-0-decisions.md)). **Aucune mesure n'a été exécutée.**
-Sources : [plan.md](../plan.md) §6.1, §6.2, §6.3, §6.4, §6.5, §7.2, §10, annexe A.3 ; backlog S1-01 à S1-09 ; [s2a-conventions.md](s2a-conventions.md).
+Sources historiques : [evidence-first-plan.md](../evidence-first-plan.md) §6.1, §6.2, §6.3, §6.4, §6.5, §7.2, §10, annexe A.3 ; backlog S1-01 à S1-09 ; [s2a-conventions.md](s2a-conventions.md).
 
 ## Protocole
 

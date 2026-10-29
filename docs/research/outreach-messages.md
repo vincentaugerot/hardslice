@@ -1,3 +1,5 @@
+> **Statut : brouillons historiques non envoyés, différés à v0.5.** Ces messages reprennent l'ancien plan ; ils ne doivent pas être utilisés avant réalignement et nouvelle validation. Ils ne bloquent pas l'implémentation.
+
 # Messages de démarchage (brouillons non envoyés)
 
 Statut : **DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 (A-01, A-02, A-06). **Aucun de ces messages n'a été envoyé.** Les envois sont des actions du mainteneur, après les préalables de [outreach-log.md](outreach-log.md), et chaque envoi est attesté dans ce journal.

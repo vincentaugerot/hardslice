@@ -1,7 +1,9 @@
+> **Statut : historique — inactif depuis le 29/10/2026.** Ce document conserve le protocole de validation de l'ancien plan « evidence first ». Il n'est plus le backlog actif et aucune décision, porte ou validation qu'il contient ne bloque l'implémentation. Le travail actif est défini par le [backlog produit](../product-backlog.md), sous l'autorité de la [spécification](../specifications.md) et du [plan de livraison](../plan.md).
+
 # Phase 0 — Réduction des risques : backlog d'exécution
 
 Statut : approuvé comme base d'exécution par le mainteneur le 28/10/2026 (attestation A-00 de [phase-0-decisions.md](phase-0-decisions.md)). Cette approbation ne tranche aucune décision D-xx et ne déclare aucun ticket terminé.
-Source de vérité : [plan.md](../plan.md) v3.2 (§10 Phase 0, §6.3, §6.4, §7.2, §9.2, §3, §16, §17). [specifications.md](../specifications.md) n'est qu'un historique.
+Source historique : [evidence-first-plan.md](../evidence-first-plan.md) v3.2 (§10 Phase 0, §6.3, §6.4, §7.2, §9.2, §3, §16, §17). Les affirmations de ce document sur la hiérarchie documentaire sont désormais obsolètes.
 Sprint 1 : [sprint-01.md](sprint-01.md).
 
 Ce document **planifie** la phase 0. Il ne contient aucun résultat de spike, d'entretien ou de démarchage : toute valeur mesurée, tout accord et tout entretien seront consignés plus tard, avec leur preuve, aux chemins indiqués.

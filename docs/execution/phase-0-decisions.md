@@ -1,6 +1,8 @@
+> **Statut : historique — registre inactif depuis le 29/10/2026.** Ce fichier conserve les décisions et faits de l'ancien contexte « evidence first ». Il n'est plus la source de vérité de l'exécution courante et aucune de ses portes ne bloque le backlog produit. Une décision qui doit encore gouverner HardSlice doit être reprise explicitement dans la spécification, le plan actif ou un nouveau document de décision produit.
+
 # Phase 0 — Journal des décisions (GOV-00)
 
-Statut : registre ouvert le 28/10/2026. Backlog : [phase-0-backlog.md](phase-0-backlog.md) (§10, §11). Sprint : [sprint-01.md](sprint-01.md). **Ce registre est la source de vérité des statuts de décision** ; les autres documents y renvoient.
+Statut : registre ouvert le 28/10/2026. Backlog : [phase-0-backlog.md](phase-0-backlog.md) (§10, §11). Sprint : [sprint-01.md](sprint-01.md). **Ce registre est la source historique des statuts de décision de l'ancienne phase 0** ; il ne gouverne plus l'exécution active.
 
 ## Règles du registre
 

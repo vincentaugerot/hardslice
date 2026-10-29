@@ -1,3 +1,5 @@
+> **Statut : historique — différé au benchmark.** Ce design reste disponible pour les futures exécutions reproductibles, mais il n'est pas requis pour construire ou démontrer le premier incrément produit.
+
 # État de référence du compte de mesure et registre RUN_ID
 
 Date : 2026-10-29

@@ -1,7 +1,9 @@
+> **Statut : brouillon historique de la piste adoption, différé à v0.5.** Ce document reprend l'ancien plan et doit être réaligné sur la roadmap active avant toute utilisation ou tout contact. Il ne bloque pas l'implémentation et n'autorise aucune action de recherche.
+
 # Note persona (UXR-01)
 
 Statut : **version précédemment validée, amendement en attente de revalidation.** La version validée par le mainteneur le 28/10/2026 (D-UXR-01 `DECIDED` dans [phase-0-decisions.md](../execution/phase-0-decisions.md)) est celle du commit `40a2763`. L'amendement A1 du 28/10/2026 (A-05 : relances conditionnelles C1 et C4, règle « indéterminé = non qualifié », remplacement des participants disqualifiés) **n'est pas couvert par D-UXR-01** : il attend D-UXR-01-A1 (`OPEN`). Note interne en français ; questions de présélection destinées aux participants en français et en anglais (D-11).
-Source : [plan.md](../plan.md) §3, §10 ; backlog UXR-01.
+Source historique : [evidence-first-plan.md](../evidence-first-plan.md) §3, §10 ; backlog UXR-01.
 
 ## 1. Persona prioritaire
 
@@ -25,7 +27,7 @@ Chaque critère est vérifié par une question de présélection neutre. Les que
 
 Un participant est **qualifié** s'il satisfait C1 à C7, y compris après les relances conditionnelles ci-dessous. Une réponse « mélange » à C4 n'est qualifiante que si la relance C4 confirme qu'une organisation par fonctionnalité existe dans le service cité. **Une réponse indéterminée ne qualifie pas.**
 
-Justification de C3 : le premier cas d'usage est l'adoption sur un **dépôt existant** (§3 du plan) ; « en production » garantit un code existant, avec des utilisateurs et un historique de changements. Aucune durée minimale n'est imposée : un seuil n'aurait pas de fondement dans le plan.
+Justification de C3 : cette piste de recherche cible l'**adoption sur un dépôt existant**, engagée pour la v0.5 du [plan actif](../plan.md), même si la première entrée de développement est désormais le template greenfield. « En production » garantit un code existant, avec des utilisateurs et un historique de changements. Aucune durée minimale n'est imposée.
 
 ### Questions de présélection
 

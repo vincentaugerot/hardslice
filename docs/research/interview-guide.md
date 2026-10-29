@@ -1,11 +1,13 @@
+> **Statut : brouillon historique de la piste adoption, différé à v0.5.** Ce guide contient encore des références à l'ancien plan et doit être réaligné puis revalidé avant tout contact ou entretien. Il ne bloque pas l'implémentation et n'autorise aucune action de recherche.
+
 # Guide d'entretien et règle de codage (UXR-02)
 
-Statut : **DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02, A-03, A-05, A-06), non validé (D-UXR-02 `OPEN` dans [phase-0-decisions.md](../execution/phase-0-decisions.md)). La règle de codage ne vaut que si elle est validée et datée **avant le premier entretien**. Notes internes en français ; script et questions destinés au participant en français et en anglais (D-11), même contenu dans les deux langues.
-Sources : [plan.md](../plan.md) §3 ; [persona.md](persona.md) ; backlog UXR-02, R-05 ; D-13.
+Statut : **DRAFT**, préparé par l'agent le 28/10/2026, corrigé le 28/10/2026 à la demande du mainteneur (A-01, A-02, A-03, A-05, A-06), non validé (D-UXR-02 `OPEN` dans le [registre historique](../execution/phase-0-decisions.md)). Avant tout contact réel, les validations nécessaires doivent être reprises et approuvées dans un registre de recherche actif ; le statut historique seul n'autorise rien. La règle de codage ne vaut que si elle est validée et datée **avant le premier entretien**. Notes internes en français ; script et questions destinés au participant en français et en anglais (D-11), même contenu dans les deux langues.
+Sources historiques : [evidence-first-plan.md](../evidence-first-plan.md) §3 ; [persona.md](persona.md) ; backlog UXR-02, R-05 ; D-13.
 
 **Porte avant tout premier contact** (recrutement, design partner, gardien) :
-- D-UXR-01 validée (fait le 28/10/2026, version de `40a2763`) et son amendement D-UXR-01-A1 revalidé (`OPEN` à ce jour) ;
-- D-UXR-02 **doit être validée** par le mainteneur (script corrigé, D-13) ; elle est `OPEN` à ce jour ;
+- la note persona et son amendement sont relus puis validés par le mainteneur dans un registre de recherche actif ; les anciens statuts D-UXR-01 et D-UXR-01-A1 ne suffisent pas ;
+- ce guide et sa règle de codage sont validés et datés dans ce même registre ; l'ancien statut D-UXR-02 ne suffit pas ;
 - moyen de demande de suppression renseigné à la place du placeholder du §2 ;
 - stockage vérifié et attesté (OP-UXR-01 : hors synchronisation iCloud, Dropbox et OneDrive ; permissions `0700` sur le dossier, `0600` sur les fichiers ; sauvegardes conformes à D-13).
 
