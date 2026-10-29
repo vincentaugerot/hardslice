@@ -1,16 +1,10 @@
 using System.Reflection;
-using MyApp.Domain.Bookings;
-using MyApp.Features.Bookings;
 
 namespace MyApp.ArchitectureTests;
 
 public sealed class RuntimeDependencyTests
 {
-    public static TheoryData<string> ApplicationAssemblies =>
-    [
-        typeof(Booking).Assembly.GetName().Name!,
-        typeof(BookingsModule).Assembly.GetName().Name!
-    ];
+    public static TheoryData<string> ApplicationAssemblies => [Application.DomainName, Application.WebName];
 
     // HardSlice is build-time tooling only: the application must run without any HardSlice assembly.
     [Theory]

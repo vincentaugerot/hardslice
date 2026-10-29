@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Shouldly" />
+    <PackageReference Include="TngTech.ArchUnitNET" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,9 +18,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="../../src/MyApp.Domain/MyApp.Domain.csproj"
-          Link="ArchitectureInputs/DomainProject.csproj"
-          CopyToOutputDirectory="PreserveNewest" />
+    <!-- hardslice.json, the domain project and the Shared folders are read from the solution under test. -->
+    <AssemblyMetadata Include="SolutionRoot" Value="$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))" />
   </ItemGroup>
 
   <ItemGroup>

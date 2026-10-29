@@ -1,0 +1,6 @@
+{
+  "style": "slices",
+  "shared": {
+    "allowedFolders": ["Messaging", "Persistence", "Behaviors"]
+  }
+}

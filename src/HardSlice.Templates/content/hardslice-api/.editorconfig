@@ -1,0 +1,5 @@
+root = true
+
+# HardSlice rules. Lowering a severity is a bypass: see AGENTS.md.
+[*.cs]
+dotnet_diagnostic.HS016.severity = error

@@ -79,6 +79,29 @@ public sealed class TemplatePackageTests
             .ShouldBeEmpty("AGENTS.md cites paths that the generated solution does not contain.");
     }
 
+    // v0.1 declares the severity of HS016 only: other HS rules and analysis levels come with their analyzers.
+    [Fact]
+    public void Template_editorconfig_declares_only_HS016_as_an_error()
+    {
+        var editorConfig = File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".editorconfig"));
+
+        editorConfig.ShouldContain("root = true");
+        editorConfig
+            .Where(line => line.Contains("dotnet_diagnostic.HS", StringComparison.Ordinal))
+            .ShouldBe(["dotnet_diagnostic.HS016.severity = error"]);
+    }
+
+    [Fact]
+    public void Template_hardslice_json_allows_the_default_Shared_folders_in_the_slices_style()
+    {
+        using var configuration = JsonDocument.Parse(File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), "hardslice.json")));
+
+        configuration.RootElement.GetProperty("style").GetString().ShouldBe("slices");
+        configuration.RootElement.GetProperty("shared").GetProperty("allowedFolders").EnumerateArray()
+            .Select(folder => folder.GetString())
+            .ShouldBe(["Messaging", "Persistence", "Behaviors"]);
+    }
+
     private static string TemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");
 
