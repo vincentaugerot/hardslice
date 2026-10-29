@@ -1,12 +1,12 @@
 using Demo.Domain;
 using Demo.Domain.Bookings;
-using Demo.Features.Bookings;
+using Demo.Shared.Persistence;
 
 namespace Demo.Features.Bookings.ConfirmBooking;
 
 public sealed record ConfirmBookingCommand(Guid RoomId, DateTimeOffset Start, DateTimeOffset End);
 
-internal sealed class ConfirmBookingHandler(IBookingStore store, TimeProvider clock)
+internal sealed class ConfirmBookingHandler(AppDbContext db, TimeProvider clock)
 {
     public async Task<BookingId> Handle(ConfirmBookingCommand command, CancellationToken cancellationToken)
     {
@@ -15,7 +15,8 @@ internal sealed class ConfirmBookingHandler(IBookingStore store, TimeProvider cl
             throw new DomainException("A booking cannot be confirmed for a period that has already started.");
 
         var booking = Booking.Confirm(command.RoomId, period);
-        await store.AddAsync(booking, cancellationToken);
+        db.Set<Booking>().Add(booking);
+        await db.SaveChangesAsync(cancellationToken);
         return booking.Id;
     }
 }

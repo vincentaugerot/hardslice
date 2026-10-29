@@ -1,4 +1,4 @@
-namespace Demo.Tests;
+namespace Demo.IntegrationTests;
 
 internal sealed class FixedClock(DateTimeOffset now) : TimeProvider
 {

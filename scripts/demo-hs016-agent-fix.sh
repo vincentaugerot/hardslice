@@ -131,8 +131,8 @@ validate_changed_paths() {
   local path
 
   while IFS= read -r path; do
-    if [[ ! "$path" =~ ^src/.+[.]cs$ && ! "$path" =~ ^tests/Demo[.]Tests/.+[.]cs$ ]]; then
-      fail "changed outside C# sources of src/ and tests/Demo.Tests/: $path"
+    if [[ ! "$path" =~ ^src/.+[.]cs$ && ! "$path" =~ ^tests/Demo[.](Integration)?Tests/.+[.]cs$ ]]; then
+      fail "changed outside C# sources of src/, tests/Demo.Tests/ and tests/Demo.IntegrationTests/: $path"
     fi
   done < "$changed_paths"
 }

@@ -28,6 +28,7 @@ jobs:
       - name: Build
         run: dotnet build --no-restore
 
+      # Includes the template's integration tests, which start PostgreSQL with the runner's Docker.
       - name: Test
         run: dotnet test --no-build
 
@@ -44,3 +45,16 @@ jobs:
 
       - name: Test template from a clean checkout
         run: scripts/test-template.sh
+
+  # Separate job for the same reason: the PB-008 fixture must keep producing its HS016 on the current template.
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Prepare the HS016 agent fix demonstration from a clean checkout
+        run: scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"

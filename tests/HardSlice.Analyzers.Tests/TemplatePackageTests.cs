@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -14,13 +15,7 @@ public sealed class TemplatePackageTests
             .Descendants()
             .Single(element => element.Name.LocalName == "VersionPrefix")
             .Value;
-        var templatePropertiesPath = Path.Combine(
-            repositoryRoot,
-            "src",
-            "HardSlice.Templates",
-            "content",
-            "hardslice-api",
-            "Directory.Packages.props");
+        var templatePropertiesPath = Path.Combine(TemplateRoot(repositoryRoot), "Directory.Packages.props");
         var templateProperties = File.ReadAllText(templatePropertiesPath);
         var analyzerReference = Regex.Match(
             templateProperties,
@@ -33,10 +28,38 @@ public sealed class TemplatePackageTests
             "The template must reference the same HardSlice.Analyzers version that the repository packs.");
     }
 
+    // BookingsReferenceTests compiles the template against the repository's versions: they must not drift apart.
+    [Fact]
+    public void Packages_declared_by_both_the_repository_and_the_template_share_the_same_version()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var repositoryVersions = PackageVersions(Path.Combine(repositoryRoot, "Directory.Packages.props"));
+        var templateVersions = PackageVersions(Path.Combine(TemplateRoot(repositoryRoot), "Directory.Packages.props"));
+
+        repositoryVersions.Keys.Intersect(templateVersions.Keys).ShouldNotBeEmpty();
+        repositoryVersions
+            .Where(package => templateVersions.TryGetValue(package.Key, out var templateVersion) && templateVersion != package.Value)
+            .Select(package => $"{package.Key}: repository {package.Value}, template {templateVersions[package.Key]}")
+            .ShouldBeEmpty();
+    }
+
+    // dotnet-ef must match the EF Core design-time and runtime packages it drives, or migrations may not load.
+    [Fact]
+    public void Template_dotnet_ef_tool_matches_its_EF_Core_packages()
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var templateVersions = PackageVersions(Path.Combine(templateRoot, "Directory.Packages.props"));
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")));
+        var toolVersion = manifest.RootElement.GetProperty("tools").GetProperty("dotnet-ef").GetProperty("version").GetString();
+
+        templateVersions["Microsoft.EntityFrameworkCore.Design"].ShouldBe(toolVersion);
+        templateVersions["Microsoft.EntityFrameworkCore.Relational"].ShouldBe(toolVersion);
+    }
+
     [Fact]
     public void Agent_guidance_is_short_and_every_path_it_cites_exists_in_the_template()
     {
-        var templateRoot = Path.Combine(FindRepositoryRoot(), "src", "HardSlice.Templates", "content", "hardslice-api");
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
         var agentsPath = Path.Combine(templateRoot, "AGENTS.md");
         var agents = File.ReadAllText(agentsPath);
 
@@ -55,6 +78,15 @@ public sealed class TemplatePackageTests
             .Where(path => !File.Exists(Path.Combine(templateRoot, path)) && !Directory.Exists(Path.Combine(templateRoot, path)))
             .ShouldBeEmpty("AGENTS.md cites paths that the generated solution does not contain.");
     }
+
+    private static string TemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");
+
+    private static Dictionary<string, string> PackageVersions(string packagesPropsPath) =>
+        XDocument.Load(packagesPropsPath)
+            .Descendants()
+            .Where(element => element.Name.LocalName == "PackageVersion")
+            .ToDictionary(element => element.Attribute("Include")!.Value, element => element.Attribute("Version")!.Value);
 
     private static string FindRepositoryRoot()
     {

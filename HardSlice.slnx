@@ -9,6 +9,7 @@
   </Folder>
   <Folder Name="/templates/hardslice-api/tests/">
     <Project Path="src/HardSlice.Templates/content/hardslice-api/tests/MyApp.Tests/MyApp.Tests.csproj" />
+    <Project Path="src/HardSlice.Templates/content/hardslice-api/tests/MyApp.IntegrationTests/MyApp.IntegrationTests.csproj" />
     <Project Path="src/HardSlice.Templates/content/hardslice-api/tests/MyApp.ArchitectureTests/MyApp.ArchitectureTests.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -122,8 +122,16 @@ public sealed class BookingsReferenceTests
             .Append(("Usings.cs", ImplicitUsings))
             .Append(("WebUsings.cs", WebImplicitUsings));
 
-        return Compile("MyApp", application, [domain.ToMetadataReference()], OutputKind.ConsoleApplication);
+        return Compile("MyApp", application, [domain.ToMetadataReference(), .. PersistenceReferences()], OutputKind.ConsoleApplication);
     }
+
+    // EF Core and Npgsql, as restored for this test project at the template's versions.
+    private static IEnumerable<MetadataReference> PersistenceReferences() =>
+        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Where(path => Path.GetFileName(path) is var name
+                && (name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) || name.StartsWith("Npgsql", StringComparison.Ordinal)))
+            .Select(path => MetadataReference.CreateFromFile(path));
 
     private static IEnumerable<(string Path, string Source)> SourceFiles(string project)
     {

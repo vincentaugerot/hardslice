@@ -1,21 +1,21 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using MyApp.Domain.Bookings;
-using MyApp.Features.Bookings;
+using MyApp.Shared.Persistence;
 
 namespace MyApp.Features.Bookings.CancelBooking;
 
 public sealed record CancelBookingCommand(Guid BookingId);
 
-internal sealed class CancelBookingHandler(IBookingStore store)
+internal sealed class CancelBookingHandler(AppDbContext db)
 {
     public async Task<bool> Handle(CancelBookingCommand command, CancellationToken cancellationToken)
     {
-        var booking = await store.FindAsync(new BookingId(command.BookingId), cancellationToken);
+        var booking = await db.Set<Booking>().FindAsync([new BookingId(command.BookingId)], cancellationToken);
         if (booking is null)
             return false;
 
         booking.Cancel();
-        await store.UpdateAsync(booking, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 }

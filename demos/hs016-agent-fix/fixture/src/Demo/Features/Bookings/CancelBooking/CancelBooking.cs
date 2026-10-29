@@ -1,18 +1,18 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Demo.Domain;
 using Demo.Domain.Bookings;
-using Demo.Features.Bookings;
 using Demo.Features.Bookings.ConfirmBooking;
+using Demo.Shared.Persistence;
 
 namespace Demo.Features.Bookings.CancelBooking;
 
 public sealed record CancelBookingCommand(Guid BookingId);
 
-internal sealed class CancelBookingHandler(IBookingStore store, TimeProvider clock)
+internal sealed class CancelBookingHandler(AppDbContext db, TimeProvider clock)
 {
     public async Task<bool> Handle(CancelBookingCommand command, CancellationToken cancellationToken)
     {
-        var booking = await store.FindAsync(new BookingId(command.BookingId), cancellationToken);
+        var booking = await db.Set<Booking>().FindAsync([new BookingId(command.BookingId)], cancellationToken);
         if (booking is null)
             return false;
 
@@ -20,7 +20,7 @@ internal sealed class CancelBookingHandler(IBookingStore store, TimeProvider clo
             throw new DomainException($"Booking '{booking.Id}' cannot be cancelled once it has started.");
 
         booking.Cancel();
-        await store.UpdateAsync(booking, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 }

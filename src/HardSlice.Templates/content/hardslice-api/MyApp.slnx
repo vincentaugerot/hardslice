@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MyApp.Tests/MyApp.Tests.csproj" />
+    <Project Path="tests/MyApp.IntegrationTests/MyApp.IntegrationTests.csproj" />
     <Project Path="tests/MyApp.ArchitectureTests/MyApp.ArchitectureTests.csproj" />
   </Folder>
 </Solution>

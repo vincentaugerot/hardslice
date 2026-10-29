@@ -7,7 +7,6 @@ public static class BookingsModule
 {
     public static IServiceCollection AddBookingsModule(this IServiceCollection services) =>
         services
-            .AddSingleton<IBookingStore, InMemoryBookingStore>()
             .AddScoped<ConfirmBookingHandler>()
             .AddScoped<CancelBookingHandler>();
 

@@ -8,15 +8,17 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 |---|---|
 | `src/MyApp.Domain/<Module>/` | Aggregates, value objects and business rules. Depends on the base class library only. |
 | `src/MyApp/Features/<Module>/<Slice>/` | One use case: its command or query, handler and endpoint. |
-| `src/MyApp/Features/<Module>/` | Module registration (`<Module>Module.cs`) and the public contract shared by its slices. |
+| `src/MyApp/Features/<Module>/` | Module registration (`<Module>Module.cs`), EF Core mapping of its aggregates (`<Aggregate>Configuration.cs`) and the public contract shared by its slices. |
 | `src/MyApp/Shared/` | Cross-cutting code only, never a use case. |
-| `tests/MyApp.Tests/` | Unit tests, at the same path as the code they test. |
+| `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations. It declares no module type. |
+| `tests/MyApp.Tests/` | Unit tests of the domain, at the same path as the code they test. |
+| `tests/MyApp.IntegrationTests/` | Tests on a real PostgreSQL (Testcontainers), at the same path as the slice they test. |
 | `tests/MyApp.ArchitectureTests/` | Architecture tests. |
 | `docs/rules/` | One sheet per HardSlice rule: what it forbids and how to fix it. |
 
 Modules and slices:
 
-- `Bookings`: `ConfirmBooking`, `CancelBooking`. Public contract: `IBookingStore`.
+- `Bookings`: `ConfirmBooking`, `CancelBooking`. Mapping: `BookingConfiguration`. Public contract: none yet.
 
 ## Golden rules
 
@@ -31,10 +33,22 @@ Modules and slices:
 ## Adding a slice
 
 1. Check whether the aggregate already owns the business rule. If not, add it to the aggregate with its unit test.
-2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`: the command or query, an `internal` handler and an `internal` endpoint. Follow `ConfirmBooking` as the example.
+2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`: the command or query, an `internal` handler and an `internal` endpoint. The handler reaches aggregates through `AppDbContext.Set<T>()`. Follow `ConfirmBooking` as the example.
 3. Register the handler and map the endpoint in `<Module>Module.cs`.
-4. Add its tests in `tests/MyApp.Tests/Features/<Module>/<Slice>/`.
+4. Add its tests in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`.
 5. Add the slice to the map above, then verify.
+
+## Changing the database
+
+1. Map a new aggregate in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`: an `internal` `IEntityTypeConfiguration<T>` in fluent API. Never add EF Core attributes or references to the domain, and never declare module types in `AppDbContext`.
+2. After any mapping change, add a migration. Never edit a migration that may already be applied.
+
+   ```text
+   dotnet tool restore
+   dotnet ef migrations add <Name> --project src/MyApp --output-dir Shared/Persistence/Migrations
+   ```
+
+3. The application never migrates its database at startup. Apply migrations with `dotnet ef database update --project src/MyApp`, which reads `ConnectionStrings:Database`. Integration tests apply them to their own container and fail if the model has changes missing from the migrations.
 
 ## Verify
 
@@ -43,7 +57,7 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-Both scripts build the solution (restoring if needed), then run the unit tests and the architecture tests. They exit with a non-zero code on any failure.
+Both scripts build the solution (restoring if needed), then run the unit tests, the architecture tests and the integration tests. Integration tests need a Docker-compatible container runtime: without one, the scripts stop before them and say so. They exit with a non-zero code on any failure.
 
 **You are not done until the check script exits 0.** Do not hand back, report success or commit while it fails. If it cannot pass without breaking a rule, stop and explain the conflict instead.
 
