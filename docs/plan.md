@@ -199,6 +199,6 @@ Le protocole détaillé du benchmark, son isolation et ses règles d'intégrité
 
 ## 9. Prochaine action
 
-Exécuter uniquement le jalon « boucle verticale HardSlice » décrit dans [product-backlog.md](product-backlog.md).
+L'incrément 1 « boucle verticale HardSlice » est terminé. Exécuter l'incrément actif « Fondation v0.1 » décrit dans [product-backlog.md](product-backlog.md).
 
-La première modification d'implémentation doit créer la solution .NET et son build. Toute planification qui ne contribue pas directement à la définition de fini de ce jalon est reportée.
+Commencer par PB-009, qui remplace le stockage en mémoire par PostgreSQL, EF Core et des tests d'intégration Testcontainers. PB-014 peut avancer en parallèle selon le graphe de dépendances du backlog. Toute planification qui ne contribue pas directement à la définition de fini de l'incrément 2 est reportée.

@@ -121,10 +121,11 @@ src/
           CancelBooking.cs
         GetBooking/
           GetBooking.cs      # requête, projection, endpoint
+        BookingConfiguration.cs  # mapping EF Core du module, hors de toute slice
         BookingsModule.cs    # enregistrement du module (MapGroup, DI) et contrat public
     Shared/                  # transverse seulement
       Messaging/             # médiateur maison (pas de MediatR)
-      Persistence/           # AppDbContext, configurations EF Core
+      Persistence/           # AppDbContext, connexion et migrations
       Behaviors/             # validation, transactions, logs
     Program.cs
 tests/
@@ -317,7 +318,7 @@ Cette table décrit le périmètre produit promis. Le séquençage d'exécution 
 4. Quels CLI lisent les skills au format `SKILL.md` ?
 5. Seuil de découpage d'une slice en plusieurs fichiers : 200 lignes, ou au nombre de types ?
 6. Les modules restent-ils des dossiers d'un même projet, ou deviennent-ils des projets séparés quand la solution grossit ?
-7. Où vit la persistance d'un module (configurations EF Core dans le module ou dans `Shared/Persistence`) ?
+7. ~~Où vit la persistance d'un module ?~~ **Résolu : `Shared/Persistence` contient `AppDbContext`, la connexion et les migrations ; chaque configuration EF Core d'agrégat vit à la racine de son module, hors de toute slice.**
 8. Temps réel du build incrémental après chaque édition sur une grosse solution : tenir les 10 secondes ?
 9. ~~Nom définitif ?~~ **Résolu : HardSlice.** La disponibilité exacte des identifiants NuGet et du domaine reste à vérifier avant publication.
 10. Licence du projet : MIT.
