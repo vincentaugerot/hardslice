@@ -21,7 +21,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 
 Modules and slices:
 
-- `Bookings`: `ConfirmBooking`, `CancelBooking` (commands). Mapping: `BookingConfiguration`. Public contract: none yet.
+- `Bookings`: `ConfirmBooking`, `CancelBooking` (commands), `GetBooking` (query). Mapping: `BookingConfiguration`. Public contract: none yet.
 
 ## Golden rules
 
@@ -42,6 +42,7 @@ Modules and slices:
    - a public request: an `ICommand<TResponse>` when it changes state, an `IQuery<TResponse>` when it only reads. The response type is exact (invariant), matching its handler and pipeline;
    - an `internal` validator, an `AbstractValidator<TRequest>` that checks the shape of the input (required fields, formats, lengths). A failure is answered with 400 naming the fields, before the handler runs. Business rules stay in the aggregate;
    - an `internal` handler, an `IRequestHandler<TRequest, TResponse>` that reaches aggregates through `AppDbContext.Set<T>()`. It never calls `SaveChangesAsync`: each command runs in one transaction that the pipeline saves and commits, and any exception rolls it back. A failed transaction also detaches tracked entities: later commands in the same scope must reload them. Save early only to translate a database error, as `ConfirmBooking` does;
+   - for a query, follow `GetBooking` instead: a public response DTO, and a handler that reads with `AsNoTracking()` and projects into that DTO with `Select`. It never loads an aggregate, never saves, and runs outside any transaction. An unknown id is a `null` response, answered with 404;
    - an `internal` endpoint that sends the request through `IMediator` and returns `TypedResults`. It never calls a handler.
 3. In `<Module>Module.cs`, register the handler and the validator by their contracts (`IRequestHandler<,>`, `IValidator<>`) and map the endpoint.
 4. Add the validator tests in `tests/MyApp.Tests/Features/<Module>/<Slice>/` and the integration tests, an invalid request included, in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`.

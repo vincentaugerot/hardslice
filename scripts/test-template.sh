@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Packs HardSlice, installs the hardslice-api template, generates a solution in a temporary directory,
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks its migrations with the pinned dotnet-ef,
-# checks that commands go through its own mediator and pipeline, proves both scripts name the missing container runtime,
+# checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves HS016 fails both and points to a rule doc that exists.
 set -euo pipefail
 
@@ -38,7 +38,7 @@ echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
 )
 
 # The check scripts above ran these tests: make sure the generated solution still contains them, and no mediation library.
-echo "==> Checking that commands go through the generated solution's own mediator, validation and transaction"
+echo "==> Checking that commands go through the generated solution's own mediator, validation and transaction, and queries read without tracking"
 (
   cd "$app"
   if dotnet list "$app_name.slnx" package --include-transitive | grep -Eq '^[[:space:]]*>[[:space:]]*(MediatR|Mediator[.])'; then
@@ -59,7 +59,9 @@ echo "==> Checking that commands go through the generated solution's own mediato
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_never_commits_a_failed_commands_additions" \
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_reloads_the_state_before_a_failed_commands_changes" \
     "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Rejects_a_command_without_room_with_a_validation_problem_before_its_handler" \
-    "Features.Bookings.CancelBooking.CancelBookingTests.Rejects_an_empty_booking_id_with_a_validation_problem"; do
+    "Features.Bookings.CancelBooking.CancelBookingTests.Rejects_an_empty_booking_id_with_a_validation_problem" \
+    "Features.Bookings.GetBooking.GetBookingTests.Reads_a_confirmed_booking_at_the_location_returned_by_its_creation" \
+    "Features.Bookings.GetBooking.GetBookingTests.Reads_a_booking_without_tracking_any_entity"; do
     if ! printf '%s\n' "$listed_tests" | grep -Fq ".$test"; then
       echo "error: the generated solution has no test $test." >&2
       exit 1

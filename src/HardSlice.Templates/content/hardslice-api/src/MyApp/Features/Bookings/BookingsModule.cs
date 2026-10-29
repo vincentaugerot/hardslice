@@ -2,6 +2,7 @@ using FluentValidation;
 using MyApp.Domain.Bookings;
 using MyApp.Features.Bookings.CancelBooking;
 using MyApp.Features.Bookings.ConfirmBooking;
+using MyApp.Features.Bookings.GetBooking;
 using MyApp.Shared.Messaging;
 
 namespace MyApp.Features.Bookings;
@@ -14,13 +15,15 @@ public static class BookingsModule
             .AddScoped<IRequestHandler<ConfirmBookingCommand, BookingId>, ConfirmBookingHandler>()
             .AddScoped<IValidator<ConfirmBookingCommand>, ConfirmBookingValidator>()
             .AddScoped<IRequestHandler<CancelBookingCommand, bool>, CancelBookingHandler>()
-            .AddScoped<IValidator<CancelBookingCommand>, CancelBookingValidator>();
+            .AddScoped<IValidator<CancelBookingCommand>, CancelBookingValidator>()
+            .AddScoped<IRequestHandler<GetBookingQuery, BookingDto?>, GetBookingHandler>();
 
     public static IEndpointRouteBuilder MapBookingsModule(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/bookings");
         ConfirmBookingEndpoint.Map(group);
         CancelBookingEndpoint.Map(group);
+        GetBookingEndpoint.Map(group);
         return endpoints;
     }
 }
