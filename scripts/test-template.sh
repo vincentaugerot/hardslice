@@ -4,7 +4,8 @@
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
-# and that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts.
+# that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
+# and that an unknown HardSliceAnalysisMode fails them with the list of modes.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
 # and that seeded violations of HS001, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
@@ -841,7 +842,40 @@ sed 's/"style": "slices"/"style": "layers"/' "$work/hardslice.json.backup" > "$a
 expect_failure "hardslice.json: 'style' must be" "docs/rules/HS017.md" "an invalid hardslice.json" check.ps1
 mv "$work/hardslice.json.backup" "$app/hardslice.json"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 with their rule docs, and on a missing or invalid hardslice.json and its contracts (HS900)"
+# The package targets give the compiler the global config of the mode that Directory.Build.props sets.
+echo "==> Checking that $app_name compiles with the global config of the All analysis mode"
+evaluation="$(cd "$app" && dotnet msbuild "src/$app_name/$app_name.csproj" -getProperty:HardSliceAnalysisMode -getItem:EditorConfigFiles)"
+if ! printf '%s\n' "$evaluation" | grep -Fq '"HardSliceAnalysisMode": "All"' ||
+  ! printf '%s\n' "$evaluation" | grep -Fq 'HardSlice.All.globalconfig' ||
+  printf '%s\n' "$evaluation" | grep -Eq 'HardSlice[.](Minimum|Recommended)[.]globalconfig'; then
+  printf '%s\n' "$evaluation" >&2
+  echo "error: $app_name does not compile with the global config of the All analysis mode alone." >&2
+  exit 1
+fi
+
+echo "==> Checking that an unknown analysis mode fails both check scripts with the list of modes"
+cp "$app/Directory.Build.props" "$work/Directory.Build.props.backup"
+sed 's|<HardSliceAnalysisMode>All</HardSliceAnalysisMode>|<HardSliceAnalysisMode>Strict</HardSliceAnalysisMode>|' "$work/Directory.Build.props.backup" > "$app/Directory.Build.props"
+if ! grep -Fq '<HardSliceAnalysisMode>Strict</HardSliceAnalysisMode>' "$app/Directory.Build.props"; then
+  echo "error: the Directory.Build.props of $app_name does not set HardSliceAnalysisMode to All." >&2
+  exit 1
+fi
+unknown_mode="HardSliceAnalysisMode is 'Strict', which is not a HardSlice analysis mode. The mode selects the active HardSlice rules: Minimum, Recommended or All."
+for script in check.sh check.ps1; do
+  if check_output="$(run_check "$script" 2>&1)"; then
+    echo "error: scripts/$script passed with an unknown HardSliceAnalysisMode." >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$check_output" | grep -Fq "$unknown_mode"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/$script failed on an unknown HardSliceAnalysisMode without listing the modes." >&2
+    exit 1
+  fi
+done
+echo "    $unknown_mode"
+mv "$work/Directory.Build.props.backup" "$app/Directory.Build.props"
+
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), and on an unknown analysis mode"
 
 sample_name="$app_name"
 blank_name="Blank"

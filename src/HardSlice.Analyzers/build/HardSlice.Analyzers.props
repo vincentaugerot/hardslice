@@ -5,6 +5,7 @@
     <CompilerVisibleProperty Include="IsTestProject" />
     <!-- Names the folder searched for hardslice.json when it is missing. -->
     <CompilerVisibleProperty Include="MSBuildProjectDirectory" />
+    <!-- The analysis mode, Recommended when it is not set: see build/HardSlice.Analyzers.targets. -->
     <CompilerVisibleProperty Include="HardSliceAnalysisMode" />
   </ItemGroup>
 </Project>

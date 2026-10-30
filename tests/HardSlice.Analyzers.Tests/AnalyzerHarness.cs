@@ -53,10 +53,22 @@ internal static class AnalyzerHarness
         string? configuration,
         bool isTestProject = false) =>
         compilation
-            .WithAnalyzers(
-                [new SliceReferenceAnalyzer(), new ClassificationAnalyzer()],
-                Options(configuration, isTestProject))
+            .WithAnalyzers(Analyzers(), Options(configuration, isTestProject))
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
+
+    // The same, with the .editorconfig and global config files the compiler receives, as (path, text):
+    // Roslyn merges them, an .editorconfig section taking precedence over a global config.
+    public static Task<ImmutableArray<Diagnostic>> AnalyzeAllAsync(
+        Compilation compilation,
+        string? configuration,
+        IEnumerable<(string Path, string Text)> analyzerConfigs) =>
+        compilation
+            .WithOptions(compilation.Options.WithSyntaxTreeOptionsProvider(new AnalyzerConfigSeverities(
+                AnalyzerConfigSet.Create(analyzerConfigs.Select(config => AnalyzerConfig.Parse(config.Text, config.Path)).ToImmutableArray()))))
+            .WithAnalyzers(Analyzers(), Options(configuration))
+            .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
+
+    public static ImmutableArray<DiagnosticAnalyzer> Analyzers() => [new SliceReferenceAnalyzer(), new ClassificationAnalyzer()];
 
     public const string ConfigurationPath = "/solution/hardslice.json";
 
@@ -120,6 +132,18 @@ internal static class AnalyzerHarness
                 .Where(path => frameworkDirectories.Contains(Path.GetDirectoryName(path)))
                 .Select(path => MetadataReference.CreateFromFile(path))
         ];
+    }
+
+    // Severities as the compiler reads them: the sections of the file's path first, then the global configs.
+    private sealed class AnalyzerConfigSeverities(AnalyzerConfigSet configs) : SyntaxTreeOptionsProvider
+    {
+        public override GeneratedKind IsGenerated(SyntaxTree tree, CancellationToken cancellationToken) => GeneratedKind.Unknown;
+
+        public override bool TryGetDiagnosticValue(SyntaxTree tree, string diagnosticId, CancellationToken cancellationToken, out ReportDiagnostic severity) =>
+            configs.GetOptionsForSourcePath(tree.FilePath).TreeOptions.TryGetValue(diagnosticId, out severity);
+
+        public override bool TryGetGlobalDiagnosticValue(string diagnosticId, CancellationToken cancellationToken, out ReportDiagnostic severity) =>
+            configs.GlobalConfigOptions.TreeOptions.TryGetValue(diagnosticId, out severity);
     }
 
     private sealed class InMemoryAdditionalText(string path, string text) : AdditionalText

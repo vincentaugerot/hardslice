@@ -7,4 +7,26 @@
   <ItemGroup Condition="'$(_HardSliceConfigurationFile)' != ''">
     <AdditionalFiles Include="$(_HardSliceConfigurationFile)" />
   </ItemGroup>
+
+  <!-- HardSliceAnalysisMode turns rules on or off through the global config of its mode, Recommended when it is not set.
+       An unknown mode fails the build in _HardSliceCheckAnalysisMode: it never falls back to another mode. -->
+  <PropertyGroup>
+    <HardSliceAnalysisMode Condition="'$(HardSliceAnalysisMode)' == ''">Recommended</HardSliceAnalysisMode>
+    <_HardSliceAnalysisModeFile Condition="'$(HardSliceAnalysisMode)' == 'Minimum'">$(MSBuildThisFileDirectory)HardSlice.Minimum.globalconfig</_HardSliceAnalysisModeFile>
+    <_HardSliceAnalysisModeFile Condition="'$(HardSliceAnalysisMode)' == 'Recommended'">$(MSBuildThisFileDirectory)HardSlice.Recommended.globalconfig</_HardSliceAnalysisModeFile>
+    <_HardSliceAnalysisModeFile Condition="'$(HardSliceAnalysisMode)' == 'All'">$(MSBuildThisFileDirectory)HardSlice.All.globalconfig</_HardSliceAnalysisModeFile>
+  </PropertyGroup>
+
+  <!-- The SDK turns GlobalAnalyzerConfigFiles into EditorConfigFiles before it imports the targets of packages:
+       the file is added to both, as the SDK's own analysis level files are. -->
+  <ItemGroup Condition="'$(_HardSliceAnalysisModeFile)' != ''">
+    <GlobalAnalyzerConfigFiles Include="$(_HardSliceAnalysisModeFile)" />
+    <EditorConfigFiles Include="$(_HardSliceAnalysisModeFile)" />
+  </ItemGroup>
+
+  <Target Name="_HardSliceCheckAnalysisMode"
+          BeforeTargets="GenerateMSBuildEditorConfigFileCore;CoreCompile"
+          Condition="'$(_HardSliceAnalysisModeFile)' == ''">
+    <Error Text="HardSliceAnalysisMode is '$(HardSliceAnalysisMode)', which is not a HardSlice analysis mode. The mode selects the active HardSlice rules: Minimum, Recommended or All. Fix: set HardSliceAnalysisMode to Minimum, Recommended or All in Directory.Build.props." />
+  </Target>
 </Project>

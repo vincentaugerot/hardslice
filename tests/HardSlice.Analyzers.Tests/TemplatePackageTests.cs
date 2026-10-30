@@ -85,16 +85,27 @@ public sealed class TemplatePackageTests
             .ShouldBeEmpty("AGENTS.md cites paths that the generated solution does not contain.");
     }
 
-    // v0.1 declares the severity of HS016 only: other HS rules and analysis levels come with their analyzers.
+    // The analysis mode turns the rules on: .editorconfig keeps the HS016 line and the reminder that lowering it is a bypass.
     [Fact]
     public void Template_editorconfig_declares_only_HS016_as_an_error()
     {
         var editorConfig = File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".editorconfig"));
 
         editorConfig.ShouldContain("root = true");
+        editorConfig.ShouldContain("# Lowering a severity is a bypass: see AGENTS.md.");
         editorConfig
             .Where(line => line.Contains("dotnet_diagnostic.HS", StringComparison.Ordinal))
             .ShouldBe(["dotnet_diagnostic.HS016.severity = error"]);
+    }
+
+    [Fact]
+    public void Template_turns_every_HardSlice_rule_on_with_the_All_analysis_mode()
+    {
+        XDocument.Load(Path.Combine(TemplateRoot(FindRepositoryRoot()), "Directory.Build.props"))
+            .Descendants()
+            .Where(element => element.Name.LocalName == "HardSliceAnalysisMode")
+            .Select(element => element.Value)
+            .ShouldBe(["All"]);
     }
 
     [Fact]

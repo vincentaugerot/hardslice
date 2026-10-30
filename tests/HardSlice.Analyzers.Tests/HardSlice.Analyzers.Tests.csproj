@@ -41,6 +41,9 @@
     <None Include="$(TemplateContentDir)docs/**/*.md"
           LinkBase="TemplateDocs"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/HardSlice.Analyzers/build/*.globalconfig"
+          LinkBase="AnalysisModes"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

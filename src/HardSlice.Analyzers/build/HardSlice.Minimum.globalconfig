@@ -1,0 +1,17 @@
+# HardSlice analysis mode 'Minimum': the rules that assume neither the shape of a slice nor the messaging of the template, plus HS016.
+# Added by build/HardSlice.Analyzers.targets when HardSliceAnalysisMode is 'Minimum'.
+# A mode turns a rule on or off, at its own severity: it never changes the severity of a rule it keeps.
+# A setting of .editorconfig, or of a global config of the solution, takes precedence over it (global_level -1).
+# Every rule of HardSlice.Analyzers has a line in each mode.
+
+is_global = true
+global_level = -1
+
+# HS016: a slice never uses a type of another slice.
+dotnet_diagnostic.HS016.severity = error
+
+# HS900 to HS902: the contracts that classify types are usable, unambiguous and cover every mapped entity.
+# Reported only when an active rule depends on the classification.
+dotnet_diagnostic.HS900.severity = error
+dotnet_diagnostic.HS901.severity = error
+dotnet_diagnostic.HS902.severity = error

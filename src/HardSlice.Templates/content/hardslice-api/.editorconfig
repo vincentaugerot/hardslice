@@ -1,5 +1,6 @@
 root = true
 
-# HardSlice rules. Lowering a severity is a bypass: see AGENTS.md.
+# HardSlice rules. HardSliceAnalysisMode in Directory.Build.props turns them on, and a line here takes precedence over it.
+# Lowering a severity is a bypass: see AGENTS.md.
 [*.cs]
 dotnet_diagnostic.HS016.severity = error

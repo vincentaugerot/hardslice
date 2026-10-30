@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace HardSlice.Analyzers.Tests;
@@ -109,6 +110,32 @@ public sealed class AnalyzerPackageTests
             violatingBuild.ExitCode.ShouldNotBe(0, violatingBuild.Output);
             violatingBuild.Output.ShouldContain(SliceReferenceAnalyzer.DiagnosticId);
 
+            // HardSliceAnalysisMode gives the compiler the global config of its mode, Recommended when it is not set.
+            foreach (var (properties, mode) in new[] { (Array.Empty<string>(), "Recommended"), (["-p:HardSliceAnalysisMode=Minimum"], "Minimum"), (["-p:HardSliceAnalysisMode=All"], "All") })
+            {
+                var evaluation = await RunDotnetAsync(
+                    consumerDirectory,
+                    consumerPackages,
+                    cancellationToken,
+                    ["msbuild", consumerProject, "-getProperty:HardSliceAnalysisMode", "-getItem:EditorConfigFiles", .. properties]);
+                evaluation.ExitCode.ShouldBe(0, evaluation.Output);
+                AnalysisModeFiles(evaluation.StandardOutput).ShouldBe([$"HardSlice.{mode}.globalconfig"], evaluation.Output);
+            }
+
+            var unknownModeBuild = await BuildConsumerAsync("-p:HardSliceAnalysisMode=Strict");
+            unknownModeBuild.ExitCode.ShouldNotBe(0, unknownModeBuild.Output);
+            unknownModeBuild.Output.ShouldContain(
+                "error : HardSliceAnalysisMode is 'Strict', which is not a HardSlice analysis mode. "
+                + "The mode selects the active HardSlice rules: Minimum, Recommended or All.");
+            unknownModeBuild.Output.ShouldNotContain(SliceReferenceAnalyzer.DiagnosticId);
+
+            // A setting of .editorconfig takes precedence over the mode.
+            var editorConfig = Path.Combine(consumerDirectory, ".editorconfig");
+            await File.WriteAllTextAsync(editorConfig, "root = true\n\n[*.cs]\ndotnet_diagnostic.HS016.severity = none\n", cancellationToken);
+            var editorConfigBuild = await BuildConsumerAsync("-p:HardSliceAnalysisMode=All");
+            editorConfigBuild.ExitCode.ShouldBe(0, editorConfigBuild.Output);
+            File.Delete(editorConfig);
+
             await File.WriteAllTextAsync(consumerSource, AmbiguousSource, cancellationToken);
             var ambiguousBuild = await BuildConsumerAsync();
             ambiguousBuild.ExitCode.ShouldNotBe(0, ambiguousBuild.Output);
@@ -146,6 +173,9 @@ public sealed class AnalyzerPackageTests
         entries.ShouldContain("analyzers/dotnet/cs/HardSlice.Analyzers.dll");
         entries.ShouldContain("build/HardSlice.Analyzers.props");
         entries.ShouldContain("build/HardSlice.Analyzers.targets");
+        entries.ShouldContain("build/HardSlice.Minimum.globalconfig");
+        entries.ShouldContain("build/HardSlice.Recommended.globalconfig");
+        entries.ShouldContain("build/HardSlice.All.globalconfig");
         entries.Any(entry => entry.StartsWith("lib/", StringComparison.Ordinal)).ShouldBeFalse();
         entries.Any(entry => entry.StartsWith("ref/", StringComparison.Ordinal)).ShouldBeFalse();
         entries.Any(entry => entry.StartsWith("runtimes/", StringComparison.Ordinal)).ShouldBeFalse();
@@ -154,6 +184,17 @@ public sealed class AnalyzerPackageTests
         using var nuspec = nuspecEntry.Open();
         var document = XDocument.Load(nuspec);
         document.Descendants().Where(element => element.Name.LocalName == "dependency").ShouldBeEmpty();
+    }
+
+    // The analysis mode files among the EditorConfigFiles that 'dotnet msbuild -getItem' prints as JSON.
+    private static string[] AnalysisModeFiles(string evaluation)
+    {
+        using var document = JsonDocument.Parse(evaluation);
+        return document.RootElement.GetProperty("Items").GetProperty("EditorConfigFiles").EnumerateArray()
+            .Select(item => Path.GetFileName(item.GetProperty("FullPath").GetString()!))
+            .Where(file => file.StartsWith("HardSlice.", StringComparison.Ordinal))
+            .Distinct()
+            .ToArray();
     }
 
     private static async Task<DotnetResult> RunDotnetAsync(
@@ -302,7 +343,10 @@ public sealed class AnalyzerPackageTests
         namespace MyApp.Features.Bookings.CancelBooking
         {
             internal sealed class CancelBookingHandler(
-                MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingCommand command);
+                MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingCommand command)
+            {
+                public object Command { get; } = command;
+            }
         }
         """;
 

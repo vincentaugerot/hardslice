@@ -27,6 +27,10 @@
     <None Include="build/HardSlice.Analyzers.props;build/HardSlice.Analyzers.targets"
           Pack="true"
           PackagePath="build" />
+    <!-- One global config per analysis mode, selected by HardSliceAnalysisMode in build/HardSlice.Analyzers.targets. -->
+    <None Include="build/*.globalconfig"
+          Pack="true"
+          PackagePath="build" />
   </ItemGroup>
 
 </Project>

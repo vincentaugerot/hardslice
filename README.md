@@ -133,6 +133,17 @@ Ask your agent to read `AGENTS.md`: it says where a use case goes, how to add a 
 
 Each generated solution carries these sheets in `docs/rules/`, at the path its diagnostics announce. A sheet says what the rule forbids, how to fix a violation, and which workarounds are forbidden.
 
+### Analysis modes
+
+The MSBuild property `HardSliceAnalysisMode` chooses which analyzer rules are on: `Minimum`, `Recommended` (when it is not set) or `All`. A generated solution sets `All` in its `Directory.Build.props`. A mode turns a rule on or off, never changes its severity, and a `dotnet_diagnostic.<rule>.severity` line of `.editorconfig` takes precedence over it. Any other value fails the build with the list of modes.
+
+| Rule | `Minimum` | `Recommended` | `All` |
+|---|---|---|---|
+| HS016 | error | error | error |
+| HS900 to HS902 | error | error | error |
+
+HS900 to HS902 are reported only when an active rule depends on the classification of types. The architecture tests do not depend on the mode.
+
 ## Known limitations
 
 - The packages are built locally with the fixed version 0.1.0. After pulling a new version of this repository, repack, reinstall the template with `dotnet new install artifacts/packages/HardSlice.Templates.0.1.0.nupkg --force`, and clear the analyzer NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the old build of `HardSlice.Analyzers` 0.1.0.

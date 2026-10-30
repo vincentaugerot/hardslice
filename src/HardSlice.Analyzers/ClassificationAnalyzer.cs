@@ -79,7 +79,9 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
                 return;
 
             var model = DomainModel.Create(compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
-            start.RegisterCompilationEndAction(end => ReportConfigurationProblems(end, model, activeRules));
+            // HS900 has no source location: the compiler filters it by the global options only, never by .editorconfig.
+            if (RuleActivation.IsActive(compilation, ConfigurationId, start.CancellationToken))
+                start.RegisterCompilationEndAction(end => ReportConfigurationProblems(end, model, activeRules));
 
             if (activeRules.Any(rule => rule.RuleId == AmbiguityId))
                 start.RegisterSymbolAction(symbolContext => AnalyzeAmbiguity(symbolContext, model), SymbolKind.NamedType);

@@ -5,5 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Every HardSlice rule is on. Lowering the mode is a bypass: see AGENTS.md. -->
+    <HardSliceAnalysisMode>All</HardSliceAnalysisMode>
   </PropertyGroup>
 </Project>
