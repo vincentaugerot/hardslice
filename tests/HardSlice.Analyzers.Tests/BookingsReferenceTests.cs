@@ -124,9 +124,22 @@ public sealed class BookingsReferenceTests
             + "Fix: make the caller async and await the task. Doc: 'docs/rules/HS011.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS010_when_ConfirmBookingHandler_reads_the_system_clock()
+    {
+        var diagnostic = (await AnalyzeAllAsync(ConfirmBookingThatReadsTheClock(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(SystemClockAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "'ConfirmBookingHandler.Handle' in slice 'Bookings/ConfirmBooking' reads 'DateTimeOffset.UtcNow'. "
+            + "The domain and the slices never read the system clock. "
+            + "Fix: inject TimeProvider and call GetUtcNow(), or pass the instant to the domain as a parameter. Doc: 'docs/rules/HS010.md'.");
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
+    [InlineData(SystemClockAnalyzer.DiagnosticId)]
     [InlineData(AsyncUsageAnalyzer.DiagnosticId)]
     [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
     [InlineData(ClassificationAnalyzer.ConfigurationId)]
@@ -137,6 +150,7 @@ public sealed class BookingsReferenceTests
         var diagnostics = ruleId switch
         {
             EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
+            SystemClockAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReadsTheClock(), Configuration),
             AsyncUsageAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration),
             SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
             ClassificationAnalyzer.ConfigurationId => await AnalyzeAllAsync(
@@ -287,6 +301,19 @@ public sealed class BookingsReferenceTests
             typedEndpoint,
             "async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>\n"
             + "            await mediator.Send(new GetBookingQuery(id), cancellationToken) is { } booking ? Results.Ok(booking) : Results.NotFound());")));
+    }
+
+    // ConfirmBooking, whose handler compares the start of the booking with the system clock.
+    private static CSharpCompilation ConfirmBookingThatReadsTheClock()
+    {
+        var path = "Features/Bookings/ConfirmBooking/ConfirmBooking.cs";
+        var confirmBooking = ReferenceSource(path);
+        var period = "var period = new BookingPeriod(command.Start, command.End);";
+        confirmBooking.ShouldContain(period);
+
+        return CompileApplication((path, confirmBooking.Replace(
+            period,
+            period + "\n        if (period.Start < DateTimeOffset.UtcNow)\n            throw new ArgumentException(\"A booking starts in the future.\");")));
     }
 
     // ConfirmBooking, whose handler blocks on the bookings it loads instead of awaiting them.

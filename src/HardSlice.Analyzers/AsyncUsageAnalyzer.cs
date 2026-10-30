@@ -27,11 +27,7 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly SymbolDisplayFormat DisplayFormat = new(
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
-        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-        memberOptions: SymbolDisplayMemberOptions.IncludeContainingType,
-        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+    private static readonly SymbolDisplayFormat DisplayFormat = ContainingMember.DisplayFormat;
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 
@@ -69,7 +65,7 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
             IMethodReferenceOperation reference => reference.Method,
             _ => null
         };
-        if (member is null || !blocking.Contains(member) || IsWithinNameOf(context.Operation))
+        if (member is null || !blocking.Contains(member) || ContainingMember.IsWithinNameOf(context.Operation))
             return;
 
         var fix = member.Name switch
@@ -83,7 +79,7 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             Rule,
             Location(context.Operation.Syntax),
-            $"{Describe(context.ContainingSymbol)} blocks on '{member.OriginalDefinition.ToDisplayString(DisplayFormat)}'",
+            $"{ContainingMember.Describe(context.ContainingSymbol)} blocks on '{member.OriginalDefinition.ToDisplayString(DisplayFormat)}'",
             BlockingRule,
             fix));
     }
@@ -106,7 +102,7 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
             : $"make it synchronous, or, if the application declares '{imposedBy.OriginalDefinition.ToDisplayString(DisplayFormat)}', "
                 + "make both return Task and await it where it is called";
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, location, $"{Describe(method)} is async void", AsyncVoidRule, fix));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, location, $"{ContainingMember.Describe(method)} is async void", AsyncVoidRule, fix));
     }
 
     private static void AnalyzeLocalFunction(OperationAnalysisContext context)
@@ -118,7 +114,7 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             Rule,
             context.Operation.Syntax is LocalFunctionStatementSyntax syntax ? syntax.Identifier.GetLocation() : context.Operation.Syntax.GetLocation(),
-            $"local function '{function.Name}' of {Describe(context.ContainingSymbol)} is async void",
+            $"local function '{function.Name}' of {ContainingMember.Describe(context.ContainingSymbol)} is async void",
             AsyncVoidRule,
             "return Task instead of void, and await it where it is called"));
     }
@@ -138,7 +134,7 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             Rule,
             operation.Syntax is AnonymousFunctionExpressionSyntax { AsyncKeyword.RawKind: not 0 } syntax ? syntax.AsyncKeyword.GetLocation() : operation.Syntax.GetLocation(),
-            $"{function} of {Describe(context.ContainingSymbol)} is async void{converted}",
+            $"{function} of {ContainingMember.Describe(context.ContainingSymbol)} is async void{converted}",
             AsyncVoidRule,
             AnonymousFunctionFix(creation, operation.Symbol)));
     }
@@ -159,19 +155,6 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
         return $"give it a delegate type that returns Task, such as 'Func<{string.Join(", ", parameters)}>', and await the task it returns";
     }
 
-    // 'ConfirmBookingHandler.Handle', or the constructor, the property or the top-level statements the code is in.
-    private static string Describe(ISymbol? symbol) => symbol switch
-    {
-        IMethodSymbol { MethodKind: MethodKind.Constructor } constructor => $"the constructor of '{constructor.ContainingType.ToDisplayString(DisplayFormat)}'",
-        IMethodSymbol { MethodKind: MethodKind.StaticConstructor } constructor => $"the static constructor of '{constructor.ContainingType.ToDisplayString(DisplayFormat)}'",
-        IMethodSymbol { MethodKind: MethodKind.PropertyGet or MethodKind.PropertySet or MethodKind.EventAdd or MethodKind.EventRemove, AssociatedSymbol: { } associated } =>
-            $"'{associated.ToDisplayString(DisplayFormat)}'",
-        IMethodSymbol { Name: WellKnownMemberNames.TopLevelStatementsEntryPointMethodName } entryPoint =>
-            $"the top-level statements of '{entryPoint.ContainingType.ToDisplayString(DisplayFormat)}'",
-        null => "the code",
-        _ => $"'{symbol.ToDisplayString(DisplayFormat)}'"
-    };
-
     private static ISymbol? ImplementedMember(IMethodSymbol method)
     {
         if (!method.ExplicitInterfaceImplementations.IsEmpty)
@@ -187,17 +170,6 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
         }
 
         return null;
-    }
-
-    private static bool IsWithinNameOf(IOperation operation)
-    {
-        for (var current = operation.Parent; current is not null; current = current.Parent)
-        {
-            if (current is INameOfOperation)
-                return true;
-        }
-
-        return false;
     }
 
     // The name of the member: 'Result' in 'task.Result', 'Wait' in 'task.Wait()', 'GetResult' in 'awaiter.GetResult()'.

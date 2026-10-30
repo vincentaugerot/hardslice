@@ -69,7 +69,7 @@ internal static class AnalyzerHarness
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
 
     public static ImmutableArray<DiagnosticAnalyzer> Analyzers() =>
-        [new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer(), new SliceEndpointAnalyzer(), new AsyncUsageAnalyzer()];
+        [new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer(), new SliceEndpointAnalyzer(), new AsyncUsageAnalyzer(), new SystemClockAnalyzer()];
 
     public const string ConfigurationPath = "/solution/hardslice.json";
 
@@ -112,22 +112,33 @@ internal static class AnalyzerHarness
 
     // Sources mark each expected location of the analyzer's diagnostic with [|...|]; every other location must stay silent.
     // The analyzer runs without hardslice.json, outside a test project. Returns the diagnostics, in source order.
+    public static Task<ImmutableArray<Diagnostic>> VerifyAsync(
+        DiagnosticAnalyzer analyzer,
+        string diagnosticId,
+        MetadataReference[] references,
+        OutputKind outputKind,
+        params string[] markedSources) =>
+        VerifyAsync(analyzer, diagnosticId, "MyApp", configuration: null, references, outputKind, markedSources);
+
+    // The same, in the assembly named assemblyName, with the given hardslice.json.
     public static async Task<ImmutableArray<Diagnostic>> VerifyAsync(
         DiagnosticAnalyzer analyzer,
         string diagnosticId,
+        string assemblyName,
+        string? configuration,
         MetadataReference[] references,
         OutputKind outputKind,
         params string[] markedSources)
     {
         var files = markedSources.Select((source, index) => (Path: $"File{index}.cs", Marked: Markup.Parse(source))).ToList();
         var compilation = Compile(
-            "MyApp",
+            assemblyName,
             files.Select(file => (file.Path, file.Marked.Source)).Append(("Usings.cs", ImplicitUsings)),
             references,
             outputKind);
 
         var diagnostics = (await compilation
-                .WithAnalyzers([analyzer], Options(configuration: null))
+                .WithAnalyzers([analyzer], Options(configuration))
                 .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken))
             .OrderBy(diagnostic => diagnostic.Location.SourceTree!.FilePath, StringComparer.Ordinal)
             .ThenBy(diagnostic => diagnostic.Location.SourceSpan.Start)

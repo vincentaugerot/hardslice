@@ -8,6 +8,8 @@ using MyApp.Shared.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+// The clock handlers inject instead of reading DateTime.UtcNow (HS010); the host does not register it.
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddPersistence(builder.Configuration);

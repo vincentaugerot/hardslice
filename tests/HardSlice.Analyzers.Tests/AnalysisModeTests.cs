@@ -13,6 +13,7 @@ public sealed class AnalysisModeTests
     private static readonly (string Rule, string Minimum, string Recommended, string All)[] Matrix =
     [
         ("HS003", "error", "error", "error"),
+        ("HS010", "error", "error", "error"),
         ("HS011", "error", "error", "error"),
         ("HS015", "none", "error", "error"),
         ("HS016", "error", "error", "error"),
@@ -82,6 +83,7 @@ public sealed class AnalysisModeTests
     private static readonly Dictionary<string, (string[] Sources, string? Configuration)> Probes = new()
     {
         ["HS003"] = ([EndpointDatabaseAccess], Configuration),
+        ["HS010"] = ([SystemClockRead], Configuration),
         ["HS011"] = ([BlockingCall], Configuration),
         ["HS015"] = ([SliceEndpointOutsideItsGroup], Configuration),
         ["HS016"] = ([CrossSliceReference()], Configuration),
@@ -102,6 +104,18 @@ public sealed class AnalysisModeTests
             internal static class HealthEndpoint
             {
                 public static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet("/health", (DbContext db) => db.ToString());
+            }
+        }
+        """;
+
+    // A domain service that reads the system clock: the contracts make MyApp the domain.
+    private const string SystemClockRead =
+        """
+        namespace MyApp.Domain.Bookings
+        {
+            public static class BookingClock
+            {
+                public static DateTimeOffset Now() => DateTimeOffset.UtcNow;
             }
         }
         """;
