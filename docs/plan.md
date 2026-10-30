@@ -203,6 +203,6 @@ Le protocole détaillé du benchmark, son isolation et ses règles d'intégrité
 
 ## 9. Prochaine action
 
-L'incrément 1 « boucle verticale HardSlice » est terminé. Terminer l'incrément actif « Fondation v0.1 » (PB-017) décrit dans [product-backlog.md](product-backlog.md).
+Les incréments 1 « boucle verticale HardSlice » et 2 « Fondation v0.1 » sont terminés. Exécuter l'incrément actif « Analyseurs v0.2 » (PB-018 à PB-033) décrit dans [product-backlog.md](product-backlog.md).
 
-L'incrément 3 « Analyseurs v0.2 » est préparé (PB-018 à PB-033). Il démarre une fois la définition de fini de l'incrément 2 atteinte, par PB-018 (classification), qui débloque les règles du domaine. PB-019 (performance), PB-020 (niveaux d'analyse), PB-021 (outil) et les règles HS003, HS011 et HS015 avancent en parallèle. Les prérequis de la préversion NuGet sont à réunir par le mainteneur pendant l'incrément ; seule la publication finale (PB-033) les attend.
+Commencer par PB-018 (classification), qui débloque les règles du domaine. PB-019 (performance), PB-020 (niveaux d'analyse), PB-021 (outil) et les règles HS003, HS011 et HS015 avancent en parallèle. Les prérequis de la préversion NuGet sont à réunir par le mainteneur pendant l'incrément ; seule la publication finale (PB-033) les attend.

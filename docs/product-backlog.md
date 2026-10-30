@@ -169,7 +169,9 @@ Cette démonstration n'est pas un benchmark statistique et ne prétend pas prouv
 
 L'incrément est terminé lorsque PB-001 à PB-008 sont satisfaits depuis un checkout propre. Aucune porte documentaire supplémentaire ne s'applique.
 
-## 3. Incrément actif — Fondation v0.1
+## 3. Incrément terminé : Fondation v0.1
+
+Statut : terminé le 30/10/2026. PB-009 à PB-017 sont validés et poussés ; la CI est verte. Cette section est conservée comme historique.
 
 ### Résultat attendu
 
@@ -671,9 +673,9 @@ L'incrément est terminé lorsque PB-009 à PB-017 sont satisfaits depuis un che
 
 Aucune porte documentaire supplémentaire ne s'applique.
 
-## 4. Incrément préparé : Analyseurs v0.2
+## 4. Incrément actif : Analyseurs v0.2
 
-Statut : préparé le 30/10/2026. Il démarre lorsque la définition de fini de l'incrément 2 est atteinte. Aucun ticket n'est commencé.
+Statut : actif depuis le 30/10/2026, l'incrément 2 étant terminé. Le travail commence par PB-018 ; les tickets peuvent être menés un par un dans l'ordre des numéros, qui respecte le graphe des dépendances.
 
 ### Résultat attendu
 
