@@ -83,8 +83,8 @@ Aucune à ce jour : les seuils sont ceux de PB-019.
 
 ### Mesure du 2026-10-30
 
-- Commit : `ba18a28, avec des modifications non commitées`
-- Règles HardSlice : HS003, HS004, HS010, HS011, HS015, HS016, HS900, HS901, HS902
+- Commit : `2c4af08, avec des modifications non commitées`
+- Règles HardSlice : HS003, HS004, HS005, HS010, HS011, HS015, HS016, HS900, HS901, HS902
 - SDK effectif : 10.0.401
 - Runner : machine locale, Linux 6.8.0-147-generic
 - Processeur : AMD EPYC 9354P 32-Core Processor, 4 cœurs
@@ -96,63 +96,68 @@ Durées en secondes, une chauffe puis 5 builds mesurés par variante, en alterna
 
 | Scénario | Analyseurs | Minimum | Médiane | Maximum | Dispersion |
 |---|---|---:|---:|---:|---:|
-| A | avec | 3.23 | 3.46 | 3.62 | 11.1 % |
-| A | sans | 3.00 | 3.14 | 3.36 | 11.7 % |
-| B | avec | 3.90 | 4.02 | 4.50 | 14.7 % |
-| B | sans | 3.43 | 4.01 | 5.61 | 54.4 % |
-| C | avec | 4.38 | 4.47 | 4.71 | 7.3 % |
-| C | sans | 3.98 | 4.21 | 6.10 | 50.4 % |
+| A | avec | 3.49 | 3.65 | 4.04 | 15.0 % |
+| A | sans | 2.95 | 3.29 | 5.33 | 72.4 % |
+| B | avec | 4.16 | 4.23 | 4.70 | 12.7 % |
+| B | sans | 3.76 | 3.91 | 4.99 | 31.5 % |
+| C | avec | 4.08 | 4.31 | 5.39 | 30.4 % |
+| C | sans | 3.90 | 4.15 | 4.43 | 12.6 % |
 
 Seuils, sur la médiane :
 
 | Scénario | Mesure | Valeur | Seuil | Résultat |
 |---|---|---:|---:|---|
-| A | Durée totale avec analyseurs | 3.46 s | ≤ 10.00 s | respecté |
-| A | Surcoût des analyseurs | 0.32 s | ≤ 1.00 s | respecté |
-| B | Durée totale avec analyseurs | 4.02 s | ≤ 20.00 s | respecté |
-| B | Surcoût des analyseurs | 0.01 s | ≤ 2.00 s | respecté |
-| C | Surcoût des analyseurs | 6.2 % | ≤ 15 % | respecté |
+| A | Durée totale avec analyseurs | 3.65 s | ≤ 10.00 s | respecté |
+| A | Surcoût des analyseurs | 0.36 s | ≤ 1.00 s | respecté |
+| B | Durée totale avec analyseurs | 4.23 s | ≤ 20.00 s | respecté |
+| B | Surcoût des analyseurs | 0.32 s | ≤ 2.00 s | respecté |
+| C | Surcoût des analyseurs | 3.8 % | ≤ 15 % | respecté |
 
 `-p:ReportAnalyzer=true`, build complet avec analyseurs : temps cumulé de chaque analyseur HardSlice, puis de tous les analyseurs du projet.
 Ces temps se chevauchent (exécution concurrente) : ils expliquent un surcoût, seuls les seuils sur la durée totale font foi.
 
 | Projet | Analyseur HardSlice | Temps | Tous les analyseurs |
 |---|---|---:|---:|
-| PerfApp.Domain | SliceReferenceAnalyzer (HS016) | 0.001 s | 0.026 s |
-| PerfApp.Domain | SliceStructureAnalyzer (HS004) | <0.001 s | 0.026 s |
-| PerfApp.Domain | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.026 s |
-| PerfApp.Domain | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.026 s |
-| PerfApp.Domain | SystemClockAnalyzer (HS010) | <0.001 s | 0.026 s |
-| PerfApp.Domain | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.026 s |
-| PerfApp.Domain | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.026 s |
-| PerfApp | SliceReferenceAnalyzer (HS016) | 1.253 s | 1.732 s |
-| PerfApp | SliceStructureAnalyzer (HS004) | 0.078 s | 1.732 s |
-| PerfApp | ClassificationAnalyzer (HS900, HS901, HS902) | 0.016 s | 1.732 s |
-| PerfApp | EndpointDatabaseAccessAnalyzer (HS003) | 0.010 s | 1.732 s |
-| PerfApp | SliceEndpointAnalyzer (HS015) | 0.009 s | 1.732 s |
-| PerfApp | AsyncUsageAnalyzer (HS011) | 0.004 s | 1.732 s |
-| PerfApp | SystemClockAnalyzer (HS010) | <0.001 s | 1.732 s |
-| PerfApp.ArchitectureTests | SliceReferenceAnalyzer (HS016) | 0.003 s | 0.164 s |
-| PerfApp.ArchitectureTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.164 s |
-| PerfApp.ArchitectureTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.164 s |
-| PerfApp.ArchitectureTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.164 s |
-| PerfApp.ArchitectureTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.164 s |
-| PerfApp.ArchitectureTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.164 s |
-| PerfApp.ArchitectureTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.164 s |
-| PerfApp.IntegrationTests | SliceReferenceAnalyzer (HS016) | 0.049 s | 0.119 s |
-| PerfApp.IntegrationTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.119 s |
-| PerfApp.IntegrationTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.119 s |
-| PerfApp.IntegrationTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.119 s |
-| PerfApp.IntegrationTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.119 s |
-| PerfApp.IntegrationTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.119 s |
-| PerfApp.IntegrationTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.119 s |
-| PerfApp.Tests | SliceReferenceAnalyzer (HS016) | 0.005 s | 0.072 s |
-| PerfApp.Tests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.072 s |
-| PerfApp.Tests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.072 s |
-| PerfApp.Tests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.072 s |
-| PerfApp.Tests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.072 s |
-| PerfApp.Tests | SystemClockAnalyzer (HS010) | <0.001 s | 0.072 s |
-| PerfApp.Tests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.072 s |
+| PerfApp.Domain | SliceStructureAnalyzer (HS004) | 0.003 s | 0.025 s |
+| PerfApp.Domain | SliceReferenceAnalyzer (HS016) | 0.001 s | 0.025 s |
+| PerfApp.Domain | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.025 s |
+| PerfApp.Domain | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.025 s |
+| PerfApp.Domain | SystemClockAnalyzer (HS010) | <0.001 s | 0.025 s |
+| PerfApp.Domain | CommandResponseAnalyzer (HS005) | <0.001 s | 0.025 s |
+| PerfApp.Domain | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.025 s |
+| PerfApp.Domain | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.025 s |
+| PerfApp | SliceReferenceAnalyzer (HS016) | 1.831 s | 2.277 s |
+| PerfApp | SliceStructureAnalyzer (HS004) | 0.028 s | 2.277 s |
+| PerfApp | SliceEndpointAnalyzer (HS015) | 0.016 s | 2.277 s |
+| PerfApp | ClassificationAnalyzer (HS900, HS901, HS902) | 0.013 s | 2.277 s |
+| PerfApp | EndpointDatabaseAccessAnalyzer (HS003) | 0.010 s | 2.277 s |
+| PerfApp | CommandResponseAnalyzer (HS005) | 0.004 s | 2.277 s |
+| PerfApp | AsyncUsageAnalyzer (HS011) | 0.002 s | 2.277 s |
+| PerfApp | SystemClockAnalyzer (HS010) | <0.001 s | 2.277 s |
+| PerfApp.ArchitectureTests | SliceReferenceAnalyzer (HS016) | 0.003 s | 0.152 s |
+| PerfApp.ArchitectureTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.152 s |
+| PerfApp.ArchitectureTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.152 s |
+| PerfApp.ArchitectureTests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.152 s |
+| PerfApp.ArchitectureTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.152 s |
+| PerfApp.ArchitectureTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.152 s |
+| PerfApp.ArchitectureTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.152 s |
+| PerfApp.ArchitectureTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.152 s |
+| PerfApp.IntegrationTests | SliceReferenceAnalyzer (HS016) | 0.393 s | 0.819 s |
+| PerfApp.IntegrationTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.819 s |
+| PerfApp.IntegrationTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.819 s |
+| PerfApp.IntegrationTests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.819 s |
+| PerfApp.IntegrationTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.819 s |
+| PerfApp.IntegrationTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.819 s |
+| PerfApp.IntegrationTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.819 s |
+| PerfApp.IntegrationTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.819 s |
+| PerfApp.Tests | SliceReferenceAnalyzer (HS016) | 0.011 s | 0.130 s |
+| PerfApp.Tests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.130 s |
+| PerfApp.Tests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.130 s |
+| PerfApp.Tests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.130 s |
+| PerfApp.Tests | SystemClockAnalyzer (HS010) | <0.001 s | 0.130 s |
+| PerfApp.Tests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.130 s |
+| PerfApp.Tests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.130 s |
+| PerfApp.Tests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.130 s |
 
 <!-- measure-analyzers:latest:end -->
 
@@ -168,4 +173,5 @@ Médianes en secondes, avec / sans analyseurs.
 | 2026-10-30 | `027b032` | HS003, HS011, HS015, HS016, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.57 / 3.37 | 3.86 / 3.34 | 4.12 / 3.76 | pass |
 | 2026-10-30 | `ce292d4` | HS003, HS010, HS011, HS015, HS016, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.09 / 2.95 | 3.88 / 3.63 | 4.07 / 3.66 | pass |
 | 2026-10-30 | `ba18a28` | HS003, HS004, HS010, HS011, HS015, HS016, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.46 / 3.14 | 4.02 / 4.01 | 4.47 / 4.21 | pass |
+| 2026-10-30 | `2c4af08` | HS003, HS004, HS005, HS010, HS011, HS015, HS016, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.65 / 3.29 | 4.23 / 3.91 | 4.31 / 4.15 | pass |
 <!-- measure-analyzers:history -->

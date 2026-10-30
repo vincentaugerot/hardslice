@@ -183,10 +183,23 @@ public sealed class BookingsReferenceTests
             + "Fix: inject TimeProvider and call GetUtcNow(), or pass the instant to the domain as a parameter. Doc: 'docs/rules/HS010.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS005_when_ConfirmBookingHandler_returns_a_DTO_that_holds_the_booking()
+    {
+        var diagnostic = (await AnalyzeAllAsync(ConfirmBookingThatReturnsTheBooking(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(CommandResponseAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "handler 'ConfirmBookingHandler' of command 'ConfirmBookingCommand' returns 'ConfirmationDto', whose property 'Booking' holds the entity 'Booking'. "
+            + "Command handlers return an identifier, a DTO of values or nothing. "
+            + "Fix: return 'BookingId', or a DTO built from the entity's values. Doc: 'docs/rules/HS005.md'.");
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
     [InlineData(SliceStructureAnalyzer.DiagnosticId)]
+    [InlineData(CommandResponseAnalyzer.DiagnosticId)]
     [InlineData(SystemClockAnalyzer.DiagnosticId)]
     [InlineData(AsyncUsageAnalyzer.DiagnosticId)]
     [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
@@ -199,6 +212,7 @@ public sealed class BookingsReferenceTests
         {
             EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
             SliceStructureAnalyzer.DiagnosticId => await AnalyzeAllAsync(ArchiveBookingWithArchiveCommand(), Configuration),
+            CommandResponseAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReturnsTheBooking(), Configuration),
             SystemClockAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReadsTheClock(), Configuration),
             AsyncUsageAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration),
             SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
@@ -404,6 +418,23 @@ public sealed class BookingsReferenceTests
             period + "\n        if (period.Start < DateTimeOffset.UtcNow)\n            throw new ArgumentException(\"A booking starts in the future.\");")));
     }
 
+    // ConfirmBooking, whose handler returns the booking it confirms in a DTO instead of its identifier.
+    private static CSharpCompilation ConfirmBookingThatReturnsTheBooking()
+    {
+        var path = "Features/Bookings/ConfirmBooking/ConfirmBooking.cs";
+        var confirmBooking = ReferenceSource(path);
+        string[] replaced = ["ICommand<BookingId>;", "IRequestHandler<ConfirmBookingCommand, BookingId>", "public async Task<BookingId> Handle", "return booking.Id;"];
+        foreach (var text in replaced)
+            confirmBooking.ShouldContain(text);
+
+        return CompileApplication((path, confirmBooking
+            .Replace("ICommand<BookingId>;", "ICommand<ConfirmationDto>;\n\npublic sealed record ConfirmationDto(Guid RoomId, Booking Booking);")
+            .Replace("IRequestHandler<ConfirmBookingCommand, BookingId>", "IRequestHandler<ConfirmBookingCommand, ConfirmationDto>")
+            .Replace("public async Task<BookingId> Handle", "public async Task<ConfirmationDto> Handle")
+            .Replace("return booking.Id;", "return new ConfirmationDto(command.RoomId, booking);")),
+            BookingsModuleRegistration("IRequestHandler<ConfirmBookingCommand, BookingId>", "IRequestHandler<ConfirmBookingCommand, ConfirmationDto>"));
+    }
+
     // ConfirmBooking, whose handler blocks on the bookings it loads instead of awaiting them.
     private static CSharpCompilation ConfirmBookingThatBlocks()
     {
@@ -417,6 +448,16 @@ public sealed class BookingsReferenceTests
         return CompileApplication((path, confirmBooking
             .Replace(load, "var existingBookings = db.Set<Booking>()")
             .Replace(loaded, ".ToListAsync(cancellationToken).Result;")));
+    }
+
+    // BookingsModule, which registers a handler under another contract.
+    private static (string Path, string Source) BookingsModuleRegistration(string registered, string replacement)
+    {
+        var path = "Features/Bookings/BookingsModule.cs";
+        var module = ReferenceSource(path);
+        module.ShouldContain(registered);
+
+        return (path, module.Replace(registered, replacement));
     }
 
     // BookingsModule, which also maps the endpoint class of another slice on its group.

@@ -56,6 +56,22 @@ internal sealed class DomainModel
         return type.AllInterfaces.Any(@interface => SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, contract));
     }
 
+    // The constructed contracts a type implements, directly or through a base class: 'IRequestHandler<ConfirmBookingCommand, BookingId>'.
+    public static IEnumerable<INamedTypeSymbol> Implementations(INamedTypeSymbol type, INamedTypeSymbol contract)
+    {
+        for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(baseType.OriginalDefinition, contract))
+                yield return baseType;
+        }
+
+        foreach (var @interface in type.AllInterfaces)
+        {
+            if (SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, contract))
+                yield return @interface;
+        }
+    }
+
     // A contract is required in its declaring assembly and in every compilation that references it. Elsewhere it is
     // invisible, which is not an error: the compilation of MyApp.Domain does not reference MyApp.
     public static DomainModel Create(Compilation compilation, HardSliceConfiguration configuration)

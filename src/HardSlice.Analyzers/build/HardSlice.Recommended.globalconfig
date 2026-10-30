@@ -13,6 +13,9 @@ dotnet_diagnostic.HS003.severity = error
 # HS004: a slice holds one request named after it, its handler and its endpoint, in its own folder.
 dotnet_diagnostic.HS004.severity = error
 
+# HS005: a command handler never returns an entity, directly, in an envelope or in a DTO.
+dotnet_diagnostic.HS005.severity = error
+
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error
 

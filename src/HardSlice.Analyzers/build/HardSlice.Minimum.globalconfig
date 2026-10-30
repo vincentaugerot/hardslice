@@ -14,6 +14,10 @@ dotnet_diagnostic.HS003.severity = error
 # Off: it assumes the shape of a slice.
 dotnet_diagnostic.HS004.severity = none
 
+# HS005: a command handler never returns an entity, directly, in an envelope or in a DTO.
+# Off: it assumes the messaging of the template.
+dotnet_diagnostic.HS005.severity = none
+
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error
 

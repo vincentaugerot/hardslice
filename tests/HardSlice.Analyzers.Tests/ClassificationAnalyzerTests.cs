@@ -188,7 +188,7 @@ public sealed class ClassificationAnalyzerTests
             diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
             diagnostic.GetMessage().ShouldBe(
                 "contract 'contracts.entity' of hardslice.json, 'MyApp.Domain.IEntity', is not declared by assembly 'MyApp.Domain'. "
-                + "The contracts of hardslice.json classify the types checked by HS010, HS901 and HS902. "
+                + "The contracts of hardslice.json classify the types checked by HS005, HS010, HS901 and HS902. "
                 + "Fix: restore the contract type 'MyApp.Domain.IEntity' in project 'MyApp.Domain', or hardslice.json, from version control. "
                 + "Doc: 'docs/rules/HS900.md'.");
             var position = diagnostic.Location.GetLineSpan();
@@ -209,7 +209,7 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
         diagnostic.GetMessage().ShouldStartWith(
             "contract 'contracts.command' of hardslice.json, 'MyApp.Shared.Messaging.ICommandX`1', is not declared by assembly 'MyApp'. "
-            + "The contracts of hardslice.json classify the types checked by HS004 and HS901.");
+            + "The contracts of hardslice.json classify the types checked by HS004, HS005 and HS901.");
     }
 
     [Theory]
@@ -482,7 +482,7 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.Location.ShouldBe(Location.None);
         diagnostic.GetMessage().ShouldBe(
             "hardslice.json was not found in '/solution/src/MyApp' or above it. "
-            + "The contracts of hardslice.json classify the types checked by HS004, HS010, HS901 and HS902. "
+            + "The contracts of hardslice.json classify the types checked by HS004, HS005, HS010, HS901 and HS902. "
             + "Fix: restore hardslice.json at the solution root from version control. Doc: 'docs/rules/HS900.md'.");
     }
 
@@ -519,7 +519,7 @@ public sealed class ClassificationAnalyzerTests
 
         diagnostic.GetMessage().ShouldStartWith(
             "'contracts.entity' in hardslice.json is not '<metadata name>, <assembly>'. "
-            + "The contracts of hardslice.json classify the types checked by HS010, HS901 and HS902. "
+            + "The contracts of hardslice.json classify the types checked by HS005, HS010, HS901 and HS902. "
             + "Fix: restore hardslice.json from version control; it expects the metadata name of the contract type then its declaring assembly, "
             + "such as \"MyApp.Domain.IEntity, MyApp.Domain\". Doc: 'docs/rules/HS900.md'.");
         diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(3);
@@ -546,7 +546,7 @@ public sealed class ClassificationAnalyzerTests
 
         diagnostic.GetMessage().ShouldStartWith(
             "contracts 'contracts.command' and 'contracts.query' of hardslice.json both designate 'MyApp.Shared.Messaging.ICommand`1, MyApp'. "
-            + "The contracts of hardslice.json classify the types checked by HS004 and HS901.");
+            + "The contracts of hardslice.json classify the types checked by HS004, HS005 and HS901.");
     }
 
     [Fact]
@@ -560,7 +560,7 @@ public sealed class ClassificationAnalyzerTests
 
         diagnostic.GetMessage().ShouldBe(
             "contract 'contracts.aggregateRoot', 'IAggregateRoot', does not derive from contract 'contracts.entity', 'IEntity'. "
-            + "The contracts of hardslice.json classify the types checked by HS010, HS901 and HS902. "
+            + "The contracts of hardslice.json classify the types checked by HS005, HS010, HS901 and HS902. "
             + "Fix: declare 'IAggregateRoot' as deriving from 'IEntity': an aggregate root is an entity. Doc: 'docs/rules/HS900.md'.");
     }
 
@@ -572,7 +572,7 @@ public sealed class ClassificationAnalyzerTests
         (await AnalyzeAllAsync(CompileDomain(), configuration)).ShouldBeEmpty();
     }
 
-    // Only HS004 needs the handler contract: HS900 stays silent while HS004 is off.
+    // Only HS004 and HS005 need the handler contract: HS900 stays silent while both are off.
     [Fact]
     public async Task Does_not_report_a_contract_no_active_rule_needs()
     {
@@ -580,9 +580,10 @@ public sealed class ClassificationAnalyzerTests
         configuration.ShouldNotContain("requestHandler");
         var application = CompileApplication(CompileDomain().ToMetadataReference());
 
-        (await AnalyzeAllAsync(WithSeverities(application, ("HS004", ReportDiagnostic.Suppress)), configuration)).ShouldBeEmpty();
+        (await AnalyzeAllAsync(WithSeverities(application, ("HS004", ReportDiagnostic.Suppress), ("HS005", ReportDiagnostic.Suppress)), configuration))
+            .ShouldBeEmpty();
         (await AnalyzeAllAsync(application, configuration)).ShouldHaveSingleItem().GetMessage().ShouldStartWith(
-            "hardslice.json declares no contract 'contracts.requestHandler'. The contracts of hardslice.json classify the types checked by HS004. ");
+            "hardslice.json declares no contract 'contracts.requestHandler'. The contracts of hardslice.json classify the types checked by HS004 and HS005. ");
     }
 
     [Fact]
@@ -594,23 +595,48 @@ public sealed class ClassificationAnalyzerTests
                 WithSeverities(
                     domain,
                     ("HS004", ReportDiagnostic.Suppress),
+                    ("HS005", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
                 configuration: null))
             .ShouldBeEmpty();
         (await AnalyzeAllAsync(
-                WithSeverities(domain, ("HS004", ReportDiagnostic.Suppress), ("HS010", ReportDiagnostic.Suppress), ("HS902", ReportDiagnostic.Suppress)),
+                WithSeverities(
+                    domain,
+                    ("HS004", ReportDiagnostic.Suppress),
+                    ("HS005", ReportDiagnostic.Suppress),
+                    ("HS010", ReportDiagnostic.Suppress),
+                    ("HS902", ReportDiagnostic.Suppress)),
                 configuration: null))
             .ShouldHaveSingleItem().GetMessage().ShouldContain("checked by HS901.");
         (await AnalyzeAllAsync(
-                WithSeverities(domain, ("HS004", ReportDiagnostic.Suppress), ("HS901", ReportDiagnostic.Suppress), ("HS902", ReportDiagnostic.Suppress)),
+                WithSeverities(
+                    domain,
+                    ("HS004", ReportDiagnostic.Suppress),
+                    ("HS005", ReportDiagnostic.Suppress),
+                    ("HS901", ReportDiagnostic.Suppress),
+                    ("HS902", ReportDiagnostic.Suppress)),
                 configuration: null))
             .ShouldHaveSingleItem().GetMessage().ShouldContain("checked by HS010.");
         (await AnalyzeAllAsync(
-                WithSeverities(domain, ("HS010", ReportDiagnostic.Suppress), ("HS901", ReportDiagnostic.Suppress), ("HS902", ReportDiagnostic.Suppress)),
+                WithSeverities(
+                    domain,
+                    ("HS005", ReportDiagnostic.Suppress),
+                    ("HS010", ReportDiagnostic.Suppress),
+                    ("HS901", ReportDiagnostic.Suppress),
+                    ("HS902", ReportDiagnostic.Suppress)),
                 configuration: null))
             .ShouldHaveSingleItem().GetMessage().ShouldContain("checked by HS004.");
+        (await AnalyzeAllAsync(
+                WithSeverities(
+                    domain,
+                    ("HS004", ReportDiagnostic.Suppress),
+                    ("HS010", ReportDiagnostic.Suppress),
+                    ("HS901", ReportDiagnostic.Suppress),
+                    ("HS902", ReportDiagnostic.Suppress)),
+                configuration: null))
+            .ShouldHaveSingleItem().GetMessage().ShouldContain("checked by HS005.");
     }
 
     [Fact]

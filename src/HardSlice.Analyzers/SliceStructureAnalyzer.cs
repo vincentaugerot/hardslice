@@ -406,7 +406,7 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         public string HandlerContract(INamedTypeSymbol request)
         {
             var contract = _model.IsCommand(request) ? Command : Query;
-            var response = Implementations(request, contract).FirstOrDefault()?.TypeArguments.FirstOrDefault();
+            var response = DomainModel.Implementations(request, contract).FirstOrDefault()?.TypeArguments.FirstOrDefault();
             return $"{_handler.Name}<{request.ToDisplayString(DisplayFormat)}, {response?.ToDisplayString(DisplayFormat) ?? "TResponse"}>";
         }
 
@@ -415,28 +415,13 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
             if (type.TypeKind != TypeKind.Class || type.IsAbstract || type.IsStatic)
                 return [];
 
-            return Implementations(type, contract)
+            return DomainModel.Implementations(type, contract)
                 .Select(implementation => implementation.TypeArguments.FirstOrDefault())
                 .OfType<INamedTypeSymbol>()
                 .Where(argument => argument.TypeKind != TypeKind.Error && accept(argument))
                 .Select(argument => argument.OriginalDefinition)
                 .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
                 .ToImmutableArray();
-        }
-
-        private static IEnumerable<INamedTypeSymbol> Implementations(INamedTypeSymbol type, INamedTypeSymbol contract)
-        {
-            for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
-            {
-                if (SymbolEqualityComparer.Default.Equals(baseType.OriginalDefinition, contract))
-                    yield return baseType;
-            }
-
-            foreach (var @interface in type.AllInterfaces)
-            {
-                if (SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, contract))
-                    yield return @interface;
-            }
         }
 
         // The requests the handlers of this compilation handle, wherever they are declared: a request whose handler is
