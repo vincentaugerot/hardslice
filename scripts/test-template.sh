@@ -3,12 +3,12 @@
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
+# then proves a seeded violation of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned to the version of the analyzers, refuses another one before the build and explains every rule with the sheet of the template.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
-# and that seeded violations of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
+# and that seeded violations of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them, and HS019 still reaches the compiler log: without the sample, the rules keep their targets.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -198,8 +198,8 @@ echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
 
 echo "==> Checking that $app_name holds every v0.1 deliverable of the specification"
 for deliverable in \
-  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS004.md docs/rules/HS005.md docs/rules/HS006.md docs/rules/HS007.md docs/rules/HS008.md docs/rules/HS010.md docs/rules/HS011.md docs/rules/HS012.md \
-  docs/rules/HS013.md docs/rules/HS014.md docs/rules/HS015.md docs/rules/HS016.md docs/rules/HS017.md docs/rules/HS018.md \
+  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS004.md docs/rules/HS005.md docs/rules/HS006.md docs/rules/HS007.md docs/rules/HS008.md docs/rules/HS009.md docs/rules/HS010.md docs/rules/HS011.md docs/rules/HS012.md \
+  docs/rules/HS013.md docs/rules/HS014.md docs/rules/HS015.md docs/rules/HS016.md docs/rules/HS017.md docs/rules/HS018.md docs/rules/HS019.md \
   docs/rules/HS900.md docs/rules/HS901.md docs/rules/HS902.md "src/$app_name.Domain/IEntity.cs" "src/$app_name.Domain/IAggregateRoot.cs" \
   "src/$app_name.Domain/Bookings/Booking.cs" "src/$app_name.Domain/Bookings/BookingId.cs" \
   "src/$app_name.Domain/Bookings/BookingPeriod.cs" "src/$app_name.Domain/Bookings/Events/BookingConfirmed.cs" \
@@ -1054,6 +1054,64 @@ EOF
   rm "$app/src/$app_name.Domain/$module/RoomTour.cs"
 }
 
+# Seeds a domain event of module <module> declared as a class: the analyzer of the domain reports HS009 in its own compilation.
+probe_domain_event_record() {
+  local module="$1"
+  mkdir -p "$app/src/$app_name.Domain/$module/Events"
+  cat > "$app/src/$app_name.Domain/$module/Events/RoomInspected.cs" <<EOF
+namespace $app_name.Domain.$module.Events;
+
+public sealed class RoomInspected : IDomainEvent
+{
+    public Guid RoomId { get; } = Guid.NewGuid();
+}
+EOF
+  expect_failure "HS009: domain event 'RoomInspected' is a class. Domain events are records." "docs/rules/HS009.md" "a domain event of $app_name declared as a class" check.sh check.ps1
+  rm "$app/src/$app_name.Domain/$module/Events/RoomInspected.cs"
+}
+
+# Seeds a domain event of module <module> named as a command. HS019 is a suggestion of the All mode: with the shipped
+# configuration, both check scripts still pass, and the suggestion is in the SARIF log of the compiler of the domain.
+probe_domain_event_name() {
+  local module="$1"
+  local script
+  local check_output
+  local build_output
+  local sarif="$work/hs019.sarif"
+  mkdir -p "$app/src/$app_name.Domain/$module/Events"
+  cat > "$app/src/$app_name.Domain/$module/Events/InspectRoom.cs" <<EOF
+namespace $app_name.Domain.$module.Events;
+
+public sealed record InspectRoom(Guid RoomId) : IDomainEvent;
+EOF
+  if [[ ! -f "$app/docs/rules/HS019.md" ]]; then
+    echo "error: docs/rules/HS019.md does not exist from the generated solution root." >&2
+    exit 1
+  fi
+  for script in check.sh check.ps1; do
+    if ! check_output="$(run_check "$script" 2>&1)"; then
+      printf '%s\n' "$check_output" >&2
+      echo "error: scripts/$script failed on a domain event of $app_name not named as a past fact: HS019 never blocks." >&2
+      exit 1
+    fi
+  done
+  rm -f "$sarif"
+  if ! build_output="$(dotnet build "$app/src/$app_name.Domain/$app_name.Domain.csproj" --no-restore --no-incremental "-p:ErrorLog=$sarif" 2>&1)"; then
+    printf '%s\n' "$build_output" >&2
+    echo "error: the domain of $app_name does not build with a domain event not named as a past fact." >&2
+    exit 1
+  fi
+  if ! grep -Fq '"ruleId": "HS019"' "$sarif" ||
+    ! grep -Fq "domain event 'InspectRoom' is not named as a past fact. Domain events are named in the past tense." "$sarif" ||
+    ! grep -Fq "Doc: 'docs/rules/HS019.md'." "$sarif"; then
+    cat "$sarif" >&2 || true
+    echo "error: the compiler log of $app_name.Domain does not hold the HS019 suggestion on InspectRoom." >&2
+    exit 1
+  fi
+  echo "    HS019: domain event 'InspectRoom' is not named as a past fact, a suggestion of the compiler log; both scripts pass"
+  rm "$app/src/$app_name.Domain/$module/Events/InspectRoom.cs" "$sarif"
+}
+
 # Seeds a slice handler of module <module>, then a domain type of it, that read the system clock: the analyzer of the web project
 # reports HS010 in the slice, the analyzer of the domain in its own compilation, which it recognizes by the entity contract.
 probe_system_clock() {
@@ -1119,6 +1177,12 @@ probe_entity_state Bookings
 
 echo "==> Checking that HS008 fails both check scripts on a child entity that holds another aggregate"
 probe_aggregate_reference Bookings
+
+echo "==> Checking that HS009 fails both check scripts on a domain event declared as a class"
+probe_domain_event_record Bookings
+
+echo "==> Checking that HS019 suggests a past fact for a domain event named as a command, without failing the check scripts"
+probe_domain_event_name Bookings
 
 echo "==> Checking that HS010 fails both check scripts on a slice handler and a domain type that read the system clock"
 probe_system_clock Bookings
@@ -1201,7 +1265,7 @@ done
 echo "    $version_mismatch ..."
 mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule, while they pass with the HS019 suggestion in the compiler log"
 
 sample_name="$app_name"
 blank_name="Blank"
@@ -1405,6 +1469,12 @@ probe_entity_state Rooms
 
 echo "==> Checking that HS008 fails both check scripts on a child entity of the first aggregate of $app_name that holds another aggregate"
 probe_aggregate_reference Rooms
+
+echo "==> Checking that HS009 fails both check scripts on the first domain event of $app_name declared as a class"
+probe_domain_event_record Rooms
+
+echo "==> Checking that HS019 suggests a past fact for the first domain event of $app_name named as a command, without failing the check scripts"
+probe_domain_event_name Rooms
 
 echo "==> Checking that HS010 fails both check scripts on the first slice handler and domain type of $app_name that read the system clock"
 probe_system_clock Rooms

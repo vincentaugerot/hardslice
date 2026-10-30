@@ -25,6 +25,9 @@ dotnet_diagnostic.HS007.severity = error
 # HS008: an aggregate references another aggregate by its identifier only, from its root and from its child entities.
 dotnet_diagnostic.HS008.severity = error
 
+# HS009: a domain event is a record, a record class or a record struct, wherever it is declared.
+dotnet_diagnostic.HS009.severity = error
+
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error
 
@@ -36,6 +39,10 @@ dotnet_diagnostic.HS015.severity = error
 
 # HS016: a slice never uses a type of another slice.
 dotnet_diagnostic.HS016.severity = error
+
+# HS019: a domain event is named as a past fact. A naming convention, never blocking.
+# A suggestion: visible in the IDE and the compiler log, without effect on the build, even with TreatWarningsAsErrors.
+dotnet_diagnostic.HS019.severity = suggestion
 
 # HS900 to HS902: the contracts that classify types are usable, unambiguous and cover every mapped entity.
 # Reported only when an active rule depends on the classification.

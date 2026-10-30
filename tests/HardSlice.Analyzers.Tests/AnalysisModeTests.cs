@@ -18,10 +18,12 @@ public sealed class AnalysisModeTests
         ("HS006", "none", "error", "error"),
         ("HS007", "error", "error", "error"),
         ("HS008", "none", "error", "error"),
+        ("HS009", "none", "error", "error"),
         ("HS010", "error", "error", "error"),
         ("HS011", "error", "error", "error"),
         ("HS015", "none", "error", "error"),
         ("HS016", "error", "error", "error"),
+        ("HS019", "none", "none", "suggestion"),
         ("HS900", "error", "error", "error"),
         ("HS901", "error", "error", "error"),
         ("HS902", "error", "error", "error")
@@ -93,10 +95,12 @@ public sealed class AnalysisModeTests
         ["HS006"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ListBookings/ListBookings.cs", QueryHandlerThatWrites)], Configuration),
         ["HS007"] = ([("Domain/Bookings/Booking.cs", AggregateWithAPublicSetter)], Configuration),
         ["HS008"] = ([("Domain/Bookings/Booking.cs", AggregateThatHoldsAnotherAggregate)], Configuration),
+        ["HS009"] = ([("Domain/Bookings/Events/BookingConfirmed.cs", EventDeclaredAsAClass)], Configuration),
         ["HS010"] = ([("Domain/Bookings/BookingClock.cs", SystemClockRead)], Configuration),
         ["HS011"] = ([("Domain/Bookings/BookingCounter.cs", BlockingCall)], Configuration),
         ["HS015"] = ([("Features/Bookings/ListBookings/ListBookings.cs", SliceEndpointOutsideItsGroup)], Configuration),
         ["HS016"] = (CrossSliceReference(), Configuration),
+        ["HS019"] = ([("Domain/Bookings/Events/ConfirmBooking.cs", EventNamedAsACommand)], Configuration),
         ["HS900"] = ([], null),
         ["HS901"] = ([AmbiguousType()], Configuration),
         ["HS902"] = ([("Features/Rooms/RoomConfiguration.cs", UnclassifiedEntity)], Configuration)
@@ -200,6 +204,24 @@ public sealed class AnalysisModeTests
             {
                 private Room _room = new();
             }
+        }
+        """;
+
+    // A domain event declared as a class instead of a record.
+    private const string EventDeclaredAsAClass =
+        """
+        namespace MyApp.Domain.Bookings.Events
+        {
+            public sealed class BookingConfirmed : IDomainEvent;
+        }
+        """;
+
+    // A domain event named as the command that raises it, not as the fact it records.
+    private const string EventNamedAsACommand =
+        """
+        namespace MyApp.Domain.Bookings.Events
+        {
+            public sealed record ConfirmBooking(Guid BookingId) : IDomainEvent;
         }
         """;
 

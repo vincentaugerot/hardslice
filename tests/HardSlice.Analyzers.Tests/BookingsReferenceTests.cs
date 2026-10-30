@@ -27,6 +27,13 @@ public sealed class BookingsReferenceTests
 
     private static readonly string Configuration = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TemplateConfiguration", "hardslice.json"));
 
+    // The global config of the All mode, the mode of the template, as build/HardSlice.Analyzers.targets gives it to the compiler.
+    private static readonly (string Path, string Text)[] AllMode =
+    [
+        ("/packages/hardslice.analyzers/build/HardSlice.All.globalconfig",
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "AnalysisModes", "HardSlice.All.globalconfig")))
+    ];
+
     // Packages of the Bookings reference, restored for this test project at the template's versions.
     private static readonly string[] PackageAssemblyPrefixes = ["Microsoft.EntityFrameworkCore", "Npgsql", "FluentValidation"];
 
@@ -45,6 +52,14 @@ public sealed class BookingsReferenceTests
     {
         (await AnalyzeAllAsync(CompileDomain(), Configuration)).ShouldBeEmpty();
         (await AnalyzeAllAsync(CompileApplication(), Configuration)).ShouldBeEmpty();
+    }
+
+    // The template compiles in the All mode, where HS019 suggests a name: BookingConfirmed is a past fact.
+    [Fact]
+    public async Task Reports_no_HardSlice_diagnostic_on_the_Bookings_reference_in_the_All_mode()
+    {
+        (await AnalyzeAllAsync(CompileDomain(), Configuration, AllMode)).ShouldBeEmpty();
+        (await AnalyzeAllAsync(CompileApplication(), Configuration, AllMode)).ShouldBeEmpty();
     }
 
     [Fact]
@@ -231,6 +246,31 @@ public sealed class BookingsReferenceTests
             + "Fix: replace the property with 'RoomId' and load 'Room' in the handler that needs it. Doc: 'docs/rules/HS008.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS009_when_BookingConfirmed_is_a_class()
+    {
+        var diagnostic = (await AnalyzeAllAsync(BookingConfirmedAsAClass(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(DomainEventRecordAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "domain event 'BookingConfirmed' is a class. Domain events are records. "
+            + "Fix: declare it as 'public sealed record BookingConfirmed(...) : IDomainEvent'. Doc: 'docs/rules/HS009.md'.");
+    }
+
+    // A suggestion of the All mode only: the Recommended mode, the default, does not report it.
+    [Fact]
+    public async Task Suggests_HS019_in_the_All_mode_when_BookingConfirmed_is_named_ConfirmBooking()
+    {
+        (await AnalyzeAllAsync(BookingConfirmedNamedConfirmBooking(), Configuration)).ShouldBeEmpty();
+
+        var diagnostic = (await AnalyzeAllAsync(BookingConfirmedNamedConfirmBooking(), Configuration, AllMode)).ShouldHaveSingleItem();
+        diagnostic.Id.ShouldBe(DomainEventNameAnalyzer.DiagnosticId);
+        diagnostic.Severity.ShouldBe(DiagnosticSeverity.Info);
+        diagnostic.GetMessage().ShouldBe(
+            "domain event 'ConfirmBooking' is not named as a past fact. Domain events are named in the past tense. "
+            + "Fix: rename it, for example to 'BookingConfirmed'. Doc: 'docs/rules/HS019.md'.");
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
@@ -239,9 +279,11 @@ public sealed class BookingsReferenceTests
     [InlineData(QueryHandlerTrackingAnalyzer.DiagnosticId)]
     [InlineData(EntityStateAnalyzer.DiagnosticId)]
     [InlineData(AggregateReferenceAnalyzer.DiagnosticId)]
+    [InlineData(DomainEventRecordAnalyzer.DiagnosticId)]
     [InlineData(SystemClockAnalyzer.DiagnosticId)]
     [InlineData(AsyncUsageAnalyzer.DiagnosticId)]
     [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
+    [InlineData(DomainEventNameAnalyzer.DiagnosticId)]
     [InlineData(ClassificationAnalyzer.ConfigurationId)]
     [InlineData(ClassificationAnalyzer.AmbiguityId)]
     [InlineData(ClassificationAnalyzer.UnclassifiedEntityId)]
@@ -255,6 +297,8 @@ public sealed class BookingsReferenceTests
             QueryHandlerTrackingAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingThatTracksTheBooking(), Configuration),
             EntityStateAnalyzer.DiagnosticId => await AnalyzeAllAsync(BookingWithAStatusSetter(), Configuration),
             AggregateReferenceAnalyzer.DiagnosticId => await AnalyzeAllAsync(BookingWhoseLinesHoldTheirRoom(), Configuration),
+            DomainEventRecordAnalyzer.DiagnosticId => await AnalyzeAllAsync(BookingConfirmedAsAClass(), Configuration),
+            DomainEventNameAnalyzer.DiagnosticId => await AnalyzeAllAsync(BookingConfirmedNamedConfirmBooking(), Configuration, AllMode),
             SystemClockAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReadsTheClock(), Configuration),
             AsyncUsageAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration),
             SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
@@ -493,6 +537,42 @@ public sealed class BookingsReferenceTests
             (path, booking.Replace(status, status + "\n    private readonly List<BookingLine> _lines = [];")),
             ("Bookings/BookingLine.cs", "namespace MyApp.Domain.Bookings; public sealed class BookingLine : IEntity { public Room Room { get; private set; } = null!; }"),
             ("Bookings/Room.cs", "namespace MyApp.Domain.Bookings; public sealed class Room : IAggregateRoot { public Guid Id { get; } }"));
+    }
+
+    // BookingConfirmed becomes a sealed class with the same constructor and properties.
+    private static CSharpCompilation BookingConfirmedAsAClass()
+    {
+        var path = "Bookings/Events/BookingConfirmed.cs";
+        var record = "public sealed record BookingConfirmed(BookingId BookingId, Guid RoomId, BookingPeriod Period) : IDomainEvent;";
+        var bookingConfirmed = File.ReadAllText(Path.Combine(ReferenceDirectory, "MyApp.Domain", path)).ReplaceLineEndings("\n");
+        bookingConfirmed.ShouldContain(record);
+
+        return CompileDomain((path, bookingConfirmed.Replace(
+            record,
+            """
+            public sealed class BookingConfirmed(BookingId bookingId, Guid roomId, BookingPeriod period) : IDomainEvent
+            {
+                public BookingId BookingId { get; } = bookingId;
+
+                public Guid RoomId { get; } = roomId;
+
+                public BookingPeriod Period { get; } = period;
+            }
+            """)));
+    }
+
+    // BookingConfirmed is renamed after the command that raises it.
+    private static CSharpCompilation BookingConfirmedNamedConfirmBooking()
+    {
+        string[] paths = ["Bookings/Events/BookingConfirmed.cs", "Bookings/Booking.cs"];
+        return CompileDomain(paths
+            .Select(path => File.ReadAllText(Path.Combine(ReferenceDirectory, "MyApp.Domain", path)).ReplaceLineEndings("\n"))
+            .Select((source, index) =>
+            {
+                source.ShouldContain("BookingConfirmed(");
+                return (paths[index], source.Replace("BookingConfirmed(", "ConfirmBooking("));
+            })
+            .ToArray());
     }
 
     // ConfirmBooking, whose handler compares the start of the booking with the system clock.

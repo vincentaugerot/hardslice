@@ -12,16 +12,22 @@ internal static class RuleActivation
 
     // A rule is active unless /nowarn, a global config or the .editorconfig of every source file sets it to none.
     // A rule turned off in some files only stays active: it still needs its contracts in the others.
-    public static bool IsActive(Compilation compilation, string ruleId, CancellationToken cancellationToken)
+    // A rule off by default, such as HS019, is active only where a setting turns it on.
+    public static bool IsActive(Compilation compilation, string ruleId, CancellationToken cancellationToken, bool enabledByDefault = true)
     {
         var options = compilation.Options;
-        if (options.SpecificDiagnosticOptions.TryGetValue(ruleId, out var specific) && specific == ReportDiagnostic.Suppress)
-            return false;
+        var projectWide = enabledByDefault;
+        if (options.SpecificDiagnosticOptions.TryGetValue(ruleId, out var specific))
+        {
+            if (specific == ReportDiagnostic.Suppress)
+                return false;
+
+            projectWide |= specific != ReportDiagnostic.Default;
+        }
 
         var provider = options.SyntaxTreeOptionsProvider;
-        var projectWide = provider is not null && provider.TryGetGlobalDiagnosticValue(ruleId, cancellationToken, out var global)
-            ? global != ReportDiagnostic.Suppress
-            : true;
+        if (provider is not null && provider.TryGetGlobalDiagnosticValue(ruleId, cancellationToken, out var global))
+            projectWide = global != ReportDiagnostic.Suppress;
 
         if (provider is null || !compilation.SyntaxTrees.Any())
             return projectWide;

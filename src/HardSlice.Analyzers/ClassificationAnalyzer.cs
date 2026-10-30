@@ -27,10 +27,16 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
         (QueryHandlerTrackingAnalyzer.DiagnosticId, [ContractKeys.Entity, ContractKeys.Query, ContractKeys.RequestHandler]),
         (EntityStateAnalyzer.DiagnosticId, [ContractKeys.Entity]),
         (AggregateReferenceAnalyzer.DiagnosticId, [ContractKeys.Entity, ContractKeys.AggregateRoot]),
+        (DomainEventRecordAnalyzer.DiagnosticId, [ContractKeys.DomainEvent]),
         (SystemClockAnalyzer.DiagnosticId, [ContractKeys.Entity]),
+        (DomainEventNameAnalyzer.DiagnosticId, [ContractKeys.DomainEvent]),
         (AmbiguityId, [ContractKeys.Entity, ContractKeys.AggregateRoot, ContractKeys.DomainEvent, ContractKeys.Command, ContractKeys.Query]),
         (UnclassifiedEntityId, [ContractKeys.Entity, ContractKeys.AggregateRoot])
     ];
+
+    // The rules of ContractsByRule whose descriptor is off by default: they need their contracts only where a setting,
+    // such as the All analysis mode, turns them on.
+    private static readonly ImmutableHashSet<string> OffByDefault = ImmutableHashSet<string>.Empty.Add(DomainEventNameAnalyzer.DiagnosticId);
 
     private static readonly DiagnosticDescriptor ConfigurationRule = new(
         ConfigurationId,
@@ -79,7 +85,7 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
 
             var compilation = start.Compilation;
             var activeRules = ContractsByRule
-                .Where(rule => RuleActivation.IsActive(compilation, rule.RuleId, start.CancellationToken))
+                .Where(rule => RuleActivation.IsActive(compilation, rule.RuleId, start.CancellationToken, !OffByDefault.Contains(rule.RuleId)))
                 .ToImmutableArray();
             if (activeRules.IsEmpty)
                 return;

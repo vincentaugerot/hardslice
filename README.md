@@ -11,7 +11,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 **v0.1, local preview.** The packages are not published on NuGet yet: you build them from this repository. v0.1 ships:
 
 - the `hardslice-api` solution template: an ASP.NET Core API in vertical slices around a rich domain, with a `Bookings` sample module, or empty with `--no-sample`;
-- the `HardSlice.Analyzers` package, which reports HS003 to HS008, HS010, HS011, HS015 and HS016 at build time, and HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
+- the `HardSlice.Analyzers` package, which reports HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
 - architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
 - the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule;
 - `AGENTS.md`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution.
@@ -139,6 +139,7 @@ Ask your agent to read `AGENTS.md`: it says where a use case goes, how to add a 
 | [HS006](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS006.md) | A query handler never writes through EF Core, never turns tracking back on nor reconfigures it, never calls `Find`, and starts each query that materializes an entity with `AsNoTracking()` in the handler itself. | Analyzer at build time |
 | [HS007](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS007.md) | An entity, root or child, has no `set` or `init` accessor reachable from outside its assembly, not even through a public interface, and no public field that is not `readonly`: its state changes through its methods. | Analyzer at build time |
 | [HS008](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS008.md) | An aggregate references another aggregate by its identifier only: neither its root nor its child entities hold another root, directly, in a collection, an array or a generic type, not even another instance of the same type. A child entity may reference the roots that reach it and any child entity. | Analyzer at build time |
+| [HS009](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS009.md) | A domain event, a type that implements `IDomainEvent` in any project, is a `record` or a `record struct`. | Analyzer at build time |
 | [HS010](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS010.md) | The domain and the slices never read the system clock (`DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today`, `DateTimeOffset.Now`, `DateTimeOffset.UtcNow`): handlers inject `TimeProvider` and pass the instant to the domain. | Analyzer at build time |
 | [HS011](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS011.md) | Code never blocks on asynchronous work (`.Result`, `.Wait()`, `GetAwaiter().GetResult()`) and never declares `async void`, lambdas converted to `void` delegates included. | Analyzer at build time |
 | [HS012](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS012.md) | A module uses another module only through its public contract. | Architecture tests |
@@ -148,6 +149,7 @@ Ask your agent to read `AGENTS.md`: it says where a use case goes, how to add a 
 | [HS016](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS016.md) | A slice never uses a type of another slice, and its handler, validator and endpoint stay `internal`. | Analyzer at build time, and architecture tests |
 | [HS017](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS017.md) | `Shared` stays cross-cutting: it never depends on `Features`, and holds only the folders `hardslice.json` allows. | Architecture tests |
 | [HS018](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS018.md) | The tests of a slice are at the same path under `tests/`, and every slice has some. | Architecture tests |
+| [HS019](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS019.md) | A domain event is named as a past fact: the last word of its name ends with `ed` or is an irregular past participle of the sheet's list (`BookingPaid`). A naming convention, never blocking. | Analyzer suggestion in the `All` mode |
 | [HS900](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS900.md) | `hardslice.json` is usable: it declares the contracts `IEntity`, `IAggregateRoot`, `IDomainEvent`, `ICommand<T>`, `IQuery<T>` and `IRequestHandler<,>`, and each one exists in its declaring assembly. | Analyzer at build time |
 | [HS901](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS901.md) | A type has one role: never both an entity and a domain event, a command and a query, or an entity and a request. | Analyzer at build time |
 | [HS902](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS902.md) | Every domain type EF Core maps as an entity implements `IEntity` or `IAggregateRoot`. | Analyzer at build time |
@@ -166,19 +168,21 @@ The MSBuild property `HardSliceAnalysisMode` chooses which analyzer rules are on
 | HS006 | – | error | error |
 | HS007 | error | error | error |
 | HS008 | – | error | error |
+| HS009 | – | error | error |
 | HS010 | error | error | error |
 | HS011 | error | error | error |
 | HS015 | – | error | error |
 | HS016 | error | error | error |
+| HS019 | – | – | suggestion |
 | HS900 to HS902 | error | error | error |
 
-A dash means the mode turns the rule off: `Minimum` keeps the rules that assume neither the shape of a slice, the messaging of the template nor its aggregates referenced by identifier, plus HS016. HS900 to HS902 are reported only when an active rule depends on the classification of types. The architecture tests do not depend on the mode.
+A dash means the mode turns the rule off: `Minimum` keeps the rules that assume neither the shape of a slice, the messaging of the template, its aggregates referenced by identifier nor its domain events declared as records, plus HS016. HS019, a heuristic, is a suggestion of the `All` mode only: it never blocks the build, even with `TreatWarningsAsErrors`. HS900 to HS902 are reported only when an active rule depends on the classification of types. The architecture tests do not depend on the mode.
 
 ## Known limitations
 
 - The packages are built locally with the fixed version 0.1.0. After pulling a new version of this repository, repack, reinstall the template with `dotnet new install artifacts/packages/HardSlice.Templates.0.1.0.nupkg --force`, and clear the packages NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the old builds of `HardSlice.Analyzers` and `HardSlice.Tool` 0.1.0.
 - `HardSlice.Analyzers` is supported only in a solution generated by `hardslice-api`, whose `docs/rules/` holds the sheets its diagnostics point to.
-- Only HS003 to HS008, HS010, HS011, HS015, HS016 and HS900 to HS902 are reported at build time and in the IDE. The other rules are architecture tests: they fail `dotnet test` and the check scripts, not `dotnet build`. HS900, and HS015 for an endpoint its module never maps, are reported at the end of the analysis of a project: the IDE shows them with full solution analysis only.
+- Only HS003 to HS011, HS015, HS016 and HS900 to HS902 are reported at build time and in the IDE, and HS019 as a suggestion, which the build output does not show: the IDE and the compiler log (`ErrorLog`) do. The other rules are architecture tests: they fail `dotnet test` and the check scripts, not `dotnet build`. HS900, and HS015 for an endpoint its module never maps, are reported at the end of the analysis of a project: the IDE shows them with full solution analysis only.
 - HS016 is analyzed within one assembly: slices and modules are folders of the web project.
 - HS003 reads the body of the endpoint only: the methods it calls are not followed, and a delegate stored in a variable or declared in another assembly is not analyzed.
 - HS004 checks the slices of the project that declares them, by the namespaces `<Assembly>.Features.<Module>.<Slice>` and the folders below the project directory: the name and the number of the files of a slice are free, and generated code is not checked. Every slice needs an endpoint, a slice triggered by an event included.
@@ -186,6 +190,8 @@ A dash means the mode turns the rule off: `Minimum` keeps the rules that assume 
 - HS006 analyzes the code of the query handler only, without control flow: a query obtained from a field, a parameter or a helper, a local reassigned other than as `query = query.<operators>`, a compiled query and a write made in a helper or through another library are not analyzed. An `AsNoTracking()` added by a conditional reassignment guarantees nothing, and the global `UseQueryTrackingBehavior` is not read.
 - HS007 checks each entity in the project that declares it, by the accessibility of its accessors and fields: a write by reflection, through a public mutable collection the entity exposes, or by a public method that only assigns its parameter is not detected.
 - HS008 checks each entity in the project that declares it, by the declared types of its properties and fields: a root held through `object`, an unclassified interface, a type parameter or the members of another type is not detected. The owners of a child entity are the roots of the same project that reach its type: a child that no root reaches, or a reference from a child to a root of another project, is not reported, and the rule reads types, not instances.
+- HS009 checks that each domain event is a record, in the project that declares it, not that it is immutable: a record with a public setter is accepted.
+- HS019 reads the form of the name only: `RoomSeed` passes although it is no past fact, an irregular past participle missing from the list of the sheet is reported, and no exception can be configured. Abstract events and event interfaces are not checked.
 - HS010 checks the domain project, recognized by its entity contract in `hardslice.json`, and the slices only: the module, `Shared` and `Program.cs` are not checked, and the methods they declare that a slice calls are not followed. `TimeProvider.System` is not reported.
 - HS011 recognizes the blocking members of tasks and their awaiters only: `Thread.Sleep`, `SemaphoreSlim.Wait`, synchronous APIs and the methods the code calls in other assemblies are not followed, and a task never awaited is not reported.
 - HS015 checks the endpoints mapped under `Features` only, and accepts the result types of `Microsoft.AspNetCore.Http.HttpResults` only: a custom `IResult` is reported. The module must call the method of the slice that maps the endpoint, not a helper of it.

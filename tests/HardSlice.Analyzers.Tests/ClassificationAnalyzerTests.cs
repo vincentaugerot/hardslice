@@ -482,7 +482,7 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.Location.ShouldBe(Location.None);
         diagnostic.GetMessage().ShouldBe(
             "hardslice.json was not found in '/solution/src/MyApp' or above it. "
-            + "The contracts of hardslice.json classify the types checked by HS004, HS005, HS006, HS007, HS008, HS010, HS901 and HS902. "
+            + "The contracts of hardslice.json classify the types checked by HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS901 and HS902. "
             + "Fix: restore hardslice.json at the solution root from version control. Doc: 'docs/rules/HS900.md'.");
     }
 
@@ -533,7 +533,7 @@ public sealed class ClassificationAnalyzerTests
         var diagnostic = (await AnalyzeAllAsync(CompileDomain(), configuration)).ShouldHaveSingleItem();
 
         diagnostic.GetMessage().ShouldStartWith(
-            "hardslice.json declares no contract 'contracts.domainEvent'. The contracts of hardslice.json classify the types checked by HS901. "
+            "hardslice.json declares no contract 'contracts.domainEvent'. The contracts of hardslice.json classify the types checked by HS009 and HS901. "
             + "Fix: restore hardslice.json from version control; it declares \"domainEvent\": \"MyApp.Domain.IDomainEvent, MyApp.Domain\".");
     }
 
@@ -601,6 +601,7 @@ public sealed class ClassificationAnalyzerTests
                     ("HS006", ReportDiagnostic.Suppress),
                     ("HS007", ReportDiagnostic.Suppress),
                     ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
@@ -614,6 +615,7 @@ public sealed class ClassificationAnalyzerTests
                     ("HS006", ReportDiagnostic.Suppress),
                     ("HS007", ReportDiagnostic.Suppress),
                     ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
                 configuration: null))
@@ -626,6 +628,7 @@ public sealed class ClassificationAnalyzerTests
                     ("HS006", ReportDiagnostic.Suppress),
                     ("HS007", ReportDiagnostic.Suppress),
                     ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
                 configuration: null))
@@ -637,6 +640,7 @@ public sealed class ClassificationAnalyzerTests
                     ("HS006", ReportDiagnostic.Suppress),
                     ("HS007", ReportDiagnostic.Suppress),
                     ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
@@ -649,6 +653,7 @@ public sealed class ClassificationAnalyzerTests
                     ("HS006", ReportDiagnostic.Suppress),
                     ("HS007", ReportDiagnostic.Suppress),
                     ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
@@ -661,6 +666,7 @@ public sealed class ClassificationAnalyzerTests
                     ("HS005", ReportDiagnostic.Suppress),
                     ("HS007", ReportDiagnostic.Suppress),
                     ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
@@ -673,6 +679,7 @@ public sealed class ClassificationAnalyzerTests
                     ("HS005", ReportDiagnostic.Suppress),
                     ("HS006", ReportDiagnostic.Suppress),
                     ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
@@ -685,11 +692,41 @@ public sealed class ClassificationAnalyzerTests
                     ("HS005", ReportDiagnostic.Suppress),
                     ("HS006", ReportDiagnostic.Suppress),
                     ("HS007", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
                     ("HS010", ReportDiagnostic.Suppress),
                     ("HS901", ReportDiagnostic.Suppress),
                     ("HS902", ReportDiagnostic.Suppress)),
                 configuration: null))
             .ShouldHaveSingleItem().GetMessage().ShouldContain("checked by HS008.");
+        (await AnalyzeAllAsync(
+                WithSeverities(
+                    domain,
+                    ("HS004", ReportDiagnostic.Suppress),
+                    ("HS005", ReportDiagnostic.Suppress),
+                    ("HS006", ReportDiagnostic.Suppress),
+                    ("HS007", ReportDiagnostic.Suppress),
+                    ("HS008", ReportDiagnostic.Suppress),
+                    ("HS010", ReportDiagnostic.Suppress),
+                    ("HS901", ReportDiagnostic.Suppress),
+                    ("HS902", ReportDiagnostic.Suppress)),
+                configuration: null))
+            .ShouldHaveSingleItem().GetMessage().ShouldContain("checked by HS009.");
+        // HS019 is off by default: it needs its contract only where a setting, such as the All mode, turns it on.
+        (await AnalyzeAllAsync(
+                WithSeverities(
+                    domain,
+                    ("HS004", ReportDiagnostic.Suppress),
+                    ("HS005", ReportDiagnostic.Suppress),
+                    ("HS006", ReportDiagnostic.Suppress),
+                    ("HS007", ReportDiagnostic.Suppress),
+                    ("HS008", ReportDiagnostic.Suppress),
+                    ("HS009", ReportDiagnostic.Suppress),
+                    ("HS010", ReportDiagnostic.Suppress),
+                    ("HS019", ReportDiagnostic.Info),
+                    ("HS901", ReportDiagnostic.Suppress),
+                    ("HS902", ReportDiagnostic.Suppress)),
+                configuration: null))
+            .ShouldHaveSingleItem().GetMessage().ShouldContain("checked by HS019.");
     }
 
     [Fact]

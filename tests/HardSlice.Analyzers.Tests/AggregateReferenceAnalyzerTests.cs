@@ -517,7 +517,7 @@ public sealed class AggregateReferenceAnalyzerTests
     {
         var diagnostic = (await AnalyzeAllAsync(CompileBookingWithItsRoom(), configuration: null)).ShouldHaveSingleItem();
         diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
-        diagnostic.GetMessage().ShouldContain("classify the types checked by HS004, HS005, HS006, HS007, HS008, HS010, HS901 and HS902.");
+        diagnostic.GetMessage().ShouldContain("classify the types checked by HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS901 and HS902.");
     }
 
     [Fact]
