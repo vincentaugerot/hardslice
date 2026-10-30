@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Packs HardSlice, installs the hardslice-api template into an isolated hive and generates the Demo solution in <work-dir>/Demo.
-# Shared by test-template.sh and demo-hs016-agent-fix.sh so both exercise the same generated solution.
+# Packs HardSlice, installs the hardslice-api template into an isolated hive and generates the <app-name> solution, Demo by default,
+# in <work-dir>/<app-name>. Shared by test-template.sh, demo-hs016-agent-fix.sh and measure-analyzers.sh so all exercise the same generated solution.
 # Follows steps 1 and 2 of "Getting started" in README.md, with the same commands and nuget.config, isolated in <work-dir>:
 # the feed, the template hive and the NuGet package folder.
 set -euo pipefail
 
-if [[ $# -ne 1 ]]; then
-  echo "usage: $0 <work-dir>" >&2
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+  echo "usage: $0 <work-dir> [app-name]" >&2
   exit 2
 fi
 
@@ -14,7 +14,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(cd "$1" && pwd)"
 feed="$work/feed"
 hive="$work/template-hive"
-app_name="Demo"
+app_name="${2:-Demo}"
 template_hive_args=(--debug:custom-hive "$hive")
 
 echo "==> Packing HardSlice.Analyzers and HardSlice.Templates"

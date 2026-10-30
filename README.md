@@ -153,22 +153,24 @@ dotnet build --no-restore
 dotnet test --no-build
 scripts/test-template.sh
 scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
+scripts/measure-analyzers.sh
 ```
 
 - `dotnet test` runs the analyzer tests and the tests of the template content, integration tests included: it needs a container runtime.
 - `scripts/test-template.sh` packs both packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic and its sheet. It needs PowerShell 7.
 - `scripts/demo-hs016-agent-fix.sh` prepares the [HS016 agent fix demonstration](demos/hs016-agent-fix/README.md).
+- `scripts/measure-analyzers.sh` measures the build time of a large generated application with and without the HardSlice analyzers, checks the thresholds and records the measurement in [the performance report](docs/performance/analyzers.md), in French.
 
-CI runs three jobs on every push to `main` and every pull request, each on a fresh runner from a fresh checkout, without cache: build and tests, template, and demonstration.
+CI runs three jobs on every push to `main` and every pull request, each on a fresh runner from a fresh checkout, without cache: build and tests, template, and demonstration. A fourth one, performance, measures the analyzers on every push to `main` and on the pull requests that change the analyzers, the template or the measurement.
 
 | Path | Contains |
 |---|---|
 | `src/HardSlice.Analyzers/` | The Roslyn analyzer package. |
 | `src/HardSlice.Templates/content/hardslice-api/` | The solution template, `MyApp` being replaced by the name you choose. |
 | `tests/HardSlice.Analyzers.Tests/` | Analyzer tests, and tests that compile the template content as is. |
-| `scripts/` | Template and demonstration scenarios. |
+| `scripts/` | Template, demonstration and performance scenarios. |
 | `demos/hs016-agent-fix/` | An agent fixing a deliberate HS016 violation. |
-| `docs/` | Specification, plan and backlog, in French. |
+| `docs/` | Specification, plan, backlog and performance report, in French. |
 
 ## License
 
