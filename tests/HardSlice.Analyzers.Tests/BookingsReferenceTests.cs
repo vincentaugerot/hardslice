@@ -71,9 +71,51 @@ public sealed class BookingsReferenceTests
             + "Fix: move the data access into the handler of a query and send the query with IMediator. Doc: 'docs/rules/HS003.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS015_when_GetBooking_returns_IResult()
+    {
+        var diagnostic = (await AnalyzeAllAsync(GetBookingWithResults(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(SliceEndpointAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "endpoint 'GET /{id:guid}' in slice 'Bookings/GetBooking' returns 'IResult'. "
+            + "A slice endpoint returns TypedResults, so its responses are part of its signature. "
+            + "Fix: build every response with TypedResults instead of Results, and declare them all as the return type of the endpoint, "
+            + "such as 'Task<Results<Ok<T>, NotFound>>'. Doc: 'docs/rules/HS015.md'.");
+    }
+
+    [Fact]
+    public async Task Reports_HS015_when_BookingsModule_never_maps_ArchiveBooking()
+    {
+        var archiveBooking =
+            """
+            namespace MyApp.Features.Bookings.ArchiveBooking;
+
+            internal static class ArchiveBookingEndpoint
+            {
+                public static void Map(RouteGroupBuilder group) =>
+                    group.MapPost("/{id:guid}/archive", (Guid id) => TypedResults.NoContent());
+            }
+            """;
+
+        var diagnostic = (await AnalyzeAllAsync(
+                CompileApplication(("Features/Bookings/ArchiveBooking/ArchiveBooking.cs", archiveBooking)),
+                Configuration))
+            .ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(SliceEndpointAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "endpoint 'POST /{id:guid}/archive' in slice 'Bookings/ArchiveBooking' is mapped by 'ArchiveBookingEndpoint.Map', "
+            + "which 'BookingsModule' never calls. "
+            + "A slice endpoint is exposed only through its module, which maps every endpoint of its slices. "
+            + "Fix: call 'ArchiveBookingEndpoint.Map' with the group of the module from the mapping method of 'BookingsModule'. "
+            + "Doc: 'docs/rules/HS015.md'.");
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
+    [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
     [InlineData(ClassificationAnalyzer.ConfigurationId)]
     [InlineData(ClassificationAnalyzer.AmbiguityId)]
     [InlineData(ClassificationAnalyzer.UnclassifiedEntityId)]
@@ -82,6 +124,7 @@ public sealed class BookingsReferenceTests
         var diagnostics = ruleId switch
         {
             EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
+            SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
             ClassificationAnalyzer.ConfigurationId => await AnalyzeAllAsync(
                 CompileDomain(),
                 Configuration.Replace("\"MyApp.Domain.IEntity, MyApp.Domain\"", "\"MyApp.Domain.Entity, MyApp.Domain\"")),
@@ -191,7 +234,8 @@ public sealed class BookingsReferenceTests
             : document.Substring(contentStart, nextHeading - contentStart);
     }
 
-    // ListBookings, a slice whose endpoint reads the bookings through AppDbContext instead of sending a query.
+    // ListBookings, a slice mapped by BookingsModule whose endpoint reads the bookings through AppDbContext instead of
+    // sending a query.
     private static CSharpCompilation ListBookingsWithDbContext()
     {
         var listBookings =
@@ -205,13 +249,44 @@ public sealed class BookingsReferenceTests
             internal static class ListBookingsEndpoint
             {
                 public static void Map(RouteGroupBuilder group) =>
-                    group.MapGet("/", (AppDbContext db, CancellationToken cancellationToken) =>
-                        db.Set<Booking>().AsNoTracking().Select(booking => booking.Id.Value).ToListAsync(cancellationToken));
+                    group.MapGet("/", async (AppDbContext db, CancellationToken cancellationToken) =>
+                        TypedResults.Ok(await db.Set<Booking>().AsNoTracking().Select(booking => booking.Id.Value).ToListAsync(cancellationToken)));
             }
             """;
 
-        return CompileApplication(("Features/Bookings/ListBookings/ListBookings.cs", listBookings));
+        return CompileApplication(
+            ("Features/Bookings/ListBookings/ListBookings.cs", listBookings),
+            BookingsModuleMapping("MyApp.Features.Bookings.ListBookings.ListBookingsEndpoint"));
     }
+
+    // GetBooking, whose endpoint answers with Results instead of TypedResults.
+    private static CSharpCompilation GetBookingWithResults()
+    {
+        var path = "Features/Bookings/GetBooking/GetBooking.cs";
+        var getBooking = ReferenceSource(path);
+        var typedEndpoint =
+            "async Task<Results<Ok<BookingDto>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>\n"
+            + "            await mediator.Send(new GetBookingQuery(id), cancellationToken) is { } booking ? TypedResults.Ok(booking) : TypedResults.NotFound());";
+        getBooking.ShouldContain(typedEndpoint);
+
+        return CompileApplication((path, getBooking.Replace(
+            typedEndpoint,
+            "async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>\n"
+            + "            await mediator.Send(new GetBookingQuery(id), cancellationToken) is { } booking ? Results.Ok(booking) : Results.NotFound());")));
+    }
+
+    // BookingsModule, which also maps the endpoint class of another slice on its group.
+    private static (string Path, string Source) BookingsModuleMapping(string endpoint)
+    {
+        var path = "Features/Bookings/BookingsModule.cs";
+        var module = ReferenceSource(path);
+        module.ShouldContain("GetBookingEndpoint.Map(group);");
+
+        return (path, module.Replace("GetBookingEndpoint.Map(group);", $"GetBookingEndpoint.Map(group);\n        {endpoint}.Map(group);"));
+    }
+
+    private static string ReferenceSource(string path) =>
+        File.ReadAllText(Path.Combine(ReferenceDirectory, "MyApp", path)).ReplaceLineEndings("\n");
 
     // Room, a domain type with no contract, mapped by an IEntityTypeConfiguration of its module.
     private static CSharpCompilation MapRoomWithoutContract()
@@ -250,7 +325,9 @@ public sealed class BookingsReferenceTests
 
     private static CSharpCompilation CompileApplication(CSharpCompilation domain, params (string Path, string Source)[] extraFiles)
     {
+        // An extra file replaces the file of the reference at the same path.
         var application = SourceFiles("MyApp")
+            .Where(file => extraFiles.All(extra => extra.Path != file.Path))
             .Concat(extraFiles)
             .Append(("Usings.cs", ImplicitUsings))
             .Append(("WebUsings.cs", WebImplicitUsings));
@@ -268,6 +345,6 @@ public sealed class BookingsReferenceTests
         var files = Directory.GetFiles(projectDirectory, "*.cs", SearchOption.AllDirectories);
         files.ShouldNotBeEmpty();
 
-        return files.Select(file => (Path.GetRelativePath(projectDirectory, file), File.ReadAllText(file)));
+        return files.Select(file => (Path.GetRelativePath(projectDirectory, file).Replace('\\', '/'), File.ReadAllText(file)));
     }
 }

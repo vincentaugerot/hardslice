@@ -13,6 +13,7 @@ public sealed class AnalysisModeTests
     private static readonly (string Rule, string Minimum, string Recommended, string All)[] Matrix =
     [
         ("HS003", "error", "error", "error"),
+        ("HS015", "none", "error", "error"),
         ("HS016", "error", "error", "error"),
         ("HS900", "error", "error", "error"),
         ("HS901", "error", "error", "error"),
@@ -80,23 +81,40 @@ public sealed class AnalysisModeTests
     private static readonly Dictionary<string, (string[] Sources, string? Configuration)> Probes = new()
     {
         ["HS003"] = ([EndpointDatabaseAccess], Configuration),
+        ["HS015"] = ([SliceEndpointOutsideItsGroup], Configuration),
         ["HS016"] = ([CrossSliceReference()], Configuration),
         ["HS900"] = ([], null),
         ["HS901"] = ([AmbiguousType()], Configuration),
         ["HS902"] = ([UnclassifiedEntity], Configuration)
     };
 
+    // A technical endpoint outside Features: HS015 does not check it.
     private const string EndpointDatabaseAccess =
         """
         using Microsoft.AspNetCore.Builder;
         using Microsoft.AspNetCore.Routing;
         using Microsoft.EntityFrameworkCore;
 
+        namespace MyApp.Health
+        {
+            internal static class HealthEndpoint
+            {
+                public static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet("/health", (DbContext db) => db.ToString());
+            }
+        }
+        """;
+
+    // A slice endpoint mapped on the application, which returns a string and that no module calls.
+    private const string SliceEndpointOutsideItsGroup =
+        """
+        using Microsoft.AspNetCore.Builder;
+        using Microsoft.AspNetCore.Routing;
+
         namespace MyApp.Features.Bookings.ListBookings
         {
             internal static class ListBookingsEndpoint
             {
-                public static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet("/bookings", (DbContext db) => db.ToString());
+                public static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet("/bookings", () => "bookings");
             }
         }
         """;
@@ -140,7 +158,7 @@ public sealed class AnalysisModeTests
     [Fact]
     public void The_matrix_holds_every_rule_of_the_analyzers()
     {
-        Descriptors().Select(descriptor => descriptor.Id).Order(StringComparer.Ordinal)
+        Descriptors().Select(descriptor => descriptor.Id).Distinct().Order(StringComparer.Ordinal)
             .ShouldBe(Matrix.Select(row => row.Rule));
     }
 
@@ -193,7 +211,7 @@ public sealed class AnalysisModeTests
     public async Task An_editorconfig_setting_takes_precedence_over_the_mode(string mode, string rule)
     {
         var on = IsOn(rule, mode);
-        var setting = on ? "none" : Severity(Descriptors().Single(descriptor => descriptor.Id == rule).DefaultSeverity);
+        var setting = on ? "none" : Severity(Descriptors().First(descriptor => descriptor.Id == rule).DefaultSeverity);
         var editorConfig = $"""
             root = true
 
@@ -265,6 +283,7 @@ public sealed class AnalysisModeTests
         }
         """;
 
+    // A rule may have several descriptors, such as HS015 and the part of it reported at the end of the compilation.
     private static IEnumerable<DiagnosticDescriptor> Descriptors() =>
         AnalyzerHarness.Analyzers().SelectMany(analyzer => analyzer.SupportedDiagnostics).OrderBy(descriptor => descriptor.Id, StringComparer.Ordinal);
 

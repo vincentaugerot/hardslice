@@ -12,6 +12,7 @@ internal sealed class SliceMap(Compilation compilation)
     private readonly IAssemblySymbol _assembly = compilation.Assembly;
     private readonly string[] _rootSegments = compilation.AssemblyName?.Split('.') ?? [];
     private readonly ConcurrentDictionary<INamespaceSymbol, string?> _slices = new(SymbolEqualityComparer.Default);
+    private readonly ConcurrentDictionary<INamespaceSymbol, string[]?> _featuresPaths = new(SymbolEqualityComparer.Default);
 
     // Only symbols of the analyzed assembly are classified: cross-assembly references are out of scope.
     public string? SliceOf(ISymbol symbol) =>
@@ -19,9 +20,19 @@ internal sealed class SliceMap(Compilation compilation)
             ? _slices.GetOrAdd(ns, ComputeSlice)
             : null;
 
+    // The namespaces of a symbol below '<AssemblyName>.Features': empty in 'Features' itself, [module] in the namespace of
+    // a module, [module, slice, ...] in a slice, null outside 'Features' or outside the analyzed assembly.
+    public string[]? FeaturesPathOf(ISymbol symbol) =>
+        SymbolEqualityComparer.Default.Equals(symbol.ContainingAssembly, _assembly) && symbol.ContainingNamespace is { } ns
+            ? _featuresPaths.GetOrAdd(ns, ComputeFeaturesPath)
+            : null;
+
     public static string ModuleOf(string slice) => slice.Substring(0, slice.IndexOf('/'));
 
-    private string? ComputeSlice(INamespaceSymbol ns)
+    private string? ComputeSlice(INamespaceSymbol ns) =>
+        ComputeFeaturesPath(ns) is { Length: >= 2 } path ? $"{path[0]}/{path[1]}" : null;
+
+    private string[]? ComputeFeaturesPath(INamespaceSymbol ns)
     {
         var segments = new List<string>();
         for (var current = ns; current is { IsGlobalNamespace: false }; current = current.ContainingNamespace)
@@ -29,7 +40,7 @@ internal sealed class SliceMap(Compilation compilation)
         segments.Reverse();
 
         var features = _rootSegments.Length;
-        if (_rootSegments.Length == 0 || segments.Count < features + 3 || segments[features] != FeaturesSegment)
+        if (_rootSegments.Length == 0 || segments.Count < features + 1 || segments[features] != FeaturesSegment)
             return null;
 
         for (var i = 0; i < features; i++)
@@ -38,6 +49,6 @@ internal sealed class SliceMap(Compilation compilation)
                 return null;
         }
 
-        return $"{segments[features + 1]}/{segments[features + 2]}";
+        return segments.Skip(features + 1).ToArray();
     }
 }
