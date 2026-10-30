@@ -16,6 +16,7 @@ public sealed class AnalysisModeTests
         ("HS004", "none", "error", "error"),
         ("HS005", "none", "error", "error"),
         ("HS006", "none", "error", "error"),
+        ("HS007", "error", "error", "error"),
         ("HS010", "error", "error", "error"),
         ("HS011", "error", "error", "error"),
         ("HS015", "none", "error", "error"),
@@ -89,6 +90,7 @@ public sealed class AnalysisModeTests
         ["HS004"] = ([("Features/Bookings/ArchiveBooking/ArchiveBooking.cs", MisnamedCommand)], Configuration),
         ["HS005"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ConfirmBooking/ConfirmBooking.cs", CommandReturningTheAggregate)], Configuration),
         ["HS006"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ListBookings/ListBookings.cs", QueryHandlerThatWrites)], Configuration),
+        ["HS007"] = ([("Domain/Bookings/Booking.cs", AggregateWithAPublicSetter)], Configuration),
         ["HS010"] = ([("Domain/Bookings/BookingClock.cs", SystemClockRead)], Configuration),
         ["HS011"] = ([("Domain/Bookings/BookingCounter.cs", BlockingCall)], Configuration),
         ["HS015"] = ([("Features/Bookings/ListBookings/ListBookings.cs", SliceEndpointOutsideItsGroup)], Configuration),
@@ -170,6 +172,18 @@ public sealed class AnalysisModeTests
             }
 
             internal static class ListBookingsEndpoint;
+        }
+        """;
+
+    // An aggregate root whose status any code can set.
+    private const string AggregateWithAPublicSetter =
+        """
+        namespace MyApp.Domain.Bookings
+        {
+            public sealed class Booking : IAggregateRoot
+            {
+                public int Status { get; set; }
+            }
         }
         """;
 

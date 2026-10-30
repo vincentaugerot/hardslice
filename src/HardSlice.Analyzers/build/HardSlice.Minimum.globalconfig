@@ -22,6 +22,9 @@ dotnet_diagnostic.HS005.severity = none
 # Off: it assumes the messaging of the template.
 dotnet_diagnostic.HS006.severity = none
 
+# HS007: the state of an entity changes only through its methods: no public setter, init accessor or writable field.
+dotnet_diagnostic.HS007.severity = error
+
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error
 
