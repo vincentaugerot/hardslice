@@ -2,7 +2,7 @@
 # Packs HardSlice, installs the hardslice-api template, generates a solution in a temporary directory,
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS001, HS012, HS016 and HS017 fails both, naming the rule and a rule doc that exists,
+# then proves a seeded violation of HS001, HS012, HS013, HS014, HS016, HS017 and HS018 fails both, naming the rule and a rule doc that exists,
 # and that a missing or invalid hardslice.json fails them explicitly.
 set -euo pipefail
 
@@ -141,8 +141,10 @@ app_src="$app/src/$app_name"
 domain_project="$app/src/$app_name.Domain/$app_name.Domain.csproj"
 
 echo "==> Checking inherited domain dependencies used only by an assembly attribute"
+cp "$app/Directory.Build.targets" "$app/Directory.Build.original.targets"
 cat > "$app/Directory.Build.targets" <<EOF
 <Project>
+  <Import Project="Directory.Build.original.targets" />
   <ItemGroup Condition="'\$(MSBuildProjectName)' == '$app_name.Domain'">
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
@@ -152,7 +154,8 @@ cat > "$app/src/$app_name.Domain/Hs001AssemblyProbe.cs" <<EOF
 [assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsId("hardslice-probe")]
 EOF
 expect_failure "HS001: assembly '$app_name.Domain' references 'Microsoft.Extensions.Configuration.UserSecrets'" "docs/rules/HS001.md" "an inherited dependency used by a domain assembly attribute" check.sh check.ps1
-rm "$app/Directory.Build.targets" "$app/src/$app_name.Domain/Hs001AssemblyProbe.cs"
+mv "$app/Directory.Build.original.targets" "$app/Directory.Build.targets"
+rm "$app/src/$app_name.Domain/Hs001AssemblyProbe.cs"
 
 echo "==> Checking that the HS016 analyzer fails both check scripts on a cross-slice reference"
 cat > "$app_src/Features/Bookings/CancelBooking/Hs016Probe.cs" <<EOF
@@ -363,6 +366,218 @@ EOF
 expect_failure "HS017: 'TextHelpers' is in 'Shared/Helpers'" "docs/rules/HS017.md" "a Shared folder that hardslice.json does not allow" check.sh
 rm -r "$app_src/Shared/Helpers"
 
+echo "==> Checking that HS013 fails both check scripts on a command with parameters but no validator"
+cat > "$app_src/Features/Bookings/CancelBooking/Hs013Probe.cs" <<EOF
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.Bookings.CancelBooking;
+
+public sealed record Hs013ProbeCommand(Guid BookingId, string Reason) : ICommand<bool>;
+EOF
+expect_failure "HS013: command 'Hs013ProbeCommand' in slice 'Bookings/CancelBooking' has parameters (BookingId, Reason) but no validator." "docs/rules/HS013.md" "a command with parameters but no validator" check.sh check.ps1
+rm "$app_src/Features/Bookings/CancelBooking/Hs013Probe.cs"
+
+# A specialized or constrained validator must not cover every construction of an open command.
+echo "==> Checking that HS013 preserves generic arguments and validator constraints"
+cat > "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs" <<EOF
+using FluentValidation;
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.Bookings.CancelBooking;
+
+public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool>;
+
+internal sealed class Hs013IntValidator : AbstractValidator<Hs013GenericCommand<int>>
+{
+    public Hs013IntValidator() => RuleFor(command => command.Value).GreaterThan(0);
+}
+EOF
+expect_failure "HS013: command 'Hs013GenericCommand'" "docs/rules/HS013.md" "a generic command with only an int validator" check.sh check.ps1
+cat > "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs" <<EOF
+using FluentValidation;
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.Bookings.CancelBooking;
+
+public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool>;
+
+internal sealed class Hs013StructValidator<T> : AbstractValidator<Hs013GenericCommand<T>> where T : struct
+{
+    public Hs013StructValidator() => RuleFor(command => command.Value).NotEmpty();
+}
+EOF
+expect_failure "HS013: command 'Hs013GenericCommand'" "docs/rules/HS013.md" "a generic command with only a struct-constrained validator" check.sh check.ps1
+rm "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs"
+
+# The slice has a test folder, so HS018 passes: only HS014 sees that it holds no test.
+echo "==> Checking that HS014 fails both check scripts on a command handler without tests at the path of its slice"
+mkdir -p "$app_src/Features/Bookings/ArchiveBooking" "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
+cat > "$app_src/Features/Bookings/ArchiveBooking/ArchiveBooking.cs" <<EOF
+using FluentValidation;
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.Bookings.ArchiveBooking;
+
+public sealed record ArchiveBookingCommand(Guid BookingId) : ICommand<bool>;
+
+internal sealed class ArchiveBookingValidator : AbstractValidator<ArchiveBookingCommand>
+{
+    public ArchiveBookingValidator() =>
+        RuleFor(command => command.BookingId).NotEmpty();
+}
+
+internal sealed class ArchiveBookingHandler : IRequestHandler<ArchiveBookingCommand, bool>
+{
+    public Task<bool> Handle(ArchiveBookingCommand command, CancellationToken cancellationToken) => Task.FromResult(false);
+}
+EOF
+cat > "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking/ArchiveBookingFixture.cs" <<EOF
+namespace $app_name.Tests.Features.Bookings.ArchiveBooking;
+
+internal static class ArchiveBookingFixture
+{
+    internal static readonly Guid BookingId = Guid.NewGuid();
+}
+EOF
+expect_failure "HS014: command handler 'ArchiveBookingHandler' in slice 'Bookings/ArchiveBooking' has no test" "docs/rules/HS014.md" "a command handler without tests" check.sh check.ps1
+
+# Runs the architecture tests alone: the probe slice is registered nowhere, so its tests only need to exist.
+expect_architecture_tests_pass() {
+  local description="$1"
+  local configuration="${2:-Debug}"
+  local check_output
+
+  if ! check_output="$(
+    cd "$app"
+    dotnet build "$app_name.slnx" --configuration "$configuration" 2>&1 &&
+      dotnet test --project "tests/$app_name.ArchitectureTests/$app_name.ArchitectureTests.csproj" --configuration "$configuration" --no-build 2>&1
+  )"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: the architecture tests failed with $description." >&2
+    exit 1
+  fi
+}
+
+echo "==> Checking that HS014 and HS018 accept the tests of a slice in either test project"
+mkdir -p "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking"
+# Only this test project defines the extra symbol. Neither the unit nor architecture project does.
+cat > "$app/tests/$app_name.IntegrationTests/Directory.Build.props" <<'EOF'
+<Project>
+  <Import Project="../../Directory.Build.props" />
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);HS014_PROJECT_PROBE</DefineConstants>
+  </PropertyGroup>
+</Project>
+EOF
+cat > "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking/ArchiveBookingTests.cs" <<EOF
+namespace $app_name.IntegrationTests.Features.Bookings.ArchiveBooking;
+
+#if !NET10_0 || !HS014_PROJECT_PROBE
+public sealed class ArchiveBookingTests
+{
+    [Fact]
+    public void Probe() => Assert.True(true);
+}
+#endif
+EOF
+expect_failure "HS014: command handler 'ArchiveBookingHandler' in slice 'Bookings/ArchiveBooking' has no test" "docs/rules/HS014.md" "tests excluded by framework and project symbols" check.sh check.ps1
+cat > "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking/ArchiveBookingTests.cs" <<EOF
+namespace $app_name.IntegrationTests.Features.Bookings.ArchiveBooking;
+
+#if NET10_0 && HS014_PROJECT_PROBE && DEBUG
+public sealed class ArchiveBookingTests
+{
+    [Fact]
+    public void Probe() => Assert.True(true);
+}
+#endif
+EOF
+expect_architecture_tests_pass "a command handler tested under framework, project and Debug symbols in $app_name.IntegrationTests"
+# The same source is inactive in Release: architecture tests must use the current configuration.
+if check_output="$(
+  cd "$app"
+  dotnet build "$app_name.slnx" --configuration Release 2>&1 &&
+    dotnet test --project "tests/$app_name.ArchitectureTests/$app_name.ArchitectureTests.csproj" --configuration Release --no-build 2>&1
+)"; then
+  echo "error: HS014 accepted Debug-only tests in Release." >&2
+  exit 1
+fi
+if ! printf '%s\n' "$check_output" | grep -Fq "HS014: command handler 'ArchiveBookingHandler'"; then
+  printf '%s\n' "$check_output" >&2
+  echo "error: the Release probe failed without the expected HS014 diagnostic." >&2
+  exit 1
+fi
+cat > "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking/ArchiveBookingTests.cs" <<EOF
+namespace $app_name.IntegrationTests.Features.Bookings.ArchiveBooking;
+
+#if NET10_0 && HS014_PROJECT_PROBE && !DEBUG
+public sealed class ArchiveBookingTests
+{
+    [Fact]
+    public void Probe() => Assert.True(true);
+}
+#endif
+EOF
+expect_architecture_tests_pass "a command handler with Release-only tests in $app_name.IntegrationTests" Release
+rm "$app/tests/$app_name.IntegrationTests/Directory.Build.props"
+rm -r "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking" "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
+mkdir -p "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
+cat > "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking/ArchiveBookingValidatorTests.cs" <<EOF
+namespace $app_name.Tests.Features.Bookings.ArchiveBooking;
+
+public sealed class ArchiveBookingValidatorTests
+{
+    [Fact]
+    public void Probe() => Assert.True(true);
+}
+EOF
+expect_architecture_tests_pass "a command handler tested in $app_name.Tests only"
+rm -r "$app_src/Features/Bookings/ArchiveBooking" "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
+
+echo "==> Checking that HS013 accepts a generic validator covering all command arguments"
+cat > "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs" <<EOF
+using FluentValidation;
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.Bookings.CancelBooking;
+
+public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool>;
+
+internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>>
+{
+    public Hs013GenericValidator() => RuleFor(command => command.Value).NotEmpty();
+}
+EOF
+expect_architecture_tests_pass "an unconstrained generic command with an unconstrained validator"
+rm "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs"
+
+echo "==> Checking that HS018 fails both check scripts on a slice without tests"
+mkdir -p "$app_src/Features/Bookings/ExportBookings"
+cat > "$app_src/Features/Bookings/ExportBookings/ExportBookings.cs" <<EOF
+namespace $app_name.Features.Bookings.ExportBookings;
+
+internal static class ExportBookingsFormat
+{
+    internal const string ContentType = "text/csv";
+}
+EOF
+expect_failure "HS018: slice 'Bookings/ExportBookings' has no tests" "docs/rules/HS018.md" "a slice without tests" check.sh check.ps1
+rm -r "$app_src/Features/Bookings/ExportBookings"
+
+echo "==> Checking that HS018 fails both check scripts on a test folder without its slice"
+mkdir -p "$app/tests/$app_name.Tests/Features/Bookings/ConfirmBookng"
+cat > "$app/tests/$app_name.Tests/Features/Bookings/ConfirmBookng/ConfirmBookngTests.cs" <<EOF
+namespace $app_name.Tests.Features.Bookings.ConfirmBookng;
+
+public sealed class ConfirmBookngTests
+{
+    [Fact]
+    public void Probe() => Assert.True(true);
+}
+EOF
+expect_failure "HS018: test folder 'tests/$app_name.Tests/Features/Bookings/ConfirmBookng/' has no slice" "docs/rules/HS018.md" "a test folder without its slice" check.sh check.ps1
+rm -r "$app/tests/$app_name.Tests/Features/Bookings/ConfirmBookng"
+
 echo "==> Checking that a missing or invalid hardslice.json fails the check scripts explicitly"
 mv "$app/hardslice.json" "$work/hardslice.json.backup"
 expect_failure "hardslice.json: no file at" "docs/rules/HS017.md" "a missing hardslice.json" check.sh
@@ -370,4 +585,4 @@ printf '%s\n' '{ "style": "layers", "shared": { "allowedFolders": ["Messaging", 
 expect_failure "hardslice.json: 'style' must be" "docs/rules/HS017.md" "an invalid hardslice.json" check.ps1
 mv "$work/hardslice.json.backup" "$app/hardslice.json"
 
-echo "==> Template OK: $app_name passes both check scripts, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS016 and HS017 with their rule docs, and on a missing or invalid hardslice.json"
+echo "==> Template OK: $app_name passes both check scripts, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017 and HS018 with their rule docs, and on a missing or invalid hardslice.json"

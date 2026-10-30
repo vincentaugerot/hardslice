@@ -10,6 +10,7 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="TngTech.ArchUnitNET" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- hardslice.json, the domain project and the Shared folders are read from the solution under test. -->
+    <!-- hardslice.json, the domain project, the Shared folders and the test sources are read from the solution under test. -->
     <AssemblyMetadata Include="SolutionRoot" Value="$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))" />
   </ItemGroup>
 
@@ -26,5 +27,15 @@
     <Using Include="Shouldly" />
     <Using Include="Xunit" />
   </ItemGroup>
+
+  <Target Name="HardSliceCollectTestSymbols" BeforeTargets="GetAssemblyAttributes">
+    <MSBuild Projects="../MyApp.Tests/MyApp.Tests.csproj;../MyApp.IntegrationTests/MyApp.IntegrationTests.csproj"
+             Targets="HardSliceGetTestSymbols" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_HardSliceTestSymbols" />
+    </MSBuild>
+    <ItemGroup>
+      <AssemblyMetadata Include="TestSymbols:%(_HardSliceTestSymbols.Identity)" Value="%(_HardSliceTestSymbols.Symbols)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

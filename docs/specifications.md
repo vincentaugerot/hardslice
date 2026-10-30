@@ -179,6 +179,7 @@ Tout est `internal` sauf la commande : une autre slice ne peut pas appeler ce ha
 | Tests | xUnit v3, NSubstitute, Testcontainers | Standards libres |
 | Persistance | EF Core et Npgsql, `AsNoTracking` et projections pour les requêtes | Une seule techno de données à apprendre |
 | Règles d'architecture | ArchUnitNET (tranché par PB-014, cf. section 13) | |
+| Tests présents au chemin des slices (HS014, HS018) | `Microsoft.CodeAnalysis.CSharp`, arbre syntaxique des sources de tests (PB-015) | Licence MIT ; ne dépend pas d'assemblies de tests construits ou périmés |
 | API bannies | `Microsoft.CodeAnalysis.BannedApiAnalyzers` et `BannedSymbols.txt` | Interdire `DateTime.Now`, `.Result`… sans écrire d'analyseur |
 | Orchestration locale | Aspire en option (`--aspire`) | |
 

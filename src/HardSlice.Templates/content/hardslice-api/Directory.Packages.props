@@ -31,5 +31,7 @@
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <!-- Apache-2.0. Loads the compiled assemblies and their dependency graph for the architecture tests. -->
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.4" />
+    <!-- MIT. Parses the test sources for HS014 and HS018, without building the test projects. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
   </ItemGroup>
 </Project>

@@ -16,10 +16,11 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 | `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations. It declares no module type. |
 | `tests/MyApp.Tests/` | Unit tests of the domain, the validators and `Shared`, at the same path as the code they test. |
 | `tests/MyApp.IntegrationTests/` | Tests on a real PostgreSQL (Testcontainers), at the same path as the slice they test. |
-| `tests/MyApp.ArchitectureTests/` | Architecture tests of HS001, HS012, HS016 and HS017, on the compiled assemblies. |
+| `tests/MyApp.ArchitectureTests/` | Architecture tests of HS001, HS012 to HS014 and HS016 to HS018, on the compiled assemblies and the test sources. |
 | `docs/rules/` | One sheet per HardSlice rule: what it forbids and how to fix it. |
 | `hardslice.json` | HardSlice configuration read by the architecture tests: the `slices` style and the folders allowed in `Shared`. |
 | `.editorconfig` | Severity of the HardSlice analyzer rules. |
+| `Directory.Build.targets` | Supplies each test project's compilation symbols to HS014. |
 
 Modules and slices:
 
@@ -33,7 +34,7 @@ Modules and slices:
 4. Business rules live in the domain aggregates, not in handlers or endpoints.
 5. The domain project references nothing but the base class library (HS001).
 6. `Shared` holds cross-cutting code only, in the folders `hardslice.json` allows, and never depends on `Features` (HS017).
-7. Every behavior change comes with a test at the same path as the code it covers.
+7. Every behavior change comes with a test at the same path as the code it covers. Every slice has tests at its path under `tests/` (HS018), at least one for a command handler (HS014), and every command with parameters has a validator (HS013).
 8. Never weaken a rule to make the build pass: see [Forbidden](#forbidden).
 
 ## Adding a slice
@@ -43,12 +44,12 @@ Modules and slices:
    When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` named in the past tense, implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`. Follow `BookingConfirmed`, recorded by `Booking.Confirm` and exposed through `Booking.DomainEvents`. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
 2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`. Follow `ConfirmBooking` as the example:
    - a public request: an `ICommand<TResponse>` when it changes state, an `IQuery<TResponse>` when it only reads. The response type is exact (invariant), matching its handler and pipeline;
-   - an `internal` validator, an `AbstractValidator<TRequest>` that checks the shape of the input (required fields, formats, lengths). A failure is answered with 400 naming the fields, before the handler runs. Business rules stay in the aggregate;
+   - an `internal` validator, an `AbstractValidator<TRequest>`, required for a command with parameters, that checks the shape of the input (required fields, formats, lengths). A failure is answered with 400 naming the fields, before the handler runs. Business rules stay in the aggregate;
    - an `internal` handler, an `IRequestHandler<TRequest, TResponse>` that reaches aggregates through `AppDbContext.Set<T>()`. It never calls `SaveChangesAsync`: each command runs in one transaction that the pipeline saves and commits, and any exception rolls it back. A failed transaction also detaches tracked entities: later commands in the same scope must reload them. Save early only to translate a database error, as `ConfirmBooking` does;
    - for a query, follow `GetBooking` instead: a public response DTO, and a handler that reads with `AsNoTracking()` and projects into that DTO with `Select`. It never loads an aggregate, never saves, and runs outside any transaction. An unknown id is a `null` response, answered with 404;
    - an `internal` endpoint that sends the request through `IMediator` and returns `TypedResults`. It never calls a handler.
 3. In `<Module>Module.cs`, register the handler and the validator by their contracts (`IRequestHandler<,>`, `IValidator<>`) and map the endpoint.
-4. Add the validator tests in `tests/MyApp.Tests/Features/<Module>/<Slice>/` and the integration tests, an invalid request included, in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`.
+4. Add the validator tests in `tests/MyApp.Tests/Features/<Module>/<Slice>/` and the integration tests, an invalid request included, in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`. Renaming or moving a slice moves these folders too.
 5. Add the slice to the map above, then verify.
 
 ## Changing the database
@@ -76,10 +77,10 @@ Both scripts build the solution (restoring if needed), then run the unit tests, 
 
 ## Fixing a HardSlice failure
 
-A HardSlice failure starts with its rule: `HS016` from the analyzer at build time, or `HS001`, `HS012`, `HS016`, `HS017` from the architecture tests.
+A HardSlice failure starts with its rule: `HS016` from the analyzer at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests.
 
 1. Read the diagnostic: it names the offending symbol, the rule, the expected fix and its sheet after `Doc:`.
-2. Open the sheet and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS012.md` (modules), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared).
+2. Open the sheet and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders).
 3. Run the check script again.
 
 A message starting with `hardslice.json:` means the configuration is missing or invalid: restore it, never adapt it to the code.
@@ -94,6 +95,8 @@ Fix the code, never the rule. Never make a HardSlice diagnostic or an architectu
 - turning analyzers off: `<RunAnalyzers>false</RunAnalyzers>` or `<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>`;
 - removing, editing or downgrading `HardSlice.Analyzers` or its reference in `Directory.Packages.props`;
 - deleting, skipping or editing tests in `tests/MyApp.ArchitectureTests/`, or editing `scripts/check.sh` and `scripts/check.ps1`;
+- changing `HardSliceGetTestSymbols` in `Directory.Build.targets` to hide tests behind different compilation symbols;
+- an empty validator, an empty test or a placeholder file written only to satisfy HS013, HS014 or HS018;
 - any other workaround listed in the rule sheets of `docs/rules/`, such as reflection, a public handler or moving a slice's type into the module namespace.
 
 An exception requires an explicit decision from a maintainer.

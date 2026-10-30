@@ -1,0 +1,12 @@
+<Project>
+  <!-- Read each test project's symbols without compiling it or reading a potentially stale test assembly. -->
+  <Target Name="HardSliceGetTestSymbols"
+          DependsOnTargets="AddImplicitDefineConstants"
+          Returns="@(_HardSliceTestSymbols)">
+    <ItemGroup>
+      <_HardSliceTestSymbols Include="$(MSBuildProjectName)">
+        <Symbols>$(DefineConstants)</Symbols>
+      </_HardSliceTestSymbols>
+    </ItemGroup>
+  </Target>
+</Project>
