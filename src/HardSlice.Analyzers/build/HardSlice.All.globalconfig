@@ -22,6 +22,9 @@ dotnet_diagnostic.HS006.severity = error
 # HS007: the state of an entity changes only through its methods: no public setter, init accessor or writable field.
 dotnet_diagnostic.HS007.severity = error
 
+# HS008: an aggregate references another aggregate by its identifier only, from its root and from its child entities.
+dotnet_diagnostic.HS008.severity = error
+
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error
 

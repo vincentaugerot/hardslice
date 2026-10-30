@@ -3,12 +3,12 @@
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS001, HS003, HS004, HS005, HS006, HS007, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
+# then proves a seeded violation of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned to the version of the analyzers, refuses another one before the build and explains every rule with the sheet of the template.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
-# and that seeded violations of HS001, HS003, HS004, HS005, HS006, HS007, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
+# and that seeded violations of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -198,7 +198,7 @@ echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
 
 echo "==> Checking that $app_name holds every v0.1 deliverable of the specification"
 for deliverable in \
-  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS004.md docs/rules/HS005.md docs/rules/HS006.md docs/rules/HS007.md docs/rules/HS010.md docs/rules/HS011.md docs/rules/HS012.md \
+  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS004.md docs/rules/HS005.md docs/rules/HS006.md docs/rules/HS007.md docs/rules/HS008.md docs/rules/HS010.md docs/rules/HS011.md docs/rules/HS012.md \
   docs/rules/HS013.md docs/rules/HS014.md docs/rules/HS015.md docs/rules/HS016.md docs/rules/HS017.md docs/rules/HS018.md \
   docs/rules/HS900.md docs/rules/HS901.md docs/rules/HS902.md "src/$app_name.Domain/IEntity.cs" "src/$app_name.Domain/IAggregateRoot.cs" \
   "src/$app_name.Domain/Bookings/Booking.cs" "src/$app_name.Domain/Bookings/BookingId.cs" \
@@ -1023,6 +1023,37 @@ EOF
   rm "$app/src/$app_name.Domain/$module/RoomInspection.cs"
 }
 
+# Seeds an aggregate of module <module> whose child entity holds another aggregate instead of its identifier: the analyzer
+# of the domain reports HS008 in its own compilation, the child belonging to the root that reaches it.
+probe_aggregate_reference() {
+  local module="$1"
+  mkdir -p "$app/src/$app_name.Domain/$module"
+  cat > "$app/src/$app_name.Domain/$module/RoomTour.cs" <<EOF
+namespace $app_name.Domain.$module;
+
+public sealed class RoomKey : IAggregateRoot
+{
+    public Guid Id { get; } = Guid.NewGuid();
+}
+
+public sealed class RoomTour : IAggregateRoot
+{
+    private readonly List<TourStop> _stops = [];
+
+    public Guid Id { get; } = Guid.NewGuid();
+
+    public IReadOnlyList<TourStop> Stops => _stops;
+}
+
+public sealed class TourStop : IEntity
+{
+    public RoomKey Key { get; private set; } = new();
+}
+EOF
+  expect_failure "HS008: entity 'TourStop' of aggregate 'RoomTour' references aggregate 'RoomKey' through property 'Key'." "docs/rules/HS008.md" "a child entity of $app_name that holds another aggregate" check.sh check.ps1
+  rm "$app/src/$app_name.Domain/$module/RoomTour.cs"
+}
+
 # Seeds a slice handler of module <module>, then a domain type of it, that read the system clock: the analyzer of the web project
 # reports HS010 in the slice, the analyzer of the domain in its own compilation, which it recognizes by the entity contract.
 probe_system_clock() {
@@ -1085,6 +1116,9 @@ probe_query_tracking Bookings
 
 echo "==> Checking that HS007 fails both check scripts on an aggregate whose state has a public setter"
 probe_entity_state Bookings
+
+echo "==> Checking that HS008 fails both check scripts on a child entity that holds another aggregate"
+probe_aggregate_reference Bookings
 
 echo "==> Checking that HS010 fails both check scripts on a slice handler and a domain type that read the system clock"
 probe_system_clock Bookings
@@ -1167,7 +1201,7 @@ done
 echo "    $version_mismatch ..."
 mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
 
 sample_name="$app_name"
 blank_name="Blank"
@@ -1368,6 +1402,9 @@ probe_query_tracking Rooms
 
 echo "==> Checking that HS007 fails both check scripts on the first aggregate of $app_name whose state has a public setter"
 probe_entity_state Rooms
+
+echo "==> Checking that HS008 fails both check scripts on a child entity of the first aggregate of $app_name that holds another aggregate"
+probe_aggregate_reference Rooms
 
 echo "==> Checking that HS010 fails both check scripts on the first slice handler and domain type of $app_name that read the system clock"
 probe_system_clock Rooms

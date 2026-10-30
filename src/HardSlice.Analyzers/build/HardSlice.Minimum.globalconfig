@@ -1,4 +1,4 @@
-# HardSlice analysis mode 'Minimum': the rules that assume neither the shape of a slice nor the messaging of the template, plus HS016.
+# HardSlice analysis mode 'Minimum': the rules that assume neither the shape of a slice, the messaging of the template nor its aggregates referenced by identifier, plus HS016.
 # Added by build/HardSlice.Analyzers.targets when HardSliceAnalysisMode is 'Minimum'.
 # A mode turns a rule on or off, at its own severity: it never changes the severity of a rule it keeps.
 # A setting of .editorconfig, or of a global config of the solution, takes precedence over it (global_level -1).
@@ -24,6 +24,10 @@ dotnet_diagnostic.HS006.severity = none
 
 # HS007: the state of an entity changes only through its methods: no public setter, init accessor or writable field.
 dotnet_diagnostic.HS007.severity = error
+
+# HS008: an aggregate references another aggregate by its identifier only, from its root and from its child entities.
+# Off: it assumes the aggregates of the template, which reference each other by identifier.
+dotnet_diagnostic.HS008.severity = none
 
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error

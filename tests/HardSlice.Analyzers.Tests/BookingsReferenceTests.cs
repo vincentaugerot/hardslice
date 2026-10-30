@@ -219,6 +219,18 @@ public sealed class BookingsReferenceTests
             + "Fix: make the setter private and change the state in a domain method, such as 'Booking.Cancel()'. Doc: 'docs/rules/HS007.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS008_when_a_line_of_Booking_holds_its_room()
+    {
+        var diagnostic = (await AnalyzeAllAsync(BookingWhoseLinesHoldTheirRoom(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(AggregateReferenceAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "entity 'BookingLine' of aggregate 'Booking' references aggregate 'Room' through property 'Room'. "
+            + "An aggregate references another aggregate only by its identifier. "
+            + "Fix: replace the property with 'RoomId' and load 'Room' in the handler that needs it. Doc: 'docs/rules/HS008.md'.");
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
@@ -226,6 +238,7 @@ public sealed class BookingsReferenceTests
     [InlineData(CommandResponseAnalyzer.DiagnosticId)]
     [InlineData(QueryHandlerTrackingAnalyzer.DiagnosticId)]
     [InlineData(EntityStateAnalyzer.DiagnosticId)]
+    [InlineData(AggregateReferenceAnalyzer.DiagnosticId)]
     [InlineData(SystemClockAnalyzer.DiagnosticId)]
     [InlineData(AsyncUsageAnalyzer.DiagnosticId)]
     [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
@@ -241,6 +254,7 @@ public sealed class BookingsReferenceTests
             CommandResponseAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReturnsTheBooking(), Configuration),
             QueryHandlerTrackingAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingThatTracksTheBooking(), Configuration),
             EntityStateAnalyzer.DiagnosticId => await AnalyzeAllAsync(BookingWithAStatusSetter(), Configuration),
+            AggregateReferenceAnalyzer.DiagnosticId => await AnalyzeAllAsync(BookingWhoseLinesHoldTheirRoom(), Configuration),
             SystemClockAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReadsTheClock(), Configuration),
             AsyncUsageAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration),
             SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
@@ -456,7 +470,6 @@ public sealed class BookingsReferenceTests
                 + "        new(booking.Id.Value, booking.RoomId, booking.Period.Start, booking.Period.End, booking.Status.ToString());\n")));
     }
 
-    // ConfirmBooking, whose handler compares the start of the booking with the system clock.
     // The status of Booking gets a public setter: any code can cancel a booking without Booking.Cancel().
     private static CSharpCompilation BookingWithAStatusSetter()
     {
@@ -468,6 +481,21 @@ public sealed class BookingsReferenceTests
         return CompileDomain((path, booking.Replace(status, "public BookingStatus Status { get => _status; set => _status = value; }")));
     }
 
+    // Booking gets lines, and each line holds the Room aggregate instead of its identifier.
+    private static CSharpCompilation BookingWhoseLinesHoldTheirRoom()
+    {
+        var path = "Bookings/Booking.cs";
+        var status = "private BookingStatus _status;";
+        var booking = File.ReadAllText(Path.Combine(ReferenceDirectory, "MyApp.Domain", path)).ReplaceLineEndings("\n");
+        booking.ShouldContain(status);
+
+        return CompileDomain(
+            (path, booking.Replace(status, status + "\n    private readonly List<BookingLine> _lines = [];")),
+            ("Bookings/BookingLine.cs", "namespace MyApp.Domain.Bookings; public sealed class BookingLine : IEntity { public Room Room { get; private set; } = null!; }"),
+            ("Bookings/Room.cs", "namespace MyApp.Domain.Bookings; public sealed class Room : IAggregateRoot { public Guid Id { get; } }"));
+    }
+
+    // ConfirmBooking, whose handler compares the start of the booking with the system clock.
     private static CSharpCompilation ConfirmBookingThatReadsTheClock()
     {
         var path = "Features/Bookings/ConfirmBooking/ConfirmBooking.cs";

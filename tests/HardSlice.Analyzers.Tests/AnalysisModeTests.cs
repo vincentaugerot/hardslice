@@ -17,6 +17,7 @@ public sealed class AnalysisModeTests
         ("HS005", "none", "error", "error"),
         ("HS006", "none", "error", "error"),
         ("HS007", "error", "error", "error"),
+        ("HS008", "none", "error", "error"),
         ("HS010", "error", "error", "error"),
         ("HS011", "error", "error", "error"),
         ("HS015", "none", "error", "error"),
@@ -91,6 +92,7 @@ public sealed class AnalysisModeTests
         ["HS005"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ConfirmBooking/ConfirmBooking.cs", CommandReturningTheAggregate)], Configuration),
         ["HS006"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ListBookings/ListBookings.cs", QueryHandlerThatWrites)], Configuration),
         ["HS007"] = ([("Domain/Bookings/Booking.cs", AggregateWithAPublicSetter)], Configuration),
+        ["HS008"] = ([("Domain/Bookings/Booking.cs", AggregateThatHoldsAnotherAggregate)], Configuration),
         ["HS010"] = ([("Domain/Bookings/BookingClock.cs", SystemClockRead)], Configuration),
         ["HS011"] = ([("Domain/Bookings/BookingCounter.cs", BlockingCall)], Configuration),
         ["HS015"] = ([("Features/Bookings/ListBookings/ListBookings.cs", SliceEndpointOutsideItsGroup)], Configuration),
@@ -183,6 +185,20 @@ public sealed class AnalysisModeTests
             public sealed class Booking : IAggregateRoot
             {
                 public int Status { get; set; }
+            }
+        }
+        """;
+
+    // An aggregate root that holds the room it books instead of its identifier.
+    private const string AggregateThatHoldsAnotherAggregate =
+        """
+        namespace MyApp.Domain.Bookings
+        {
+            public sealed class Room : IAggregateRoot;
+
+            public sealed class Booking : IAggregateRoot
+            {
+                private Room _room = new();
             }
         }
         """;
