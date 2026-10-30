@@ -48,7 +48,7 @@ internal sealed class EntityContainment
                 return Find(array.ElementType, members, visited);
 
             case INamedTypeSymbol { TypeKind: not TypeKind.Error } named:
-                if (IsEntity(named))
+                if (IsEntityOrContract(named))
                     return new EntityPath(named, members);
 
                 if (!visited.Add(named))
@@ -97,7 +97,13 @@ internal sealed class EntityContainment
         return null;
     }
 
-    private bool IsEntity(ITypeSymbol type) =>
+    // An entity, the entity or aggregate root contract, or a type parameter constrained to one of them: 'TEntity : IEntity'.
+    public bool IsEntity(ITypeSymbol type) =>
+        type is ITypeParameterSymbol parameter
+            ? parameter.ConstraintTypes.Any(IsEntity)
+            : IsEntityOrContract(type);
+
+    private bool IsEntityOrContract(ITypeSymbol type) =>
         _model.IsEntity(type)
         || SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, _entity)
         || (_aggregateRoot is not null && SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, _aggregateRoot));

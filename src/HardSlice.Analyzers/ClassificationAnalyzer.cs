@@ -24,6 +24,7 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
     [
         (SliceStructureAnalyzer.DiagnosticId, [ContractKeys.Command, ContractKeys.Query, ContractKeys.RequestHandler]),
         (CommandResponseAnalyzer.DiagnosticId, [ContractKeys.Entity, ContractKeys.Command, ContractKeys.RequestHandler]),
+        (QueryHandlerTrackingAnalyzer.DiagnosticId, [ContractKeys.Entity, ContractKeys.Query, ContractKeys.RequestHandler]),
         (SystemClockAnalyzer.DiagnosticId, [ContractKeys.Entity]),
         (AmbiguityId, [ContractKeys.Entity, ContractKeys.AggregateRoot, ContractKeys.DomainEvent, ContractKeys.Command, ContractKeys.Query]),
         (UnclassifiedEntityId, [ContractKeys.Entity, ContractKeys.AggregateRoot])

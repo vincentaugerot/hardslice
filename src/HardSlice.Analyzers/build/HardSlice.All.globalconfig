@@ -16,6 +16,9 @@ dotnet_diagnostic.HS004.severity = error
 # HS005: a command handler never returns an entity, directly, in an envelope or in a DTO.
 dotnet_diagnostic.HS005.severity = error
 
+# HS006: a query handler reads without tracking and never writes.
+dotnet_diagnostic.HS006.severity = error
+
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error
 

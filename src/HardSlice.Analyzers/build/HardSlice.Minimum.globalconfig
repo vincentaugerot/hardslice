@@ -18,6 +18,10 @@ dotnet_diagnostic.HS004.severity = none
 # Off: it assumes the messaging of the template.
 dotnet_diagnostic.HS005.severity = none
 
+# HS006: a query handler reads without tracking and never writes.
+# Off: it assumes the messaging of the template.
+dotnet_diagnostic.HS006.severity = none
+
 # HS010: the domain and the slices never read the system clock.
 dotnet_diagnostic.HS010.severity = error
 

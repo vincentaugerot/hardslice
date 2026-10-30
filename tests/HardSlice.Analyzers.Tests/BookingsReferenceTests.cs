@@ -195,11 +195,24 @@ public sealed class BookingsReferenceTests
             + "Fix: return 'BookingId', or a DTO built from the entity's values. Doc: 'docs/rules/HS005.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS006_when_GetBookingHandler_maps_the_booking_on_the_client_without_AsNoTracking()
+    {
+        var diagnostic = (await AnalyzeAllAsync(GetBookingThatTracksTheBooking(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(QueryHandlerTrackingAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "query handler 'GetBookingHandler' reads 'Booking' from 'Set<Booking>()' without a local guarantee that it is not tracked. "
+            + "Query handlers read without tracking and never write. "
+            + "Fix: add AsNoTracking() where the query starts, and project to a DTO. Doc: 'docs/rules/HS006.md'.");
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
     [InlineData(SliceStructureAnalyzer.DiagnosticId)]
     [InlineData(CommandResponseAnalyzer.DiagnosticId)]
+    [InlineData(QueryHandlerTrackingAnalyzer.DiagnosticId)]
     [InlineData(SystemClockAnalyzer.DiagnosticId)]
     [InlineData(AsyncUsageAnalyzer.DiagnosticId)]
     [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
@@ -213,6 +226,7 @@ public sealed class BookingsReferenceTests
             EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
             SliceStructureAnalyzer.DiagnosticId => await AnalyzeAllAsync(ArchiveBookingWithArchiveCommand(), Configuration),
             CommandResponseAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReturnsTheBooking(), Configuration),
+            QueryHandlerTrackingAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingThatTracksTheBooking(), Configuration),
             SystemClockAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReadsTheClock(), Configuration),
             AsyncUsageAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration),
             SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
@@ -403,6 +417,29 @@ public sealed class BookingsReferenceTests
             typedEndpoint,
             "async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>\n"
             + "            await mediator.Send(new GetBookingQuery(id), cancellationToken) is { } booking ? Results.Ok(booking) : Results.NotFound());")));
+    }
+
+    // GetBooking, whose handler drops AsNoTracking and maps the booking with a method of its own, which EF Core runs on the
+    // client: the booking is materialized and tracked.
+    private static CSharpCompilation GetBookingThatTracksTheBooking()
+    {
+        var path = "Features/Bookings/GetBooking/GetBooking.cs";
+        var getBooking = ReferenceSource(path);
+        var noTracking = "            .AsNoTracking()\n";
+        var projection =
+            ".Select(booking => new BookingDto(\n"
+            + "                booking.Id.Value, booking.RoomId, booking.Period.Start, booking.Period.End, booking.Status.ToString()))";
+        var handlerEnd = "            .SingleOrDefaultAsync(cancellationToken);\n    }\n";
+        foreach (var text in new[] { noTracking, projection, handlerEnd })
+            getBooking.ShouldContain(text);
+
+        return CompileApplication((path, getBooking
+            .Replace(noTracking, "")
+            .Replace(projection, ".Select(booking => ToDto(booking))")
+            .Replace(
+                handlerEnd,
+                handlerEnd + "\n    private static BookingDto ToDto(Booking booking) =>\n"
+                + "        new(booking.Id.Value, booking.RoomId, booking.Period.Start, booking.Period.End, booking.Status.ToString());\n")));
     }
 
     // ConfirmBooking, whose handler compares the start of the booking with the system clock.

@@ -15,6 +15,7 @@ public sealed class AnalysisModeTests
         ("HS003", "error", "error", "error"),
         ("HS004", "none", "error", "error"),
         ("HS005", "none", "error", "error"),
+        ("HS006", "none", "error", "error"),
         ("HS010", "error", "error", "error"),
         ("HS011", "error", "error", "error"),
         ("HS015", "none", "error", "error"),
@@ -87,6 +88,7 @@ public sealed class AnalysisModeTests
         ["HS003"] = ([("Health/HealthEndpoint.cs", EndpointDatabaseAccess)], Configuration),
         ["HS004"] = ([("Features/Bookings/ArchiveBooking/ArchiveBooking.cs", MisnamedCommand)], Configuration),
         ["HS005"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ConfirmBooking/ConfirmBooking.cs", CommandReturningTheAggregate)], Configuration),
+        ["HS006"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ListBookings/ListBookings.cs", QueryHandlerThatWrites)], Configuration),
         ["HS010"] = ([("Domain/Bookings/BookingClock.cs", SystemClockRead)], Configuration),
         ["HS011"] = ([("Domain/Bookings/BookingCounter.cs", BlockingCall)], Configuration),
         ["HS015"] = ([("Features/Bookings/ListBookings/ListBookings.cs", SliceEndpointOutsideItsGroup)], Configuration),
@@ -149,6 +151,25 @@ public sealed class AnalysisModeTests
             internal sealed class ConfirmBookingHandler : IRequestHandler<ConfirmBookingCommand, Booking>;
 
             internal static class ConfirmBookingEndpoint;
+        }
+        """;
+
+    // A complete slice whose query handler saves the changes of its context.
+    private const string QueryHandlerThatWrites =
+        """
+        using Microsoft.EntityFrameworkCore;
+        using MyApp.Shared.Messaging;
+
+        namespace MyApp.Features.Bookings.ListBookings
+        {
+            public sealed record ListBookingsQuery : IQuery<int>;
+
+            internal sealed class ListBookingsHandler(DbContext db) : IRequestHandler<ListBookingsQuery, int>
+            {
+                public int Handle() => db.SaveChanges();
+            }
+
+            internal static class ListBookingsEndpoint;
         }
         """;
 
