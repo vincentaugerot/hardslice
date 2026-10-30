@@ -1,6 +1,6 @@
 # HardSlice — plan de livraison
 
-Statut : roadmap produit active, 29/10/2026.
+Statut : roadmap produit active, 30/10/2026.
 
 **Source de vérité produit** : [specifications.md](specifications.md).
 
@@ -19,7 +19,7 @@ HardSlice n'est pas un framework d'exécution pour construire des agents. C'est 
 Les cinq piliers engagés sont :
 
 1. **Générer** : templates de solution et d'éléments.
-2. **Contraindre** : analyseurs Roslyn, tests d'architecture et API bannies appliqués par le build.
+2. **Contraindre** : analyseurs Roslyn, dont les interdictions d'API, et tests d'architecture appliqués par le build.
 3. **Faire corriger** : diagnostics, fiches, instructions, skills et hooks qui ramènent l'agent au vert.
 4. **Adopter progressivement** : cartographie, conventions, baseline, cliquet et rapport sur une solution existante.
 5. **Mesurer** : benchmarks publics, reproductibles et transparents.
@@ -39,6 +39,9 @@ Aucun composant HardSlice n'est requis au runtime de l'application générée.
 | CLI canonique | `dotnet hardslice <commande>` |
 | Vérification | Build et tests comme autorité locale ; CI protégée comme autorité finale |
 | Langue publique | Code, diagnostics et documentation publique en anglais |
+| Classification des types | Contrats applicatifs `IEntity`, `IAggregateRoot`, `IDomainEvent` et contrats de messagerie, déclarés dans `hardslice.json` et reconnus par symbole ; aucune heuristique de forme (30/10/2026) |
+| HS010 et HS011 | Analyseurs HardSlice ciblés avec leurs propres identifiants, au lieu de `BannedApiAnalyzers` qui les confondrait sous `RS0030` (30/10/2026) |
+| Vérification outillée | `dotnet hardslice check` dès v0.2 ; `scripts/check.sh` et `check.ps1` le lancent ; `dotnet build` seul produit toujours les diagnostics |
 | Benchmark | Après une première boucle produit utilisable, jamais comme prérequis au premier code |
 
 Les choix fonctionnels de la spécification restent engagés. Contraintes transverses retenues : niveaux d'analyse, baseline par occurrence, contrôle des faux positifs, budgets de performance et versions CLI/analyseurs identiques.
@@ -103,11 +106,11 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 
 ### v0.2 — Analyseurs et diagnostics réparables
 
-- livrer progressivement HS003 à HS011 et HS015 avec le mécanisme approprié ;
-- configurer les API bannies sans réimplémenter les analyseurs existants ;
-- fournir les fiches des règles, `dotnet hardslice check` et `explain` ;
-- ajouter niveaux d'analyse, tests de faux positifs, détection inter-assemblies, diagnostic de configuration pour les types applicatifs non classifiables et mesures de performance ;
-- publier les premiers paquets NuGet en préversion.
+- classer entités, agrégats, événements, commandes, requêtes et handlers par des contrats applicatifs (`IEntity`, `IAggregateRoot`), y compris depuis un projet référencé, avec les diagnostics de configuration HS900 à HS902 ;
+- livrer progressivement HS003 à HS011, HS015 et HS019 ; HS010 et HS011 sont des analyseurs HardSlice avec leurs propres identifiants, et non des listes `BannedApiAnalyzers` ;
+- fournir les fiches des règles, `dotnet hardslice check` et `explain` dans un outil local épinglé à la version des analyseurs ;
+- ajouter les niveaux d'analyse `Minimum`, `Recommended` et `All`, les tests de faux positifs, les cas inter-assemblies et la mesure de performance sur un build incrémental réel ;
+- publier les premiers paquets NuGet en préversion (`0.2.0-preview.1`).
 
 **Résultat visible** : les dérives principales échouent avec des messages que l'agent peut corriger.
 
@@ -169,7 +172,8 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 | Tests d'architecture | v0.1 | v0.2 |
 | Kit agents | Premier jalon minimal | v0.3 |
 | Scripts de vérification | Premier jalon | v0.3 |
-| Outil d'adoption | v0.5 | v1.0 |
+| Outil `dotnet hardslice` | v0.2 (`check`, `explain`) | v1.0 |
+| Outil d'adoption (`init`, `baseline`…) | v0.5 | v1.0 |
 | Benchmark | v0.4 | v0.6 |
 | Documentation des règles | Premier jalon avec HS016 | v0.2 et v1.0 |
 
@@ -199,6 +203,6 @@ Le protocole détaillé du benchmark, son isolation et ses règles d'intégrité
 
 ## 9. Prochaine action
 
-L'incrément 1 « boucle verticale HardSlice » est terminé. Exécuter l'incrément actif « Fondation v0.1 » décrit dans [product-backlog.md](product-backlog.md).
+L'incrément 1 « boucle verticale HardSlice » est terminé. Terminer l'incrément actif « Fondation v0.1 » (PB-017) décrit dans [product-backlog.md](product-backlog.md).
 
-Commencer par PB-009, qui remplace le stockage en mémoire par PostgreSQL, EF Core et des tests d'intégration Testcontainers. PB-014 peut avancer en parallèle selon le graphe de dépendances du backlog. Toute planification qui ne contribue pas directement à la définition de fini de l'incrément 2 est reportée.
+L'incrément 3 « Analyseurs v0.2 » est préparé (PB-018 à PB-033). Il démarre une fois la définition de fini de l'incrément 2 atteinte, par PB-018 (classification), qui débloque les règles du domaine. PB-019 (performance), PB-020 (niveaux d'analyse), PB-021 (outil) et les règles HS003, HS011 et HS015 avancent en parallèle. Les prérequis de la préversion NuGet sont à réunir par le mainteneur pendant l'incrément ; seule la publication finale (PB-033) les attend.

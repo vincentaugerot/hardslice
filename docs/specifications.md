@@ -2,12 +2,13 @@
 
 # HardSlice : spécifications du kit d'architecture .NET pour agents IA
 
-Statut : spécification produit v2.1, 29 octobre 2026. Le contenu fonctionnel provient de la v2 du 27 octobre 2026 ; cette révision rétablit le document comme contrat produit et harmonise le nom **HardSlice**.
+Statut : spécification produit v2.2, 30 octobre 2026. Le contenu fonctionnel provient de la v2 du 27 octobre 2026, complétée par les décisions de la v2.2 sur les analyseurs v0.2.
 
 Historique :
 - v1 : architecture en couches.
 - v2, sous le nom provisoire « Keel » : le template passe en **vertical slices avec un domaine riche**. Nouvelles règles HS016 à HS018, outil d'adoption compatible couches et slices, comparaison couches contre slices dans le benchmark.
 - v2.1 : « Keel » devient **HardSlice** ; les identifiants `KEELxxx` deviennent `HSxxx` et la CLI canonique devient `dotnet hardslice`.
+- v2.2 (préparation de v0.2) : classification des types par les contrats applicatifs `IEntity` et `IAggregateRoot` ; HS010 et HS011 deviennent des analyseurs HardSlice au lieu de `BannedApiAnalyzers` ; HS009 est séparée en contrôle structurel (HS009) et convention de nommage non bloquante (HS019) ; diagnostics de configuration HS900 à HS902 ; niveaux d'analyse ; `check` et `explain` livrés dès v0.2.
 
 ## 1. En une phrase
 
@@ -90,7 +91,7 @@ Sans garde-fous, les agents dégradent une architecture en slices plus vite qu'u
 | Tests d'architecture | Projet `tests/MyApp.ArchitectureTests` | Règles de dépendances entre projets, modules et slices |
 | Kit agents | `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `GEMINI.md`, skills, hooks | Guider les agents et boucler sur les erreurs |
 | Script de vérification | `scripts/check.sh` et `scripts/check.ps1` | Point unique appelé par les hooks, le pre-commit git et la CI |
-| Outil d'adoption | Outil local `HardSlice.Tool`, restauré avec `dotnet tool restore`, puis `dotnet hardslice init` et `dotnet hardslice baseline` | Ajouter HardSlice à une solution existante, en couches ou en slices |
+| Outil `dotnet hardslice` | Outil local `HardSlice.Tool`, restauré avec `dotnet tool restore` et épinglé à la version des analyseurs : `check` et `explain` dès v0.2, puis `init`, `map`, `baseline`, `report` et `verify` | Vérifier, expliquer une règle, puis ajouter HardSlice à une solution existante, en couches ou en slices |
 | Benchmark | Dossier `bench/` et page de résultats | Mesurer l'effet, nourrir les articles |
 | Documentation | Une fiche par règle (`docs/rules/HS001.md`…) et un site simple | Comprendre et corriger |
 
@@ -100,16 +101,18 @@ Sans garde-fous, les agents dégradent une architecture en slices plus vite qu'u
 
 ```
 MyApp.sln
-Directory.Build.props        # net10.0, Nullable, TreatWarningsAsErrors, HardSlice.Analyzers
-Directory.Packages.props     # versions centralisées
-.editorconfig                # sévérités des règles HS
-hardslice.json               # style (slices), modules, chemins
+Directory.Build.props        # net10.0, Nullable, TreatWarningsAsErrors, HardSliceAnalysisMode
+Directory.Packages.props     # versions centralisées, HardSlice.Analyzers
+.editorconfig                # réglages individuels des règles HS
+hardslice.json               # style (slices), contrats de classification, dossiers de Shared
+.config/dotnet-tools.json    # dotnet-ef (version d'EF Core), HardSlice.Tool (version des analyseurs)
 AGENTS.md  CLAUDE.md  GEMINI.md  .github/copilot-instructions.md
 .claude/settings.json        # hooks
 .claude/skills/              # skills
 scripts/check.sh  scripts/check.ps1
 src/
   MyApp.Domain/              # aucune dépendance, partagé par les slices
+    IEntity.cs  IAggregateRoot.cs  IDomainEvent.cs   # contrats de classification
     Bookings/
       Booking.cs  BookingId.cs  BookingPeriod.cs  Events/BookingConfirmed.cs
   MyApp/                     # hôte web, slices, persistance
@@ -180,14 +183,15 @@ Tout est `internal` sauf la commande : une autre slice ne peut pas appeler ce ha
 | Persistance | EF Core et Npgsql, `AsNoTracking` et projections pour les requêtes | Une seule techno de données à apprendre |
 | Règles d'architecture | ArchUnitNET (tranché par PB-014, cf. section 13) | |
 | Tests présents au chemin des slices (HS014, HS018) | `Microsoft.CodeAnalysis.CSharp`, arbre syntaxique des sources de tests (PB-015) | Licence MIT ; ne dépend pas d'assemblies de tests construits ou périmés |
-| API bannies | `Microsoft.CodeAnalysis.BannedApiAnalyzers` et `BannedSymbols.txt` | Interdire `DateTime.Now`, `.Result`… sans écrire d'analyseur |
+| Horloge et appels bloquants (HS010, HS011) | Analyseurs HardSlice ciblés | Décision du 30/10/2026, qui remplace `BannedApiAnalyzers` : il produirait `RS0030` pour les deux règles, qu'on ne pourrait ni configurer, ni supprimer, ni compter séparément. Aucun autre analyseur ne signale les mêmes appels |
+| Classification des types (entités, agrégats, événements, commandes, requêtes, handlers) | Interfaces de l'application, déclarées dans `hardslice.json` | Aucune dépendance runtime à HardSlice ; reconnaissance par symbole, jamais par heuristique de forme (cf. section 8) |
 | Orchestration locale | Aspire en option (`--aspire`) | |
 
 Les licences sont à revérifier au moment du développement.
 
 ## 8. Le catalogue de règles
 
-Chaque règle a un identifiant, une sévérité par défaut (modifiable dans `.editorconfig`), un mécanisme et une fiche `docs/rules/HSxxx.md` (pourquoi, mauvais exemple, bon exemple, skill à utiliser). La colonne « Style » dit si la règle s'applique aux slices, aux couches (adoption d'une solution existante) ou aux deux.
+Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modifiable dans `.editorconfig`), un mécanisme et une fiche `docs/rules/HSxxx.md` (pourquoi, mauvais exemple, bon exemple, contournements interdits, limites de détection, skill à utiliser dès qu'elle existe). La colonne « Style » dit si la règle s'applique aux slices, aux couches (adoption d'une solution existante) ou aux deux.
 
 | Id | Règle | Mécanisme | Style |
 |---|---|---|---|
@@ -195,14 +199,14 @@ Chaque règle a un identifiant, une sévérité par défaut (modifiable dans `.e
 | HS001 | Le Domain ne dépend d'aucun autre projet ni d'EF Core, d'ASP.NET Core ou de la DI | Test d'architecture | Les deux |
 | HS002 | Couches : Application ne dépend ni d'Infrastructure ni d'Api, ni d'EF Core, ni de `HttpContext` | Test d'architecture | Couches |
 | HS003 | Un endpoint n'accède jamais directement à la base : il envoie une commande ou une requête | Analyseur | Les deux |
-| HS004 | Nommage et emplacement : une slice `Xxx` est dans `Features/<Module>/Xxx/` et contient `XxxCommand` (ou `XxxQuery`), son handler, son validateur et son endpoint | Analyseur | Slices (variante couches dans `hardslice.json`) |
-| HS005 | Un handler de commande ne renvoie jamais d'entité ni d'agrégat (un identifiant, un DTO ou rien) | Analyseur | Les deux |
-| HS006 | Un handler de requête ne charge pas d'agrégat suivi par EF Core et n'appelle jamais `SaveChanges` : il lit avec `AsNoTracking` et des projections | Analyseur | Les deux |
-| HS007 | Les entités n'ont pas de setter public : l'état change par des méthodes du domaine qui protègent les invariants. **C'est la règle qui empêche le domaine anémique** | Analyseur | Les deux |
-| HS008 | Un agrégat référence un autre agrégat par son identifiant, jamais par une propriété de navigation | Analyseur | Les deux |
-| HS009 | Les événements de domaine sont des `record` au passé (`BookingConfirmed`) | Analyseur | Les deux |
-| HS010 | Pas de `DateTime.Now` ni `DateTime.UtcNow` dans le domaine et les slices : utiliser `TimeProvider` | API bannies | Les deux |
-| HS011 | Pas de `.Result`, `.Wait()` ni `async void` | API bannies et analyseurs existants | Les deux |
+| HS004 | Nommage et emplacement : une slice `Xxx` est dans `Features/<Module>/Xxx/` et contient `XxxCommand` (ou `XxxQuery`), son handler et son endpoint ; un validateur présent est nommé `XxxValidator` et reste dans la slice (son obligation relève de HS013) | Analyseur | Slices (variante couches dans `hardslice.json`, v0.5) |
+| HS005 | Un handler de commande ne renvoie jamais d'entité ni d'agrégat (un identifiant, un DTO ou rien), ni directement, ni dans une enveloppe générique, une collection, un tableau, un tuple ou un DTO | Analyseur | Les deux |
+| HS006 | Un handler de requête ne matérialise aucune entité suivie par EF Core, ne réactive ni ne reconfigure le suivi, et n'écrit jamais : ni `SaveChanges`, ni `ExecuteUpdate`/`ExecuteDelete`, ni SQL brut d'écriture. Il lit avec `AsNoTracking` et des projections : l'absence de suivi est garantie dans le handler, sans dépendre du réglage global du contexte | Analyseur | Les deux |
+| HS007 | Les entités, racines et entités enfants, n'ont ni `set` ni `init` accessible de l'extérieur, y compris par une interface publique, ni champ public modifiable : l'état change par des méthodes du domaine qui protègent les invariants. **C'est la règle qui empêche le domaine anémique** | Analyseur | Les deux |
+| HS008 | Un agrégat référence un autre agrégat par son identifiant, jamais par une propriété de navigation, une collection ou depuis une de ses entités enfants. Les références à ses propres entités enfants restent permises | Analyseur | Les deux |
+| HS009 | Les événements de domaine (`IDomainEvent`) sont des `record` | Analyseur | Les deux |
+| HS010 | Pas de `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today`, `DateTimeOffset.Now` ni `DateTimeOffset.UtcNow` dans le domaine et les slices : utiliser `TimeProvider` | Analyseur | Les deux |
+| HS011 | Pas de `.Result`, `.Wait()`, `GetAwaiter().GetResult()` sur une tâche, ni `async void` (méthodes et lambdas converties en délégués `void`) | Analyseur | Les deux |
 | HS012 | Un module n'utilise pas les types d'un autre module : il passe par un événement de domaine ou le contrat public du module (`XxxModule`) | Test d'architecture | Les deux |
 | HS013 | Toute commande qui a des paramètres a un validateur | Test d'architecture | Les deux |
 | HS014 | Tout handler de commande a des tests | Test d'architecture | Les deux |
@@ -210,6 +214,29 @@ Chaque règle a un identifiant, une sévérité par défaut (modifiable dans `.e
 | **HS016** | **Une slice n'utilise aucun type d'une autre slice** (ni son handler, ni sa commande, ni son DTO). Pour partager : le domaine, un événement ou le contrat du module. Les handlers, validateurs et endpoints sont `internal` | Test d'architecture et analyseur | Slices |
 | **HS017** | **`Shared` reste transverse** : il ne dépend jamais de `Features` ni d'un module, et ne contient que les dossiers autorisés dans `hardslice.json` (par défaut `Messaging`, `Persistence`, `Behaviors`) | Test d'architecture | Slices |
 | **HS018** | **Les tests reflètent les slices** : les tests de `Features/<Module>/<Slice>/` sont au même chemin dans `tests/`. Une slice sans dossier de tests est signalée | Test d'architecture | Slices |
+| HS019 | Les événements de domaine sont nommés au passé (`BookingConfirmed`). Convention de nommage, jamais bloquante : suggestion | Analyseur | Les deux |
+
+### Classification des types
+
+Les règles du domaine et de la messagerie ne devinent pas le rôle d'un type. Le Domain généré déclare `IEntity` et `IAggregateRoot : IEntity`, à côté d'`IDomainEvent`, et `hardslice.json` déclare ces contrats ainsi que `ICommand<T>`, `IQuery<T>` et `IRequestHandler<TRequest, TResponse>`, par nom de métadonnée et assembly déclarant. Ces interfaces appartiennent à l'application : aucun paquet HardSlice n'est requis au runtime.
+
+- Un type appartient à une catégorie s'il implémente le contrat, directement ou par héritage, y compris depuis un assembly référencé. Un type homonyme d'un autre espace de noms ou d'un autre assembly est ignoré.
+- Une propriété `Id` ne classe jamais un type.
+- La cartographie des slices (espaces de noms de la compilation analysée) et la classification des types (symboles, références comprises) sont deux mécanismes distincts. Une règle sur une déclaration s'exécute dans la compilation qui déclare le type ; une règle sur un usage lit les symboles des assemblies référencés. Aucun analyseur ne charge la solution entière.
+
+Diagnostics de configuration, émis seulement lorsqu'une règle active en dépend :
+
+| Id | Condition |
+|---|---|
+| HS900 | `hardslice.json` introuvable ou invalide, contrat absent, mal formé ou introuvable dans son assembly déclarant alors que la compilation le référence, contrats incohérents |
+| HS901 | Type classé dans deux catégories incompatibles : entité et événement, commande et requête, entité et commande ou requête |
+| HS902 | Type de l'assembly du Domain mappé comme entité EF Core (`IEntityTypeConfiguration<T>`, `DbSet<T>`, `ModelBuilder.Entity<T>()`) sans implémenter `IEntity` |
+
+Restent indétectables : une entité mappée par convention, par `Entity(typeof(T))` ou par nom, une entité enfant mappée comme type possédé (`OwnsOne`, `OwnsMany`) qui n'implémente pas `IEntity`, car le mapping ne dit pas si un type possédé est un objet valeur ou une entité : seuls les contrats font autorité, une entité non persistée qui n'implémente aucun contrat, un mapping dans un projet qui n'utilise pas les analyseurs.
+
+### Niveaux d'analyse
+
+La propriété MSBuild `HardSliceAnalysisMode` choisit `Minimum`, `Recommended` (par défaut) ou `All` ; le template utilise `All`. Un niveau active ou désactive des règles, il ne change jamais la sévérité d'une règle active. Un réglage individuel de `.editorconfig` l'emporte sur le niveau. Comme le template traite les warnings comme des erreurs, une règle heuristique comme HS019 n'est jamais au-delà de `suggestion`. La matrice des règles par niveau est tenue dans le [backlog](product-backlog.md) (PB-020).
 
 ### Format des messages (le cœur du projet)
 
@@ -222,7 +249,7 @@ Fix: move the shared rule into the Booking aggregate (MyApp.Domain/Bookings/Book
 domain event. Skill: add-slice. Rule: docs/rules/HS016.md
 ```
 
-Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en une phrase, la correction attendue, la skill à utiliser, la fiche. Messages en anglais (langue des agents et de la communauté).
+Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en une phrase, la correction attendue, la skill à utiliser, la fiche. Messages en anglais (langue des agents et de la communauté). La mention `Skill:` n'apparaît qu'une fois la skill livrée (v0.3) ; les diagnostics ne fournissent pas de correction automatique (`CodeFixProvider`) en v0.2.
 
 ## 9. Le kit agents
 
@@ -304,7 +331,7 @@ Cette table décrit le périmètre produit promis. Le séquençage d'exécution 
 | Version | Contenu | Résultat publiable |
 |---|---|---|
 | v0.1 | Template de solution en slices, module Bookings, tests d'architecture HS001, 012 à 014 et 016 à 018, `AGENTS.md`, `scripts/check.sh` | Repo public |
-| v0.2 | Analyseurs HS003 à 011 et 015, API bannies, messages pour agents, fiches de règles | Post « des erreurs de compilation écrites pour les agents » |
+| v0.2 | Analyseurs HS003 à 011, 015 et 019, classification par contrats et diagnostics de configuration HS900 à 902, niveaux d'analyse, `dotnet hardslice check` et `explain`, messages pour agents, fiches de règles, préversion NuGet | Post « des erreurs de compilation écrites pour les agents » |
 | v0.3 | Templates d'éléments, skills, hooks Claude Code, HS000 | Démo vidéo courte |
 | v0.4 | Benchmark, question 1 (A/B/C) | Article principal et post LinkedIn chiffré |
 | v0.5 | `dotnet hardslice init`, `map`, `baseline`, cliquet et `report`, règles en mode couches (HS002) | Post « adopter sur un projet existant » |
