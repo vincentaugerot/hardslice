@@ -69,7 +69,7 @@ internal static class AnalyzerHarness
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
 
     public static ImmutableArray<DiagnosticAnalyzer> Analyzers() =>
-        [new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer(), new SliceEndpointAnalyzer()];
+        [new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer(), new SliceEndpointAnalyzer(), new AsyncUsageAnalyzer()];
 
     public const string ConfigurationPath = "/solution/hardslice.json";
 

@@ -42,7 +42,8 @@ Modules and slices:
 5. The domain project references nothing but the base class library (HS001). Every aggregate root implements `IAggregateRoot`, every child entity `IEntity` (HS902), and a type has one role (HS901).
 6. `Shared` holds cross-cutting code only, in the folders `hardslice.json` allows, and never depends on `Features` (HS017).
 7. Every behavior change comes with a test at the same path as the code it covers. Every slice has tests at its path under `tests/` (HS018), at least one for a command handler (HS014), and every command with parameters has a validator (HS013).
-8. Never weaken a rule to make the build pass: see [Forbidden](#forbidden).
+8. Asynchronous work is awaited all the way up: never `.Result`, `.Wait()`, `GetAwaiter().GetResult()`, nor `async void`, an async lambda given to an `Action` included (HS011).
+9. Never weaken a rule to make the build pass: see [Forbidden](#forbidden).
 <!--#if (NoSample) -->
 
 ## Adding a first module
@@ -122,10 +123,10 @@ Both scripts restore the local tools, then run `dotnet hardslice check`: it buil
 
 ## Fixing a HardSlice failure
 
-A HardSlice failure starts with its rule: `HS003`, `HS015`, `HS016` and `HS900` to `HS902` from the analyzers at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests.
+A HardSlice failure starts with its rule: `HS003`, `HS011`, `HS015`, `HS016` and `HS900` to `HS902` from the analyzers at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests.
 
 1. Read the diagnostic: it names the offending symbol, the rule, the expected fix and its sheet after `Doc:`.
-2. Open the sheet, or print it with `dotnet hardslice explain <rule>`, and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS003.md` (endpoints), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS015.md` (slice endpoints), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders), `docs/rules/HS900.md` (contracts of `hardslice.json`), `docs/rules/HS901.md` (one role per type), `docs/rules/HS902.md` (mapped entities).
+2. Open the sheet, or print it with `dotnet hardslice explain <rule>`, and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS003.md` (endpoints), `docs/rules/HS011.md` (blocking calls and async void), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS015.md` (slice endpoints), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders), `docs/rules/HS900.md` (contracts of `hardslice.json`), `docs/rules/HS901.md` (one role per type), `docs/rules/HS902.md` (mapped entities).
 3. Run the check script again.
 
 `HS900`, or a message starting with `hardslice.json:`, means the configuration or one of its contracts is missing or invalid: restore them, never adapt them to the code.

@@ -112,9 +112,22 @@ public sealed class BookingsReferenceTests
             + "Doc: 'docs/rules/HS015.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS011_when_ConfirmBookingHandler_blocks_on_the_bookings_it_loads()
+    {
+        var diagnostic = (await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(AsyncUsageAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "'ConfirmBookingHandler.Handle' blocks on 'Task<TResult>.Result'. "
+            + "Code never blocks on asynchronous work. "
+            + "Fix: make the caller async and await the task. Doc: 'docs/rules/HS011.md'.");
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
+    [InlineData(AsyncUsageAnalyzer.DiagnosticId)]
     [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
     [InlineData(ClassificationAnalyzer.ConfigurationId)]
     [InlineData(ClassificationAnalyzer.AmbiguityId)]
@@ -124,6 +137,7 @@ public sealed class BookingsReferenceTests
         var diagnostics = ruleId switch
         {
             EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
+            AsyncUsageAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration),
             SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
             ClassificationAnalyzer.ConfigurationId => await AnalyzeAllAsync(
                 CompileDomain(),
@@ -273,6 +287,21 @@ public sealed class BookingsReferenceTests
             typedEndpoint,
             "async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>\n"
             + "            await mediator.Send(new GetBookingQuery(id), cancellationToken) is { } booking ? Results.Ok(booking) : Results.NotFound());")));
+    }
+
+    // ConfirmBooking, whose handler blocks on the bookings it loads instead of awaiting them.
+    private static CSharpCompilation ConfirmBookingThatBlocks()
+    {
+        var path = "Features/Bookings/ConfirmBooking/ConfirmBooking.cs";
+        var confirmBooking = ReferenceSource(path);
+        var load = "var existingBookings = await db.Set<Booking>()";
+        var loaded = ".ToListAsync(cancellationToken);";
+        confirmBooking.ShouldContain(load);
+        confirmBooking.ShouldContain(loaded);
+
+        return CompileApplication((path, confirmBooking
+            .Replace(load, "var existingBookings = db.Set<Booking>()")
+            .Replace(loaded, ".ToListAsync(cancellationToken).Result;")));
     }
 
     // BookingsModule, which also maps the endpoint class of another slice on its group.

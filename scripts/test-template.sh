@@ -3,12 +3,12 @@
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS001, HS003, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
+# then proves a seeded violation of HS001, HS003, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned to the version of the analyzers, refuses another one before the build and explains every rule with the sheet of the template.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
-# and that seeded violations of HS001, HS003, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
+# and that seeded violations of HS001, HS003, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -198,7 +198,7 @@ echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
 
 echo "==> Checking that $app_name holds every v0.1 deliverable of the specification"
 for deliverable in \
-  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS012.md \
+  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS011.md docs/rules/HS012.md \
   docs/rules/HS013.md docs/rules/HS014.md docs/rules/HS015.md docs/rules/HS016.md docs/rules/HS017.md docs/rules/HS018.md \
   docs/rules/HS900.md docs/rules/HS901.md docs/rules/HS902.md "src/$app_name.Domain/IEntity.cs" "src/$app_name.Domain/IAggregateRoot.cs" \
   "src/$app_name.Domain/Bookings/Booking.cs" "src/$app_name.Domain/Bookings/BookingId.cs" \
@@ -886,11 +886,30 @@ EOF
   rm -r "$app_src/Features/$module/ArchiveProbes"
 }
 
+# Seeds a domain type of module <module> that blocks on a task: the analyzer of the domain reports HS011 in its own compilation.
+probe_blocking_call() {
+  local module="$1"
+  mkdir -p "$app/src/$app_name.Domain/$module"
+  cat > "$app/src/$app_name.Domain/$module/RoomAvailability.cs" <<EOF
+namespace $app_name.Domain.$module;
+
+public static class RoomAvailability
+{
+    public static bool IsFree(Task<bool> lookup) => lookup.Result;
+}
+EOF
+  expect_failure "HS011: 'RoomAvailability.IsFree' blocks on 'Task<TResult>.Result'." "docs/rules/HS011.md" "a domain type of $app_name that blocks on a task" check.sh check.ps1
+  rm "$app/src/$app_name.Domain/$module/RoomAvailability.cs"
+}
+
 echo "==> Checking that HS003 fails both check scripts on an endpoint that receives AppDbContext"
 probe_endpoint_database_access Bookings
 
 echo "==> Checking that HS015 fails both check scripts on an endpoint that BookingsModule never maps"
 probe_unmapped_endpoint Bookings
+
+echo "==> Checking that HS011 fails both check scripts on a domain type that blocks on a task"
+probe_blocking_call Bookings
 
 echo "==> Checking that HS902 fails both check scripts on a domain type mapped without contract"
 probe_unclassified_entity Bookings
@@ -967,7 +986,7 @@ done
 echo "    $version_mismatch ..."
 mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
 
 sample_name="$app_name"
 blank_name="Blank"
@@ -1148,6 +1167,9 @@ probe_endpoint_database_access Rooms
 
 echo "==> Checking that HS015 fails both check scripts on the first endpoint of $app_name, which no RoomsModule maps"
 probe_unmapped_endpoint Rooms
+
+echo "==> Checking that HS011 fails both check scripts on the first domain type of $app_name that blocks on a task"
+probe_blocking_call Rooms
 
 echo "==> Checking that HS902 fails both check scripts on the first domain type of $app_name mapped without contract"
 probe_unclassified_entity Rooms

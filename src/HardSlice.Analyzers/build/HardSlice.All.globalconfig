@@ -10,6 +10,9 @@ global_level = -1
 # HS003: an endpoint never reaches the database.
 dotnet_diagnostic.HS003.severity = error
 
+# HS011: code never blocks on asynchronous work and never declares async void.
+dotnet_diagnostic.HS011.severity = error
+
 # HS015: the endpoint of a slice stays in its slice, on the group of its module, and returns TypedResults.
 dotnet_diagnostic.HS015.severity = error
 
