@@ -10,13 +10,50 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <ContentTargetFolders>content</ContentTargetFolders>
     <NoDefaultExcludes>true</NoDefaultExcludes>
+    <!-- A template package has no dependency: no empty net10.0 group, that NuGet would compare with a lib folder the package does not have (NU5128). -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <!-- NU5110/NU5111: scripts/check.ps1 is template content, not a NuGet install script. -->
-    <NoWarn>$(NoWarn);NU5128;NU5110;NU5111</NoWarn>
+    <NoWarn>$(NoWarn);NU5110;NU5111</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <Content Include="content/**/*" Exclude="content/**/bin/**;content/**/obj/**;content/**/TestResults/**" />
     <Compile Remove="**/*" />
+    <None Update="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
+
+  <!-- The template pins HardSlice.Analyzers and the hardslice.tool local tool at the version of the HardSlice packages,
+       the Version of Directory.Build.props: the pack writes it in place of the token, dotnet-ef keeps its own version. -->
+  <PropertyGroup>
+    <HardSliceVersionToken>HARDSLICE_VERSION</HardSliceVersionToken>
+    <BeforePack>$(BeforePack);WriteHardSliceVersionInTemplate</BeforePack>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <VersionedTemplateFile Include="content/hardslice-api/Directory.Packages.props;content/hardslice-api/.config/dotnet-tools.json" />
+    <Content Remove="@(VersionedTemplateFile)" />
+  </ItemGroup>
+
+  <!-- Runs once per file: Outputs batches the target on the files. IntermediateOutputPath is only known once the SDK targets are evaluated. -->
+  <Target Name="WriteHardSliceVersionInTemplate" Outputs="%(VersionedTemplateFile.Identity)">
+    <PropertyGroup>
+      <_VersionedTemplateDir>$(IntermediateOutputPath)versioned-template/</_VersionedTemplateDir>
+      <_VersionedTemplateSource>%(VersionedTemplateFile.Identity)</_VersionedTemplateSource>
+      <_VersionedTemplateText>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/$(_VersionedTemplateSource)'))</_VersionedTemplateText>
+      <_VersionedTemplateTarget>$(_VersionedTemplateDir)$(_VersionedTemplateSource)</_VersionedTemplateTarget>
+    </PropertyGroup>
+
+    <Error Condition="!$(_VersionedTemplateText.Contains('$(HardSliceVersionToken)'))"
+           Text="$(_VersionedTemplateSource) no longer holds $(HardSliceVersionToken): the template would not pin the HardSlice packages at version $(Version)." />
+
+    <WriteLinesToFile File="$(_VersionedTemplateTarget)"
+                      Lines="$([MSBuild]::Escape($(_VersionedTemplateText.Replace('$(HardSliceVersionToken)', '$(Version)').TrimEnd())))"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+
+    <ItemGroup>
+      <None Include="$(_VersionedTemplateTarget)" Pack="true" PackagePath="$(ContentTargetFolders)/%(VersionedTemplateFile.RelativeDir)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

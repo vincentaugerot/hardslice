@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Packs HardSlice, installs the hardslice-api template, generates a solution in a temporary directory,
+# Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template, generates a solution in a temporary directory,
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
-# is pinned to the version of the analyzers, refuses another one before the build and explains every rule with the sheet of the template.
+# is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
 # and that seeded violations of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them, and HS019 still reaches the compiler log: without the sample, the rules keep their targets.
 set -euo pipefail
@@ -36,6 +36,7 @@ source "$repo_root/scripts/dotnet-cli-home.sh"
 isolate_dotnet_cli_home "$work"
 
 "$repo_root/scripts/generate-app.sh" "$work"
+hardslice_version="$(cd "$repo_root" && dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:Version)"
 
 if ! command -v pwsh > /dev/null; then
   echo "error: pwsh is required to verify scripts/check.ps1." >&2
@@ -163,6 +164,8 @@ echo "==> Verifying the generated solution with scripts/check.ps1"
 pwsh -NoProfile -File "$app/scripts/check.ps1"
 
 # The check scripts have restored the tool: it must be the version of the analyzers, and print the sheets of the template as it ships them.
+# Both have the version of Directory.Build.props, which the pack wrote in the template, and come from the local feed, never from nuget.org:
+# the packages restored into the private package folder are the very files generate-app.sh packed.
 echo "==> Checking that dotnet hardslice is pinned to the version of the analyzers and explains every rule"
 (
   cd "$app"
@@ -172,6 +175,18 @@ echo "==> Checking that dotnet hardslice is pinned to the version of the analyze
     echo "error: dotnet hardslice is version '$tool_version' but $app_name references HardSlice.Analyzers '$analyzer_version'." >&2
     exit 1
   fi
+  if [[ "$analyzer_version" != "$hardslice_version" ]]; then
+    echo "error: $app_name pins the HardSlice packages at '$analyzer_version' instead of $hardslice_version, the version of Directory.Build.props." >&2
+    exit 1
+  fi
+  for package in HardSlice.Analyzers HardSlice.Tool; do
+    lower="$(printf '%s' "$package" | tr '[:upper:]' '[:lower:]')"
+    restored="$work/nuget-packages/$lower/$hardslice_version/$lower.$hardslice_version.nupkg"
+    if ! cmp --silent "$work/feed/$package.$hardslice_version.nupkg" "$restored"; then
+      echo "error: $app_name did not restore $package $hardslice_version from the local feed: $restored is not the package generate-app.sh packed." >&2
+      exit 1
+    fi
+  done
   for sheet in "$repo_root"/src/HardSlice.Templates/content/hardslice-api/docs/rules/HS*.md; do
     rule="$(basename "$sheet" .md)"
     if ! dotnet hardslice explain "$rule" | cmp --silent - "$sheet"; then
@@ -186,7 +201,7 @@ echo "==> Checking that dotnet hardslice is pinned to the version of the analyze
     echo "error: dotnet hardslice explain HS999 exited $explain_status instead of 2 with the list of rules." >&2
     exit 1
   fi
-  echo "    dotnet hardslice $tool_version explains $(ls docs/rules | wc -l) rules"
+  echo "    dotnet hardslice $tool_version, restored from the local feed with HardSlice.Analyzers $analyzer_version, explains $(ls docs/rules | wc -l) rules"
 )
 
 echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
@@ -1265,7 +1280,7 @@ done
 echo "    $version_mismatch ..."
 mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule, while they pass with the HS019 suggestion in the compiler log"
+echo "==> $app_name OK: it restores the HardSlice packages $hardslice_version from the local feed, passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule, while they pass with the HS019 suggestion in the compiler log"
 
 sample_name="$app_name"
 blank_name="Blank"

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -6,26 +7,79 @@ namespace HardSlice.Analyzers.Tests;
 
 public sealed class TemplatePackageTests
 {
-    [Fact]
-    public void Template_analyzer_version_matches_distributable_package_version()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var buildProperties = XDocument.Load(Path.Combine(repositoryRoot, "Directory.Build.props"));
-        var packageVersion = buildProperties
-            .Descendants()
-            .Single(element => element.Name.LocalName == "VersionPrefix")
-            .Value;
-        var templatePropertiesPath = Path.Combine(TemplateRoot(repositoryRoot), "Directory.Packages.props");
-        var templateProperties = File.ReadAllText(templatePropertiesPath);
-        var analyzerReference = Regex.Match(
-            templateProperties,
-            """<GlobalPackageReference\s+Include="HardSlice\.Analyzers"\s+Version="(?<version>[^"]+)"\s*/>""");
+    // Written by the pack of HardSlice.Templates in place of the version of the HardSlice packages.
+    private const string VersionToken = "HARDSLICE_VERSION";
 
-        analyzerReference.Success.ShouldBeTrue(
-            $"Could not find the HardSlice.Analyzers global package reference in {templatePropertiesPath}.");
-        analyzerReference.Groups["version"].Value.ShouldBe(
-            packageVersion,
-            "The template must reference the same HardSlice.Analyzers version that the repository packs.");
+    // Directory.Build.props holds the only version: the pack of the template writes it where the template pins the analyzers and the tool.
+    [Fact]
+    public async Task Packed_template_pins_the_analyzers_and_the_tool_at_the_version_of_the_HardSlice_packages()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var repositoryRoot = FindRepositoryRoot();
+        var templateRoot = TemplateRoot(repositoryRoot);
+        var version = PackageVersion(repositoryRoot);
+        var templateProject = Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "HardSlice.Templates.csproj");
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"hardslice-template-package-{Guid.NewGuid():N}");
+        var feedDirectory = Path.Combine(temporaryDirectory, "feed");
+        // The pack builds in its own folders: it never races the build of the solution for obj/.
+        string[] isolation =
+        [
+            $"-p:BaseOutputPath={Path.Combine(temporaryDirectory, "pack-bin")}{Path.DirectorySeparatorChar}",
+            $"-p:BaseIntermediateOutputPath={Path.Combine(temporaryDirectory, "pack-obj")}{Path.DirectorySeparatorChar}",
+            "-p:DefaultItemExcludes=obj/**"
+        ];
+
+        try
+        {
+            var restore = await Dotnet.RunAsync(repositoryRoot, null, cancellationToken, ["restore", templateProject, .. isolation]);
+            restore.ExitCode.ShouldBe(0, restore.Output);
+            var pack = await Dotnet.RunAsync(
+                repositoryRoot,
+                null,
+                cancellationToken,
+                ["pack", templateProject, "--configuration", "Release", "--no-restore", "--output", feedDirectory, .. isolation]);
+            pack.ExitCode.ShouldBe(0, pack.Output);
+
+            using var archive = ZipFile.OpenRead(
+                Directory.EnumerateFiles(feedDirectory, $"HardSlice.Templates.{version}.nupkg").ShouldHaveSingleItem());
+            var packedPackages = TemplateEntry(archive, "Directory.Packages.props");
+            var packedManifest = TemplateEntry(archive, ".config/dotnet-tools.json");
+
+            AnalyzerReferenceVersion(packedPackages).ShouldBe(version);
+            using var manifest = JsonDocument.Parse(packedManifest);
+            var tools = manifest.RootElement.GetProperty("tools");
+            tools.GetProperty("hardslice.tool").GetProperty("version").GetString().ShouldBe(version);
+            tools.GetProperty("dotnet-ef").GetProperty("version").GetString()
+                .ShouldBe(PackageVersions(Path.Combine(templateRoot, "Directory.Packages.props"))["Microsoft.EntityFrameworkCore.Design"]);
+
+            // The pack replaces the token and nothing else.
+            packedPackages.TrimEnd().ShouldBe(
+                File.ReadAllText(Path.Combine(templateRoot, "Directory.Packages.props")).Replace(VersionToken, version).TrimEnd());
+            packedManifest.TrimEnd().ShouldBe(
+                File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")).Replace(VersionToken, version).TrimEnd());
+            archive.Entries.Select(entry => entry.FullName).ShouldContain("README.md");
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryDirectory))
+                Directory.Delete(temporaryDirectory, recursive: true);
+        }
+    }
+
+    // In the repository, the template holds the token in place of the version, in its reference to the analyzers and in its tool entry only.
+    [Fact]
+    public void Template_holds_the_version_token_where_it_pins_the_analyzers_and_the_tool()
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var packages = File.ReadAllText(Path.Combine(templateRoot, "Directory.Packages.props"));
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")));
+
+        AnalyzerReferenceVersion(packages).ShouldBe(VersionToken);
+        Regex.Count(packages, VersionToken).ShouldBe(1);
+        manifest.RootElement.GetProperty("tools").EnumerateObject()
+            .Where(tool => tool.Value.GetProperty("version").GetString() == VersionToken)
+            .Select(tool => tool.Name)
+            .ShouldBe(["hardslice.tool"]);
     }
 
     // BookingsReferenceTests compiles the template against the repository's versions: they must not drift apart.
@@ -149,6 +203,29 @@ public sealed class TemplatePackageTests
 
         branch.ShouldBeNull("AGENTS.md has a template condition without its <!--#endif -->.");
         return [.. kept];
+    }
+
+    private static string PackageVersion(string repositoryRoot) =>
+        XDocument.Load(Path.Combine(repositoryRoot, "Directory.Build.props"))
+            .Descendants()
+            .Single(element => element.Name.LocalName == "Version")
+            .Value;
+
+    // The template keeps the reference in a comment that dotnet new uncomments: the repository builds the template content without the package.
+    private static string AnalyzerReferenceVersion(string packagesProps)
+    {
+        var reference = Regex.Match(
+            packagesProps,
+            """<GlobalPackageReference\s+Include="HardSlice\.Analyzers"\s+Version="(?<version>[^"]+)"\s*/>""");
+        reference.Success.ShouldBeTrue("The template no longer references HardSlice.Analyzers.");
+        return reference.Groups["version"].Value;
+    }
+
+    private static string TemplateEntry(ZipArchive archive, string path)
+    {
+        var entry = archive.Entries.Single(candidate => candidate.FullName.Replace('\\', '/').EndsWith($"/hardslice-api/{path}", StringComparison.Ordinal));
+        using var reader = new StreamReader(entry.Open());
+        return reader.ReadToEnd();
     }
 
     private static string TemplateRoot(string repositoryRoot) =>

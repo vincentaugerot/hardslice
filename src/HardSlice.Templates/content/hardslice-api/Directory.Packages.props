@@ -6,10 +6,11 @@
 
   <!--#if (false)
   The repository builds the template content without HardSlice.Analyzers: dotnet new uncomments the next block in generated solutions.
+  The pack of HardSlice.Templates writes the version of the HardSlice packages in place of the version of this reference.
   #endif -->
   <!--#if (true)
   <ItemGroup Label="Analyzers">
-    <GlobalPackageReference Include="HardSlice.Analyzers" Version="0.1.0" />
+    <GlobalPackageReference Include="HardSlice.Analyzers" Version="HARDSLICE_VERSION" />
   </ItemGroup>
   #endif -->
 

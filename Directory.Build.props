@@ -6,10 +6,20 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
-  <!-- Distributable HardSlice packages share the same version and metadata. -->
+  <!-- Distributable HardSlice packages share the same version and metadata.
+       The single source of the version: HardSlice.Templates writes it at pack time where the template pins the analyzers and the tool. -->
   <PropertyGroup>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <Version>0.2.0-preview.1</Version>
     <Authors>Vincent Augerot</Authors>
+    <Copyright>Copyright (c) 2026 Vincent Augerot</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/toregua/hardslice</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/toregua/hardslice.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- Each package ships the README.md of its project, written for its page on NuGet.org: absolute links only. -->
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <!-- A warning of NuGet or of the package validation fails the pack, like a compiler warning fails the build. -->
+    <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
   </PropertyGroup>
 </Project>

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -27,7 +26,7 @@ public sealed class AnalyzerPackageTests
 
         try
         {
-            var packRestore = await RunDotnetAsync(
+            var packRestore = await Dotnet.RunAsync(
                 repositoryRoot,
                 nugetPackagesDirectory: null,
                 cancellationToken,
@@ -38,7 +37,7 @@ public sealed class AnalyzerPackageTests
                 "-p:DefaultItemExcludes=obj/**");
             packRestore.ExitCode.ShouldBe(0, packRestore.Output);
 
-            var pack = await RunDotnetAsync(
+            var pack = await Dotnet.RunAsync(
                 repositoryRoot,
                 nugetPackagesDirectory: null,
                 cancellationToken,
@@ -72,7 +71,7 @@ public sealed class AnalyzerPackageTests
             await File.WriteAllTextAsync(confirmBookingSource, ConfirmBookingSource, cancellationToken);
             await File.WriteAllTextAsync(consumerSource, CompliantSource, cancellationToken);
 
-            var restore = await RunDotnetAsync(
+            var restore = await Dotnet.RunAsync(
                 consumerDirectory,
                 consumerPackages,
                 cancellationToken,
@@ -83,7 +82,7 @@ public sealed class AnalyzerPackageTests
             restore.ExitCode.ShouldBe(0, restore.Output);
 
             var publishDirectory = Path.Combine(temporaryDirectory, "publish");
-            var publish = await RunDotnetAsync(
+            var publish = await Dotnet.RunAsync(
                 consumerDirectory,
                 consumerPackages,
                 cancellationToken,
@@ -104,7 +103,7 @@ public sealed class AnalyzerPackageTests
 
             await File.WriteAllTextAsync(consumerSource, ViolatingSource, cancellationToken);
 
-            var violatingBuild = await RunDotnetAsync(
+            var violatingBuild = await Dotnet.RunAsync(
                 consumerDirectory,
                 consumerPackages,
                 cancellationToken,
@@ -119,7 +118,7 @@ public sealed class AnalyzerPackageTests
             // HardSliceAnalysisMode gives the compiler the global config of its mode, Recommended when it is not set.
             foreach (var (properties, mode) in new[] { (Array.Empty<string>(), "Recommended"), (["-p:HardSliceAnalysisMode=Minimum"], "Minimum"), (["-p:HardSliceAnalysisMode=All"], "All") })
             {
-                var evaluation = await RunDotnetAsync(
+                var evaluation = await Dotnet.RunAsync(
                     consumerDirectory,
                     consumerPackages,
                     cancellationToken,
@@ -159,7 +158,7 @@ public sealed class AnalyzerPackageTests
             unconfiguredBuild.Output.ShouldContain($"error HS900: hardslice.json was not found in '{consumerDirectory}' or above it.");
 
             Task<DotnetResult> BuildConsumerAsync(params string[] properties) =>
-                RunDotnetAsync(
+                Dotnet.RunAsync(
                     consumerDirectory,
                     consumerPackages,
                     cancellationToken,
@@ -202,53 +201,6 @@ public sealed class AnalyzerPackageTests
             .Where(file => file.StartsWith("HardSlice.", StringComparison.Ordinal))
             .Distinct()
             .ToArray();
-    }
-
-    private static async Task<DotnetResult> RunDotnetAsync(
-        string workingDirectory,
-        string? nugetPackagesDirectory,
-        CancellationToken cancellationToken,
-        params string[] arguments)
-    {
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        startInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-        startInfo.Environment["DOTNET_NOLOGO"] = "1";
-        if (nugetPackagesDirectory is not null)
-            startInfo.Environment["NUGET_PACKAGES"] = nugetPackagesDirectory;
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
-
-        using var process = new Process { StartInfo = startInfo };
-        if (!process.Start())
-            throw new InvalidOperationException("The dotnet process could not be started.");
-
-        try
-        {
-            var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
-            return new DotnetResult(process.ExitCode, await standardOutput, await standardError);
-        }
-        finally
-        {
-            try
-            {
-                if (!process.HasExited)
-                    process.Kill(entireProcessTree: true);
-            }
-            catch (InvalidOperationException) when (process.HasExited)
-            {
-                // The process exited between the state check and Kill.
-            }
-
-            await process.WaitForExitAsync(CancellationToken.None);
-        }
     }
 
     private static string FindRepositoryRoot()
@@ -369,9 +321,4 @@ public sealed class AnalyzerPackageTests
 
         internal static class CancelBookingEndpoint;
         """;
-
-    private sealed record DotnetResult(int ExitCode, string StandardOutput, string StandardError)
-    {
-        public string Output => $"{StandardOutput}{Environment.NewLine}{StandardError}";
-    }
 }

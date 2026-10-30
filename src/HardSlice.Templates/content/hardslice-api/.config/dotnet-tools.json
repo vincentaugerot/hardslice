@@ -10,7 +10,7 @@
       "rollForward": false
     },
     "hardslice.tool": {
-      "version": "0.1.0",
+      "version": "HARDSLICE_VERSION",
       "commands": [
         "dotnet-hardslice"
       ],

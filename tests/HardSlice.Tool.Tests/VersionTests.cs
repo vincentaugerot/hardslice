@@ -1,15 +1,14 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace HardSlice.Tool.Tests;
 
-// The tool checks the rules of the analyzers it ships with: the repository packs both at one version, which the template pins.
+// The tool checks the rules of the analyzers it ships with: the repository packs both at one version, which the pack of the template writes.
 public sealed class VersionTests
 {
     private static readonly string PackageVersion = XDocument.Load(Path.Combine(Repository.Root, "Directory.Build.props"))
         .Descendants()
-        .Single(element => element.Name.LocalName == "VersionPrefix")
+        .Single(element => element.Name.LocalName == "Version")
         .Value;
 
     [Fact]
@@ -18,24 +17,15 @@ public sealed class VersionTests
         ToolVersion.Current.ShouldBe(PackageVersion);
     }
 
+    // TemplatePackageTests checks that the pack writes the version of the HardSlice packages in place of the token.
     [Fact]
-    public void The_template_manifest_pins_the_tool_at_the_version_of_the_analyzers_without_roll_forward()
+    public void The_template_manifest_pins_the_tool_at_the_version_of_the_HardSlice_packages_without_roll_forward()
     {
         using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repository.Template, ".config", "dotnet-tools.json")));
         var tool = manifest.RootElement.GetProperty("tools").GetProperty("hardslice.tool");
 
-        tool.GetProperty("version").GetString().ShouldBe(PackageVersion);
-        tool.GetProperty("version").GetString().ShouldBe(TemplateAnalyzerVersion());
+        tool.GetProperty("version").GetString().ShouldBe("HARDSLICE_VERSION");
         tool.GetProperty("rollForward").GetBoolean().ShouldBeFalse();
         tool.GetProperty("commands").EnumerateArray().Select(command => command.GetString()).ShouldBe(["dotnet-hardslice"]);
-    }
-
-    // The template keeps the reference in a comment that dotnet new uncomments: the repository builds the template content without the package.
-    private static string TemplateAnalyzerVersion()
-    {
-        var packages = File.ReadAllText(Path.Combine(Repository.Template, "Directory.Packages.props"));
-        var reference = Regex.Match(packages, """<GlobalPackageReference\s+Include="HardSlice\.Analyzers"\s+Version="(?<version>[^"]+)"\s*/>""");
-        reference.Success.ShouldBeTrue("The template no longer references HardSlice.Analyzers.");
-        return reference.Groups["version"].Value;
     }
 }
