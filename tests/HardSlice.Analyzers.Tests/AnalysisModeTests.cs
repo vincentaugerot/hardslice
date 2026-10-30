@@ -13,6 +13,7 @@ public sealed class AnalysisModeTests
     private static readonly (string Rule, string Minimum, string Recommended, string All)[] Matrix =
     [
         ("HS003", "error", "error", "error"),
+        ("HS004", "none", "error", "error"),
         ("HS010", "error", "error", "error"),
         ("HS011", "error", "error", "error"),
         ("HS015", "none", "error", "error"),
@@ -79,17 +80,18 @@ public sealed class AnalysisModeTests
         }
         """;
 
-    // One probe per rule: sources that violate it alone, analyzed with or without hardslice.json.
-    private static readonly Dictionary<string, (string[] Sources, string? Configuration)> Probes = new()
+    // One probe per rule: files that violate it alone, by their path in the project, analyzed with or without hardslice.json.
+    private static readonly Dictionary<string, ((string Path, string Source)[] Files, string? Configuration)> Probes = new()
     {
-        ["HS003"] = ([EndpointDatabaseAccess], Configuration),
-        ["HS010"] = ([SystemClockRead], Configuration),
-        ["HS011"] = ([BlockingCall], Configuration),
-        ["HS015"] = ([SliceEndpointOutsideItsGroup], Configuration),
-        ["HS016"] = ([CrossSliceReference()], Configuration),
+        ["HS003"] = ([("Health/HealthEndpoint.cs", EndpointDatabaseAccess)], Configuration),
+        ["HS004"] = ([("Features/Bookings/ArchiveBooking/ArchiveBooking.cs", MisnamedCommand)], Configuration),
+        ["HS010"] = ([("Domain/Bookings/BookingClock.cs", SystemClockRead)], Configuration),
+        ["HS011"] = ([("Domain/Bookings/BookingCounter.cs", BlockingCall)], Configuration),
+        ["HS015"] = ([("Features/Bookings/ListBookings/ListBookings.cs", SliceEndpointOutsideItsGroup)], Configuration),
+        ["HS016"] = (CrossSliceReference(), Configuration),
         ["HS900"] = ([], null),
         ["HS901"] = ([AmbiguousType()], Configuration),
-        ["HS902"] = ([UnclassifiedEntity], Configuration)
+        ["HS902"] = ([("Features/Rooms/RoomConfiguration.cs", UnclassifiedEntity)], Configuration)
     };
 
     // A technical endpoint outside Features: HS015 does not check it.
@@ -105,6 +107,21 @@ public sealed class AnalysisModeTests
             {
                 public static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet("/health", (DbContext db) => db.ToString());
             }
+        }
+        """;
+
+    // A slice whose command is not named after it.
+    private const string MisnamedCommand =
+        """
+        using MyApp.Shared.Messaging;
+
+        namespace MyApp.Features.Bookings.ArchiveBooking
+        {
+            public sealed record ArchiveCommand(Guid BookingId) : ICommand<bool>;
+
+            internal sealed class ArchiveBookingHandler : IRequestHandler<ArchiveCommand, bool>;
+
+            internal static class ArchiveBookingEndpoint;
         }
         """;
 
@@ -137,9 +154,14 @@ public sealed class AnalysisModeTests
         """
         using Microsoft.AspNetCore.Builder;
         using Microsoft.AspNetCore.Routing;
+        using MyApp.Shared.Messaging;
 
         namespace MyApp.Features.Bookings.ListBookings
         {
+            public sealed record ListBookingsQuery : IQuery<string>;
+
+            internal sealed class ListBookingsHandler : IRequestHandler<ListBookingsQuery, string>;
+
             internal static class ListBookingsEndpoint
             {
                 public static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet("/bookings", () => "bookings");
@@ -262,8 +284,7 @@ public sealed class AnalysisModeTests
     public async Task Pragma_and_SuppressMessage_turn_off_a_single_HardSlice_rule(string suppressed, string suppression, string kept)
     {
         var compilation = CompileProbe(
-            CrossSliceReference(suppressed == "HS016" ? suppression : null),
-            AmbiguousType(suppressed == "HS901" ? suppression : null));
+            [.. CrossSliceReference(suppressed == "HS016" ? suppression : null), AmbiguousType(suppressed == "HS901" ? suppression : null)]);
 
         var diagnostics = await AnalyzeAllAsync(compilation, Configuration, [(ModePath("All"), ModeFile("All"))]);
 
@@ -273,43 +294,61 @@ public sealed class AnalysisModeTests
     private static Task<ImmutableArray<Diagnostic>> AnalyzeProbeAsync(string rule, params (string Path, string Text)[] analyzerConfigs)
     {
         var probe = Probes[rule];
-        return AnalyzeAllAsync(CompileProbe(probe.Sources), probe.Configuration, analyzerConfigs);
+        return AnalyzeAllAsync(CompileProbe(probe.Files), probe.Configuration, analyzerConfigs);
     }
 
-    private static Compilation CompileProbe(params string[] sources) =>
+    private static Compilation CompileProbe(params (string Path, string Source)[] files) =>
         Compile(
             "MyApp",
-            sources.Select((source, index) => ($"{SourceDirectory}Probe{index}.cs", source))
+            files.Select(file => ($"{SourceDirectory}{file.Path}", file.Source))
                 .Append(($"{SourceDirectory}Contracts.cs", Contracts))
                 .Append(($"{SourceDirectory}Usings.cs", ImplicitUsings)),
             [.. PackageReferences("Microsoft.EntityFrameworkCore")]);
 
-    // HS016: a handler of CancelBooking uses the command of ConfirmBooking.
-    private static string CrossSliceReference(string? suppression = null) =>
-        $$"""
-        {{(suppression == "pragma" ? "#pragma warning disable HS016" : "")}}
-        namespace MyApp.Features.Bookings.ConfirmBooking
-        {
-            public sealed class ConfirmBookingCommand;
-        }
+    // HS016: the handler of CancelBooking uses the command of ConfirmBooking. Both slices are complete, in their folders.
+    private static (string Path, string Source)[] CrossSliceReference(string? suppression = null) =>
+    [
+        ("Features/Bookings/ConfirmBooking/ConfirmBooking.cs",
+            """
+            using MyApp.Shared.Messaging;
 
-        namespace MyApp.Features.Bookings.CancelBooking
-        {
-            {{(suppression == "attribute" ? "[System.Diagnostics.CodeAnalysis.SuppressMessage(\"HardSlice.Architecture\", \"HS016\")]" : "")}}
-            internal sealed class CancelBookingHandler(MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingCommand command);
-        }
-        """;
+            namespace MyApp.Features.Bookings.ConfirmBooking
+            {
+                public sealed record ConfirmBookingCommand : ICommand<bool>;
+
+                internal sealed class ConfirmBookingHandler : IRequestHandler<ConfirmBookingCommand, bool>;
+
+                internal static class ConfirmBookingEndpoint;
+            }
+            """),
+        ("Features/Bookings/CancelBooking/CancelBooking.cs",
+            $$"""
+            {{(suppression == "pragma" ? "#pragma warning disable HS016" : "")}}
+            using MyApp.Shared.Messaging;
+
+            namespace MyApp.Features.Bookings.CancelBooking
+            {
+                public sealed record CancelBookingCommand : ICommand<bool>;
+
+                {{(suppression == "attribute" ? "[System.Diagnostics.CodeAnalysis.SuppressMessage(\"HardSlice.Architecture\", \"HS016\")]" : "")}}
+                internal sealed class CancelBookingHandler(MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingCommand command)
+                    : IRequestHandler<CancelBookingCommand, bool>;
+
+                internal static class CancelBookingEndpoint;
+            }
+            """)
+    ];
 
     // HS901: a domain type that is both an aggregate root and a domain event.
-    private static string AmbiguousType(string? suppression = null) =>
-        $$"""
+    private static (string Path, string Source) AmbiguousType(string? suppression = null) =>
+        ("Domain/Bookings/BookingSnapshot.cs", $$"""
         {{(suppression == "pragma" ? "#pragma warning disable HS901" : "")}}
         namespace MyApp.Domain.Bookings
         {
             {{(suppression == "attribute" ? "[System.Diagnostics.CodeAnalysis.SuppressMessage(\"HardSlice.Configuration\", \"HS901\")]" : "")}}
             public sealed class BookingSnapshot : IAggregateRoot, IDomainEvent;
         }
-        """;
+        """);
 
     // A rule may have several descriptors, such as HS015 and the part of it reported at the end of the compilation.
     private static IEnumerable<DiagnosticDescriptor> Descriptors() =>

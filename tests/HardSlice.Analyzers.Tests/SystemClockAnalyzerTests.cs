@@ -322,7 +322,7 @@ public sealed class SystemClockAnalyzerTests
             [("Booking.cs", Booking.Replace("[|", "").Replace("|]", "")), ("Contracts.cs", DomainContracts), ("Usings.cs", ImplicitUsings)]);
         var diagnostic = (await AnalyzeAllAsync(domain, configuration: null)).ShouldHaveSingleItem();
         diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
-        diagnostic.GetMessage().ShouldContain("classify the types checked by HS010, HS901 and HS902.");
+        diagnostic.GetMessage().ShouldContain("classify the types checked by HS004, HS010, HS901 and HS902.");
     }
 
     // The domain is checked in its own compilation only: the application that references it reads its symbols, not its code.

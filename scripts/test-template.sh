@@ -3,12 +3,12 @@
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS001, HS003, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
+# then proves a seeded violation of HS001, HS003, HS004, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned to the version of the analyzers, refuses another one before the build and explains every rule with the sheet of the template.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
-# and that seeded violations of HS001, HS003, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
+# and that seeded violations of HS001, HS003, HS004, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -198,7 +198,7 @@ echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
 
 echo "==> Checking that $app_name holds every v0.1 deliverable of the specification"
 for deliverable in \
-  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS010.md docs/rules/HS011.md docs/rules/HS012.md \
+  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS003.md docs/rules/HS004.md docs/rules/HS010.md docs/rules/HS011.md docs/rules/HS012.md \
   docs/rules/HS013.md docs/rules/HS014.md docs/rules/HS015.md docs/rules/HS016.md docs/rules/HS017.md docs/rules/HS018.md \
   docs/rules/HS900.md docs/rules/HS901.md docs/rules/HS902.md "src/$app_name.Domain/IEntity.cs" "src/$app_name.Domain/IAggregateRoot.cs" \
   "src/$app_name.Domain/Bookings/Booking.cs" "src/$app_name.Domain/Bookings/BookingId.cs" \
@@ -393,11 +393,14 @@ rm "$app_src/Features/Bookings/CancelBooking/Hs016Probe.cs" \
   "$app_src/Features/Bookings/CancelBooking/Hs016CatchProbe.cs" \
   "$app_src/Features/Bookings/ConfirmBooking/Hs016ProbeException.cs"
 
+# The probes of the architecture tests seed complete slices, so that HS004 lets the build reach the tests. An endpoint class
+# that maps nothing completes a slice without a module to call it (HS015).
 echo "==> Checking that HS016 fails both check scripts on a public handler"
-cat > "$app_src/Features/Bookings/CancelBooking/Hs016VisibilityProbe.cs" <<EOF
+mkdir -p "$app_src/Features/Bookings/Hs016Probe"
+cat > "$app_src/Features/Bookings/Hs016Probe/Hs016Probe.cs" <<EOF
 using $app_name.Shared.Messaging;
 
-namespace $app_name.Features.Bookings.CancelBooking;
+namespace $app_name.Features.Bookings.Hs016Probe;
 
 public sealed record Hs016ProbeQuery : IQuery<bool>;
 
@@ -405,26 +408,33 @@ public sealed class Hs016ProbeHandler : IRequestHandler<Hs016ProbeQuery, bool>
 {
     public Task<bool> Handle(Hs016ProbeQuery query, CancellationToken cancellationToken) => Task.FromResult(true);
 }
+
+internal static class Hs016ProbeEndpoint;
 EOF
 expect_failure "HS016: handler 'Hs016ProbeHandler'" "docs/rules/HS016.md" "a public handler" check.sh check.ps1
-rm "$app_src/Features/Bookings/CancelBooking/Hs016VisibilityProbe.cs"
+rm -r "$app_src/Features/Bookings/Hs016Probe"
 
 echo "==> Checking protected handlers exposed through public containers"
-cat > "$app_src/Features/Bookings/CancelBooking/Hs016NestedProbe.cs" <<EOF
+mkdir -p "$app_src/Features/Bookings/Hs016Protected"
+cat > "$app_src/Features/Bookings/Hs016Protected/Hs016Protected.cs" <<EOF
 using $app_name.Shared.Messaging;
 
-namespace $app_name.Features.Bookings.CancelBooking;
+namespace $app_name.Features.Bookings.Hs016Protected;
+
+public sealed record Hs016ProtectedQuery : IQuery<bool>;
 
 public class Hs016ExtensionPoint
 {
-    protected sealed class Hs016ProtectedHandler : IRequestHandler<CancelBookingCommand, bool>
+    protected sealed class Hs016ProtectedHandler : IRequestHandler<Hs016ProtectedQuery, bool>
     {
-        public Task<bool> Handle(CancelBookingCommand command, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> Handle(Hs016ProtectedQuery query, CancellationToken cancellationToken) => Task.FromResult(true);
     }
 }
+
+internal static class Hs016ProtectedEndpoint;
 EOF
 expect_failure "HS016: handler 'Hs016ProtectedHandler'" "docs/rules/HS016.md" "a protected handler reachable from another assembly" check.sh check.ps1
-rm "$app_src/Features/Bookings/CancelBooking/Hs016NestedProbe.cs"
+rm -r "$app_src/Features/Bookings/Hs016Protected"
 
 echo "==> Checking that HS001 fails both check scripts when the domain depends on dependency injection"
 cp "$domain_project" "$work/domain-project.backup"
@@ -551,47 +561,65 @@ expect_failure "HS017: 'TextHelpers' is in 'Shared/Helpers'" "docs/rules/HS017.m
 rm -r "$app_src/Shared/Helpers"
 
 echo "==> Checking that HS013 fails both check scripts on a command with parameters but no validator"
-cat > "$app_src/Features/Bookings/CancelBooking/Hs013Probe.cs" <<EOF
+mkdir -p "$app_src/Features/Bookings/Hs013Probe"
+cat > "$app_src/Features/Bookings/Hs013Probe/Hs013Probe.cs" <<EOF
 using $app_name.Shared.Messaging;
 
-namespace $app_name.Features.Bookings.CancelBooking;
+namespace $app_name.Features.Bookings.Hs013Probe;
 
 public sealed record Hs013ProbeCommand(Guid BookingId, string Reason) : ICommand<bool>;
+
+internal sealed class Hs013ProbeHandler : IRequestHandler<Hs013ProbeCommand, bool>
+{
+    public Task<bool> Handle(Hs013ProbeCommand command, CancellationToken cancellationToken) => Task.FromResult(true);
+}
+
+internal static class Hs013ProbeEndpoint;
 EOF
-expect_failure "HS013: command 'Hs013ProbeCommand' in slice 'Bookings/CancelBooking' has parameters (BookingId, Reason) but no validator." "docs/rules/HS013.md" "a command with parameters but no validator" check.sh check.ps1
-rm "$app_src/Features/Bookings/CancelBooking/Hs013Probe.cs"
+expect_failure "HS013: command 'Hs013ProbeCommand' in slice 'Bookings/Hs013Probe' has parameters (BookingId, Reason) but no validator." "docs/rules/HS013.md" "a command with parameters but no validator" check.sh check.ps1
+rm -r "$app_src/Features/Bookings/Hs013Probe"
 
 # A specialized or constrained validator must not cover every construction of an open command.
+# The slice and its handler have their tests: only HS013 sees the validator.
 echo "==> Checking that HS013 preserves generic arguments and validator constraints"
-cat > "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs" <<EOF
+# Writes the Hs013Generic slice and its test, with the declaration of its validator and the body of the validator's constructor.
+write_hs013_generic_slice() {
+  mkdir -p "$app_src/Features/Bookings/Hs013Generic" "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic"
+  cat > "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic/Hs013GenericHandlerTests.cs" <<EOF
+namespace $app_name.Tests.Features.Bookings.Hs013Generic;
+
+public sealed class Hs013GenericHandlerTests
+{
+    [Fact]
+    public void Probe() => Assert.True(true);
+}
+EOF
+  cat > "$app_src/Features/Bookings/Hs013Generic/Hs013Generic.cs" <<EOF
 using FluentValidation;
 using $app_name.Shared.Messaging;
 
-namespace $app_name.Features.Bookings.CancelBooking;
+namespace $app_name.Features.Bookings.Hs013Generic;
 
 public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool>;
 
-internal sealed class Hs013IntValidator : AbstractValidator<Hs013GenericCommand<int>>
+internal sealed class Hs013GenericHandler<T> : IRequestHandler<Hs013GenericCommand<T>, bool>
 {
-    public Hs013IntValidator() => RuleFor(command => command.Value).GreaterThan(0);
+    public Task<bool> Handle(Hs013GenericCommand<T> command, CancellationToken cancellationToken) => Task.FromResult(true);
 }
+
+$1
+{
+    public Hs013GenericValidator() => $2;
+}
+
+internal static class Hs013GenericEndpoint;
 EOF
+}
+write_hs013_generic_slice "internal sealed class Hs013GenericValidator : AbstractValidator<Hs013GenericCommand<int>>" "RuleFor(command => command.Value).GreaterThan(0)"
 expect_failure "HS013: command 'Hs013GenericCommand'" "docs/rules/HS013.md" "a generic command with only an int validator" check.sh check.ps1
-cat > "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs" <<EOF
-using FluentValidation;
-using $app_name.Shared.Messaging;
-
-namespace $app_name.Features.Bookings.CancelBooking;
-
-public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool>;
-
-internal sealed class Hs013StructValidator<T> : AbstractValidator<Hs013GenericCommand<T>> where T : struct
-{
-    public Hs013StructValidator() => RuleFor(command => command.Value).NotEmpty();
-}
-EOF
+write_hs013_generic_slice "internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>> where T : struct" "RuleFor(command => command.Value).NotEmpty()"
 expect_failure "HS013: command 'Hs013GenericCommand'" "docs/rules/HS013.md" "a generic command with only a struct-constrained validator" check.sh check.ps1
-rm "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs"
+rm -r "$app_src/Features/Bookings/Hs013Generic" "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic"
 
 # The slice has a test folder, so HS018 passes: only HS014 sees that it holds no test.
 echo "==> Checking that HS014 fails both check scripts on a command handler without tests at the path of its slice"
@@ -614,6 +642,8 @@ internal sealed class ArchiveBookingHandler : IRequestHandler<ArchiveBookingComm
 {
     public Task<bool> Handle(ArchiveBookingCommand command, CancellationToken cancellationToken) => Task.FromResult(false);
 }
+
+internal static class ArchiveBookingEndpoint;
 EOF
 cat > "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking/ArchiveBookingFixture.cs" <<EOF
 namespace $app_name.Tests.Features.Bookings.ArchiveBooking;
@@ -767,31 +797,25 @@ rm "$app/tests/$app_name.Tests/Directory.Build.props"
 rm -r "$app_src/Features/Bookings/ArchiveBooking" "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
 
 echo "==> Checking that HS013 accepts a generic validator covering all command arguments"
-cat > "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs" <<EOF
-using FluentValidation;
-using $app_name.Shared.Messaging;
-
-namespace $app_name.Features.Bookings.CancelBooking;
-
-public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool>;
-
-internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>>
-{
-    public Hs013GenericValidator() => RuleFor(command => command.Value).NotEmpty();
-}
-EOF
+write_hs013_generic_slice "internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>>" "RuleFor(command => command.Value).NotEmpty()"
 expect_architecture_tests_pass "an unconstrained generic command with an unconstrained validator"
-rm "$app_src/Features/Bookings/CancelBooking/Hs013GenericProbe.cs"
+rm -r "$app_src/Features/Bookings/Hs013Generic" "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic"
 
 echo "==> Checking that HS018 fails both check scripts on a slice without tests"
 mkdir -p "$app_src/Features/Bookings/ExportBookings"
 cat > "$app_src/Features/Bookings/ExportBookings/ExportBookings.cs" <<EOF
+using $app_name.Shared.Messaging;
+
 namespace $app_name.Features.Bookings.ExportBookings;
 
-internal static class ExportBookingsFormat
+public sealed record ExportBookingsQuery : IQuery<string>;
+
+internal sealed class ExportBookingsHandler : IRequestHandler<ExportBookingsQuery, string>
 {
-    internal const string ContentType = "text/csv";
+    public Task<string> Handle(ExportBookingsQuery query, CancellationToken cancellationToken) => Task.FromResult("text/csv");
 }
+
+internal static class ExportBookingsEndpoint;
 EOF
 expect_failure "HS018: slice 'Bookings/ExportBookings' has no tests" "docs/rules/HS018.md" "a slice without tests" check.sh check.ps1
 rm -r "$app_src/Features/Bookings/ExportBookings"
@@ -886,6 +910,28 @@ EOF
   rm -r "$app_src/Features/$module/ArchiveProbes"
 }
 
+# Seeds a slice of module <module> whose command is not named after it: the analyzer of the web project reports HS004.
+probe_slice_structure() {
+  local module="$1"
+  mkdir -p "$app_src/Features/$module/PurgeProbes"
+  cat > "$app_src/Features/$module/PurgeProbes/PurgeProbes.cs" <<EOF
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.$module.PurgeProbes;
+
+public sealed record PurgeCommand : ICommand<int>;
+
+internal sealed class PurgeProbesHandler : IRequestHandler<PurgeCommand, int>
+{
+    public Task<int> Handle(PurgeCommand command, CancellationToken cancellationToken) => Task.FromResult(0);
+}
+
+internal static class PurgeProbesEndpoint;
+EOF
+  expect_failure "HS004: slice '$module/PurgeProbes' declares 'PurgeCommand'." "docs/rules/HS004.md" "a slice of $app_name whose command is not named after it" check.sh check.ps1
+  rm -r "$app_src/Features/$module/PurgeProbes"
+}
+
 # Seeds a slice handler of module <module>, then a domain type of it, that read the system clock: the analyzer of the web project
 # reports HS010 in the slice, the analyzer of the domain in its own compilation, which it recognizes by the entity contract.
 probe_system_clock() {
@@ -937,6 +983,9 @@ probe_endpoint_database_access Bookings
 echo "==> Checking that HS015 fails both check scripts on an endpoint that BookingsModule never maps"
 probe_unmapped_endpoint Bookings
 
+echo "==> Checking that HS004 fails both check scripts on a slice whose command is not named after it"
+probe_slice_structure Bookings
+
 echo "==> Checking that HS010 fails both check scripts on a slice handler and a domain type that read the system clock"
 probe_system_clock Bookings
 
@@ -954,9 +1003,9 @@ mv "$app/hardslice.json" "$work/hardslice.json.backup"
 expect_failure "HS900: hardslice.json was not found in '[^']*' or above it." "docs/rules/HS900.md" "a missing hardslice.json" check.sh check.ps1
 sed 's/ICommand`1, /ICommandX`1, /' "$work/hardslice.json.backup" > "$app/hardslice.json"
 expect_failure "HS900: contract 'contracts.command' of hardslice.json, '$app_name.Shared.Messaging.ICommandX.1', is not declared by assembly '$app_name'." "docs/rules/HS900.md" "a renamed command contract" check.sh check.ps1
-# No analyzer rule needs the handler contract yet: the architecture tests still reject its malformed value.
+# HS004 needs the handler contract: the build rejects its malformed value before the architecture tests run.
 sed 's/IRequestHandler`2, /IRequestHandler`2 /' "$work/hardslice.json.backup" > "$app/hardslice.json"
-expect_failure "hardslice.json: 'contracts.requestHandler' is" "docs/rules/HS900.md" "a malformed handler contract" check.ps1
+expect_failure "HS900: 'contracts.requestHandler' in hardslice.json is not '<metadata name>, <assembly>'." "docs/rules/HS900.md" "a malformed handler contract" check.sh check.ps1
 # The analyzers read the contracts only: the architecture tests reject the style.
 sed 's/"style": "slices"/"style": "layers"/' "$work/hardslice.json.backup" > "$app/hardslice.json"
 expect_failure "hardslice.json: 'style' must be" "docs/rules/HS017.md" "an invalid hardslice.json" check.ps1
@@ -1018,7 +1067,7 @@ done
 echo "    $version_mismatch ..."
 mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
 
 sample_name="$app_name"
 blank_name="Blank"
@@ -1134,12 +1183,18 @@ rm -r "$app_src/Features/Orders"
 echo "==> Checking that HS018 fails both check scripts on the first slice of $app_name without tests"
 mkdir -p "$app_src/Features/Orders/ExportOrders"
 cat > "$app_src/Features/Orders/ExportOrders/ExportOrders.cs" <<EOF
+using $app_name.Shared.Messaging;
+
 namespace $app_name.Features.Orders.ExportOrders;
 
-internal static class ExportOrdersFormat
+public sealed record ExportOrdersQuery : IQuery<string>;
+
+internal sealed class ExportOrdersHandler : IRequestHandler<ExportOrdersQuery, string>
 {
-    internal const string ContentType = "text/csv";
+    public Task<string> Handle(ExportOrdersQuery query, CancellationToken cancellationToken) => Task.FromResult("text/csv");
 }
+
+internal static class ExportOrdersEndpoint;
 EOF
 expect_failure "HS018: slice 'Orders/ExportOrders' has no tests" "docs/rules/HS018.md" "the first slice of $app_name without tests" check.sh check.ps1
 rm -r "$app_src/Features/Orders"
@@ -1158,6 +1213,8 @@ internal sealed class PlaceOrderHandler : IRequestHandler<PlaceOrderCommand, boo
 {
     public Task<bool> Handle(PlaceOrderCommand command, CancellationToken cancellationToken) => Task.FromResult(true);
 }
+
+internal static class PlaceOrderEndpoint;
 EOF
 cat > "$app/tests/$app_name.Tests/Features/Orders/PlaceOrder/PlaceOrderFixture.cs" <<EOF
 namespace $app_name.Tests.Features.Orders.PlaceOrder;
@@ -1199,6 +1256,9 @@ probe_endpoint_database_access Rooms
 
 echo "==> Checking that HS015 fails both check scripts on the first endpoint of $app_name, which no RoomsModule maps"
 probe_unmapped_endpoint Rooms
+
+echo "==> Checking that HS004 fails both check scripts on the first slice of $app_name whose command is not named after it"
+probe_slice_structure Rooms
 
 echo "==> Checking that HS010 fails both check scripts on the first slice handler and domain type of $app_name that read the system clock"
 probe_system_clock Rooms

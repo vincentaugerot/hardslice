@@ -59,11 +59,17 @@ public sealed class AnalyzerPackageTests
             AssertAnalyzerOnlyPackage(packagePath);
 
             var consumerProject = Path.Combine(consumerDirectory, "MyApp.csproj");
-            var consumerSource = Path.Combine(consumerDirectory, "Program.cs");
+            // Each slice in its folder, as HS004 requires: the CancelBooking slice is the one the test makes violate HS016.
+            var confirmBookingSource = Path.Combine(consumerDirectory, "Features", "Bookings", "ConfirmBooking", "ConfirmBooking.cs");
+            var consumerSource = Path.Combine(consumerDirectory, "Features", "Bookings", "CancelBooking", "CancelBooking.cs");
+            var domainSource = Path.Combine(consumerDirectory, "Domain.cs");
             var configuration = Path.Combine(temporaryDirectory, "hardslice.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(confirmBookingSource)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(consumerSource)!);
             await File.WriteAllTextAsync(consumerProject, ConsumerProject(packageVersion), cancellationToken);
             await File.WriteAllTextAsync(Path.Combine(consumerDirectory, "Contracts.cs"), ContractsSource, cancellationToken);
             await File.WriteAllTextAsync(configuration, Configuration, cancellationToken);
+            await File.WriteAllTextAsync(confirmBookingSource, ConfirmBookingSource, cancellationToken);
             await File.WriteAllTextAsync(consumerSource, CompliantSource, cancellationToken);
 
             var restore = await RunDotnetAsync(
@@ -136,7 +142,8 @@ public sealed class AnalyzerPackageTests
             editorConfigBuild.ExitCode.ShouldBe(0, editorConfigBuild.Output);
             File.Delete(editorConfig);
 
-            await File.WriteAllTextAsync(consumerSource, AmbiguousSource, cancellationToken);
+            await File.WriteAllTextAsync(consumerSource, CompliantSource, cancellationToken);
+            await File.WriteAllTextAsync(domainSource, AmbiguousSource, cancellationToken);
             var ambiguousBuild = await BuildConsumerAsync();
             ambiguousBuild.ExitCode.ShouldNotBe(0, ambiguousBuild.Output);
             ambiguousBuild.Output.ShouldContain("error HS901: 'BookingSnapshot' is both an entity and a domain event");
@@ -145,7 +152,7 @@ public sealed class AnalyzerPackageTests
             var testProjectBuild = await BuildConsumerAsync("-p:IsTestProject=true");
             testProjectBuild.ExitCode.ShouldBe(0, testProjectBuild.Output);
 
-            await File.WriteAllTextAsync(consumerSource, CompliantSource, cancellationToken);
+            File.Delete(domainSource);
             File.Delete(configuration);
             var unconfiguredBuild = await BuildConsumerAsync();
             unconfiguredBuild.ExitCode.ShouldNotBe(0, unconfiguredBuild.Output);
@@ -320,34 +327,47 @@ public sealed class AnalyzerPackageTests
         }
         """;
 
+    private const string ConfirmBookingSource =
+        """
+        using MyApp.Shared.Messaging;
+
+        namespace MyApp.Features.Bookings.ConfirmBooking;
+
+        public sealed class ConfirmBookingCommand : ICommand<bool>;
+
+        internal sealed class ConfirmBookingHandler : IRequestHandler<ConfirmBookingCommand, bool>;
+
+        internal static class ConfirmBookingEndpoint;
+        """;
+
     private const string CompliantSource =
         """
-        namespace MyApp.Features.Bookings.ConfirmBooking
-        {
-            public sealed class ConfirmBookingCommand;
-        }
+        using MyApp.Shared.Messaging;
 
-        namespace MyApp.Features.Bookings.CancelBooking
-        {
-            internal sealed class CancelBookingHandler;
-        }
+        namespace MyApp.Features.Bookings.CancelBooking;
+
+        public sealed class CancelBookingCommand : ICommand<bool>;
+
+        internal sealed class CancelBookingHandler : IRequestHandler<CancelBookingCommand, bool>;
+
+        internal static class CancelBookingEndpoint;
         """;
 
     private const string ViolatingSource =
         """
-        namespace MyApp.Features.Bookings.ConfirmBooking
+        using MyApp.Shared.Messaging;
+
+        namespace MyApp.Features.Bookings.CancelBooking;
+
+        public sealed class CancelBookingCommand : ICommand<bool>;
+
+        internal sealed class CancelBookingHandler(
+            MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingCommand command) : IRequestHandler<CancelBookingCommand, bool>
         {
-            public sealed class ConfirmBookingCommand;
+            public object Command { get; } = command;
         }
 
-        namespace MyApp.Features.Bookings.CancelBooking
-        {
-            internal sealed class CancelBookingHandler(
-                MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingCommand command)
-            {
-                public object Command { get; } = command;
-            }
-        }
+        internal static class CancelBookingEndpoint;
         """;
 
     private sealed record DotnetResult(int ExitCode, string StandardOutput, string StandardError)

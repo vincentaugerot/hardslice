@@ -89,7 +89,16 @@ public sealed class BookingsReferenceTests
     {
         var archiveBooking =
             """
+            using MyApp.Shared.Messaging;
+
             namespace MyApp.Features.Bookings.ArchiveBooking;
+
+            public sealed record ArchiveBookingCommand(Guid BookingId) : ICommand<bool>;
+
+            internal sealed class ArchiveBookingHandler : IRequestHandler<ArchiveBookingCommand, bool>
+            {
+                public Task<bool> Handle(ArchiveBookingCommand command, CancellationToken cancellationToken) => Task.FromResult(true);
+            }
 
             internal static class ArchiveBookingEndpoint
             {
@@ -110,6 +119,44 @@ public sealed class BookingsReferenceTests
             + "A slice endpoint is exposed only through its module, which maps every endpoint of its slices. "
             + "Fix: call 'ArchiveBookingEndpoint.Map' with the group of the module from the mapping method of 'BookingsModule'. "
             + "Doc: 'docs/rules/HS015.md'.");
+    }
+
+    [Fact]
+    public async Task Reports_HS004_when_ArchiveBooking_declares_ArchiveCommand()
+    {
+        var diagnostic = (await AnalyzeAllAsync(ArchiveBookingWithArchiveCommand(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(SliceStructureAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "slice 'Bookings/ArchiveBooking' declares 'ArchiveCommand'. "
+            + "A slice holds one request named after it, its handler and its endpoint. "
+            + "Fix: rename the command to 'ArchiveBookingCommand'. Doc: 'docs/rules/HS004.md'.");
+    }
+
+    // ConfirmBooking.cs moved to the root of the module, its namespace unchanged: each type of the slice is reported.
+    [Fact]
+    public async Task Reports_HS004_when_ConfirmBooking_is_declared_outside_its_folder()
+    {
+        var path = "Features/Bookings/ConfirmBooking/ConfirmBooking.cs";
+        var application = CompileApplication(
+            CompileDomain(),
+            ("Features/Bookings/ConfirmBooking.cs", ReferenceSource(path)),
+            (path, "namespace MyApp.Features.Bookings.ConfirmBooking;"));
+
+        var diagnostics = await AnalyzeAllAsync(application, Configuration);
+
+        diagnostics.Select(diagnostic => diagnostic.Id).Distinct().ShouldBe([SliceStructureAnalyzer.DiagnosticId]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" is declared in ")[0]).ShouldBe(
+        [
+            "'ConfirmBookingCommand' of slice 'Bookings/ConfirmBooking'",
+            "'ConfirmBookingValidator' of slice 'Bookings/ConfirmBooking'",
+            "'ConfirmBookingHandler' of slice 'Bookings/ConfirmBooking'",
+            "'ConfirmBookingEndpoint' of slice 'Bookings/ConfirmBooking'"
+        ], ignoreOrder: true);
+        diagnostics.First(diagnostic => diagnostic.GetMessage().StartsWith("'ConfirmBookingCommand'")).GetMessage().ShouldBe(
+            "'ConfirmBookingCommand' of slice 'Bookings/ConfirmBooking' is declared in 'Features/Bookings/ConfirmBooking.cs', "
+            + "outside the folder of its slice. The folder and the namespace of a slice hold the same types. "
+            + "Fix: move the declaration into a file under 'Features/Bookings/ConfirmBooking/'. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -139,6 +186,7 @@ public sealed class BookingsReferenceTests
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
+    [InlineData(SliceStructureAnalyzer.DiagnosticId)]
     [InlineData(SystemClockAnalyzer.DiagnosticId)]
     [InlineData(AsyncUsageAnalyzer.DiagnosticId)]
     [InlineData(SliceEndpointAnalyzer.DiagnosticId)]
@@ -150,6 +198,7 @@ public sealed class BookingsReferenceTests
         var diagnostics = ruleId switch
         {
             EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
+            SliceStructureAnalyzer.DiagnosticId => await AnalyzeAllAsync(ArchiveBookingWithArchiveCommand(), Configuration),
             SystemClockAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReadsTheClock(), Configuration),
             AsyncUsageAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatBlocks(), Configuration),
             SliceEndpointAnalyzer.DiagnosticId => await AnalyzeAllAsync(GetBookingWithResults(), Configuration),
@@ -263,16 +312,25 @@ public sealed class BookingsReferenceTests
     }
 
     // ListBookings, a slice mapped by BookingsModule whose endpoint reads the bookings through AppDbContext instead of
-    // sending a query.
+    // sending its query.
     private static CSharpCompilation ListBookingsWithDbContext()
     {
         var listBookings =
             """
             using Microsoft.EntityFrameworkCore;
             using MyApp.Domain.Bookings;
+            using MyApp.Shared.Messaging;
             using MyApp.Shared.Persistence;
 
             namespace MyApp.Features.Bookings.ListBookings;
+
+            public sealed record ListBookingsQuery : IQuery<List<Guid>>;
+
+            internal sealed class ListBookingsHandler(AppDbContext db) : IRequestHandler<ListBookingsQuery, List<Guid>>
+            {
+                public Task<List<Guid>> Handle(ListBookingsQuery query, CancellationToken cancellationToken) =>
+                    db.Set<Booking>().AsNoTracking().Select(booking => booking.Id.Value).ToListAsync(cancellationToken);
+            }
 
             internal static class ListBookingsEndpoint
             {
@@ -285,6 +343,36 @@ public sealed class BookingsReferenceTests
         return CompileApplication(
             ("Features/Bookings/ListBookings/ListBookings.cs", listBookings),
             BookingsModuleMapping("MyApp.Features.Bookings.ListBookings.ListBookingsEndpoint"));
+    }
+
+    // ArchiveBooking, a slice mapped by BookingsModule whose command is not named after it.
+    private static CSharpCompilation ArchiveBookingWithArchiveCommand()
+    {
+        var archiveBooking =
+            """
+            using Microsoft.AspNetCore.Http.HttpResults;
+            using MyApp.Shared.Messaging;
+
+            namespace MyApp.Features.Bookings.ArchiveBooking;
+
+            public sealed record ArchiveCommand(Guid BookingId) : ICommand<bool>;
+
+            internal sealed class ArchiveBookingHandler : IRequestHandler<ArchiveCommand, bool>
+            {
+                public Task<bool> Handle(ArchiveCommand command, CancellationToken cancellationToken) => Task.FromResult(true);
+            }
+
+            internal static class ArchiveBookingEndpoint
+            {
+                public static void Map(RouteGroupBuilder group) =>
+                    group.MapPost("/{id:guid}/archive", async Task<Results<NoContent, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+                        await mediator.Send(new ArchiveCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
+            }
+            """;
+
+        return CompileApplication(
+            ("Features/Bookings/ArchiveBooking/ArchiveBooking.cs", archiveBooking),
+            BookingsModuleMapping("MyApp.Features.Bookings.ArchiveBooking.ArchiveBookingEndpoint"));
     }
 
     // GetBooking, whose endpoint answers with Results instead of TypedResults.

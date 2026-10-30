@@ -27,6 +27,10 @@ internal sealed class SliceMap(Compilation compilation)
             ? _featuresPaths.GetOrAdd(ns, ComputeFeaturesPath)
             : null;
 
+    // The same, for a namespace itself: [module, slice] for '<AssemblyName>.Features.<Module>.<Slice>'.
+    public string[]? FeaturesPathOfNamespace(INamespaceSymbol ns) =>
+        SymbolEqualityComparer.Default.Equals(ns.ContainingAssembly, _assembly) ? _featuresPaths.GetOrAdd(ns, ComputeFeaturesPath) : null;
+
     public static string ModuleOf(string slice) => slice.Substring(0, slice.IndexOf('/'));
 
     private string? ComputeSlice(INamespaceSymbol ns) =>

@@ -69,7 +69,7 @@ internal static class AnalyzerHarness
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
 
     public static ImmutableArray<DiagnosticAnalyzer> Analyzers() =>
-        [new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer(), new SliceEndpointAnalyzer(), new AsyncUsageAnalyzer(), new SystemClockAnalyzer()];
+        [new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer(), new SliceEndpointAnalyzer(), new AsyncUsageAnalyzer(), new SystemClockAnalyzer(), new SliceStructureAnalyzer()];
 
     public const string ConfigurationPath = "/solution/hardslice.json";
 
@@ -121,6 +121,24 @@ internal static class AnalyzerHarness
         VerifyAsync(analyzer, diagnosticId, "MyApp", configuration: null, references, outputKind, markedSources);
 
     // The same, in the assembly named assemblyName, with the given hardslice.json.
+    public static Task<ImmutableArray<Diagnostic>> VerifyAsync(
+        DiagnosticAnalyzer analyzer,
+        string diagnosticId,
+        string assemblyName,
+        string? configuration,
+        MetadataReference[] references,
+        OutputKind outputKind,
+        params string[] markedSources) =>
+        VerifyAsync(
+            analyzer,
+            diagnosticId,
+            assemblyName,
+            configuration,
+            references,
+            outputKind,
+            markedSources.Select((source, index) => ($"File{index}.cs", source)).ToArray());
+
+    // The same, with the path of each file relative to the project directory.
     public static async Task<ImmutableArray<Diagnostic>> VerifyAsync(
         DiagnosticAnalyzer analyzer,
         string diagnosticId,
@@ -128,9 +146,9 @@ internal static class AnalyzerHarness
         string? configuration,
         MetadataReference[] references,
         OutputKind outputKind,
-        params string[] markedSources)
+        params (string Path, string MarkedSource)[] markedFiles)
     {
-        var files = markedSources.Select((source, index) => (Path: $"File{index}.cs", Marked: Markup.Parse(source))).ToList();
+        var files = markedFiles.Select(file => (file.Path, Marked: Markup.Parse(file.MarkedSource))).ToList();
         var compilation = Compile(
             assemblyName,
             files.Select(file => (file.Path, file.Marked.Source)).Append(("Usings.cs", ImplicitUsings)),
