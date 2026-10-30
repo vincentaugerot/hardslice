@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Packs HardSlice, installs the hardslice-api template into an isolated hive and generates the Demo solution in <work-dir>/Demo.
 # Shared by test-template.sh and demo-hs016-agent-fix.sh so both exercise the same generated solution.
+# Follows steps 1 and 2 of "Getting started" in README.md, with the same commands and nuget.config, isolated in <work-dir>:
+# the feed, the template hive and the NuGet package folder.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then

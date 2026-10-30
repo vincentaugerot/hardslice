@@ -11,15 +11,19 @@ violation HS016
 
 This is a demonstration, not a statistical benchmark: one run does not prove a general improvement.
 
+The fixture applies to the v0.1 `hardslice-api` template, with the Bookings sample: `Booking` persisted in PostgreSQL, and the `ConfirmBooking`, `CancelBooking` and `GetBooking` slices. The CI prepares it from a fresh checkout on every push, so it keeps producing its HS016 on the current template.
+
 ## Contents
 
 | Path | Role |
 |---|---|
-| `fixture/` | Files laid over a freshly generated `Demo` solution. They add a business rule — a booking that has started can no longer be confirmed or cancelled — whose check lives in the `ConfirmBooking` slice and is reused by `CancelBooking`: a deliberate HS016 violation. The tests describing the rule are included. |
+| `fixture/` | Files laid over a freshly generated `Demo` solution. They add a business rule (a booking that has started can no longer be confirmed or cancelled) whose check lives in the `ConfirmBooking` slice and is reused by `CancelBooking`: a deliberate HS016 violation. The integration tests describing the rule are included, with the fixed clock they use. |
 | `prompt.md` | The development prompt given to the agent, as is. It does not mention HS016 or how to fix it. |
-| `trace.md` | Concise trace of a run recorded on the increment 1 template, before slices used PostgreSQL. |
+| `trace.md` | Concise trace of a run recorded on the increment 1 template, before slices used PostgreSQL. On the v0.1 template, the handlers use `AppDbContext`, the rule's tests are integration tests and `scripts/check.sh` also runs them: a new run differs in these details, not in the loop. |
 
 ## Running it
+
+Prerequisites: the .NET SDK pinned by the repository's `global.json`, and a Docker-compatible container runtime.
 
 ```text
 scripts/demo-hs016-agent-fix.sh prepare <dir>
@@ -54,4 +58,4 @@ Fails unless all of the following hold:
 
 `verify` never invokes scripts, projects, packages or Git metadata from the candidate workspace. It validates the candidate first, copies only accepted C# changes into a clean tree, and only then builds and tests that code with the trusted check script. Candidate Git tags, commits, configuration, hooks and ignored files have no authority over the verdict.
 
-The verifier checks bypasses mechanically. Whether the fix is the right architectural one — the rule moved into the `Booking` aggregate rather than copied into each slice — is still judged by reading the diff, as `trace.md` does.
+The verifier checks bypasses mechanically. Whether the fix is the right architectural one (the rule moved into the `Booking` aggregate rather than copied into each slice) is still judged by reading the diff, as `trace.md` does.

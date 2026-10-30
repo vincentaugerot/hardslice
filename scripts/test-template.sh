@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
 # Packs HardSlice, installs the hardslice-api template, generates a solution in a temporary directory,
-# verifies it with scripts/check.sh and check.ps1, integration tests included, checks its migrations with the pinned dotnet-ef,
+# verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
+# runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS001, HS012, HS013, HS014, HS016, HS017 and HS018 fails both, naming the rule and a rule doc that exists,
 # and that a missing or invalid hardslice.json fails them explicitly.
-# Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample and passes both scripts,
+# Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
 # and that seeded violations of HS001, HS013, HS014, HS016, HS017 and HS018 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/hardslice-template.XXXXXX")"
-trap 'rm -rf "$work"' EXIT
+postgres_container=""
+api_pid=""
+
+cleanup() {
+  if [[ -n "$api_pid" ]]; then
+    kill -TERM -- "-$api_pid" 2> /dev/null || true
+    wait "$api_pid" 2> /dev/null || true
+  fi
+  if [[ -n "$postgres_container" ]]; then
+    docker rm --force "$postgres_container" > /dev/null 2>&1 || true
+  fi
+  rm -rf "$work"
+}
+trap cleanup EXIT
 
 app_name="Demo"
 app="$work/$app_name"
@@ -21,6 +35,119 @@ if ! command -v pwsh > /dev/null; then
   echo "error: pwsh is required to verify scripts/check.ps1." >&2
   exit 1
 fi
+
+# One container for both variants, started as README.md documents it, except for its name and a free host port instead of 5432.
+# Each variant migrates the database named by its own connection string.
+start_documented_postgres() {
+  [[ -z "$postgres_container" ]] || return 0
+  echo "==> Starting PostgreSQL as README.md documents it, on a free port"
+  postgres_container="$(docker run --detach --env POSTGRES_PASSWORD=postgres --publish 127.0.0.1::5432 postgres:18-alpine)"
+  postgres_port="$(docker port "$postgres_container" 5432/tcp | head -n 1 | sed 's/.*://')"
+  # The wait of README.md: TCP only, as the image's initialization server listens on its Unix socket, then restarts.
+  if ! docker exec "$postgres_container" sh -c 'for i in $(seq 60); do pg_isready --quiet --host 127.0.0.1 --username postgres && exit 0; sleep 1; done; echo "PostgreSQL not ready after 60 s" >&2; exit 1'; then
+    echo "error: the PostgreSQL container did not accept connections within 60 seconds." >&2
+    exit 1
+  fi
+}
+
+stop_api() {
+  kill -TERM -- "-$api_pid" 2> /dev/null || true
+  wait "$api_pid" 2> /dev/null || true
+  api_pid=""
+}
+
+# Runs "Run the API" of README.md on a solution its check scripts have built: tool restore, migrations, dotnet run in Development,
+# then, with the sample, the booking of the README created, read at its Location, and refused when posted again.
+# The connection string of the generated settings is kept, with the container's port; the API listens on a free port.
+run_documented_path() {
+  local app="$1"
+  local app_name="$2"
+  local with_sample="$3"
+  local settings="$app/src/$app_name/appsettings.Development.json"
+  local generated_connection_string
+  local connection_string
+  local api_log="$work/$app_name-api.log"
+  local api_url=""
+  local booking='{"roomId":"3f2b8c1e-0d4a-4b6e-9a7f-1c2d3e4f5a6b","start":"2026-12-01T09:00:00Z","end":"2026-12-01T10:00:00Z"}'
+  local headers="$work/$app_name-booking.headers"
+  local status
+  local location
+  local body
+
+  start_documented_postgres
+
+  generated_connection_string="$(sed -n 's/.*"Database": "\([^"]*\)".*/\1/p' "$settings")"
+  if [[ "$generated_connection_string" != "Host=localhost;Port=5432;Database="*";Username=postgres;Password=postgres" ]]; then
+    echo "error: $settings no longer matches the PostgreSQL container of README.md: $generated_connection_string" >&2
+    exit 1
+  fi
+  connection_string="${generated_connection_string/Port=5432;/Port=$postgres_port;}"
+
+  echo "==> Applying the migrations of $app_name to PostgreSQL as README.md documents it"
+  (
+    cd "$app"
+    export DOTNET_CLI_HOME="$work/dotnet-cli"
+    export ConnectionStrings__Database="$connection_string"
+    dotnet tool restore
+    dotnet ef database update --project "src/$app_name"
+  )
+
+  echo "==> Starting the API of $app_name as README.md documents it"
+  # Job control gives the API its own process group: stopping it also stops the application dotnet run started.
+  set -m
+  (cd "$app" && ConnectionStrings__Database="$connection_string" exec dotnet run --project "src/$app_name" -- --environment Development --urls http://127.0.0.1:0) < /dev/null > "$api_log" 2>&1 &
+  api_pid=$!
+  set +m
+  for _ in $(seq 180); do
+    api_url="$(sed -n 's/.*Now listening on: \(http:[^[:space:]]*\).*/\1/p' "$api_log" | head -n 1)"
+    [[ -z "$api_url" ]] || break
+    if ! kill -0 "$api_pid" 2> /dev/null; then
+      cat "$api_log" >&2
+      echo "error: the API of $app_name stopped before listening." >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  if [[ -z "$api_url" ]]; then
+    cat "$api_log" >&2
+    echo "error: the API of $app_name did not listen within 180 seconds." >&2
+    exit 1
+  fi
+
+  if [[ "$with_sample" == false ]]; then
+    status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$api_url/")"
+    if [[ "$status" != 404 ]]; then
+      echo "error: the API of $app_name, which has no endpoint, answered $status instead of 404." >&2
+      exit 1
+    fi
+    stop_api
+    echo "    $app_name started on its migrated database at $api_url"
+    return 0
+  fi
+
+  echo "==> Confirming then reading the booking of README.md with $app_name"
+  status="$(curl --silent --show-error --output /dev/null --dump-header "$headers" --write-out '%{http_code}' \
+    -X POST "$api_url/bookings" -H "Content-Type: application/json" -d "$booking")"
+  location="$(sed -n 's/^[Ll]ocation: *\([^[:space:]]*\).*/\1/p' "$headers" | tr -d '\r')"
+  if [[ "$status" != 201 || ! "$location" =~ ^/bookings/[0-9a-f-]{36}$ ]]; then
+    cat "$api_log" >&2
+    echo "error: confirming the booking of README.md answered $status with Location '$location' instead of 201 and /bookings/<id>." >&2
+    exit 1
+  fi
+  body="$(curl --silent --show-error --fail "$api_url$location")"
+  if [[ "$body" != *'"id":"'"${location#/bookings/}"'"'* || "$body" != *'"roomId":"3f2b8c1e-0d4a-4b6e-9a7f-1c2d3e4f5a6b"'* || "$body" != *'"status":"Confirmed"'* ]]; then
+    echo "error: reading $location did not return the confirmed booking: $body" >&2
+    exit 1
+  fi
+  status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    -X POST "$api_url/bookings" -H "Content-Type: application/json" -d "$booking")"
+  if [[ "$status" != 409 ]]; then
+    echo "error: posting the booking of README.md again answered $status instead of 409." >&2
+    exit 1
+  fi
+  stop_api
+  echo "    $body"
+}
 
 # The check scripts are run from another directory: they must locate the solution themselves.
 # dotnet new does not preserve the executable bit, hence the documented 'bash scripts/check.sh' form.
@@ -39,6 +166,31 @@ echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
   dotnet tool restore
   dotnet ef migrations has-pending-model-changes --project "src/$app_name" --no-build
 )
+
+echo "==> Checking that $app_name holds every v0.1 deliverable of the specification"
+for deliverable in \
+  AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS012.md \
+  docs/rules/HS013.md docs/rules/HS014.md docs/rules/HS016.md docs/rules/HS017.md docs/rules/HS018.md \
+  "src/$app_name.Domain/Bookings/Booking.cs" "src/$app_name.Domain/Bookings/BookingId.cs" \
+  "src/$app_name.Domain/Bookings/BookingPeriod.cs" "src/$app_name.Domain/Bookings/Events/BookingConfirmed.cs" \
+  "src/$app_name/Features/Bookings/ConfirmBooking/ConfirmBooking.cs" "src/$app_name/Features/Bookings/CancelBooking/CancelBooking.cs" \
+  "src/$app_name/Features/Bookings/GetBooking/GetBooking.cs" "src/$app_name/Features/Bookings/BookingConfiguration.cs" \
+  "src/$app_name/Features/Bookings/BookingsModule.cs" "src/$app_name/Shared/Messaging/IMediator.cs" \
+  "src/$app_name/Shared/Persistence/AppDbContext.cs" "src/$app_name/Shared/Behaviors/TransactionBehavior.cs" \
+  "tests/$app_name.Tests/Domain/Bookings/BookingTests.cs" "tests/$app_name.IntegrationTests/Features/Bookings/ConfirmBooking/ConfirmBookingTests.cs" \
+  "tests/$app_name.ArchitectureTests/SliceTests.cs"; do
+  if [[ ! -f "$app/$deliverable" ]]; then
+    echo "error: $app_name has no $deliverable, a v0.1 deliverable of the specification." >&2
+    exit 1
+  fi
+done
+# The overlap invariant holds under concurrency only through the exclusion constraint of PostgreSQL.
+if ! grep -rqF 'EXCLUDE USING gist ("RoomId" WITH =' "$app/src/$app_name/Shared/Persistence/Migrations"; then
+  echo "error: the migrations of $app_name no longer create the constraint that keeps bookings of a room from overlapping." >&2
+  exit 1
+fi
+
+run_documented_path "$app" "$app_name" true
 
 # The check scripts above ran these tests: make sure the generated solution still contains them, and no mediation library.
 echo "==> Checking that commands go through the generated solution's own mediator, validation and transaction, and queries read without tracking"
@@ -635,7 +787,7 @@ printf '%s\n' '{ "style": "layers", "shared": { "allowedFolders": ["Messaging", 
 expect_failure "hardslice.json: 'style' must be" "docs/rules/HS017.md" "an invalid hardslice.json" check.ps1
 mv "$work/hardslice.json.backup" "$app/hardslice.json"
 
-echo "==> $app_name OK: it passes both check scripts, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017 and HS018 with their rule docs, and on a missing or invalid hardslice.json"
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017 and HS018 with their rule docs, and on a missing or invalid hardslice.json"
 
 sample_name="$app_name"
 blank_name="Blank"
@@ -684,6 +836,8 @@ echo "==> Checking that the model of $blank_name needs no migration, with the pi
   dotnet tool restore
   dotnet ef migrations has-pending-model-changes --project "src/$blank_name" --no-build
 )
+
+run_documented_path "$blank" "$blank_name" false
 
 echo "==> Checking that each test project of $blank_name runs tests of the foundation"
 (
@@ -835,4 +989,4 @@ expect_failure "HS001: 'Hs001Probe' in the domain uses 'IServiceCollection'" "do
 mv "$work/domain-project.backup" "$domain_project"
 rm "$app/src/$app_name.Domain/Hs001Probe.cs"
 
-echo "==> Template OK: $sample_name and $blank_name, generated with --no-sample, pass both check scripts, and seeded violations fail them in both"
+echo "==> Template OK: $sample_name and $blank_name, generated with --no-sample, pass both check scripts and the README path, and seeded violations fail them in both"

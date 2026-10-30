@@ -12,15 +12,20 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
+# Each job starts from a fresh runner and checkout, without NuGet cache, artifacts or outputs of another job:
+# together they prove the v0.1 contract from a clean state.
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
+          cache: false
 
       - name: Restore
         run: dotnet restore
@@ -33,15 +38,18 @@ jobs:
         run: dotnet test --no-build
 
   # Separate job: a fresh runner and checkout, without the build job's outputs or any NuGet cache,
-  # so the template scenario cannot depend on state left by a previous build.
+  # so the template scenario cannot depend on state left by a previous build. It also runs the getting started path of README.md.
   template:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
+          cache: false
 
       - name: Test template from a clean checkout
         run: scripts/test-template.sh
@@ -51,10 +59,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
+          cache: false
 
       - name: Prepare the HS016 agent fix demonstration from a clean checkout
         run: scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"

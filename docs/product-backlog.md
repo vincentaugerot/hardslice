@@ -624,6 +624,14 @@ Un nouvel utilisateur suit le `README.md` du dépôt pour construire le paquet l
 - README de la démonstration PB-008 exact pour le template v0.1 ;
 - CI : jobs build, template et démonstration, chacun depuis un checkout neuf, sans cache ni état hérité d'un autre job.
 
+**Livraison**
+
+Le `README.md` décrit le parcours d'un nouvel utilisateur en cinq étapes : construction des deux paquets dans `artifacts/packages` et installation du template ; `nuget.config` dont la correspondance de sources réserve les paquets `HardSlice.*` au dossier local ; génération avec ou sans exemple ; vérification par les deux scripts ; démarrage de l'API (PostgreSQL dans un conteneur publié sur 127.0.0.1 seulement, attente bornée à 60 secondes de `pg_isready` en TCP dans le conteneur, `dotnet tool restore`, `dotnet ef database update`, `dotnet run` en Development, réservation créée puis relue avec `curl`). Le paquet garde la version fixe 0.1.0 : le README indique comment réinstaller le template et vider le dossier global des paquets NuGet après une reconstruction.
+
+`scripts/generate-app.sh` exécute les étapes 1 et 2 avec les mêmes commandes et le même `nuget.config`, isolés dans le dossier de travail (flux, ruche de templates, dossier des paquets). `scripts/test-template.sh` exécute les étapes 3 et 4 sur les deux variantes : un seul conteneur `postgres:18-alpine` sur un port libre de 127.0.0.1, attendu par la même commande que le README, la chaîne de connexion générée avec ce port, l'API sur un port libre. Avec l'exemple, la réservation du README est créée (201 et `Location`), relue (200) puis refusée en double (409) ; sans exemple, l'API démarre sur sa base créée par `dotnet ef database update` et répond 404. Le script vérifie aussi que la solution générée par défaut contient les livrables v0.1 de la spécification, contrainte d'exclusion PostgreSQL comprise.
+
+`ReadmeTests` vérifie que les liens relatifs du README existent et que sa table des règles cite exactement les fiches livrées par le template. `AGENTS.md` nomme `BookingsModule` comme contrat public du module, conformément à HS012 et HS016, et reçoit une section « Running the API » ; il compte 118 lignes générées avec l'exemple et 125 sans. Le README de la démonstration PB-008 précise ce qui distingue la trace enregistrée du template v0.1. La CI déclare l'absence de cache (`cache: false`) et ne conserve pas les identifiants du checkout.
+
 **Dépendances**
 
 PB-016, et par lui PB-009 à PB-015.

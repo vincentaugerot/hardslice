@@ -25,7 +25,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 Modules and slices:
 
 <!--#if (!NoSample) -->
-- `Bookings`: `ConfirmBooking`, `CancelBooking` (commands), `GetBooking` (query). Mapping: `BookingConfiguration`. Public contract: none yet.
+- `Bookings`: `ConfirmBooking`, `CancelBooking` (commands), `GetBooking` (query). Mapping: `BookingConfiguration`. Public contract: `BookingsModule`, which registers and maps the module; no type for other modules yet.
 <!--#else -->
 - None yet: start with [Adding a first module](#adding-a-first-module).
 <!--#endif -->
@@ -91,6 +91,20 @@ Modules and slices:
    ```
 
 3. The application never migrates its database at startup. Apply migrations with `dotnet ef database update --project src/MyApp`, which reads `ConnectionStrings:Database`. Integration tests apply them to their own container and fail if the model has changes missing from the migrations.
+
+## Running the API
+
+`src/MyApp/appsettings.Development.json` points to a local PostgreSQL. After a first build or check:
+
+```text
+docker run --detach --name myapp-postgres --env POSTGRES_PASSWORD=postgres --publish 127.0.0.1:5432:5432 postgres:18-alpine
+docker exec myapp-postgres sh -c 'for i in $(seq 60); do pg_isready --quiet --host 127.0.0.1 --username postgres && exit 0; sleep 1; done; echo "PostgreSQL not ready after 60 s" >&2; exit 1'
+dotnet tool restore
+dotnet ef database update --project src/MyApp
+dotnet run --project src/MyApp -- --environment Development --urls http://localhost:5080
+```
+
+The second command waits, for at most 60 seconds, until PostgreSQL accepts TCP connections. Override the connection string with the `ConnectionStrings__Database` environment variable. Running the API is never a substitute for the check script.
 
 ## Verify
 
