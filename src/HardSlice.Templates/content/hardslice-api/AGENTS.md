@@ -20,7 +20,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 | `docs/rules/` | One sheet per HardSlice rule: what it forbids and how to fix it. |
 | `hardslice.json` | HardSlice configuration read by the architecture tests: the `slices` style and the folders allowed in `Shared`. |
 | `.editorconfig` | Severity of the HardSlice analyzer rules. |
-| `Directory.Build.targets` | Supplies each test project's compilation symbols to HS014. |
+| `Directory.Build.targets` | Supplies each test project's compilation symbols and compiled source paths to HS014. |
 
 Modules and slices:
 
@@ -95,7 +95,7 @@ Fix the code, never the rule. Never make a HardSlice diagnostic or an architectu
 - turning analyzers off: `<RunAnalyzers>false</RunAnalyzers>` or `<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>`;
 - removing, editing or downgrading `HardSlice.Analyzers` or its reference in `Directory.Packages.props`;
 - deleting, skipping or editing tests in `tests/MyApp.ArchitectureTests/`, or editing `scripts/check.sh` and `scripts/check.ps1`;
-- changing `HardSliceGetTestSymbols` in `Directory.Build.targets` to hide tests behind different compilation symbols;
+- changing `HardSliceGetTestInputs` in `Directory.Build.targets` to hide tests behind different compilation symbols or source paths;
 - an empty validator, an empty test or a placeholder file written only to satisfy HS013, HS014 or HS018;
 - any other workaround listed in the rule sheets of `docs/rules/`, such as reflection, a public handler or moving a slice's type into the module namespace.
 

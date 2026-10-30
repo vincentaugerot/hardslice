@@ -1,12 +1,13 @@
 <Project>
-  <!-- Read each test project's symbols without compiling it or reading a potentially stale test assembly. -->
-  <Target Name="HardSliceGetTestSymbols"
-          DependsOnTargets="AddImplicitDefineConstants"
-          Returns="@(_HardSliceTestSymbols)">
+  <!-- Read evaluated Compile items and symbols without compiling a potentially stale test assembly. -->
+  <Target Name="HardSliceGetTestInputs"
+          DependsOnTargets="AddImplicitDefineConstants;GenerateGlobalUsings"
+          Returns="@(_HardSliceTestInputs)">
     <ItemGroup>
-      <_HardSliceTestSymbols Include="$(MSBuildProjectName)">
+      <_HardSliceTestInputs Include="$(MSBuildProjectName)">
         <Symbols>$(DefineConstants)</Symbols>
-      </_HardSliceTestSymbols>
+        <Sources>@(Compile->'%(FullPath)')</Sources>
+      </_HardSliceTestInputs>
     </ItemGroup>
   </Target>
 </Project>

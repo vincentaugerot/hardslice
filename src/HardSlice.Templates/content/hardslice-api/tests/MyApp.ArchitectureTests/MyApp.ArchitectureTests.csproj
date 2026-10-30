@@ -28,13 +28,14 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <Target Name="HardSliceCollectTestSymbols" BeforeTargets="GetAssemblyAttributes">
+  <Target Name="HardSliceCollectTestInputs" BeforeTargets="GetAssemblyAttributes">
     <MSBuild Projects="../MyApp.Tests/MyApp.Tests.csproj;../MyApp.IntegrationTests/MyApp.IntegrationTests.csproj"
-             Targets="HardSliceGetTestSymbols" Properties="Configuration=$(Configuration)">
-      <Output TaskParameter="TargetOutputs" ItemName="_HardSliceTestSymbols" />
+             Targets="HardSliceGetTestInputs" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_HardSliceTestInputs" />
     </MSBuild>
     <ItemGroup>
-      <AssemblyMetadata Include="TestSymbols:%(_HardSliceTestSymbols.Identity)" Value="%(_HardSliceTestSymbols.Symbols)" />
+      <AssemblyMetadata Include="TestSymbols:%(_HardSliceTestInputs.Identity)" Value="%(_HardSliceTestInputs.Symbols)" />
+      <AssemblyMetadata Include="TestSources:%(_HardSliceTestInputs.Identity)" Value="%(_HardSliceTestInputs.Sources)" />
     </ItemGroup>
   </Target>
 

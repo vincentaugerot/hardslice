@@ -520,18 +520,66 @@ public sealed class ArchiveBookingTests
 EOF
 expect_architecture_tests_pass "a command handler with Release-only tests in $app_name.IntegrationTests" Release
 rm "$app/tests/$app_name.IntegrationTests/Directory.Build.props"
+
+echo "==> Checking that HS014 accepts attribute aliases and rejects integration tests excluded by Compile Remove"
+cat > "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking/ArchiveBookingTests.cs" <<EOF
+using Test = global::Xunit.FactAttribute;
+
+namespace $app_name.IntegrationTests.Features.Bookings.ArchiveBooking;
+
+public sealed class ArchiveBookingTests
+{
+    [Test]
+    public void Probe() => Assert.True(true);
+}
+EOF
+expect_architecture_tests_pass "a command handler tested with an attribute alias in $app_name.IntegrationTests"
+cat > "$app/tests/$app_name.IntegrationTests/Directory.Build.targets" <<'EOF'
+<Project>
+  <Import Project="../../Directory.Build.targets" />
+  <ItemGroup>
+    <Compile Remove="Features/Bookings/ArchiveBooking/**/*.cs" />
+  </ItemGroup>
+</Project>
+EOF
+expect_failure "HS014: command handler 'ArchiveBookingHandler' in slice 'Bookings/ArchiveBooking' has no test" "docs/rules/HS014.md" "integration tests excluded by Compile Remove" check.sh check.ps1
+rm "$app/tests/$app_name.IntegrationTests/Directory.Build.targets"
 rm -r "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking" "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
 mkdir -p "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
+cat > "$app/tests/$app_name.Tests/ProbeAliases.cs" <<'EOF'
+global using SliceTestAttribute = Xunit.FactAttribute;
+EOF
 cat > "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking/ArchiveBookingValidatorTests.cs" <<EOF
 namespace $app_name.Tests.Features.Bookings.ArchiveBooking;
 
 public sealed class ArchiveBookingValidatorTests
 {
-    [Fact]
+    [SliceTest]
     public void Probe() => Assert.True(true);
 }
 EOF
-expect_architecture_tests_pass "a command handler tested in $app_name.Tests only"
+expect_architecture_tests_pass "a command handler tested with a global attribute alias in $app_name.Tests only"
+echo "==> Checking that HS014 rejects unit tests excluded by Compile Remove"
+cat > "$app/tests/$app_name.Tests/Directory.Build.targets" <<'EOF'
+<Project>
+  <Import Project="../../Directory.Build.targets" />
+  <ItemGroup>
+    <Compile Remove="Features/Bookings/ArchiveBooking/**/*.cs" />
+  </ItemGroup>
+</Project>
+EOF
+expect_failure "HS014: command handler 'ArchiveBookingHandler' in slice 'Bookings/ArchiveBooking' has no test" "docs/rules/HS014.md" "unit tests excluded by Compile Remove" check.sh check.ps1
+rm "$app/tests/$app_name.Tests/Directory.Build.targets" "$app/tests/$app_name.Tests/ProbeAliases.cs"
+cat > "$app/tests/$app_name.Tests/Directory.Build.props" <<'EOF'
+<Project>
+  <Import Project="../../Directory.Build.props" />
+  <ItemGroup>
+    <Using Include="Xunit.FactAttribute" Alias="SliceTest" />
+  </ItemGroup>
+</Project>
+EOF
+expect_architecture_tests_pass "a command handler tested with an MSBuild-generated global alias"
+rm "$app/tests/$app_name.Tests/Directory.Build.props"
 rm -r "$app_src/Features/Bookings/ArchiveBooking" "$app/tests/$app_name.Tests/Features/Bookings/ArchiveBooking"
 
 echo "==> Checking that HS013 accepts a generic validator covering all command arguments"

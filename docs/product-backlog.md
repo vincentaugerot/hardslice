@@ -533,7 +533,7 @@ HS013 lit l'assembly compilé : une commande est un type concret qui implémente
 
 HS014 et HS018 lisent les sources des tests sur le disque plutôt que les assemblies de tests, que le projet de tests d'architecture ne construit ni ne référence : un assembly périmé masquerait un test supprimé. Un test est une méthode marquée `[Fact]`, `[Theory]` ou un attribut xUnit nommé comme eux, lue dans l'arbre syntaxique de `Microsoft.CodeAnalysis.CSharp` 5.0.0, la version du dépôt. Sa licence MIT a été vérifiée à son introduction ; la dépendance reste dans `tests/MyApp.ArchitectureTests`. Les slices de HS018 sont les dossiers `Features/<Module>/<Slice>/` du disque et les namespaces de l'assembly compilé.
 
-HS014 analyse les branches conditionnelles avec les symboles de chaque projet de tests : framework, `DefineConstants` propres au projet et configuration Debug/Release. `Directory.Build.targets` les transmet aux métadonnées de l'assembly d'architecture au build.
+HS014 analyse les branches conditionnelles avec les symboles de chaque projet de tests : framework, `DefineConstants` propres au projet et configuration Debug/Release. `Directory.Build.targets` les transmet aux métadonnées de l'assembly d'architecture au build, avec les fichiers `Compile` évalués par MSBuild : les sources exclues ne comptent pas. Les alias d'attributs sont résolus selon leur portée (namespace, fichier ou projet), y compris les alias globaux générés par le SDK. Les fichiers restent lus sur le disque ; un fichier supprimé ne compte pas via un ancien assembly. L'inventaire doit être reconstruit après modification des entrées du projet.
 
 **Dépendances**
 

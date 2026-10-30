@@ -24,6 +24,102 @@ public sealed class TestSourcesTests : IDisposable
     }
 
     [Fact]
+    public void Resolves_attribute_aliases_in_the_file_and_the_enclosing_namespaces()
+    {
+        const string source = """
+            using Test = global::Xunit.FactAttribute;
+            using Cases = Xunit.TheoryAttribute;
+            using ShortAttribute = Xunit.FactAttribute;
+            namespace Outer
+            {
+                using Retry = Custom.RetryFactAttribute;
+                class Tests
+                {
+                    [Test] public void FactAlias() { }
+                    [Cases] public void TheoryAlias() { }
+                    [Short] public void ShortenedAlias() { }
+                    [@Short] public void VerbatimNameDoesNotExpand() { }
+                    [Retry] public void CustomAlias() { }
+                }
+                namespace Suffix
+                {
+                    using FactAttribute = Xunit.TraitAttribute;
+                    class Tests { [Fact] public void ShadowedSuffixedAlias() { } }
+                }
+                namespace Inner
+                {
+                    using Test = Xunit.TraitAttribute;
+                    using Fact = Xunit.TraitAttribute;
+                    class Tests
+                    {
+                        [Test] public void ShadowedAlias() { }
+                        [Fact] public void ShadowedFactName() { }
+                        [Retry] public void InheritedAlias() { }
+                        [Xunit.Fact] public void Qualified() { }
+                    }
+                }
+            }
+            namespace Sibling
+            {
+                class Tests { [Retry] public void AliasOutOfScope() { } }
+            }
+            """;
+
+        TestSources.TestMethodsIn(source).ShouldBe(["FactAlias", "TheoryAlias", "ShortenedAlias", "CustomAlias", "InheritedAlias", "Qualified"]);
+        TestSources.TestMethodsIn("namespace Tests; using Test = Xunit.FactAttribute; class T { [Test] public void A() { } }")
+            .ShouldBe(["A"]);
+    }
+
+    [Fact]
+    public void Only_compiled_sources_count_and_deleted_files_do_not_survive_in_the_build_inventory()
+    {
+        const string folder = "Features/Bookings/CancelBooking";
+        const string testFile = "tests/App.Tests/Features/Bookings/CancelBooking/Test.cs";
+        Write(testFile, "class Tests { [Fact] public void A() { } }");
+        var inputs = new Dictionary<string, string[]>
+        {
+            ["App.Tests"] = [],
+            ["App.IntegrationTests"] = []
+        };
+        var sources = new TestSources(_root, "App", projectSources: inputs);
+
+        sources.HasFilesIn(folder).ShouldBeTrue(); // HS018 checks the folder, HS014 the compiled tests.
+        sources.HasTestsIn(folder, recursive: true).ShouldBeFalse();
+        inputs["App.Tests"] = [Path.Combine(_root, testFile)];
+        sources.HasTestsIn(folder, recursive: true).ShouldBeTrue();
+        File.Delete(Path.Combine(_root, testFile));
+        sources.HasTestsIn(folder, recursive: true).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Global_aliases_come_only_from_active_compiled_sources_of_the_same_project()
+    {
+        const string folder = "Features/Bookings/CancelBooking";
+        const string testFile = "tests/App.Tests/Features/Bookings/CancelBooking/Test.cs";
+        const string aliasesFile = "tests/App.Tests/Aliases.cs";
+        Write(testFile, "class Tests { [Test] public void A() { } }");
+        Write("tests/App.IntegrationTests/Features/Bookings/CancelBooking/Test.cs", "class Tests { [Test] public void A() { } }");
+        Write(aliasesFile, "\u0023if ALIASES\nglobal using Test = Xunit.FactAttribute;\n\u0023endif");
+        var inputs = new Dictionary<string, string[]>
+        {
+            ["App.Tests"] = [Path.Combine(_root, testFile)],
+            ["App.IntegrationTests"] = []
+        };
+        var symbols = new Dictionary<string, string[]> { ["App.Tests"] = ["ALIASES"], ["App.IntegrationTests"] = [] };
+        var sources = new TestSources(_root, "App", symbols, inputs);
+
+        sources.HasTestsIn(folder, recursive: true).ShouldBeFalse();
+        symbols["App.Tests"] = [];
+        inputs["App.Tests"] = [Path.Combine(_root, testFile), Path.Combine(_root, aliasesFile)];
+        sources.HasTestsIn(folder, recursive: true).ShouldBeFalse();
+        symbols["App.Tests"] = ["ALIASES"];
+        sources.HasTestsIn(folder, recursive: true).ShouldBeTrue();
+        Write(testFile, "namespace Local { using Test = Xunit.TraitAttribute; class Tests { [Test] public void A() { } } }");
+        inputs["App.IntegrationTests"] = [Path.Combine(_root, "tests/App.IntegrationTests/Features/Bookings/CancelBooking/Test.cs")];
+        sources.HasTestsIn(folder, recursive: true).ShouldBeFalse();
+    }
+
+    [Fact]
     public void Ignores_commented_out_and_disabled_tests()
     {
         const string source = """
