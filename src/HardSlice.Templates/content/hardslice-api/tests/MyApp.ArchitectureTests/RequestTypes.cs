@@ -79,7 +79,7 @@ internal static class RequestTypes
     }
 
     // What a client sets on the command: its public instance properties and fields, such as the positional
-    // parameters of a record. A command without any, such as 'record PurgeExpiredBookings : ICommand<int>', has no input to validate.
+    // parameters of a record. A command without any, such as 'record PurgeExpiredOrders : ICommand<int>', has no input to validate.
     public static IReadOnlyList<string> ParametersOf(Type command) =>
         command.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(property => property.GetIndexParameters().Length == 0)
             .Select(property => property.Name)

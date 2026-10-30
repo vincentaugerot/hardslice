@@ -576,6 +576,14 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - `AGENTS.md` généré sans module dans sa carte et avec la marche à suivre pour un premier module ;
 - `scripts/test-template.sh` génère et vérifie les deux variantes.
 
+**Livraison**
+
+`--no-sample` est le paramètre booléen `NoSample` de `template.json`, nommé pour la ligne de commande par `dotnetcli.host.json`. Il exclut le domaine `Bookings`, le module `Features/Bookings`, les migrations, les tests unitaires et d'intégration de l'exemple, et `TransactionBehaviorTests`, qui a besoin de l'agrégat `Booking`. `Program.cs` et `AGENTS.md` portent les seules conditions du moteur de templates. Écrites `#if (!NoSample)`, celles de `Program.cs` restent vraies pour le compilateur : la solution du dépôt compile la variante par défaut, la variante vide n'est compilée que par `scripts/test-template.sh`. `TemplatePackageTests` vérifie `AGENTS.md` dans chacune des deux variantes.
+
+Dans la variante vide, `MyApp.Tests` garde les tests de `Shared/Messaging` et `Shared/Behaviors`. `MyApp.IntegrationTests` garde `MigrationsTests`, qui échoue dès qu'un premier agrégat est mappé sans sa migration, et reçoit `ProgramTests`, présent dans les deux variantes : l'application démarre en Development, ce qui valide ses enregistrements, répond en HTTP et trouve sa base PostgreSQL migrée. Les tests d'architecture et leurs propres tests prennent leurs exemples dans un module fictif `Orders`. Les fiches `docs/rules/` gardent leurs exemples Bookings : elles documentent les règles, pas l'application générée.
+
+`scripts/test-template.sh` génère `Blank` avec `--no-sample` depuis le même paquet. Il vérifie qu'aucun fichier hors `docs/rules/` ne mentionne Bookings, que les chemins cités par `AGENTS.md` existent, que les deux scripts et `dotnet ef migrations has-pending-model-changes` passent et que chaque projet de tests exécute les tests de la fondation. Il sème ensuite un premier module fautif : HS016 (analyseur et test d'architecture), HS018, HS013, HS014, HS017 et HS001 font échouer les deux scripts.
+
 **Dépendances**
 
 PB-010, PB-011 et PB-013 pour l'exemple complet à exclure ; PB-015, et par lui PB-014, pour l'ensemble des règles v0.1 à vérifier sur une application vide.

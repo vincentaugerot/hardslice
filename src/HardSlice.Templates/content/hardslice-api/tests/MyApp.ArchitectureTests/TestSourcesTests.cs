@@ -73,8 +73,8 @@ public sealed class TestSourcesTests : IDisposable
     [Fact]
     public void Only_compiled_sources_count_and_deleted_files_do_not_survive_in_the_build_inventory()
     {
-        const string folder = "Features/Bookings/CancelBooking";
-        const string testFile = "tests/App.Tests/Features/Bookings/CancelBooking/Test.cs";
+        const string folder = "Features/Orders/CancelOrder";
+        const string testFile = "tests/App.Tests/Features/Orders/CancelOrder/Test.cs";
         Write(testFile, "class Tests { [Fact] public void A() { } }");
         var inputs = new Dictionary<string, string[]>
         {
@@ -94,11 +94,11 @@ public sealed class TestSourcesTests : IDisposable
     [Fact]
     public void Global_aliases_come_only_from_active_compiled_sources_of_the_same_project()
     {
-        const string folder = "Features/Bookings/CancelBooking";
-        const string testFile = "tests/App.Tests/Features/Bookings/CancelBooking/Test.cs";
+        const string folder = "Features/Orders/CancelOrder";
+        const string testFile = "tests/App.Tests/Features/Orders/CancelOrder/Test.cs";
         const string aliasesFile = "tests/App.Tests/Aliases.cs";
         Write(testFile, "class Tests { [Test] public void A() { } }");
-        Write("tests/App.IntegrationTests/Features/Bookings/CancelBooking/Test.cs", "class Tests { [Test] public void A() { } }");
+        Write("tests/App.IntegrationTests/Features/Orders/CancelOrder/Test.cs", "class Tests { [Test] public void A() { } }");
         Write(aliasesFile, "\u0023if ALIASES\nglobal using Test = Xunit.FactAttribute;\n\u0023endif");
         var inputs = new Dictionary<string, string[]>
         {
@@ -115,7 +115,7 @@ public sealed class TestSourcesTests : IDisposable
         symbols["App.Tests"] = ["ALIASES"];
         sources.HasTestsIn(folder, recursive: true).ShouldBeTrue();
         Write(testFile, "namespace Local { using Test = Xunit.TraitAttribute; class Tests { [Test] public void A() { } } }");
-        inputs["App.IntegrationTests"] = [Path.Combine(_root, "tests/App.IntegrationTests/Features/Bookings/CancelBooking/Test.cs")];
+        inputs["App.IntegrationTests"] = [Path.Combine(_root, "tests/App.IntegrationTests/Features/Orders/CancelOrder/Test.cs")];
         sources.HasTestsIn(folder, recursive: true).ShouldBeFalse();
     }
 
@@ -160,64 +160,64 @@ public sealed class TestSourcesTests : IDisposable
     {
         const string enabled = "\u0023if INTEGRATION_TESTS\nclass T { [Fact] public void A() { } }\n\u0023endif";
         const string disabled = "\u0023if !INTEGRATION_TESTS\nclass T { [Fact] public void A() { } }\n\u0023endif";
-        Write("tests/App.Tests/Features/Bookings/UnitEnabled/Test.cs", enabled);
-        Write("tests/App.Tests/Features/Bookings/UnitDisabled/Test.cs", disabled);
-        Write("tests/App.IntegrationTests/Features/Bookings/IntegrationEnabled/Test.cs", enabled);
-        Write("tests/App.IntegrationTests/Features/Bookings/IntegrationDisabled/Test.cs", disabled);
+        Write("tests/App.Tests/Features/Orders/UnitEnabled/Test.cs", enabled);
+        Write("tests/App.Tests/Features/Orders/UnitDisabled/Test.cs", disabled);
+        Write("tests/App.IntegrationTests/Features/Orders/IntegrationEnabled/Test.cs", enabled);
+        Write("tests/App.IntegrationTests/Features/Orders/IntegrationDisabled/Test.cs", disabled);
         var sources = new TestSources(_root, "App", new Dictionary<string, string[]>
         {
             ["App.Tests"] = ["NET10_0", "DEBUG"],
             ["App.IntegrationTests"] = ["NET10_0", "DEBUG", "INTEGRATION_TESTS"]
         });
 
-        sources.HasTestsIn("Features/Bookings/UnitEnabled", recursive: true).ShouldBeFalse();
-        sources.HasTestsIn("Features/Bookings/UnitDisabled", recursive: true).ShouldBeTrue();
-        sources.HasTestsIn("Features/Bookings/IntegrationEnabled", recursive: true).ShouldBeTrue();
-        sources.HasTestsIn("Features/Bookings/IntegrationDisabled", recursive: true).ShouldBeFalse();
+        sources.HasTestsIn("Features/Orders/UnitEnabled", recursive: true).ShouldBeFalse();
+        sources.HasTestsIn("Features/Orders/UnitDisabled", recursive: true).ShouldBeTrue();
+        sources.HasTestsIn("Features/Orders/IntegrationEnabled", recursive: true).ShouldBeTrue();
+        sources.HasTestsIn("Features/Orders/IntegrationDisabled", recursive: true).ShouldBeFalse();
     }
 
     [Fact]
     public void Counts_tests_in_either_test_project()
     {
-        Write("tests/App.Tests/Features/Bookings/ConfirmBooking/ConfirmBookingValidatorTests.cs", "class T { [Fact] public void A() { } }");
-        Write("tests/App.IntegrationTests/Features/Bookings/CancelBooking/CancelBookingTests.cs", "class T { [Fact] public void A() { } }");
+        Write("tests/App.Tests/Features/Orders/PlaceOrder/PlaceOrderValidatorTests.cs", "class T { [Fact] public void A() { } }");
+        Write("tests/App.IntegrationTests/Features/Orders/CancelOrder/CancelOrderTests.cs", "class T { [Fact] public void A() { } }");
         var sources = new TestSources(_root, "App");
 
-        sources.HasTestsIn("Features/Bookings/ConfirmBooking", recursive: true).ShouldBeTrue();
-        sources.HasTestsIn("Features/Bookings/CancelBooking", recursive: true).ShouldBeTrue();
-        sources.HasTestsIn("Features/Bookings/GetBooking", recursive: true).ShouldBeFalse();
+        sources.HasTestsIn("Features/Orders/PlaceOrder", recursive: true).ShouldBeTrue();
+        sources.HasTestsIn("Features/Orders/CancelOrder", recursive: true).ShouldBeTrue();
+        sources.HasTestsIn("Features/Orders/GetOrder", recursive: true).ShouldBeFalse();
     }
 
     [Fact]
     public void A_folder_with_files_but_no_test_has_no_tests()
     {
-        Write("tests/App.Tests/Features/Bookings/ArchiveBooking/ArchiveBookingFixture.cs", "class Fixture { }");
+        Write("tests/App.Tests/Features/Orders/ArchiveOrder/ArchiveOrderFixture.cs", "class Fixture { }");
         var sources = new TestSources(_root, "App");
 
-        sources.HasFilesIn("Features/Bookings/ArchiveBooking").ShouldBeTrue();
-        sources.HasTestsIn("Features/Bookings/ArchiveBooking", recursive: true).ShouldBeFalse();
+        sources.HasFilesIn("Features/Orders/ArchiveOrder").ShouldBeTrue();
+        sources.HasTestsIn("Features/Orders/ArchiveOrder", recursive: true).ShouldBeFalse();
     }
 
     [Fact]
     public void Tests_of_subfolders_count_only_when_recursive()
     {
-        Write("tests/App.IntegrationTests/Features/Bookings/ConfirmBooking/Conflicts/ConflictTests.cs", "class T { [Fact] public void A() { } }");
+        Write("tests/App.IntegrationTests/Features/Orders/PlaceOrder/Conflicts/ConflictTests.cs", "class T { [Fact] public void A() { } }");
         var sources = new TestSources(_root, "App");
 
-        sources.HasTestsIn("Features/Bookings/ConfirmBooking", recursive: true).ShouldBeTrue();
-        sources.HasTestsIn("Features/Bookings/ConfirmBooking", recursive: false).ShouldBeFalse();
+        sources.HasTestsIn("Features/Orders/PlaceOrder", recursive: true).ShouldBeTrue();
+        sources.HasTestsIn("Features/Orders/PlaceOrder", recursive: false).ShouldBeFalse();
     }
 
     [Fact]
     public void Lists_the_module_and_slice_folders_that_hold_files()
     {
-        Write("tests/App.Tests/Features/Bookings/ConfirmBooking/Nested/ProbeTests.cs", "");
-        Write("tests/App.IntegrationTests/Features/Bookings/BookingConfigurationTests.cs", "");
+        Write("tests/App.Tests/Features/Orders/PlaceOrder/Nested/ProbeTests.cs", "");
+        Write("tests/App.IntegrationTests/Features/Orders/OrderConfigurationTests.cs", "");
         Write("tests/App.IntegrationTests/Features/RootTests.cs", "");
         Directory.CreateDirectory(Path.Combine(_root, "tests/App.Tests/Features/Rooms/Empty"));
 
         new TestSources(_root, "App").FeatureFolders().ShouldBe(
-            [("App.Tests", "Bookings"), ("App.Tests", "Bookings/ConfirmBooking"), ("App.IntegrationTests", "Bookings")],
+            [("App.Tests", "Orders"), ("App.Tests", "Orders/PlaceOrder"), ("App.IntegrationTests", "Orders")],
             ignoreOrder: true);
     }
 

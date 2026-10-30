@@ -43,7 +43,7 @@ public sealed class CommandTests
                 + $"and the unit tests of its validator in '{TestSources.PathOf(Tests.UnitTests, folder)}'. Doc: 'docs/rules/HS014.md'.");
     }
 
-    // The folder of a type below 'src/<App>/', read from its namespace: 'Features/Bookings/ConfirmBooking' for a type of that slice or below.
+    // The folder of a type below 'src/<App>/', read from its namespace: 'Features/Orders/PlaceOrder' for a type of that slice or below.
     private static string FolderOf(Type type)
     {
         if (Location.Of(type.Namespace).Slice is { } slice)
@@ -61,7 +61,7 @@ public sealed class CommandTests
     // A handler generic over its command names the type parameter: 'TCommand'.
     private static string Name(Type type) => type.IsGenericParameter ? type.Name : Application.DisplayName(ReferencedType.From(type));
 
-    // 'ConfirmBookingValidator' for 'ConfirmBookingCommand'.
+    // 'PlaceOrderValidator' for 'PlaceOrderCommand'.
     private static string ValidatorName(string command) =>
         (command.EndsWith("Command", StringComparison.Ordinal) ? command[..^"Command".Length] : command) + "Validator";
 }

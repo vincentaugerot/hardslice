@@ -40,7 +40,7 @@ public sealed class TestLayoutTests
                 + $"Fix: move these tests to the folder of the {kind} they test; when a slice or module is renamed or moved, its test folders follow. {Doc}");
     }
 
-    // 'Bookings' and 'Bookings/ConfirmBooking' for the modules and slices of 'src/<App>/Features/' and of the compiled namespaces.
+    // 'Orders' and 'Orders/PlaceOrder' for the modules and slices of 'src/<App>/Features/' and of the compiled namespaces.
     private static IEnumerable<string> SourceFolders()
     {
         var onDisk = TestSources.FeatureFoldersUnder(Path.Combine(Application.SolutionRoot, "src", Application.WebName, "Features"));

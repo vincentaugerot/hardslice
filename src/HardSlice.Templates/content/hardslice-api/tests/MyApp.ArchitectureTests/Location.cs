@@ -32,7 +32,7 @@ internal sealed record Location(bool InFeatures, string? Module, string? Slice, 
             : Elsewhere;
     }
 
-    // How a message names where a type is: "in slice 'Bookings/CancelBooking'", "in module 'Bookings'", "in 'Shared/Behaviors'".
+    // How a message names where a type is: "in slice 'Orders/CancelOrder'", "in module 'Orders'", "in 'Shared/Behaviors'".
     public string Describe() => this switch
     {
         { Slice: { } slice } => $"in slice '{slice}'",

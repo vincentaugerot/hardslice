@@ -4,6 +4,8 @@
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS001, HS012, HS013, HS014, HS016, HS017 and HS018 fails both, naming the rule and a rule doc that exists,
 # and that a missing or invalid hardslice.json fails them explicitly.
+# Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample and passes both scripts,
+# and that seeded violations of HS001, HS013, HS014, HS016, HS017 and HS018 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -633,4 +635,204 @@ printf '%s\n' '{ "style": "layers", "shared": { "allowedFolders": ["Messaging", 
 expect_failure "hardslice.json: 'style' must be" "docs/rules/HS017.md" "an invalid hardslice.json" check.ps1
 mv "$work/hardslice.json.backup" "$app/hardslice.json"
 
-echo "==> Template OK: $app_name passes both check scripts, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017 and HS018 with their rule docs, and on a missing or invalid hardslice.json"
+echo "==> $app_name OK: it passes both check scripts, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017 and HS018 with their rule docs, and on a missing or invalid hardslice.json"
+
+sample_name="$app_name"
+blank_name="Blank"
+blank="$work/$blank_name"
+
+# Same package and hive as $app_name: generate-app.sh installed the template in $work/template-hive, next to the local nuget.config.
+echo "==> Generating $blank_name with --no-sample"
+dotnet new hardslice-api --name "$blank_name" --output "$blank" --no-sample --debug:custom-hive "$work/template-hive"
+
+# Checked before any build: bin and obj would hold copies of the sources.
+echo "==> Checking that $blank_name holds no trace of the Bookings sample"
+# The rule sheets keep their Bookings examples: they document the rules, not the generated application.
+if sample_files="$(grep -rIil --exclude-dir=rules booking "$blank")"; then
+  printf '%s\n' "$sample_files" >&2
+  echo "error: $blank_name mentions the Bookings sample outside docs/rules/." >&2
+  exit 1
+fi
+for sample_path in "src/$blank_name.Domain/Bookings" "src/$blank_name/Features" "src/$blank_name/Shared/Persistence/Migrations"; do
+  if [[ -e "$blank/$sample_path" ]]; then
+    echo "error: $blank_name contains $sample_path, which only the Bookings sample needs." >&2
+    exit 1
+  fi
+done
+if ! grep -Fq -- "- None yet: start with [Adding a first module](#adding-a-first-module)." "$blank/AGENTS.md" ||
+  ! grep -Fxq "## Adding a first module" "$blank/AGENTS.md"; then
+  echo "error: the AGENTS.md of $blank_name does not map an empty application with the steps of a first module." >&2
+  exit 1
+fi
+while read -r cited_path; do
+  if [[ ! -e "$blank/$cited_path" ]]; then
+    echo "error: the AGENTS.md of $blank_name cites $cited_path, which $blank_name does not contain." >&2
+    exit 1
+  fi
+done < <(grep -o '`\(src\|tests\|docs\|scripts\)/[^`<>[:space:]]*`' "$blank/AGENTS.md" | tr -d '`' | sort -u)
+
+echo "==> Verifying $blank_name with scripts/check.sh"
+bash "$blank/scripts/check.sh"
+
+echo "==> Verifying $blank_name with scripts/check.ps1"
+pwsh -NoProfile -File "$blank/scripts/check.ps1"
+
+echo "==> Checking that the model of $blank_name needs no migration, with the pinned dotnet-ef tool"
+(
+  cd "$blank"
+  export DOTNET_CLI_HOME="$work/dotnet-cli"
+  dotnet tool restore
+  dotnet ef migrations has-pending-model-changes --project "src/$blank_name" --no-build
+)
+
+echo "==> Checking that each test project of $blank_name runs tests of the foundation"
+(
+  cd "$blank"
+  for expected in \
+    "$blank_name.Tests:Shared.Messaging.MediatorTests.Runs_the_behaviors_in_registration_order_around_the_handler" \
+    "$blank_name.Tests:Shared.Behaviors.BehaviorsServiceCollectionExtensionsTests.Commands_go_through_logging_then_validation_then_the_transaction" \
+    "$blank_name.IntegrationTests:ProgramTests.Starts_and_answers_HTTP_requests_on_its_migrated_database" \
+    "$blank_name.IntegrationTests:Shared.Persistence.MigrationsTests.Model_has_no_changes_missing_from_the_migrations" \
+    "$blank_name.ArchitectureTests:SliceTests.Slices_never_use_types_of_another_slice" \
+    "$blank_name.ArchitectureTests:TestLayoutTests.Every_slice_has_tests_at_its_path"; do
+    project="${expected%%:*}"
+    test="${expected#*:}"
+    listed_tests="$(dotnet test --project "tests/$project/$project.csproj" --no-build --list-tests)"
+    if ! printf '%s\n' "$listed_tests" | grep -Fq ".$test"; then
+      echo "error: $project has no test $test." >&2
+      exit 1
+    fi
+  done
+)
+
+# The probes below run on the empty application: each rule must still find its target and fail both scripts.
+app_name="$blank_name"
+app="$blank"
+app_src="$app/src/$app_name"
+domain_project="$app/src/$app_name.Domain/$app_name.Domain.csproj"
+
+echo "==> Checking that the HS016 analyzer fails both check scripts on a cross-slice reference in $app_name"
+mkdir -p "$app_src/Features/Orders/PlaceOrder" "$app_src/Features/Orders/CancelOrder"
+cat > "$app_src/Features/Orders/PlaceOrder/PlaceOrder.cs" <<EOF
+namespace $app_name.Features.Orders.PlaceOrder;
+
+internal static class PlaceOrderRules
+{
+    internal static int MaxLines => 20;
+}
+EOF
+cat > "$app_src/Features/Orders/CancelOrder/CancelOrder.cs" <<EOF
+namespace $app_name.Features.Orders.CancelOrder;
+
+internal static class CancelOrderRules
+{
+    internal static int MaxLines => $app_name.Features.Orders.PlaceOrder.PlaceOrderRules.MaxLines;
+}
+EOF
+expect_failure "error HS016: 'CancelOrderRules' in slice 'Orders/CancelOrder' uses 'PlaceOrderRules' from slice 'Orders/PlaceOrder'." "docs/rules/HS016.md" "a cross-slice reference in $app_name" check.sh check.ps1
+
+echo "==> Checking that the HS016 architecture test reports the same reference in the compiled assembly of $app_name"
+if check_output="$(
+  cd "$app"
+  dotnet build "$app_name.slnx" -p:RunAnalyzers=false 2>&1 &&
+    dotnet test --project "tests/$app_name.ArchitectureTests/$app_name.ArchitectureTests.csproj" --no-build 2>&1
+)"; then
+  echo "error: the architecture tests of $app_name passed despite a cross-slice reference in the compiled assembly." >&2
+  exit 1
+fi
+if ! printf '%s\n' "$check_output" | grep -Fq "HS016: 'CancelOrderRules' in slice 'Orders/CancelOrder' uses 'PlaceOrderRules' from slice 'Orders/PlaceOrder'."; then
+  printf '%s\n' "$check_output" >&2
+  echo "error: the architecture tests of $app_name failed without reporting the cross-slice reference as HS016." >&2
+  exit 1
+fi
+rm -r "$app_src/Features/Orders"
+
+echo "==> Checking that HS018 fails both check scripts on the first slice of $app_name without tests"
+mkdir -p "$app_src/Features/Orders/ExportOrders"
+cat > "$app_src/Features/Orders/ExportOrders/ExportOrders.cs" <<EOF
+namespace $app_name.Features.Orders.ExportOrders;
+
+internal static class ExportOrdersFormat
+{
+    internal const string ContentType = "text/csv";
+}
+EOF
+expect_failure "HS018: slice 'Orders/ExportOrders' has no tests" "docs/rules/HS018.md" "the first slice of $app_name without tests" check.sh check.ps1
+rm -r "$app_src/Features/Orders"
+
+# The slice has a test folder, so HS018 passes: HS013, then HS014, see the command and its handler.
+echo "==> Checking that HS013 and HS014 fail both check scripts on the first command of $app_name"
+mkdir -p "$app_src/Features/Orders/PlaceOrder" "$app/tests/$app_name.Tests/Features/Orders/PlaceOrder"
+cat > "$app_src/Features/Orders/PlaceOrder/PlaceOrder.cs" <<EOF
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.Orders.PlaceOrder;
+
+public sealed record PlaceOrderCommand(Guid CustomerId) : ICommand<bool>;
+
+internal sealed class PlaceOrderHandler : IRequestHandler<PlaceOrderCommand, bool>
+{
+    public Task<bool> Handle(PlaceOrderCommand command, CancellationToken cancellationToken) => Task.FromResult(true);
+}
+EOF
+cat > "$app/tests/$app_name.Tests/Features/Orders/PlaceOrder/PlaceOrderFixture.cs" <<EOF
+namespace $app_name.Tests.Features.Orders.PlaceOrder;
+
+internal static class PlaceOrderFixture
+{
+    internal static readonly Guid CustomerId = Guid.NewGuid();
+}
+EOF
+expect_failure "HS013: command 'PlaceOrderCommand' in slice 'Orders/PlaceOrder' has parameters (CustomerId) but no validator." "docs/rules/HS013.md" "the first command of $app_name without a validator" check.sh check.ps1
+cat > "$app_src/Features/Orders/PlaceOrder/PlaceOrderValidator.cs" <<EOF
+using FluentValidation;
+
+namespace $app_name.Features.Orders.PlaceOrder;
+
+internal sealed class PlaceOrderValidator : AbstractValidator<PlaceOrderCommand>
+{
+    public PlaceOrderValidator() => RuleFor(command => command.CustomerId).NotEmpty();
+}
+EOF
+expect_failure "HS014: command handler 'PlaceOrderHandler' in slice 'Orders/PlaceOrder' has no test" "docs/rules/HS014.md" "the first command handler of $app_name without tests" check.sh check.ps1
+rm -r "$app_src/Features/Orders" "$app/tests/$app_name.Tests/Features/Orders"
+
+echo "==> Checking that HS017 fails both check scripts on a folder of Shared in $app_name that hardslice.json does not allow"
+mkdir -p "$app_src/Shared/Helpers"
+cat > "$app_src/Shared/Helpers/TextHelpers.cs" <<EOF
+namespace $app_name.Shared.Helpers;
+
+internal static class TextHelpers
+{
+    internal static string Normalize(string value) => value.Trim();
+}
+EOF
+expect_failure "HS017: 'TextHelpers' is in 'Shared/Helpers'" "docs/rules/HS017.md" "a Shared folder of $app_name that hardslice.json does not allow" check.sh check.ps1
+rm -r "$app_src/Shared/Helpers"
+
+echo "==> Checking that HS001 fails both check scripts when the domain of $app_name depends on dependency injection"
+cp "$domain_project" "$work/domain-project.backup"
+cat > "$domain_project" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
+EOF
+cat > "$app/src/$app_name.Domain/Hs001Probe.cs" <<EOF
+using Microsoft.Extensions.DependencyInjection;
+
+namespace $app_name.Domain;
+
+public static class Hs001Probe
+{
+    public static bool IsEmpty(IServiceCollection services) => services.Count == 0;
+}
+EOF
+expect_failure "HS001: 'Hs001Probe' in the domain uses 'IServiceCollection'" "docs/rules/HS001.md" "a domain type of $app_name using dependency injection" check.sh check.ps1
+mv "$work/domain-project.backup" "$domain_project"
+rm "$app/src/$app_name.Domain/Hs001Probe.cs"
+
+echo "==> Template OK: $sample_name and $blank_name, generated with --no-sample, pass both check scripts, and seeded violations fail them in both"

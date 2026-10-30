@@ -24,7 +24,11 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 
 Modules and slices:
 
+<!--#if (!NoSample) -->
 - `Bookings`: `ConfirmBooking`, `CancelBooking` (commands), `GetBooking` (query). Mapping: `BookingConfiguration`. Public contract: none yet.
+<!--#else -->
+- None yet: start with [Adding a first module](#adding-a-first-module).
+<!--#endif -->
 
 ## Golden rules
 
@@ -36,17 +40,37 @@ Modules and slices:
 6. `Shared` holds cross-cutting code only, in the folders `hardslice.json` allows, and never depends on `Features` (HS017).
 7. Every behavior change comes with a test at the same path as the code it covers. Every slice has tests at its path under `tests/` (HS018), at least one for a command handler (HS014), and every command with parameters has a validator (HS013).
 8. Never weaken a rule to make the build pass: see [Forbidden](#forbidden).
+<!--#if (NoSample) -->
+
+## Adding a first module
+
+1. Create the aggregate in `src/MyApp.Domain/<Module>/`, namespace `MyApp.Domain.<Module>`: a `sealed` class whose state changes only through its methods, created by a static factory method that checks its rules, with a private parameterless constructor for persistence. Unit test it in `tests/MyApp.Tests/Domain/<Module>/`.
+2. Create `src/MyApp/Features/<Module>/<Module>Module.cs`, namespace `MyApp.Features.<Module>`: a public static class with `Add<Module>Module(this IServiceCollection services)`, which registers the slices, and `Map<Module>Module(this IEndpointRouteBuilder endpoints)`, which maps them under one `MapGroup`. Call both from `Program.cs`.
+3. Map the aggregate and add the first migration: see [Changing the database](#changing-the-database).
+4. Add its slices as below, then add the module to the map above.
+<!--#endif -->
 
 ## Adding a slice
 
 1. Check whether the aggregate already owns the business rule. If not, add it to the aggregate with its unit test.
+<!--#if (!NoSample) -->
    A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as an overlapping booking, throws a `ConflictException`, answered with 409.
    When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` named in the past tense, implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`. Follow `BookingConfirmed`, recorded by `Booking.Confirm` and exposed through `Booking.DomainEvents`. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
 2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`. Follow `ConfirmBooking` as the example:
+<!--#else -->
+   A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as a duplicate, throws a `ConflictException`, answered with 409.
+   When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` named in the past tense, implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`, kept in a private list and exposed through a read-only `DomainEvents` property. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
+2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`, containing:
+<!--#endif -->
    - a public request: an `ICommand<TResponse>` when it changes state, an `IQuery<TResponse>` when it only reads. The response type is exact (invariant), matching its handler and pipeline;
    - an `internal` validator, an `AbstractValidator<TRequest>`, required for a command with parameters, that checks the shape of the input (required fields, formats, lengths). A failure is answered with 400 naming the fields, before the handler runs. Business rules stay in the aggregate;
+<!--#if (!NoSample) -->
    - an `internal` handler, an `IRequestHandler<TRequest, TResponse>` that reaches aggregates through `AppDbContext.Set<T>()`. It never calls `SaveChangesAsync`: each command runs in one transaction that the pipeline saves and commits, and any exception rolls it back. A failed transaction also detaches tracked entities: later commands in the same scope must reload them. Save early only to translate a database error, as `ConfirmBooking` does;
    - for a query, follow `GetBooking` instead: a public response DTO, and a handler that reads with `AsNoTracking()` and projects into that DTO with `Select`. It never loads an aggregate, never saves, and runs outside any transaction. An unknown id is a `null` response, answered with 404;
+<!--#else -->
+   - an `internal` handler, an `IRequestHandler<TRequest, TResponse>` that reaches aggregates through `AppDbContext.Set<T>()`. It never calls `SaveChangesAsync`: each command runs in one transaction that the pipeline saves and commits, and any exception rolls it back. A failed transaction also detaches tracked entities: later commands in the same scope must reload them. Save early only to translate a database error, such as a violated constraint, into a domain exception;
+   - for a query, instead of that handler: a public response DTO, and a handler that reads with `AsNoTracking()` and projects into that DTO with `Select`. It never loads an aggregate, never saves, and runs outside any transaction. An unknown id is a `null` response, answered with 404;
+<!--#endif -->
    - an `internal` endpoint that sends the request through `IMediator` and returns `TypedResults`. It never calls a handler.
 3. In `<Module>Module.cs`, register the handler and the validator by their contracts (`IRequestHandler<,>`, `IValidator<>`) and map the endpoint.
 4. Add the validator tests in `tests/MyApp.Tests/Features/<Module>/<Slice>/` and the integration tests, an invalid request included, in `tests/MyApp.IntegrationTests/Features/<Module>/<Slice>/`. Renaming or moving a slice moves these folders too.
@@ -55,7 +79,11 @@ Modules and slices:
 ## Changing the database
 
 1. Map a new aggregate in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`: an `internal` `IEntityTypeConfiguration<T>` in fluent API. Never add EF Core attributes or references to the domain, and never declare module types in `AppDbContext`.
+<!--#if (!NoSample) -->
 2. After any mapping change, add a migration. A constraint EF Core cannot model, such as the exclusion constraint that keeps confirmed bookings of a room from overlapping, goes in a migration through `migrationBuilder.Sql`. Never edit a migration that may already be applied.
+<!--#else -->
+2. After any mapping change, add a migration. A constraint EF Core cannot model, such as an exclusion constraint, goes in a migration through `migrationBuilder.Sql`. Never edit a migration that may already be applied.
+<!--#endif -->
 
    ```text
    dotnet tool restore

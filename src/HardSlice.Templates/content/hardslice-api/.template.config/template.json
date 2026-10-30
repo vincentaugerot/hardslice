@@ -11,5 +11,31 @@
   "tags": {
     "language": "C#",
     "type": "solution"
-  }
+  },
+  "symbols": {
+    "NoSample": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Generates the foundation without the Bookings sample module: no sample domain, slices, tests or migrations."
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(NoSample)",
+          "exclude": [
+            "src/MyApp.Domain/Bookings/**",
+            "src/MyApp/Features/Bookings/**",
+            "src/MyApp/Shared/Persistence/Migrations/**",
+            "tests/MyApp.Tests/Domain/Bookings/**",
+            "tests/MyApp.Tests/Features/Bookings/**",
+            "tests/MyApp.IntegrationTests/Features/Bookings/**",
+            "tests/MyApp.IntegrationTests/Shared/Behaviors/TransactionBehaviorTests.cs"
+          ]
+        }
+      ]
+    }
+  ]
 }

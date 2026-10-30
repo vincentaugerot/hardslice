@@ -56,14 +56,20 @@ public sealed class TemplatePackageTests
         templateVersions["Microsoft.EntityFrameworkCore.Relational"].ShouldBe(toolVersion);
     }
 
-    [Fact]
-    public void Agent_guidance_is_short_and_every_path_it_cites_exists_in_the_template()
+    // AGENTS.md as generated with and without --no-sample: test-template.sh checks the paths of each generated variant.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_is_short_and_every_path_it_cites_exists_in_the_template(bool noSample)
     {
         var templateRoot = TemplateRoot(FindRepositoryRoot());
-        var agentsPath = Path.Combine(templateRoot, "AGENTS.md");
-        var agents = File.ReadAllText(agentsPath);
+        var lines = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var agents = string.Join('\n', lines);
 
-        File.ReadAllLines(agentsPath).Length.ShouldBeLessThan(150, "AGENTS.md must stay short enough for an agent to keep in context.");
+        lines.Length.ShouldBeLessThan(150, "AGENTS.md must stay short enough for an agent to keep in context.");
+        agents.ShouldNotContain("<!--#", customMessage: "AGENTS.md uses a template condition other than (NoSample) or (!NoSample).");
+        if (noSample)
+            agents.ShouldNotContain("Booking", Case.Insensitive, "AGENTS.md generated with --no-sample must not mention the Bookings sample.");
 
         // Placeholder paths such as 'src/MyApp/Features/<Module>/' are conventions, not files.
         var citedPaths = Regex.Matches(agents, @"`(?<path>(?:src|tests|docs|scripts)/[^`<>\s]*|[\w.]+\.props)`")
@@ -100,6 +106,38 @@ public sealed class TemplatePackageTests
         configuration.RootElement.GetProperty("shared").GetProperty("allowedFolders").EnumerateArray()
             .Select(folder => folder.GetString())
             .ShouldBe(["Messaging", "Persistence", "Behaviors"]);
+    }
+
+    // Keeps the lines dotnet new keeps for the given --no-sample value: AGENTS.md branches only on NoSample, without nesting.
+    private static string[] AgentGuidance(string[] lines, bool noSample)
+    {
+        var kept = new List<string>();
+        bool? branch = null;
+        foreach (var line in lines)
+        {
+            switch (line)
+            {
+                case "<!--#if (!NoSample) -->":
+                    branch = !noSample;
+                    break;
+                case "<!--#if (NoSample) -->":
+                    branch = noSample;
+                    break;
+                case "<!--#else -->" when branch is not null:
+                    branch = !branch;
+                    break;
+                case "<!--#endif -->" when branch is not null:
+                    branch = null;
+                    break;
+                default:
+                    if (branch is not false)
+                        kept.Add(line);
+                    break;
+            }
+        }
+
+        branch.ShouldBeNull("AGENTS.md has a template condition without its <!--#endif -->.");
+        return [.. kept];
     }
 
     private static string TemplateRoot(string repositoryRoot) =>

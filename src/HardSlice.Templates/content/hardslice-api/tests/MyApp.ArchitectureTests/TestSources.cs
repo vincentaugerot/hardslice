@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace MyApp.ArchitectureTests;
 
 // The tests of the solution as they sit on disk. 'tests/<App>.Tests/' and 'tests/<App>.IntegrationTests/' mirror 'src/<App>/':
-// the tests of slice 'Bookings/ConfirmBooking' are in 'Features/Bookings/ConfirmBooking/' of either project (HS014, HS018).
+// the tests of slice 'Orders/PlaceOrder' are in 'Features/Orders/PlaceOrder/' of either project (HS014, HS018).
 // Read from the C# files rather than the compiled test assemblies, which the architecture tests neither build nor reference.
 internal sealed class TestSources(
     string solutionRoot,
@@ -24,13 +24,13 @@ internal sealed class TestSources(
 
     private IEnumerable<string> Projects => [UnitTests, IntegrationTests];
 
-    // 'tests/MyApp.Tests/Features/Bookings/ConfirmBooking/' for that folder of 'src/MyApp/' in the unit test project.
+    // 'tests/MyApp.Tests/Features/Orders/PlaceOrder/' for that folder of 'src/MyApp/' in the unit test project.
     public static string PathOf(string project, string folder) => folder.Length == 0 ? $"tests/{project}/" : $"tests/{project}/{folder}/";
 
-    // "'tests/MyApp.Tests/Features/Bookings/ConfirmBooking/' or 'tests/MyApp.IntegrationTests/Features/Bookings/ConfirmBooking/'".
+    // "'tests/MyApp.Tests/Features/Orders/PlaceOrder/' or 'tests/MyApp.IntegrationTests/Features/Orders/PlaceOrder/'".
     public string Describe(string folder) => string.Join(" or ", Projects.Select(project => $"'{PathOf(project, folder)}'"));
 
-    // Whether a test project holds a C# file in that folder of 'src/<App>/', such as 'Features/Bookings/ConfirmBooking', or below it.
+    // Whether a test project holds a C# file in that folder of 'src/<App>/', such as 'Features/Orders/PlaceOrder', or below it.
     public bool HasFilesIn(string folder) => FilesIn(folder, SearchOption.AllDirectories).Any();
 
     // Whether a test project declares a test method in that folder, or below it when 'recursive'.
@@ -53,7 +53,7 @@ internal sealed class TestSources(
         return sources.Any(source => candidates.Contains(source.Path) && TestMethodsIn(source.Root, globalUsings).Any());
     }
 
-    // The module and slice folders of 'Features' in each test project, 'Bookings' and 'Bookings/ConfirmBooking', that hold C# files.
+    // The module and slice folders of 'Features' in each test project, 'Orders' and 'Orders/PlaceOrder', that hold C# files.
     public IEnumerable<(string Project, string Folder)> FeatureFolders() =>
         from project in Projects
         from folder in FeatureFoldersUnder(Path.Combine(solutionRoot, "tests", project, "Features"))

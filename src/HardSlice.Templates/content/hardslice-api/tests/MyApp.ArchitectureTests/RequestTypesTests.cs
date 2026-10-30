@@ -17,7 +17,7 @@ public sealed class RequestTypesTests
     [Fact]
     public void The_parameters_of_a_command_are_its_public_instance_properties_and_fields()
     {
-        RequestTypes.ParametersOf(typeof(ProbeCommand)).ShouldBe(["BookingId", "Reason"], ignoreOrder: true);
+        RequestTypes.ParametersOf(typeof(ProbeCommand)).ShouldBe(["OrderId", "Reason"], ignoreOrder: true);
         RequestTypes.ParametersOf(typeof(ProbeStructCommand)).ShouldBe(["Count"]);
         RequestTypes.ParametersOf(typeof(ParameterlessProbeCommand)).ShouldBeEmpty();
     }
@@ -115,7 +115,7 @@ public sealed class RequestTypesTests
         RequestTypes.IsValidated(typeof(GenericProbeCommand<>), validators).ShouldBeFalse();
     }
 
-    private sealed record ProbeCommand(Guid BookingId) : ICommand<bool>
+    private sealed record ProbeCommand(Guid OrderId) : ICommand<bool>
     {
         public string? Reason = null;
 
