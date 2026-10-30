@@ -12,6 +12,7 @@ public sealed class AnalysisModeTests
     // turns it off. A rule ticket adds its line here and in the three global configs.
     private static readonly (string Rule, string Minimum, string Recommended, string All)[] Matrix =
     [
+        ("HS003", "error", "error", "error"),
         ("HS016", "error", "error", "error"),
         ("HS900", "error", "error", "error"),
         ("HS901", "error", "error", "error"),
@@ -78,11 +79,27 @@ public sealed class AnalysisModeTests
     // One probe per rule: sources that violate it alone, analyzed with or without hardslice.json.
     private static readonly Dictionary<string, (string[] Sources, string? Configuration)> Probes = new()
     {
+        ["HS003"] = ([EndpointDatabaseAccess], Configuration),
         ["HS016"] = ([CrossSliceReference()], Configuration),
         ["HS900"] = ([], null),
         ["HS901"] = ([AmbiguousType()], Configuration),
         ["HS902"] = ([UnclassifiedEntity], Configuration)
     };
+
+    private const string EndpointDatabaseAccess =
+        """
+        using Microsoft.AspNetCore.Builder;
+        using Microsoft.AspNetCore.Routing;
+        using Microsoft.EntityFrameworkCore;
+
+        namespace MyApp.Features.Bookings.ListBookings
+        {
+            internal static class ListBookingsEndpoint
+            {
+                public static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet("/bookings", (DbContext db) => db.ToString());
+            }
+        }
+        """;
 
     private const string UnclassifiedEntity =
         """

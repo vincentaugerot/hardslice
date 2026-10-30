@@ -5,6 +5,7 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
+HS003 | HardSlice.Architecture | Error | EndpointDatabaseAccessAnalyzer
 HS016 | HardSlice.Architecture | Error | SliceReferenceAnalyzer
 HS900 | HardSlice.Configuration | Error | ClassificationAnalyzer
 HS901 | HardSlice.Configuration | Error | ClassificationAnalyzer

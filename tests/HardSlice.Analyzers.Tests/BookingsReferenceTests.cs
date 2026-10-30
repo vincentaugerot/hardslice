@@ -5,7 +5,7 @@ using static HardSlice.Analyzers.Tests.AnalyzerHarness;
 
 namespace HardSlice.Analyzers.Tests;
 
-// Runs HS016 on the Bookings reference shipped by the hardslice-api template, as copied into the test output.
+// Runs the HardSlice analyzers on the Bookings reference shipped by the hardslice-api template, as copied into the test output.
 public sealed class BookingsReferenceTests
 {
     private const string WebImplicitUsings =
@@ -59,15 +59,29 @@ public sealed class BookingsReferenceTests
             + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Doc: 'docs/rules/HS902.md'.");
     }
 
-    // The sheet each configuration diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
+    [Fact]
+    public async Task Reports_HS003_when_a_Bookings_endpoint_reaches_AppDbContext()
+    {
+        var diagnostic = (await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(EndpointDatabaseAccessAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "endpoint 'GET /' in slice 'Bookings/ListBookings' uses 'AppDbContext' (parameter 'db'). "
+            + "Endpoints never reach the database. "
+            + "Fix: move the data access into the handler of a query and send the query with IMediator. Doc: 'docs/rules/HS003.md'.");
+    }
+
+    // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
+    [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
     [InlineData(ClassificationAnalyzer.ConfigurationId)]
     [InlineData(ClassificationAnalyzer.AmbiguityId)]
     [InlineData(ClassificationAnalyzer.UnclassifiedEntityId)]
-    public async Task Points_to_a_rule_sheet_that_quotes_the_configuration_diagnostic(string ruleId)
+    public async Task Points_to_a_rule_sheet_that_quotes_the_diagnostic(string ruleId)
     {
         var diagnostics = ruleId switch
         {
+            EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
             ClassificationAnalyzer.ConfigurationId => await AnalyzeAllAsync(
                 CompileDomain(),
                 Configuration.Replace("\"MyApp.Domain.IEntity, MyApp.Domain\"", "\"MyApp.Domain.Entity, MyApp.Domain\"")),
@@ -175,6 +189,28 @@ public sealed class BookingsReferenceTests
         return nextHeading < 0
             ? document.Substring(contentStart)
             : document.Substring(contentStart, nextHeading - contentStart);
+    }
+
+    // ListBookings, a slice whose endpoint reads the bookings through AppDbContext instead of sending a query.
+    private static CSharpCompilation ListBookingsWithDbContext()
+    {
+        var listBookings =
+            """
+            using Microsoft.EntityFrameworkCore;
+            using MyApp.Domain.Bookings;
+            using MyApp.Shared.Persistence;
+
+            namespace MyApp.Features.Bookings.ListBookings;
+
+            internal static class ListBookingsEndpoint
+            {
+                public static void Map(RouteGroupBuilder group) =>
+                    group.MapGet("/", (AppDbContext db, CancellationToken cancellationToken) =>
+                        db.Set<Booking>().AsNoTracking().Select(booking => booking.Id.Value).ToListAsync(cancellationToken));
+            }
+            """;
+
+        return CompileApplication(("Features/Bookings/ListBookings/ListBookings.cs", listBookings));
     }
 
     // Room, a domain type with no contract, mapped by an IEntityTypeConfiguration of its module.

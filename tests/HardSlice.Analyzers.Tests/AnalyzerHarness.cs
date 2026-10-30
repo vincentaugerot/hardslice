@@ -68,7 +68,8 @@ internal static class AnalyzerHarness
             .WithAnalyzers(Analyzers(), Options(configuration))
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
 
-    public static ImmutableArray<DiagnosticAnalyzer> Analyzers() => [new SliceReferenceAnalyzer(), new ClassificationAnalyzer()];
+    public static ImmutableArray<DiagnosticAnalyzer> Analyzers() =>
+        [new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer()];
 
     public const string ConfigurationPath = "/solution/hardslice.json";
 
@@ -104,19 +105,39 @@ internal static class AnalyzerHarness
     }
 
     // Sources mark each expected HS016 location with [|...|]; every other location must stay silent.
-    public static async Task VerifyAsync(MetadataReference[] references, params string[] markedSources)
-    {
-        var files = markedSources.Select((source, index) => (Path: $"File{index}.cs", Marked: Markup.Parse(source))).ToList();
-        var compilation = Compile("MyApp", files.Select(file => (file.Path, file.Marked.Source)).Append(("Usings.cs", ImplicitUsings)), references);
-
-        var actual = (await AnalyzeAsync(compilation))
-            .Select(diagnostic => $"{diagnostic.Id} {diagnostic.Location.SourceTree!.FilePath}{diagnostic.Location.SourceSpan}");
-        var expected = files.SelectMany(file => file.Marked.Spans.Select(span => $"{SliceReferenceAnalyzer.DiagnosticId} {file.Path}{span}"));
-
-        actual.Order().ShouldBe(expected.Order());
-    }
+    public static Task VerifyAsync(MetadataReference[] references, params string[] markedSources) =>
+        VerifyAsync(new SliceReferenceAnalyzer(), SliceReferenceAnalyzer.DiagnosticId, references, OutputKind.DynamicallyLinkedLibrary, markedSources);
 
     public static Task VerifyAsync(params string[] markedSources) => VerifyAsync([], markedSources);
+
+    // Sources mark each expected location of the analyzer's diagnostic with [|...|]; every other location must stay silent.
+    // The analyzer runs without hardslice.json, outside a test project. Returns the diagnostics, in source order.
+    public static async Task<ImmutableArray<Diagnostic>> VerifyAsync(
+        DiagnosticAnalyzer analyzer,
+        string diagnosticId,
+        MetadataReference[] references,
+        OutputKind outputKind,
+        params string[] markedSources)
+    {
+        var files = markedSources.Select((source, index) => (Path: $"File{index}.cs", Marked: Markup.Parse(source))).ToList();
+        var compilation = Compile(
+            "MyApp",
+            files.Select(file => (file.Path, file.Marked.Source)).Append(("Usings.cs", ImplicitUsings)),
+            references,
+            outputKind);
+
+        var diagnostics = (await compilation
+                .WithAnalyzers([analyzer], Options(configuration: null))
+                .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken))
+            .OrderBy(diagnostic => diagnostic.Location.SourceTree!.FilePath, StringComparer.Ordinal)
+            .ThenBy(diagnostic => diagnostic.Location.SourceSpan.Start)
+            .ToImmutableArray();
+        var actual = diagnostics.Select(diagnostic => $"{diagnostic.Id} {diagnostic.Location.SourceTree!.FilePath}{diagnostic.Location.SourceSpan}");
+        var expected = files.SelectMany(file => file.Marked.Spans.Select(span => $"{diagnosticId} {file.Path}{span}"));
+
+        actual.Order().ShouldBe(expected.Order());
+        return diagnostics;
+    }
 
     private static ImmutableArray<MetadataReference> LoadFrameworkReferences()
     {
@@ -176,17 +197,18 @@ internal static class AnalyzerHarness
         {
             var source = new System.Text.StringBuilder();
             var spans = ImmutableArray.CreateBuilder<TextSpan>();
-            var start = -1;
+            // Markers nest: [|[|db|]|] expects two diagnostics on 'db'.
+            var starts = new Stack<int>();
             for (var i = 0; i < marked.Length; i++)
             {
                 if (marked.AsSpan(i).StartsWith("[|"))
                 {
-                    start = source.Length;
+                    starts.Push(source.Length);
                     i++;
                 }
                 else if (marked.AsSpan(i).StartsWith("|]"))
                 {
-                    spans.Add(TextSpan.FromBounds(start, source.Length));
+                    spans.Add(TextSpan.FromBounds(starts.Pop(), source.Length));
                     i++;
                 }
                 else

@@ -83,8 +83,8 @@ Aucune à ce jour : les seuils sont ceux de PB-019.
 
 ### Mesure du 2026-10-30
 
-- Commit : `7c2b785, avec des modifications non commitées`
-- Règles HardSlice : HS016, HS900, HS901, HS902
+- Commit : `1dcb109, avec des modifications non commitées`
+- Règles HardSlice : HS003, HS016, HS900, HS901, HS902
 - SDK effectif : 10.0.401
 - Runner : machine locale, Linux 6.8.0-147-generic
 - Processeur : AMD EPYC 9354P 32-Core Processor, 4 cœurs
@@ -96,38 +96,43 @@ Durées en secondes, une chauffe puis 5 builds mesurés par variante, en alterna
 
 | Scénario | Analyseurs | Minimum | Médiane | Maximum | Dispersion |
 |---|---|---:|---:|---:|---:|
-| A | avec | 3.70 | 3.76 | 4.86 | 30.8 % |
-| A | sans | 3.38 | 3.72 | 4.12 | 20.1 % |
-| B | avec | 4.46 | 4.62 | 5.10 | 14.0 % |
-| B | sans | 4.02 | 4.36 | 7.44 | 78.5 % |
-| C | avec | 4.32 | 4.76 | 6.18 | 39.2 % |
-| C | sans | 4.01 | 4.84 | 5.88 | 38.6 % |
+| A | avec | 3.29 | 3.38 | 3.75 | 13.4 % |
+| A | sans | 2.89 | 3.15 | 3.41 | 16.3 % |
+| B | avec | 3.82 | 4.07 | 5.76 | 47.7 % |
+| B | sans | 3.52 | 3.68 | 4.13 | 16.7 % |
+| C | avec | 4.18 | 4.50 | 5.56 | 30.7 % |
+| C | sans | 3.92 | 4.22 | 5.32 | 33.3 % |
 
 Seuils, sur la médiane :
 
 | Scénario | Mesure | Valeur | Seuil | Résultat |
 |---|---|---:|---:|---|
-| A | Durée totale avec analyseurs | 3.76 s | ≤ 10.00 s | respecté |
-| A | Surcoût des analyseurs | 0.04 s | ≤ 1.00 s | respecté |
-| B | Durée totale avec analyseurs | 4.62 s | ≤ 20.00 s | respecté |
-| B | Surcoût des analyseurs | 0.26 s | ≤ 2.00 s | respecté |
-| C | Surcoût des analyseurs | -1.7 % | ≤ 15 % | respecté |
+| A | Durée totale avec analyseurs | 3.38 s | ≤ 10.00 s | respecté |
+| A | Surcoût des analyseurs | 0.23 s | ≤ 1.00 s | respecté |
+| B | Durée totale avec analyseurs | 4.07 s | ≤ 20.00 s | respecté |
+| B | Surcoût des analyseurs | 0.38 s | ≤ 2.00 s | respecté |
+| C | Surcoût des analyseurs | 6.7 % | ≤ 15 % | respecté |
 
 `-p:ReportAnalyzer=true`, build complet avec analyseurs : temps cumulé de chaque analyseur HardSlice, puis de tous les analyseurs du projet.
 Ces temps se chevauchent (exécution concurrente) : ils expliquent un surcoût, seuls les seuils sur la durée totale font foi.
 
 | Projet | Analyseur HardSlice | Temps | Tous les analyseurs |
 |---|---|---:|---:|
-| PerfApp.Domain | SliceReferenceAnalyzer (HS016) | 0.002 s | 0.034 s |
-| PerfApp.Domain | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.034 s |
-| PerfApp | SliceReferenceAnalyzer (HS016) | 1.315 s | 1.680 s |
-| PerfApp | ClassificationAnalyzer (HS900, HS901, HS902) | 0.011 s | 1.680 s |
-| PerfApp.ArchitectureTests | SliceReferenceAnalyzer (HS016) | 0.008 s | 0.197 s |
-| PerfApp.ArchitectureTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.197 s |
-| PerfApp.IntegrationTests | SliceReferenceAnalyzer (HS016) | 0.062 s | 0.146 s |
-| PerfApp.IntegrationTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.146 s |
-| PerfApp.Tests | SliceReferenceAnalyzer (HS016) | 0.009 s | 0.098 s |
-| PerfApp.Tests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.098 s |
+| PerfApp.Domain | SliceReferenceAnalyzer (HS016) | 0.001 s | 0.015 s |
+| PerfApp.Domain | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.015 s |
+| PerfApp.Domain | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.015 s |
+| PerfApp | SliceReferenceAnalyzer (HS016) | 0.974 s | 1.359 s |
+| PerfApp | ClassificationAnalyzer (HS900, HS901, HS902) | 0.012 s | 1.359 s |
+| PerfApp | EndpointDatabaseAccessAnalyzer (HS003) | 0.008 s | 1.359 s |
+| PerfApp.ArchitectureTests | SliceReferenceAnalyzer (HS016) | 0.003 s | 0.147 s |
+| PerfApp.ArchitectureTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.147 s |
+| PerfApp.ArchitectureTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.147 s |
+| PerfApp.IntegrationTests | SliceReferenceAnalyzer (HS016) | 0.058 s | 0.143 s |
+| PerfApp.IntegrationTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.143 s |
+| PerfApp.IntegrationTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.143 s |
+| PerfApp.Tests | SliceReferenceAnalyzer (HS016) | 0.007 s | 0.071 s |
+| PerfApp.Tests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.071 s |
+| PerfApp.Tests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.071 s |
 
 <!-- measure-analyzers:latest:end -->
 
@@ -138,4 +143,5 @@ Médianes en secondes, avec / sans analyseurs.
 | Date | Commit | Règles HardSlice | Runner | A | B | C | Verdict |
 |---|---|---|---|---:|---:|---:|---|
 | 2026-10-30 | `7c2b785` | HS016, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.76 / 3.72 | 4.62 / 4.36 | 4.76 / 4.84 | pass |
+| 2026-10-30 | `1dcb109` | HS003, HS016, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.38 / 3.15 | 4.07 / 3.68 | 4.50 / 4.22 | pass |
 <!-- measure-analyzers:history -->
