@@ -6,6 +6,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 
 | Path | Contains |
 |---|---|
+| `src/MyApp.Domain/` | The contracts that classify domain types: `IEntity`, `IAggregateRoot` (an entity) and `IDomainEvent`. |
 | `src/MyApp.Domain/<Module>/` | Aggregates, value objects and business rules. Depends on the base class library only. |
 | `src/MyApp.Domain/<Module>/Events/` | Domain events raised by the module aggregates. |
 | `src/MyApp/Features/<Module>/<Slice>/` | One use case: its command or query, validator, handler and endpoint. |
@@ -18,7 +19,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 | `tests/MyApp.IntegrationTests/` | Tests on a real PostgreSQL (Testcontainers), at the same path as the slice they test. |
 | `tests/MyApp.ArchitectureTests/` | Architecture tests of HS001, HS012 to HS014 and HS016 to HS018, on the compiled assemblies and the test sources. |
 | `docs/rules/` | One sheet per HardSlice rule: what it forbids and how to fix it. |
-| `hardslice.json` | HardSlice configuration read by the architecture tests: the `slices` style and the folders allowed in `Shared`. |
+| `hardslice.json` | HardSlice configuration: the `slices` style, the `contracts` that classify entities, events, commands, queries and handlers, and the folders allowed in `Shared`. |
 | `.editorconfig` | Severity of the HardSlice analyzer rules. |
 | `Directory.Build.targets` | Supplies each test project's compilation symbols and compiled source paths to HS014. |
 
@@ -36,7 +37,7 @@ Modules and slices:
 2. A slice never uses a type from another slice, and its handler, validator and endpoint stay `internal` (HS016). Share through the domain, a domain event or the module public contract.
 3. A module uses another module only through its public contract: the types directly in `MyApp.Features.<Module>` (HS012).
 4. Business rules live in the domain aggregates, not in handlers or endpoints.
-5. The domain project references nothing but the base class library (HS001).
+5. The domain project references nothing but the base class library (HS001). Every aggregate root implements `IAggregateRoot`, every child entity `IEntity` (HS902), and a type has one role (HS901).
 6. `Shared` holds cross-cutting code only, in the folders `hardslice.json` allows, and never depends on `Features` (HS017).
 7. Every behavior change comes with a test at the same path as the code it covers. Every slice has tests at its path under `tests/` (HS018), at least one for a command handler (HS014), and every command with parameters has a validator (HS013).
 8. Never weaken a rule to make the build pass: see [Forbidden](#forbidden).
@@ -44,7 +45,7 @@ Modules and slices:
 
 ## Adding a first module
 
-1. Create the aggregate in `src/MyApp.Domain/<Module>/`, namespace `MyApp.Domain.<Module>`: a `sealed` class whose state changes only through its methods, created by a static factory method that checks its rules, with a private parameterless constructor for persistence. Unit test it in `tests/MyApp.Tests/Domain/<Module>/`.
+1. Create the aggregate in `src/MyApp.Domain/<Module>/`, namespace `MyApp.Domain.<Module>`: a `sealed` class implementing `IAggregateRoot` whose state changes only through its methods, created by a static factory method that checks its rules, with a private parameterless constructor for persistence. Unit test it in `tests/MyApp.Tests/Domain/<Module>/`.
 2. Create `src/MyApp/Features/<Module>/<Module>Module.cs`, namespace `MyApp.Features.<Module>`: a public static class with `Add<Module>Module(this IServiceCollection services)`, which registers the slices, and `Map<Module>Module(this IEndpointRouteBuilder endpoints)`, which maps them under one `MapGroup`. Call both from `Program.cs`.
 3. Map the aggregate and add the first migration: see [Changing the database](#changing-the-database).
 4. Add its slices as below, then add the module to the map above.
@@ -78,7 +79,7 @@ Modules and slices:
 
 ## Changing the database
 
-1. Map a new aggregate in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`: an `internal` `IEntityTypeConfiguration<T>` in fluent API. Never add EF Core attributes or references to the domain, and never declare module types in `AppDbContext`.
+1. Map a new aggregate in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`: an `internal` `IEntityTypeConfiguration<T>` in fluent API. The aggregate implements `IAggregateRoot` (HS902). Never add EF Core attributes or references to the domain, and never declare module types in `AppDbContext`.
 <!--#if (!NoSample) -->
 2. After any mapping change, add a migration. A constraint EF Core cannot model, such as the exclusion constraint that keeps confirmed bookings of a room from overlapping, goes in a migration through `migrationBuilder.Sql`. Never edit a migration that may already be applied.
 <!--#else -->
@@ -119,13 +120,13 @@ Both scripts build the solution (restoring if needed), then run the unit tests, 
 
 ## Fixing a HardSlice failure
 
-A HardSlice failure starts with its rule: `HS016` from the analyzer at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests.
+A HardSlice failure starts with its rule: `HS016` and `HS900` to `HS902` from the analyzer at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests.
 
 1. Read the diagnostic: it names the offending symbol, the rule, the expected fix and its sheet after `Doc:`.
-2. Open the sheet and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders).
+2. Open the sheet and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders), `docs/rules/HS900.md` (contracts of `hardslice.json`), `docs/rules/HS901.md` (one role per type), `docs/rules/HS902.md` (mapped entities).
 3. Run the check script again.
 
-A message starting with `hardslice.json:` means the configuration is missing or invalid: restore it, never adapt it to the code.
+`HS900`, or a message starting with `hardslice.json:`, means the configuration or one of its contracts is missing or invalid: restore them, never adapt them to the code.
 
 ## Forbidden
 

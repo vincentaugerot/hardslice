@@ -1,0 +1,40 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
+
+namespace HardSlice.Analyzers;
+
+internal static class RuleActivation
+{
+    // Rules that do not apply to test projects read IsTestProject, exposed by build/HardSlice.Analyzers.props.
+    public static bool IsTestProject(AnalyzerOptions options) =>
+        options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.IsTestProject", out var value)
+        && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+
+    // A rule is active unless /nowarn, a global config or the .editorconfig of every source file sets it to none.
+    // A rule turned off in some files only stays active: it still needs its contracts in the others.
+    public static bool IsActive(Compilation compilation, string ruleId, CancellationToken cancellationToken)
+    {
+        var options = compilation.Options;
+        if (options.SpecificDiagnosticOptions.TryGetValue(ruleId, out var specific) && specific == ReportDiagnostic.Suppress)
+            return false;
+
+        var provider = options.SyntaxTreeOptionsProvider;
+        var projectWide = provider is not null && provider.TryGetGlobalDiagnosticValue(ruleId, cancellationToken, out var global)
+            ? global != ReportDiagnostic.Suppress
+            : true;
+
+        if (provider is null || !compilation.SyntaxTrees.Any())
+            return projectWide;
+
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            var active = provider.TryGetDiagnosticValue(tree, ruleId, cancellationToken, out var severity)
+                ? severity != ReportDiagnostic.Suppress
+                : projectWide;
+            if (active)
+                return true;
+        }
+
+        return false;
+    }
+}

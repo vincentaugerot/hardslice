@@ -1,0 +1,10 @@
+<Project>
+  <!-- The analyzers read the contracts of the nearest hardslice.json, in the project folder or above it. -->
+  <PropertyGroup>
+    <_HardSliceConfigurationFile>$([MSBuild]::GetPathOfFileAbove('hardslice.json', '$(MSBuildProjectDirectory)'))</_HardSliceConfigurationFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_HardSliceConfigurationFile)' != ''">
+    <AdditionalFiles Include="$(_HardSliceConfigurationFile)" />
+  </ItemGroup>
+</Project>

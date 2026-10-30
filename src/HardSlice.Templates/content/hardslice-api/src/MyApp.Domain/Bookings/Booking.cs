@@ -2,7 +2,7 @@ using MyApp.Domain.Bookings.Events;
 
 namespace MyApp.Domain.Bookings;
 
-public sealed class Booking
+public sealed class Booking : IAggregateRoot
 {
     private readonly List<IDomainEvent> _domainEvents = [];
     private BookingStatus _status;

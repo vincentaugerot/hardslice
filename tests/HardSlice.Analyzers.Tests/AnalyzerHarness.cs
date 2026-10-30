@@ -46,6 +46,51 @@ internal static class AnalyzerHarness
             .WithAnalyzers([new SliceReferenceAnalyzer()])
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
 
+    // Every HardSlice analyzer, with hardslice.json and the MSBuild properties that build/HardSlice.Analyzers.props
+    // and .targets give the compiler. A null configuration means no hardslice.json was found.
+    public static Task<ImmutableArray<Diagnostic>> AnalyzeAllAsync(
+        Compilation compilation,
+        string? configuration,
+        bool isTestProject = false) =>
+        compilation
+            .WithAnalyzers(
+                [new SliceReferenceAnalyzer(), new ClassificationAnalyzer()],
+                Options(configuration, isTestProject))
+            .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
+
+    public const string ConfigurationPath = "/solution/hardslice.json";
+
+    public static AnalyzerOptions Options(string? configuration, bool isTestProject = false)
+    {
+        var properties = ImmutableDictionary.CreateBuilder<string, string>();
+        properties.Add("build_property.MSBuildProjectDirectory", "/solution/src/MyApp");
+        properties.Add("build_property.IsTestProject", isTestProject ? "true" : "");
+
+        return new AnalyzerOptions(
+            configuration is null ? [] : [new InMemoryAdditionalText(ConfigurationPath, configuration)],
+            new InMemoryOptionsProvider(properties.ToImmutable()));
+    }
+
+    // Assemblies of the packages restored for this test project, such as EF Core, at the template's versions.
+    public static IEnumerable<MetadataReference> PackageReferences(params string[] assemblyPrefixes) =>
+        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Where(path => Path.GetFileName(path) is var name
+                && assemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal)))
+            .Select(path => MetadataReference.CreateFromFile(path));
+
+    // A project reference passes the compilation itself; a package or a prebuilt assembly passes metadata only.
+    public static MetadataReference Reference(Compilation compilation, bool asMetadata)
+    {
+        if (!asMetadata)
+            return compilation.ToMetadataReference();
+
+        using var image = new MemoryStream();
+        var emit = compilation.Emit(image, cancellationToken: TestContext.Current.CancellationToken);
+        emit.Success.ShouldBeTrue(string.Join(Environment.NewLine, emit.Diagnostics));
+        return MetadataReference.CreateFromImage(image.ToArray());
+    }
+
     // Sources mark each expected HS016 location with [|...|]; every other location must stay silent.
     public static async Task VerifyAsync(MetadataReference[] references, params string[] markedSources)
     {
@@ -75,6 +120,30 @@ internal static class AnalyzerHarness
                 .Where(path => frameworkDirectories.Contains(Path.GetDirectoryName(path)))
                 .Select(path => MetadataReference.CreateFromFile(path))
         ];
+    }
+
+    private sealed class InMemoryAdditionalText(string path, string text) : AdditionalText
+    {
+        public override string Path { get; } = path;
+
+        public override SourceText GetText(CancellationToken cancellationToken = default) => SourceText.From(text);
+    }
+
+    private sealed class InMemoryOptionsProvider(ImmutableDictionary<string, string> globalOptions) : AnalyzerConfigOptionsProvider
+    {
+        private static readonly InMemoryOptions Empty = new(ImmutableDictionary<string, string>.Empty);
+
+        public override AnalyzerConfigOptions GlobalOptions { get; } = new InMemoryOptions(globalOptions);
+
+        public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => Empty;
+
+        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => Empty;
+    }
+
+    private sealed class InMemoryOptions(ImmutableDictionary<string, string> values) : AnalyzerConfigOptions
+    {
+        public override bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? value) =>
+            values.TryGetValue(key, out value);
     }
 
     private static class Markup

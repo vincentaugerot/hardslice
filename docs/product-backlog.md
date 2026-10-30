@@ -705,7 +705,7 @@ Ces contrats s'appliquent à tous les tickets de règle. Le premier ticket inté
 
 **Lecture de la configuration.** Le paquet `HardSlice.Analyzers` livre `build/HardSlice.Analyzers.props` et `build/HardSlice.Analyzers.targets`, importés par la `GlobalPackageReference` du template (actifs `Build` inclus). Ils ajoutent le `hardslice.json` le plus proche au-dessus du projet comme `AdditionalFiles` et exposent `IsTestProject`, `MSBuildProjectDirectory` et `HardSliceAnalysisMode` par `CompilerVisibleProperty`. La lecture de `hardslice.json` doit fonctionner dans tous les hôtes du compilateur : un analyseur `netstandard2.0` ne peut pas compter sur le chargement de `System.Text.Json` dans chacun d'eux. Le moyen de lecture est choisi en proportion du format attendu, petit et fermé, sans imposer un parseur JSON généraliste. Une entrée hors de ce format est rejetée par HS900, qui nomme la clé en cause ; les tests couvrent le fichier absent, le JSON invalide, la clé inconnue et la valeur mal formée.
 
-**Format des messages.** Une ligne en anglais : `HSxxx: <symbole fautif et sa position architecturale>. <règle en une phrase>. Fix: <correction>. Doc: docs/rules/HSxxx.md`. La fiche contient : pourquoi, mauvais exemple, bon exemple, contournements interdits et ce que la règle ne détecte pas.
+**Format des messages.** Une ligne en anglais : `HSxxx: <symbole fautif et sa position architecturale>. <règle en une phrase>. Fix: <correction>. Doc: 'docs/rules/HSxxx.md'.`, comme HS016 : le chemin entre apostrophes et le point final satisfont RS1032, qui exige qu'un message de plusieurs phrases se termine par un point (PB-018). La fiche contient : pourquoi, mauvais exemple, bon exemple, contournements interdits et ce que la règle ne détecte pas.
 
 **Livrables de chaque ticket de règle**, dans le même changement :
 
@@ -868,7 +868,7 @@ Incrément 2.
 HS900, HS901 et HS902 en `error`, dans tous les niveaux d'analyse, lorsqu'une règle active en dépend.
 
 ```text
-HS902: 'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'. HardSlice classifies domain types only through these contracts. Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Doc: docs/rules/HS902.md
+HS902: 'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'. HardSlice classifies domain types only through these contracts. Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Doc: 'docs/rules/HS902.md'.
 ```
 
 **Acceptation**

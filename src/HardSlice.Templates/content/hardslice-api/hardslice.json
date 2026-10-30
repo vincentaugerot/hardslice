@@ -1,5 +1,13 @@
 {
   "style": "slices",
+  "contracts": {
+    "entity": "MyApp.Domain.IEntity, MyApp.Domain",
+    "aggregateRoot": "MyApp.Domain.IAggregateRoot, MyApp.Domain",
+    "domainEvent": "MyApp.Domain.IDomainEvent, MyApp.Domain",
+    "command": "MyApp.Shared.Messaging.ICommand`1, MyApp",
+    "query": "MyApp.Shared.Messaging.IQuery`1, MyApp",
+    "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp"
+  },
   "shared": {
     "allowedFolders": ["Messaging", "Persistence", "Behaviors"]
   }

@@ -35,6 +35,9 @@
           Exclude="$(BookingsReferenceDir)**/bin/**;$(BookingsReferenceDir)**/obj/**"
           LinkBase="BookingsReference"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(TemplateContentDir)hardslice.json"
+          Link="TemplateConfiguration/hardslice.json"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(TemplateContentDir)docs/**/*.md"
           LinkBase="TemplateDocs"
           CopyToOutputDirectory="PreserveNewest" />

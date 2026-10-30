@@ -3,10 +3,10 @@
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS001, HS012, HS013, HS014, HS016, HS017 and HS018 fails both, naming the rule and a rule doc that exists,
-# and that a missing or invalid hardslice.json fails them explicitly.
+# then proves a seeded violation of HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
+# and that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
-# and that seeded violations of HS001, HS013, HS014, HS016, HS017 and HS018 still fail them: without the sample, the rules keep their targets.
+# and that seeded violations of HS001, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -171,6 +171,7 @@ echo "==> Checking that $app_name holds every v0.1 deliverable of the specificat
 for deliverable in \
   AGENTS.md .editorconfig hardslice.json scripts/check.sh scripts/check.ps1 docs/rules/HS001.md docs/rules/HS012.md \
   docs/rules/HS013.md docs/rules/HS014.md docs/rules/HS016.md docs/rules/HS017.md docs/rules/HS018.md \
+  docs/rules/HS900.md docs/rules/HS901.md docs/rules/HS902.md "src/$app_name.Domain/IEntity.cs" "src/$app_name.Domain/IAggregateRoot.cs" \
   "src/$app_name.Domain/Bookings/Booking.cs" "src/$app_name.Domain/Bookings/BookingId.cs" \
   "src/$app_name.Domain/Bookings/BookingPeriod.cs" "src/$app_name.Domain/Bookings/Events/BookingConfirmed.cs" \
   "src/$app_name/Features/Bookings/ConfirmBooking/ConfirmBooking.cs" "src/$app_name/Features/Bookings/CancelBooking/CancelBooking.cs" \
@@ -780,14 +781,67 @@ EOF
 expect_failure "HS018: test folder 'tests/$app_name.Tests/Features/Bookings/ConfirmBookng/' has no slice" "docs/rules/HS018.md" "a test folder without its slice" check.sh check.ps1
 rm -r "$app/tests/$app_name.Tests/Features/Bookings/ConfirmBookng"
 
+# Seeds a domain type of module <module> without contract, mapped by its module: the analyzer of the web project reports HS902.
+probe_unclassified_entity() {
+  local module="$1"
+  mkdir -p "$app/src/$app_name.Domain/$module" "$app_src/Features/$module"
+  cat > "$app/src/$app_name.Domain/$module/Room.cs" <<EOF
+namespace $app_name.Domain.$module;
+
+public sealed class Room
+{
+    public Guid Id { get; private set; }
+}
+EOF
+  cat > "$app_src/Features/$module/RoomConfiguration.cs" <<EOF
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using $app_name.Domain.$module;
+
+namespace $app_name.Features.$module;
+
+internal sealed class RoomConfiguration : IEntityTypeConfiguration<Room>
+{
+    public void Configure(EntityTypeBuilder<Room> builder) => builder.HasKey(room => room.Id);
+}
+EOF
+  expect_failure "HS902: 'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'." "docs/rules/HS902.md" "a domain type of $app_name mapped without contract" check.sh check.ps1
+  rm "$app/src/$app_name.Domain/$module/Room.cs" "$app_src/Features/$module/RoomConfiguration.cs"
+}
+
+# Seeds a domain type of module <module> that is both an entity and a domain event: the analyzer of the domain reports HS901.
+probe_ambiguous_type() {
+  local module="$1"
+  mkdir -p "$app/src/$app_name.Domain/$module"
+  cat > "$app/src/$app_name.Domain/$module/RoomSnapshot.cs" <<EOF
+namespace $app_name.Domain.$module;
+
+public sealed class RoomSnapshot : IAggregateRoot, IDomainEvent;
+EOF
+  expect_failure "HS901: 'RoomSnapshot' is both an entity and a domain event: it implements 'IAggregateRoot' and 'IDomainEvent'." "docs/rules/HS901.md" "a domain type of $app_name that is both an entity and an event" check.sh check.ps1
+  rm "$app/src/$app_name.Domain/$module/RoomSnapshot.cs"
+}
+
+echo "==> Checking that HS902 fails both check scripts on a domain type mapped without contract"
+probe_unclassified_entity Bookings
+
+echo "==> Checking that HS901 fails both check scripts on a domain type that is both an entity and an event"
+probe_ambiguous_type Bookings
+
 echo "==> Checking that a missing or invalid hardslice.json fails the check scripts explicitly"
 mv "$app/hardslice.json" "$work/hardslice.json.backup"
-expect_failure "hardslice.json: no file at" "docs/rules/HS017.md" "a missing hardslice.json" check.sh
-printf '%s\n' '{ "style": "layers", "shared": { "allowedFolders": ["Messaging", "Persistence", "Behaviors"] } }' > "$app/hardslice.json"
+expect_failure "HS900: hardslice.json was not found in '[^']*' or above it." "docs/rules/HS900.md" "a missing hardslice.json" check.sh check.ps1
+sed 's/ICommand`1, /ICommandX`1, /' "$work/hardslice.json.backup" > "$app/hardslice.json"
+expect_failure "HS900: contract 'contracts.command' of hardslice.json, '$app_name.Shared.Messaging.ICommandX.1', is not declared by assembly '$app_name'." "docs/rules/HS900.md" "a renamed command contract" check.sh check.ps1
+# No analyzer rule needs the handler contract yet: the architecture tests still reject its malformed value.
+sed 's/IRequestHandler`2, /IRequestHandler`2 /' "$work/hardslice.json.backup" > "$app/hardslice.json"
+expect_failure "hardslice.json: 'contracts.requestHandler' is" "docs/rules/HS900.md" "a malformed handler contract" check.ps1
+# The analyzers read the contracts only: the architecture tests reject the style.
+sed 's/"style": "slices"/"style": "layers"/' "$work/hardslice.json.backup" > "$app/hardslice.json"
 expect_failure "hardslice.json: 'style' must be" "docs/rules/HS017.md" "an invalid hardslice.json" check.ps1
 mv "$work/hardslice.json.backup" "$app/hardslice.json"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017 and HS018 with their rule docs, and on a missing or invalid hardslice.json"
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 with their rule docs, and on a missing or invalid hardslice.json and its contracts (HS900)"
 
 sample_name="$app_name"
 blank_name="Blank"
@@ -963,6 +1017,14 @@ internal static class TextHelpers
 EOF
 expect_failure "HS017: 'TextHelpers' is in 'Shared/Helpers'" "docs/rules/HS017.md" "a Shared folder of $app_name that hardslice.json does not allow" check.sh check.ps1
 rm -r "$app_src/Shared/Helpers"
+
+echo "==> Checking that HS902 fails both check scripts on the first domain type of $app_name mapped without contract"
+probe_unclassified_entity Rooms
+rm -r "$app/src/$app_name.Domain/Rooms" "$app_src/Features"
+
+echo "==> Checking that HS901 fails both check scripts on the first domain type of $app_name that is both an entity and an event"
+probe_ambiguous_type Rooms
+rm -r "$app/src/$app_name.Domain/Rooms"
 
 echo "==> Checking that HS001 fails both check scripts when the domain of $app_name depends on dependency injection"
 cp "$domain_project" "$work/domain-project.backup"

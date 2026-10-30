@@ -6,8 +6,9 @@ namespace HardSlice.Analyzers.Tests;
 
 public sealed class AnalyzerPackageTests
 {
+    // The package's build assets give the compiler the nearest hardslice.json above the project and IsTestProject.
     [Fact]
-    public async Task Package_is_analyzer_only_and_enforces_HS016_for_a_consumer()
+    public async Task Package_is_analyzer_only_and_enforces_HS016_and_its_contracts_for_a_consumer()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var repositoryRoot = FindRepositoryRoot();
@@ -58,7 +59,10 @@ public sealed class AnalyzerPackageTests
 
             var consumerProject = Path.Combine(consumerDirectory, "MyApp.csproj");
             var consumerSource = Path.Combine(consumerDirectory, "Program.cs");
+            var configuration = Path.Combine(temporaryDirectory, "hardslice.json");
             await File.WriteAllTextAsync(consumerProject, ConsumerProject(packageVersion), cancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(consumerDirectory, "Contracts.cs"), ContractsSource, cancellationToken);
+            await File.WriteAllTextAsync(configuration, Configuration, cancellationToken);
             await File.WriteAllTextAsync(consumerSource, CompliantSource, cancellationToken);
 
             var restore = await RunDotnetAsync(
@@ -104,6 +108,28 @@ public sealed class AnalyzerPackageTests
                 "--no-incremental");
             violatingBuild.ExitCode.ShouldNotBe(0, violatingBuild.Output);
             violatingBuild.Output.ShouldContain(SliceReferenceAnalyzer.DiagnosticId);
+
+            await File.WriteAllTextAsync(consumerSource, AmbiguousSource, cancellationToken);
+            var ambiguousBuild = await BuildConsumerAsync();
+            ambiguousBuild.ExitCode.ShouldNotBe(0, ambiguousBuild.Output);
+            ambiguousBuild.Output.ShouldContain("error HS901: 'BookingSnapshot' is both an entity and a domain event");
+
+            // HS900 to HS902 do not apply to test projects.
+            var testProjectBuild = await BuildConsumerAsync("-p:IsTestProject=true");
+            testProjectBuild.ExitCode.ShouldBe(0, testProjectBuild.Output);
+
+            await File.WriteAllTextAsync(consumerSource, CompliantSource, cancellationToken);
+            File.Delete(configuration);
+            var unconfiguredBuild = await BuildConsumerAsync();
+            unconfiguredBuild.ExitCode.ShouldNotBe(0, unconfiguredBuild.Output);
+            unconfiguredBuild.Output.ShouldContain($"error HS900: hardslice.json was not found in '{consumerDirectory}' or above it.");
+
+            Task<DotnetResult> BuildConsumerAsync(params string[] properties) =>
+                RunDotnetAsync(
+                    consumerDirectory,
+                    consumerPackages,
+                    cancellationToken,
+                    ["build", consumerProject, "--configuration", "Release", "--no-restore", "--no-incremental", .. properties]);
         }
         finally
         {
@@ -118,6 +144,8 @@ public sealed class AnalyzerPackageTests
         var entries = archive.Entries.Select(entry => entry.FullName.Replace('\\', '/')).ToArray();
 
         entries.ShouldContain("analyzers/dotnet/cs/HardSlice.Analyzers.dll");
+        entries.ShouldContain("build/HardSlice.Analyzers.props");
+        entries.ShouldContain("build/HardSlice.Analyzers.targets");
         entries.Any(entry => entry.StartsWith("lib/", StringComparison.Ordinal)).ShouldBeFalse();
         entries.Any(entry => entry.StartsWith("ref/", StringComparison.Ordinal)).ShouldBeFalse();
         entries.Any(entry => entry.StartsWith("runtimes/", StringComparison.Ordinal)).ShouldBeFalse();
@@ -200,6 +228,55 @@ public sealed class AnalyzerPackageTests
             <PackageReference Include="HardSlice.Analyzers" Version="{{packageVersion}}" PrivateAssets="all" />
           </ItemGroup>
         </Project>
+        """;
+
+    private const string Configuration =
+        """
+        {
+          "style": "slices",
+          "contracts": {
+            "entity": "MyApp.Domain.IEntity, MyApp",
+            "aggregateRoot": "MyApp.Domain.IAggregateRoot, MyApp",
+            "domainEvent": "MyApp.Domain.IDomainEvent, MyApp",
+            "command": "MyApp.Shared.Messaging.ICommand`1, MyApp",
+            "query": "MyApp.Shared.Messaging.IQuery`1, MyApp",
+            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp"
+          },
+          "shared": {
+            "allowedFolders": ["Messaging"]
+          }
+        }
+        """;
+
+    private const string ContractsSource =
+        """
+        namespace MyApp.Domain
+        {
+            public interface IEntity;
+
+            public interface IAggregateRoot : IEntity;
+
+            public interface IDomainEvent;
+        }
+
+        namespace MyApp.Shared.Messaging
+        {
+            public interface IRequest<TResponse>;
+
+            public interface ICommand<TResponse> : IRequest<TResponse>;
+
+            public interface IQuery<TResponse> : IRequest<TResponse>;
+
+            public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse>;
+        }
+        """;
+
+    private const string AmbiguousSource =
+        """
+        namespace MyApp.Domain.Bookings
+        {
+            public sealed class BookingSnapshot : IAggregateRoot, IDomainEvent;
+        }
         """;
 
     private const string CompliantSource =

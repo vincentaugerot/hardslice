@@ -1,0 +1,10 @@
+<Project>
+  <!-- MSBuild properties the HardSlice analyzers read as build_property.* analyzer options. -->
+  <ItemGroup>
+    <!-- Rules that do not apply to test projects. -->
+    <CompilerVisibleProperty Include="IsTestProject" />
+    <!-- Names the folder searched for hardslice.json when it is missing. -->
+    <CompilerVisibleProperty Include="MSBuildProjectDirectory" />
+    <CompilerVisibleProperty Include="HardSliceAnalysisMode" />
+  </ItemGroup>
+</Project>

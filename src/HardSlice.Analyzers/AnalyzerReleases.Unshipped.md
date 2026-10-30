@@ -6,3 +6,6 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 HS016 | HardSlice.Architecture | Error | SliceReferenceAnalyzer
+HS900 | HardSlice.Configuration | Error | ClassificationAnalyzer
+HS901 | HardSlice.Configuration | Error | ClassificationAnalyzer
+HS902 | HardSlice.Configuration | Error | ClassificationAnalyzer

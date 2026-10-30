@@ -23,6 +23,10 @@
           Pack="true"
           PackagePath="analyzers/dotnet/cs"
           Visible="false" />
+    <!-- Imported by the package reference: hardslice.json and the MSBuild properties the analyzers read. -->
+    <None Include="build/HardSlice.Analyzers.props;build/HardSlice.Analyzers.targets"
+          Pack="true"
+          PackagePath="build" />
   </ItemGroup>
 
 </Project>
