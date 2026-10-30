@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" />
     <Project Path="src/HardSlice.Templates/HardSlice.Templates.csproj" />
+    <Project Path="src/HardSlice.Tool/HardSlice.Tool.csproj" />
   </Folder>
   <Folder Name="/templates/hardslice-api/src/">
     <Project Path="src/HardSlice.Templates/content/hardslice-api/src/MyApp.Domain/MyApp.Domain.csproj" />
@@ -14,5 +15,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HardSlice.Analyzers.Tests/HardSlice.Analyzers.Tests.csproj" />
+    <Project Path="tests/HardSlice.Tool.Tests/HardSlice.Tool.Tests.csproj" />
   </Folder>
 </Solution>

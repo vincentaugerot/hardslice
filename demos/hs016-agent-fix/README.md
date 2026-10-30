@@ -31,10 +31,11 @@ scripts/demo-hs016-agent-fix.sh prepare <dir>
 
 Generates `Demo` in `<dir>` with the same generator as `scripts/test-template.sh`. Like `verify`, it runs the generated `scripts/check.sh`, whose integration tests need a Docker-compatible container runtime. It first proves the generated application is green, then applies and commits the fixture for the agent's local diff workflow. Preparation fails unless the fixture produces the expected `CancelBookingHandler` to `BookingSchedule` HS016 diagnostic.
 
-Then run any agent from `<dir>/Demo` with the content of `prompt.md`. The recorded run used Claude Code in headless mode, without user settings, plugins or MCP servers, so it relied only on what the generated solution provides:
+Then run any agent from `<dir>/Demo` with the content of `prompt.md`, with `DOTNET_CLI_HOME` set to `<dir>/dotnet-cli` like `prepare`: `scripts/check.sh` restores `dotnet hardslice` from the private package folder of `<dir>`, and the .NET SDK never updates the path of a tool version it already resolved, so a shared resolver cache would keep pointing to that folder once `<dir>` is deleted. The recorded run used Claude Code in headless mode, without user settings, plugins or MCP servers, so it relied only on what the generated solution provides:
 
 ```text
 cd <dir>/Demo
+export DOTNET_CLI_HOME=<dir>/dotnet-cli
 claude -p "$(cat <repo>/demos/hs016-agent-fix/prompt.md)" \
   --setting-sources project --strict-mcp-config --no-session-persistence \
   --permission-mode acceptEdits \

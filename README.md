@@ -13,6 +13,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 - the `hardslice-api` solution template: an ASP.NET Core API in vertical slices around a rich domain, with a `Bookings` sample module, or empty with `--no-sample`;
 - the `HardSlice.Analyzers` package, which reports HS016 at build time, and HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
 - architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
+- the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule;
 - `AGENTS.md`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution.
 
 `scripts/test-template.sh` runs the commands of [Getting started](#getting-started) in CI, from a fresh runner, on every push to `main` and every pull request: in temporary folders, on free ports, with and without the sample.
@@ -32,11 +33,12 @@ From a clone of this repository:
 
 ```text
 dotnet pack src/HardSlice.Analyzers/HardSlice.Analyzers.csproj --configuration Release --output artifacts/packages
+dotnet pack src/HardSlice.Tool/HardSlice.Tool.csproj --configuration Release --output artifacts/packages
 dotnet pack src/HardSlice.Templates/HardSlice.Templates.csproj --configuration Release --output artifacts/packages
 dotnet new install artifacts/packages/HardSlice.Templates.0.1.0.nupkg
 ```
 
-The generated solutions restore `HardSlice.Analyzers` from that folder. Create a folder for them, outside this repository, with this `nuget.config`, replacing the `value` of `hardslice-local` with the absolute path of `artifacts/packages`:
+The generated solutions restore `HardSlice.Analyzers` and `HardSlice.Tool` from that folder. Create a folder for them, outside this repository, with this `nuget.config`, replacing the `value` of `hardslice-local` with the absolute path of `artifacts/packages`:
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -83,7 +85,17 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-Both scripts build the solution, then run the unit tests, the architecture tests and the integration tests, which start PostgreSQL with Testcontainers. Without a reachable container runtime, they stop before the integration tests and say so. They exit with a non-zero code on any failure: this is the command an agent must bring back to green before it is done.
+Both scripts restore the local tools of `.config/dotnet-tools.json`, then run `dotnet hardslice check`. It builds the solution, then runs the unit tests, the architecture tests and the integration tests, which start PostgreSQL with Testcontainers. Without a reachable container runtime, it stops before the integration tests and says so. It exits with the code of the first step that fails: this is the command an agent must bring back to green before it is done. The diagnostics are those of `dotnet build` and `dotnet test`, as they print them.
+
+The tool has the version of the analyzers: `check` fails before building if `Directory.Packages.props` references another version of `HardSlice.Analyzers`. It has no option to skip a step.
+
+To read the sheet of a rule without leaving the terminal:
+
+```text
+dotnet hardslice explain HS016
+```
+
+An unknown rule exits with code 2 and lists the rules that have a sheet.
 
 ### 4. Run the API
 
@@ -131,7 +143,7 @@ Ask your agent to read `AGENTS.md`: it says where a use case goes, how to add a 
 | [HS901](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS901.md) | A type has one role: never both an entity and a domain event, a command and a query, or an entity and a request. | Analyzer at build time |
 | [HS902](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS902.md) | Every domain type EF Core maps as an entity implements `IEntity` or `IAggregateRoot`. | Analyzer at build time |
 
-Each generated solution carries these sheets in `docs/rules/`, at the path its diagnostics announce. A sheet says what the rule forbids, how to fix a violation, and which workarounds are forbidden.
+Each generated solution carries these sheets in `docs/rules/`, at the path its diagnostics announce, and `dotnet hardslice explain` prints them. A sheet says what the rule forbids, how to fix a violation, and which workarounds are forbidden.
 
 ### Analysis modes
 
@@ -146,13 +158,13 @@ HS900 to HS902 are reported only when an active rule depends on the classificati
 
 ## Known limitations
 
-- The packages are built locally with the fixed version 0.1.0. After pulling a new version of this repository, repack, reinstall the template with `dotnet new install artifacts/packages/HardSlice.Templates.0.1.0.nupkg --force`, and clear the analyzer NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the old build of `HardSlice.Analyzers` 0.1.0.
+- The packages are built locally with the fixed version 0.1.0. After pulling a new version of this repository, repack, reinstall the template with `dotnet new install artifacts/packages/HardSlice.Templates.0.1.0.nupkg --force`, and clear the packages NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the old builds of `HardSlice.Analyzers` and `HardSlice.Tool` 0.1.0.
 - `HardSlice.Analyzers` is supported only in a solution generated by `hardslice-api`, whose `docs/rules/` holds the sheets its diagnostics point to.
 - Only HS016 and HS900 to HS902 are reported at build time and in the IDE. The other rules are architecture tests: they fail `dotnet test` and the check scripts, not `dotnet build`. HS900 is reported for a whole project, at the end of its analysis: the IDE shows it with full solution analysis only.
 - HS016 is analyzed within one assembly: slices and modules are folders of the web project.
 - PostgreSQL is the only database. SQL Server and Aspire orchestration are planned for v1.0.
 - Domain events are recorded by the aggregates but not published to handlers yet.
-- `AGENTS.md` is the only agent guidance. `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, skills, hooks and item templates are planned for v0.3, the `dotnet hardslice` tool and the adoption of existing solutions for v0.2 and v0.5.
+- `AGENTS.md` is the only agent guidance. `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, skills, hooks and item templates are planned for v0.3, the adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) for v0.5.
 - The generated application has a Development configuration only: no production settings, authentication or deployment.
 - CI runs on Linux: `scripts/check.ps1` is verified with PowerShell 7 on Linux, not on Windows.
 
@@ -168,7 +180,7 @@ scripts/measure-analyzers.sh
 ```
 
 - `dotnet test` runs the analyzer tests and the tests of the template content, integration tests included: it needs a container runtime.
-- `scripts/test-template.sh` packs both packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic and its sheet. It needs PowerShell 7.
+- `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic and its sheet. It needs PowerShell 7.
 - `scripts/demo-hs016-agent-fix.sh` prepares the [HS016 agent fix demonstration](demos/hs016-agent-fix/README.md).
 - `scripts/measure-analyzers.sh` measures the build time of a large generated application with and without the HardSlice analyzers, checks the thresholds and records the measurement in [the performance report](docs/performance/analyzers.md), in French.
 
@@ -178,7 +190,9 @@ CI runs three jobs on every push to `main` and every pull request, each on a fre
 |---|---|
 | `src/HardSlice.Analyzers/` | The Roslyn analyzer package. |
 | `src/HardSlice.Templates/content/hardslice-api/` | The solution template, `MyApp` being replaced by the name you choose. |
+| `src/HardSlice.Tool/` | The `dotnet hardslice` local tool, which embeds the rule sheets of the template. |
 | `tests/HardSlice.Analyzers.Tests/` | Analyzer tests, and tests that compile the template content as is. |
+| `tests/HardSlice.Tool.Tests/` | Tests of `check` and `explain`, and of the versions and sheets the tool shares with the template. |
 | `scripts/` | Template, demonstration and performance scenarios. |
 | `demos/hs016-agent-fix/` | An agent fixing a deliberate HS016 violation. |
 | `docs/` | Specification, plan, backlog and performance report, in French. |

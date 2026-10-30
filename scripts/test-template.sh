@@ -5,7 +5,8 @@
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists,
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
-# and that an unknown HardSliceAnalysisMode fails them with the list of modes.
+# that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
+# is pinned to the version of the analyzers, refuses another one before the build and explains every rule with the sheet of the template.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
 # and that seeded violations of HS001, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 still fail them: without the sample, the rules keep their targets.
 set -euo pipefail
@@ -29,6 +30,10 @@ trap cleanup EXIT
 
 app_name="Demo"
 app="$work/$app_name"
+
+# The check scripts restore dotnet hardslice and dotnet-ef from $work/nuget-packages: their resolver cache lives in $work too.
+source "$repo_root/scripts/dotnet-cli-home.sh"
+isolate_dotnet_cli_home "$work"
 
 "$repo_root/scripts/generate-app.sh" "$work"
 
@@ -87,7 +92,6 @@ run_documented_path() {
   echo "==> Applying the migrations of $app_name to PostgreSQL as README.md documents it"
   (
     cd "$app"
-    export DOTNET_CLI_HOME="$work/dotnet-cli"
     export ConnectionStrings__Database="$connection_string"
     dotnet tool restore
     dotnet ef database update --project "src/$app_name"
@@ -158,12 +162,36 @@ bash "$app/scripts/check.sh"
 echo "==> Verifying the generated solution with scripts/check.ps1"
 pwsh -NoProfile -File "$app/scripts/check.ps1"
 
+# The check scripts have restored the tool: it must be the version of the analyzers, and print the sheets of the template as it ships them.
+echo "==> Checking that dotnet hardslice is pinned to the version of the analyzers and explains every rule"
+(
+  cd "$app"
+  analyzer_version="$(sed -n 's/.*<GlobalPackageReference Include="HardSlice.Analyzers" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)"
+  tool_version="$(dotnet hardslice --version)"
+  if [[ -z "$analyzer_version" || "$tool_version" != "$analyzer_version" ]]; then
+    echo "error: dotnet hardslice is version '$tool_version' but $app_name references HardSlice.Analyzers '$analyzer_version'." >&2
+    exit 1
+  fi
+  for sheet in "$repo_root"/src/HardSlice.Templates/content/hardslice-api/docs/rules/HS*.md; do
+    rule="$(basename "$sheet" .md)"
+    if ! dotnet hardslice explain "$rule" | cmp --silent - "$sheet"; then
+      echo "error: dotnet hardslice explain $rule does not print the sheet of the template." >&2
+      exit 1
+    fi
+  done
+  explain_status=0
+  explain_output="$(dotnet hardslice explain HS999 2>&1)" || explain_status=$?
+  if [[ "$explain_status" != 2 || "$explain_output" != *"Rules with a sheet: HS001, "* ]]; then
+    printf '%s\n' "$explain_output" >&2
+    echo "error: dotnet hardslice explain HS999 exited $explain_status instead of 2 with the list of rules." >&2
+    exit 1
+  fi
+  echo "    dotnet hardslice $tool_version explains $(ls docs/rules | wc -l) rules"
+)
+
 echo "==> Checking the generated migrations with the pinned dotnet-ef tool"
 (
   cd "$app"
-  # The restored tool lives under $work: keep its resolver cache there too, so
-  # deleting this run cannot leave stale tool paths in the user's shared cache.
-  export DOTNET_CLI_HOME="$work/dotnet-cli"
   dotnet tool restore
   dotnet ef migrations has-pending-model-changes --project "src/$app_name" --no-build
 )
@@ -875,7 +903,30 @@ done
 echo "    $unknown_mode"
 mv "$work/Directory.Build.props.backup" "$app/Directory.Build.props"
 
-echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), and on an unknown analysis mode"
+# The tool verifies the rules of the analyzers it ships with: another analyzer version stops both scripts before the build.
+echo "==> Checking that another HardSlice.Analyzers version fails both check scripts before the build"
+cp "$app/Directory.Packages.props" "$work/Directory.Packages.props.backup"
+sed 's|<GlobalPackageReference Include="HardSlice.Analyzers" Version="[^"]*" />|<GlobalPackageReference Include="HardSlice.Analyzers" Version="0.0.1" />|' "$work/Directory.Packages.props.backup" > "$app/Directory.Packages.props"
+if ! grep -Fq '<GlobalPackageReference Include="HardSlice.Analyzers" Version="0.0.1" />' "$app/Directory.Packages.props"; then
+  echo "error: the Directory.Packages.props of $app_name does not reference HardSlice.Analyzers." >&2
+  exit 1
+fi
+version_mismatch="error: Directory.Packages.props references HardSlice.Analyzers 0.0.1, but dotnet hardslice is version"
+for script in check.sh check.ps1; do
+  if check_output="$(run_check "$script" 2>&1)"; then
+    echo "error: scripts/$script passed with another HardSlice.Analyzers version." >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$check_output" | grep -Fq "$version_mismatch" || printf '%s\n' "$check_output" | grep -Fq "==> Building"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/$script did not stop before the build on another HardSlice.Analyzers version." >&2
+    exit 1
+  fi
+done
+echo "    $version_mismatch ..."
+mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
+
+echo "==> $app_name OK: it passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS012, HS013, HS014, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule"
 
 sample_name="$app_name"
 blank_name="Blank"
@@ -920,7 +971,6 @@ pwsh -NoProfile -File "$blank/scripts/check.ps1"
 echo "==> Checking that the model of $blank_name needs no migration, with the pinned dotnet-ef tool"
 (
   cd "$blank"
-  export DOTNET_CLI_HOME="$work/dotnet-cli"
   dotnet tool restore
   dotnet ef migrations has-pending-model-changes --project "src/$blank_name" --no-build
 )

@@ -23,6 +23,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 | `.editorconfig` | Severity of the HardSlice analyzer rules. |
 | `Directory.Build.props` | Build settings of every project, including `HardSliceAnalysisMode`, set to `All`: every HardSlice analyzer rule is on. |
 | `Directory.Build.targets` | Supplies each test project's compilation symbols and compiled source paths to HS014. |
+| `.config/dotnet-tools.json` | Local tools: `dotnet-ef` at the version of EF Core, and `dotnet hardslice` at the version of `HardSlice.Analyzers`. |
 
 Modules and slices:
 
@@ -115,7 +116,7 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-Both scripts build the solution (restoring if needed), then run the unit tests, the architecture tests and the integration tests. Integration tests need a Docker-compatible container runtime: without one, the scripts stop before them and say so. They exit with a non-zero code on any failure.
+Both scripts restore the local tools, then run `dotnet hardslice check`: it builds the solution (restoring if needed), then runs the unit tests, the architecture tests and the integration tests. Integration tests need a Docker-compatible container runtime: without one, the check stops before them and says so. It exits with a non-zero code on any failure, the code of the first step that fails.
 
 **You are not done until the check script exits 0.** Do not hand back, report success or commit while it fails. If it cannot pass without breaking a rule, stop and explain the conflict instead.
 
@@ -124,7 +125,7 @@ Both scripts build the solution (restoring if needed), then run the unit tests, 
 A HardSlice failure starts with its rule: `HS016` and `HS900` to `HS902` from the analyzer at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests.
 
 1. Read the diagnostic: it names the offending symbol, the rule, the expected fix and its sheet after `Doc:`.
-2. Open the sheet and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders), `docs/rules/HS900.md` (contracts of `hardslice.json`), `docs/rules/HS901.md` (one role per type), `docs/rules/HS902.md` (mapped entities).
+2. Open the sheet, or print it with `dotnet hardslice explain <rule>`, and apply the first fix that matches: `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders), `docs/rules/HS900.md` (contracts of `hardslice.json`), `docs/rules/HS901.md` (one role per type), `docs/rules/HS902.md` (mapped entities).
 3. Run the check script again.
 
 `HS900`, or a message starting with `hardslice.json:`, means the configuration or one of its contracts is missing or invalid: restore them, never adapt them to the code.
@@ -137,7 +138,7 @@ Fix the code, never the rule. Never make a HardSlice diagnostic or an architectu
 - lowering its severity: `dotnet_diagnostic.HS016.severity` in `.editorconfig` or `.globalconfig`, or turning off `TreatWarningsAsErrors`;
 - editing `.editorconfig` or `hardslice.json`, for example to allow a new folder in `Shared`;
 - turning analyzers off: `<RunAnalyzers>false</RunAnalyzers>`, `<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>` or a `HardSliceAnalysisMode` other than `All`;
-- removing, editing or downgrading `HardSlice.Analyzers` or its reference in `Directory.Packages.props`;
+- removing, editing or downgrading `HardSlice.Analyzers` or its reference in `Directory.Packages.props`, or the `hardslice.tool` entry of `.config/dotnet-tools.json`;
 - deleting, skipping or editing tests in `tests/MyApp.ArchitectureTests/`, or editing `scripts/check.sh` and `scripts/check.ps1`;
 - changing `HardSliceGetTestInputs` in `Directory.Build.targets` to hide tests behind different compilation symbols or source paths;
 - an empty validator, an empty test or a placeholder file written only to satisfy HS013, HS014 or HS018;

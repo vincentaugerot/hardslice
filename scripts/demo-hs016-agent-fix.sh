@@ -5,6 +5,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$repo_root/scripts/dotnet-cli-home.sh"
 demo="$repo_root/demos/hs016-agent-fix"
 expected_hs016="error HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'BookingSchedule' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. Doc: 'docs/rules/HS016.md'."
 forbidden_source_regex='^[[:space:]]*#|SuppressMessage|System[.]Reflection|Type[.]GetType|Activator[.]|(^|[^[:alnum:]_])dynamic([^[:alnum:]_]|$)|Skip[[:space:]]*=|if[[:space:]]*[(][[:space:]]*false'
@@ -50,6 +51,7 @@ prepare() {
   mkdir -p -- "$work"
   work="$(cd "$work" && pwd)"
 
+  isolate_dotnet_cli_home "$work"
   "$repo_root/scripts/generate-app.sh" "$work"
   local app="$work/Demo"
 
@@ -231,6 +233,8 @@ verify() {
   trap 'cleanup_verification_root "$verification_root"' EXIT
 
   echo "==> Regenerating a trusted fixture for verification"
+  # The trusted check runs dotnet hardslice from the trusted tree only, never from the package folder of the candidate.
+  isolate_dotnet_cli_home "$verification_root"
   "$repo_root/scripts/generate-app.sh" "$verification_root"
   local baseline_app="$verification_root/Demo"
   apply_fixture "$baseline_app"

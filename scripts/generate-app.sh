@@ -17,12 +17,13 @@ hive="$work/template-hive"
 app_name="${2:-Demo}"
 template_hive_args=(--debug:custom-hive "$hive")
 
-echo "==> Packing HardSlice.Analyzers and HardSlice.Templates"
+echo "==> Packing HardSlice.Analyzers, HardSlice.Tool and HardSlice.Templates"
 dotnet pack "$repo_root/src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" --configuration Release --output "$feed"
+dotnet pack "$repo_root/src/HardSlice.Tool/HardSlice.Tool.csproj" --configuration Release --output "$feed"
 dotnet pack "$repo_root/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$feed"
 
 # Parent of the generated solution: HardSlice packages come only from the local feed, everything else from nuget.org.
-# A private package folder guarantees the freshly packed analyzer is restored, never a stale build of the same version,
+# A private package folder guarantees the freshly packed analyzer and tool are restored, never a stale build of the same version,
 # including when an agent later runs the check scripts from its own shell.
 cat > "$work/nuget.config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
