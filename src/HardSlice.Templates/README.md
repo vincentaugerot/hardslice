@@ -11,9 +11,10 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-It also holds two item templates, run from the root of such a solution once it is restored. `hardslice-command` creates a command slice of an existing module, with its validator tests and its integration tests; `hardslice-query` creates a query slice that reads an aggregate of the module without tracking, one DTO by its id or, with `--result many`, a list, with its integration tests. Both print the lines that register the slice in its module:
+It also holds three item templates, run from the root of such a solution once it is restored. `hardslice-module` creates a module, its public contract that registers and maps its slices on one route group, the folder of its domain and its test folders, and prints the lines that register it in `Program.cs`. `hardslice-command` creates a command slice of an existing module, with its validator tests and its integration tests; `hardslice-query` creates a query slice that reads an aggregate of the module without tracking, one DTO by its id or, with `--result many`, a list, with its integration tests. Both print the lines that register the slice in its module:
 
 ```text
+dotnet new hardslice-module --project src/Rooms/Rooms.csproj --name Payments
 dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
 dotnet new hardslice-query --project src/Rooms/Rooms.csproj --module Bookings --name GetBookingSummary --aggregate Booking
 ```

@@ -1863,6 +1863,18 @@ scripts/test-template.sh
 - module existant : refus sans `--force` ;
 - section « Adding a first module » d'`AGENTS.md` en variante `--no-sample` : renvoie au template.
 
+**Réalisation (31/10/2026)**
+
+Essais faits avec le SDK 10.0.401 :
+
+- même liaison que PB-036 et PB-037 : `dotnet new hardslice-module --project src/<App>/<App>.csproj --name Rooms`, le nom de l'application lu par `msbuild:RootNamespace`. Le module n'a pas besoin de `HardSliceModuleFiles` : il n'en lit aucun ;
+- `dotnet new` ne crée pas de dossier vide : le dossier du domaine `src/<App>.Domain/<Module>/` et les dossiers de tests `tests/<App>.Tests/Domain/<Module>/`, `tests/<App>.Tests/Features/<Module>/` et `tests/<App>.IntegrationTests/Features/<Module>/` reçoivent chacun un `.gitkeep`. Les tests d'architecture ne lisent que les fichiers C# : HS018 ne le prend pas pour un test, et un dossier de tests de module sans slice est admis tant que le module existe ;
+- refus (code 105, rien n'est créé, même post-action sans script que PB-036) : application illisible, nom absent, non PascalCase ou suffixé `Module`, route invalide. `--route` est facultatif : sans lui, le groupe est le nom du module en kebab-case (`MeetingRooms` donne `/meeting-rooms`) ; une valeur vide revient à ce défaut ; une barre oblique initiale est retirée, et le reste doit être fait de mots en minuscules séparés par des tirets ou des barres obliques. Les tests générés par `hardslice-command` et `hardslice-query` supposent la route par défaut ;
+- un module existant est refusé par `dotnet new` lui-même (code 73, `--force`), qui trouve `<Module>Module.cs`. Avec `--force`, le contrat du module est réécrit, ses enregistrements compris ;
+- le contrat a la forme de `BookingsModule`, sans slice : `Add<Module>Module` renvoie `services`, `Map<Module>Module` crée le groupe et renvoie `endpoints`, lignes que complètent les instructions de `hardslice-command` et `hardslice-query`. Les instructions affichées donnent le `using`, puis `builder.Services.Add<Module>Module();` avant `var app = builder.Build();` et `app.Map<Module>Module();` avant `app.Run();` ;
+- les messages de `hardslice-command` et `hardslice-query` pour un module absent donnent la commande complète, `--project` compris ;
+- `scripts/test-template.sh` génère `Rooms` dans les deux variantes avec chacun de ses refus et de ses routes, l'enregistre dans `Program.cs` par les lignes affichées et lance la vérification, verte. Avec Bookings, le module généré qui utilise `BookingDto` fait échouer HS012 dans les deux scripts ; sans Bookings, il reçoit ensuite les slices de commande et de requête.
+
 **Dépendances**
 
 Incrément 3.

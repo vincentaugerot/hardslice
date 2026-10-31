@@ -61,6 +61,7 @@ public sealed class TemplatePackageTests
             // The item templates ship in the same package, beside hardslice-api.
             PackedFiles(archive, "/hardslice-command/").ShouldBe(CommandTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-query/").ShouldBe(QueryTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-module/").ShouldBe(ModuleTemplateFiles.Order(StringComparer.Ordinal));
         }
         finally
         {
@@ -159,6 +160,66 @@ public sealed class TemplatePackageTests
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
         refusals.Length.ShouldBe(7);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+    }
+
+    // hardslice-module generates the contract of the module and, since dotnet new creates no empty folder, a .gitkeep in the folder
+    // of its domain and in each of its test folders: no C# file that HS018 would read as a test.
+    [Fact]
+    public void Module_item_template_generates_the_contract_of_the_module_and_its_folders_only()
+    {
+        var root = ModuleTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(ModuleTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-module");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        config.GetProperty("sourceName").GetString().ShouldBe("ModuleName");
+        var symbols = config.GetProperty("symbols");
+        var application = symbols.GetProperty("AppName");
+        application.GetProperty("type").GetString().ShouldBe("bind");
+        application.GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        application.GetProperty("replaces").GetString().ShouldBe("MyApp");
+        // The route of the group has no default value: the name of the module in kebab-case replaces it.
+        symbols.GetProperty("Route").TryGetProperty("defaultValue", out _).ShouldBeFalse();
+        symbols.GetProperty("GroupRoute").GetProperty("replaces").GetString().ShouldBe("module-route");
+    }
+
+    // The contract has the shape of BookingsModule: registration and mapping on one group, which the lines of the slice templates complete.
+    [Fact]
+    public void Module_item_template_registers_and_maps_the_slices_on_one_group()
+    {
+        var contract = File.ReadAllLines(
+            Path.Combine(ModuleTemplateRoot(FindRepositoryRoot()), "src", "MyApp", "Features", "ModuleName", "ModuleNameModule.cs"));
+
+        contract.ShouldContain("namespace MyApp.Features.ModuleName;");
+        contract.ShouldContain("public static class ModuleNameModule");
+        contract.ShouldContain("    public static IServiceCollection AddModuleNameModule(this IServiceCollection services) =>");
+        contract.ShouldContain("        services;");
+        contract.ShouldContain("    public static IEndpointRouteBuilder MapModuleNameModule(this IEndpointRouteBuilder endpoints)");
+        contract.ShouldContain("        var group = endpoints.MapGroup(\"/module-route\");");
+        contract.ShouldContain("        return endpoints;");
+        contract.ShouldNotContain(line => line.StartsWith("using ", StringComparison.Ordinal));
+    }
+
+    // Every refusal fails the generation, after excluding every file, and says that nothing was created.
+    [Fact]
+    public void Module_item_template_refuses_with_an_error_that_creates_nothing()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ModuleTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Length.ShouldBe(5);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -345,6 +406,17 @@ public sealed class TemplatePackageTests
         "tests/MyApp.IntegrationTests/Features/ModuleName/QueryName/QueryNameTests.cs"
     ];
 
+    private static readonly string[] ModuleTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp.Domain/ModuleName/.gitkeep",
+        "src/MyApp/Features/ModuleName/ModuleNameModule.cs",
+        "tests/MyApp.IntegrationTests/Features/ModuleName/.gitkeep",
+        "tests/MyApp.Tests/Domain/ModuleName/.gitkeep",
+        "tests/MyApp.Tests/Features/ModuleName/.gitkeep"
+    ];
+
     // The files of the item template under <folder> of the package, relative to that folder.
     private static IEnumerable<string> PackedFiles(ZipArchive archive, string folder) =>
         archive.Entries.Select(entry => entry.FullName.Replace('\\', '/'))
@@ -357,6 +429,9 @@ public sealed class TemplatePackageTests
 
     private static string QueryTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-query");
+
+    private static string ModuleTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-module");
 
     private static string TemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");

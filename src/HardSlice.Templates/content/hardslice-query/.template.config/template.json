@@ -332,7 +332,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: module 'ModuleName' does not exist: src/MyApp/Features/ModuleName/ModuleNameModule.cs was not found. Create the module first with dotnet new hardslice-module --name ModuleName, then add the slice. Nothing was created."
+          "text": "error: module 'ModuleName' does not exist: src/MyApp/Features/ModuleName/ModuleNameModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name ModuleName, then add the slice. Nothing was created."
         }
       ],
       "continueOnError": false
