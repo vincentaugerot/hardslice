@@ -61,6 +61,7 @@ Modules and slices:
 1. Check whether the aggregate already owns the business rule. If not, add it to the aggregate with its unit test.
 <!--#if (!NoSample) -->
    A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as an overlapping booking, throws a `ConflictException`, answered with 409.
+   `BookingPeriod` normalizes to UTC and truncates to microseconds before checking its duration and overlaps; a period that becomes empty is invalid. The database also requires `End > Start`; repair any legacy empty periods explicitly before applying `AddBookingPositivePeriodConstraint`.
    When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` (HS009) named in the past tense (HS019), implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`. Follow `BookingConfirmed`, recorded by `Booking.Confirm` and exposed through `Booking.DomainEvents`. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
 2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`. Follow `ConfirmBooking` as the example:
 <!--#else -->

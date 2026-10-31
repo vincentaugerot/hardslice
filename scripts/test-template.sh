@@ -259,6 +259,11 @@ echo "==> Checking that commands go through the generated solution's own mediato
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_never_commits_a_failed_commands_additions" \
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_reloads_the_state_before_a_failed_commands_changes" \
     "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Rejects_a_command_without_room_with_a_validation_problem_before_its_handler" \
+    "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Stores_offset_dates_in_UTC_and_rejects_the_equivalent_UTC_booking" \
+    "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Rejects_sub_microsecond_periods_without_storing_or_blocking_the_room" \
+    "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Reads_and_cancels_a_period_at_its_persisted_precision" \
+    "Features.Bookings.BookingConfigurationTests.Database_rejects_an_empty_period_even_when_bypassing_the_domain" \
+    "Features.Bookings.BookingConfigurationTests.Upgrade_preserves_bookings_and_requires_explicit_repair_of_legacy_empty_periods" \
     "Features.Bookings.CancelBooking.CancelBookingTests.Rejects_an_empty_booking_id_with_a_validation_problem" \
     "Features.Bookings.GetBooking.GetBookingTests.Reads_a_confirmed_booking_at_the_location_returned_by_its_creation" \
     "Features.Bookings.GetBooking.GetBookingTests.Reads_a_booking_without_tracking_any_entity"; do
@@ -597,7 +602,7 @@ rm -r "$app_src/Features/Bookings/Hs013Probe"
 # A specialized or constrained validator must not cover every construction of an open command.
 # The slice and its handler have their tests: only HS013 sees the validator.
 echo "==> Checking that HS013 preserves generic arguments and validator constraints"
-# Writes the Hs013Generic slice and its test, with the declaration of its validator and the body of the validator's constructor.
+# Writes the slice and its test: validator declaration, constructor body, optional command/handler constraint.
 write_hs013_generic_slice() {
   mkdir -p "$app_src/Features/Bookings/Hs013Generic" "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic"
   cat > "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic/Hs013GenericHandlerTests.cs" <<EOF
@@ -615,9 +620,9 @@ using $app_name.Shared.Messaging;
 
 namespace $app_name.Features.Bookings.Hs013Generic;
 
-public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool>;
+public sealed record Hs013GenericCommand<T>(T Value) : ICommand<bool> ${3:-};
 
-internal sealed class Hs013GenericHandler<T> : IRequestHandler<Hs013GenericCommand<T>, bool>
+internal sealed class Hs013GenericHandler<T> : IRequestHandler<Hs013GenericCommand<T>, bool> ${3:-}
 {
     public Task<bool> Handle(Hs013GenericCommand<T> command, CancellationToken cancellationToken) => Task.FromResult(true);
 }
@@ -634,6 +639,8 @@ write_hs013_generic_slice "internal sealed class Hs013GenericValidator : Abstrac
 expect_failure "HS013: command 'Hs013GenericCommand'" "docs/rules/HS013.md" "a generic command with only an int validator" check.sh check.ps1
 write_hs013_generic_slice "internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>> where T : struct" "RuleFor(command => command.Value).NotEmpty()"
 expect_failure "HS013: command 'Hs013GenericCommand'" "docs/rules/HS013.md" "a generic command with only a struct-constrained validator" check.sh check.ps1
+write_hs013_generic_slice "internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>> where T : unmanaged" "RuleFor(command => command.Value).NotEmpty()" "where T : struct"
+expect_failure "HS013: command 'Hs013GenericCommand'" "docs/rules/HS013.md" "a struct-constrained command with only an unmanaged validator" check.sh check.ps1
 rm -r "$app_src/Features/Bookings/Hs013Generic" "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic"
 
 # The slice has a test folder, so HS018 passes: only HS014 sees that it holds no test.
@@ -814,6 +821,8 @@ rm -r "$app_src/Features/Bookings/ArchiveBooking" "$app/tests/$app_name.Tests/Fe
 echo "==> Checking that HS013 accepts a generic validator covering all command arguments"
 write_hs013_generic_slice "internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>>" "RuleFor(command => command.Value).NotEmpty()"
 expect_architecture_tests_pass "an unconstrained generic command with an unconstrained validator"
+write_hs013_generic_slice "internal sealed class Hs013GenericValidator<T> : AbstractValidator<Hs013GenericCommand<T>> where T : unmanaged" "RuleFor(command => command.Value).NotEmpty()" "where T : unmanaged"
+expect_architecture_tests_pass "an unmanaged command with an unmanaged validator"
 rm -r "$app_src/Features/Bookings/Hs013Generic" "$app/tests/$app_name.Tests/Features/Bookings/Hs013Generic"
 
 echo "==> Checking that HS018 fails both check scripts on a slice without tests"

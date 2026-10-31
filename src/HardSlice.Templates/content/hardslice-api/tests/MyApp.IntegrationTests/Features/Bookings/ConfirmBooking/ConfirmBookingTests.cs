@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyApp.Domain.Bookings;
 using MyApp.Features.Bookings.ConfirmBooking;
+using MyApp.Features.Bookings.GetBooking;
 
 namespace MyApp.IntegrationTests.Features.Bookings.ConfirmBooking;
 
@@ -27,6 +28,67 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
         booking.RoomId.ShouldBe(command.RoomId);
         booking.Period.ShouldBe(new BookingPeriod(command.Start, command.End));
         booking.Status.ShouldBe(BookingStatus.Confirmed);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-7)]
+    public async Task Stores_offset_dates_in_UTC_and_rejects_the_equivalent_UTC_booking(int offsetHours)
+    {
+        await using var app = new MyAppFactory(database);
+        var client = app.CreateClient();
+        var roomId = Guid.NewGuid();
+        var offset = TimeSpan.FromHours(offsetHours);
+
+        var response = await ConfirmAsync(client, roomId, Start.ToOffset(offset), Start.AddHours(1).ToOffset(offset));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        await using var db = database.CreateDbContext();
+        var stored = await db.Set<Booking>().SingleAsync(booking => booking.RoomId == roomId, TestContext.Current.CancellationToken);
+        stored.Period.ShouldBe(new BookingPeriod(Start, Start.AddHours(1)));
+        stored.Period.Start.Offset.ShouldBe(TimeSpan.Zero);
+        stored.Period.End.Offset.ShouldBe(TimeSpan.Zero);
+        await ShouldBeOverlapConflictAsync(await ConfirmAsync(client, roomId, Start, Start.AddHours(1)), roomId, stored.Period);
+        (await StoredCountAsync(roomId)).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Rejects_sub_microsecond_periods_without_storing_or_blocking_the_room()
+    {
+        await using var app = new MyAppFactory(database);
+        var client = app.CreateClient();
+        var roomId = Guid.NewGuid();
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var response = await ConfirmAsync(client, roomId, Start.AddTicks(1), Start.AddTicks(2));
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
+
+        (await StoredCountAsync(roomId)).ShouldBe(0);
+        (await ConfirmAsync(client, roomId, Start, Start.AddHours(1))).StatusCode.ShouldBe(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task Reads_and_cancels_a_period_at_its_persisted_precision()
+    {
+        await using var app = new MyAppFactory(database);
+        var client = app.CreateClient();
+        var roomId = Guid.NewGuid();
+        var start = Start.AddTicks(1);
+        var end = Start.AddTicks(19);
+
+        var response = await ConfirmAsync(client, roomId, start, end);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var read = await client.GetFromJsonAsync<BookingDto>(response.Headers.Location, TestContext.Current.CancellationToken);
+        read.ShouldNotBeNull();
+        read.Start.ShouldBe(Start);
+        read.End.ShouldBe(Start.AddTicks(10));
+        (await ConfirmAsync(client, roomId, start, end)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await client.PostAsync($"{response.Headers.Location}/cancel", null, TestContext.Current.CancellationToken))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await ConfirmAsync(client, roomId, start, end)).StatusCode.ShouldBe(HttpStatusCode.Created);
     }
 
     [Fact]

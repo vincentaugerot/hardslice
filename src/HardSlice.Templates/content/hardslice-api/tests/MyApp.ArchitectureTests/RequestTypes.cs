@@ -39,6 +39,11 @@ internal static class RequestTypes
             if (parameters.Any(parameter => !bindings.ContainsKey(parameter)))
                 continue;
 
+            // MakeGenericType enforces CLR constraints, but C#'s unmanaged constraint also excludes
+            // structs containing references and open parameters constrained only to struct.
+            if (parameters.Any(parameter => HasUnmanagedConstraint(parameter) && !IsUnmanaged(bindings[parameter])))
+                continue;
+
             try
             {
                 // Also checks constraints when a binding is an open command's type parameter.
@@ -53,6 +58,23 @@ internal static class RequestTypes
         }
 
         return false;
+    }
+
+    private static bool HasUnmanagedConstraint(Type parameter) =>
+        parameter.IsDefined(typeof(IsUnmanagedAttribute), inherit: false);
+
+    private static bool IsUnmanaged(Type type)
+    {
+        if (type.IsGenericParameter)
+            return HasUnmanagedConstraint(type);
+        if (type.IsPrimitive || type.IsEnum || type.IsPointer || type.IsFunctionPointer)
+            return true;
+        if (!type.IsValueType || Nullable.GetUnderlyingType(type) is not null)
+            return false;
+
+        // Primitive types are handled above: their reflection fields can refer to their own type.
+        return type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .All(field => IsUnmanaged(field.FieldType));
     }
 
     private static bool Match(Type pattern, Type command, Dictionary<Type, Type> bindings)

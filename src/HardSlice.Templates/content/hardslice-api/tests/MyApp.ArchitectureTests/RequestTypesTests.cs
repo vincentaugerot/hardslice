@@ -67,6 +67,29 @@ public sealed class RequestTypesTests
     }
 
     [Fact]
+    public void An_unmanaged_validator_does_not_cover_a_command_that_accepts_managed_structs()
+    {
+        var validators = RequestTypes.ValidatorsIn([typeof(UnmanagedProbeCommandValidator<>)]);
+
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<>), validators).ShouldBeFalse();
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<ValueTuple<string>>), validators).ShouldBeFalse();
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<ManagedInput>), validators).ShouldBeFalse();
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<NestedInput<string>>), validators).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void An_unmanaged_validator_accepts_unmanaged_arguments_and_parameters()
+    {
+        var validators = RequestTypes.ValidatorsIn([typeof(UnmanagedProbeCommandValidator<>)]);
+
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<int>), validators).ShouldBeTrue();
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<DayOfWeek>), validators).ShouldBeTrue();
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<ValueTuple<int, decimal>>), validators).ShouldBeTrue();
+        RequestTypes.IsValidated(typeof(ConstrainedProbeCommand<NestedInput<int>>), validators).ShouldBeTrue();
+        RequestTypes.IsValidated(typeof(UnmanagedProbeCommand<>), [typeof(MatchingUnmanagedValidator<>)]).ShouldBeTrue();
+    }
+
+    [Fact]
     public void Interface_and_constructor_constraints_are_checked_too()
     {
         var validators = RequestTypes.ValidatorsIn([typeof(InputProbeCommandValidator<>)]);
@@ -158,6 +181,16 @@ public sealed class RequestTypesTests
     private sealed record ConstrainedProbeCommand<T>(T Value) : ICommand<T> where T : struct;
 
     private sealed class ConstrainedProbeCommandValidator<T> : AbstractValidator<ConstrainedProbeCommand<T>> where T : struct;
+
+    private sealed class UnmanagedProbeCommandValidator<T> : AbstractValidator<ConstrainedProbeCommand<T>> where T : unmanaged;
+
+    private sealed record UnmanagedProbeCommand<T>(T Value) : ICommand<T> where T : unmanaged;
+
+    private sealed class MatchingUnmanagedValidator<T> : AbstractValidator<UnmanagedProbeCommand<T>> where T : unmanaged;
+
+    private readonly record struct ManagedInput(string Value);
+
+    private readonly record struct NestedInput<T>(ValueTuple<T> Value);
 
     private interface IProbeInput;
 

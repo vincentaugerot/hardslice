@@ -9,7 +9,8 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
 {
     public void Configure(EntityTypeBuilder<Booking> builder)
     {
-        builder.ToTable("Bookings");
+        builder.ToTable("Bookings", table =>
+            table.HasCheckConstraint("CK_Bookings_Period_Positive", "\"End\" > \"Start\""));
 
         builder.HasKey(booking => booking.Id);
         builder.Property(booking => booking.Id)

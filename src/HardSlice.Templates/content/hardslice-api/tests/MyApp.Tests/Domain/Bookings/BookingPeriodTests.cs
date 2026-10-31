@@ -16,6 +16,40 @@ public sealed class BookingPeriodTests
         period.End.ShouldBe(Start.AddHours(1));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-7)]
+    public void Normalizes_offsets_to_UTC_without_changing_the_instants(int offsetHours)
+    {
+        var offset = TimeSpan.FromHours(offsetHours);
+        var period = new BookingPeriod(Start.ToOffset(offset), Start.AddHours(1).ToOffset(offset));
+
+        period.Start.ShouldBe(Start);
+        period.End.ShouldBe(Start.AddHours(1));
+        period.Start.Offset.ShouldBe(TimeSpan.Zero);
+        period.End.Offset.ShouldBe(TimeSpan.Zero);
+    }
+
+    [Theory]
+    [InlineData(1999)]
+    [InlineData(2026)]
+    public void Truncates_bounds_to_microseconds_before_comparing_periods(int year)
+    {
+        var start = new DateTimeOffset(year, 11, 2, 9, 0, 0, TimeSpan.Zero);
+        var period = new BookingPeriod(start.AddTicks(1), start.AddTicks(19));
+
+        period.Start.ShouldBe(start);
+        period.End.ShouldBe(start.AddTicks(10));
+        period.ShouldBe(new BookingPeriod(start, start.AddTicks(10)));
+        period.Overlaps(new BookingPeriod(start.AddTicks(10), start.AddTicks(20))).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Rejects_a_period_that_collapses_at_microsecond_precision()
+    {
+        Should.Throw<DomainException>(() => new BookingPeriod(Start.AddTicks(1), Start.AddTicks(2)));
+    }
+
     [Fact]
     public void Rejects_an_end_equal_to_the_start()
     {

@@ -51,7 +51,10 @@ namespace MyApp.Shared.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Bookings", (string)null);
+                    b.ToTable("Bookings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Bookings_Period_Positive", "\"End\" > \"Start\"");
+                        });
                 });
 #pragma warning restore 612, 618
         }
