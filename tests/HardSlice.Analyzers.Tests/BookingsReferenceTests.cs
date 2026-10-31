@@ -271,8 +271,31 @@ public sealed class BookingsReferenceTests
             + "Fix: rename it, for example to 'BookingConfirmed'. Doc: 'docs/rules/HS019.md'.");
     }
 
+    [Fact]
+    public async Task Reports_HS000_when_CancelBooking_suppresses_HS016_without_justification()
+    {
+        var diagnostic = (await AnalyzeAllAsync(CancelBookingThatSuppressesHS016(), Configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(SuppressionJustificationAnalyzer.DiagnosticId);
+        diagnostic.GetMessage().ShouldBe(
+            "'#pragma warning disable HS016' in 'CancelBooking.cs' has no justification. "
+            + "A HardSlice rule is suppressed only with a reason a reviewer can read. "
+            + "Fix: remove the suppression and fix the code; if a maintainer approved it, add '// hardslice-justification: <reason>' on the line above. "
+            + "Doc: 'docs/rules/HS000.md'.");
+    }
+
+    [Fact]
+    public async Task Reports_no_HS000_when_CancelBooking_justifies_its_suppression()
+    {
+        var path = "Features/Bookings/CancelBooking/CancelBooking.cs";
+        var cancelBooking = "// hardslice-justification: approved by the maintainer in review #42\n#pragma warning disable HS016\n" + ReferenceSource(path);
+
+        (await AnalyzeAllAsync(CompileApplication((path, cancelBooking)), Configuration)).ShouldBeEmpty();
+    }
+
     // The sheet each diagnostic announces exists, quotes the diagnostic and has the sections of every rule sheet.
     [Theory]
+    [InlineData(SuppressionJustificationAnalyzer.DiagnosticId)]
     [InlineData(EndpointDatabaseAccessAnalyzer.DiagnosticId)]
     [InlineData(SliceStructureAnalyzer.DiagnosticId)]
     [InlineData(CommandResponseAnalyzer.DiagnosticId)]
@@ -291,6 +314,7 @@ public sealed class BookingsReferenceTests
     {
         var diagnostics = ruleId switch
         {
+            SuppressionJustificationAnalyzer.DiagnosticId => await AnalyzeAllAsync(CancelBookingThatSuppressesHS016(), Configuration),
             EndpointDatabaseAccessAnalyzer.DiagnosticId => await AnalyzeAllAsync(ListBookingsWithDbContext(), Configuration),
             SliceStructureAnalyzer.DiagnosticId => await AnalyzeAllAsync(ArchiveBookingWithArchiveCommand(), Configuration),
             CommandResponseAnalyzer.DiagnosticId => await AnalyzeAllAsync(ConfirmBookingThatReturnsTheBooking(), Configuration),
@@ -586,6 +610,13 @@ public sealed class BookingsReferenceTests
         return CompileApplication((path, confirmBooking.Replace(
             period,
             period + "\n        if (period.Start < DateTimeOffset.UtcNow)\n            throw new ArgumentException(\"A booking starts in the future.\");")));
+    }
+
+    // CancelBooking, which suppresses HS016 without justification.
+    private static CSharpCompilation CancelBookingThatSuppressesHS016()
+    {
+        var path = "Features/Bookings/CancelBooking/CancelBooking.cs";
+        return CompileApplication((path, "#pragma warning disable HS016\n" + ReferenceSource(path)));
     }
 
     // ConfirmBooking, whose handler returns the booking it confirms in a DTO instead of its identifier.

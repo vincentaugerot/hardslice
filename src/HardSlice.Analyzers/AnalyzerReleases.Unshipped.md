@@ -5,6 +5,7 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
+HS000 | HardSlice.Architecture | Error | SuppressionJustificationAnalyzer
 HS003 | HardSlice.Architecture | Error | EndpointDatabaseAccessAnalyzer
 HS004 | HardSlice.Architecture | Error | SliceStructureAnalyzer
 HS005 | HardSlice.Architecture | Error | CommandResponseAnalyzer

@@ -16,7 +16,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 - the `hardslice-command` item template, which adds a command slice to a module of such a solution, its tests included;
 - the `hardslice-query` item template, which adds a query slice that reads an aggregate of the module, its integration tests included;
 - the `hardslice-event` item template, which adds a domain event to a module of such a solution and, on request, the reaction slice that handles it, with its integration tests;
-- the `HardSlice.Analyzers` package, which reports HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
+- the `HardSlice.Analyzers` package, which reports HS000, HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
 - architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
 - the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule;
 - `AGENTS.md`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution.
@@ -191,6 +191,7 @@ The event and its reaction build without any HardSlice diagnostic. The handler t
 
 | Rule | Checks | Reported by |
 |---|---|---|
+| [HS000](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS000.md) | Every suppression of a HardSlice rule in source, `#pragma warning disable` or `[SuppressMessage]`, carries a `// hardslice-justification: <reason>` comment of at least ten characters on its line or the line above. HS000 itself cannot be suppressed. | Analyzer at build time, test projects included |
 | [HS001](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS001.md) | The domain project depends on the base class library only: no EF Core, ASP.NET Core or dependency injection. | Architecture tests |
 | [HS003](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS003.md) | An endpoint never reaches the database: it sends a command or a query through `IMediator`. | Analyzer at build time |
 | [HS004](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS004.md) | A slice `Features/<Module>/<Slice>/` holds one request named after it (`<Slice>Command` or `<Slice>Query`), its handler `<Slice>Handler`, its static endpoint `<Slice>Endpoint` and, if any, its validator `<Slice>Validator`, or, for a reaction slice, one domain event handler `<Slice>Handler` without request nor endpoint; no request, handler or validator lives outside a slice, and the folder and the namespace of a slice hold the same types. | Analyzer at build time |
@@ -221,6 +222,7 @@ The MSBuild property `HardSliceAnalysisMode` chooses which analyzer rules are on
 
 | Rule | `Minimum` | `Recommended` | `All` |
 |---|---|---|---|
+| HS000 | error | error | error |
 | HS003 | error | error | error |
 | HS004 | – | error | error |
 | HS005 | – | error | error |
@@ -235,13 +237,14 @@ The MSBuild property `HardSliceAnalysisMode` chooses which analyzer rules are on
 | HS019 | – | – | suggestion |
 | HS900 to HS902 | error | error | error |
 
-A dash means the mode turns the rule off: `Minimum` keeps the rules that assume neither the shape of a slice, the messaging of the template, its aggregates referenced by identifier nor its domain events declared as records, plus HS016. HS019, a heuristic, is a suggestion of the `All` mode only: it never blocks the build, even with `TreatWarningsAsErrors`. HS900 to HS902 are reported only when an active rule depends on the classification of types. The architecture tests do not depend on the mode.
+A dash means the mode turns the rule off: `Minimum` keeps the rules that assume neither the shape of a slice, the messaging of the template, its aggregates referenced by identifier nor its domain events declared as records, plus HS016. HS019, a heuristic, is a suggestion of the `All` mode only: it never blocks the build, even with `TreatWarningsAsErrors`. HS900 to HS902 are reported only when an active rule depends on the classification of types. HS000 is not configurable: no mode, `.editorconfig` line or `<NoWarn>` turns it off. The architecture tests do not depend on the mode.
 
 ## Known limitations
 
 - The packages are built locally with the fixed version 0.2.0-preview.1: a rebuild does not change it. After pulling a new version of this repository, repack the three packages, reinstall the template with `dotnet new install artifacts/packages/HardSlice.Templates.0.2.0-preview.1.nupkg --force`, and clear the packages NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the old builds of `HardSlice.Analyzers` and `HardSlice.Tool` 0.2.0-preview.1. A solution generated before keeps the template it was generated from.
 - `HardSlice.Analyzers` is supported only in a solution generated by `hardslice-api`, whose `docs/rules/` holds the sheets its diagnostics point to.
-- Only HS003 to HS011, HS015, HS016 and HS900 to HS902 are reported at build time and in the IDE, and HS019 as a suggestion, which the build output does not show: the IDE and the compiler log (`ErrorLog`) do. The other rules are architecture tests: they fail `dotnet test` and the check scripts, not `dotnet build`. HS900, and HS015 for an endpoint its module never maps, are reported at the end of the analysis of a project: the IDE shows them with full solution analysis only.
+- Only HS000, HS003 to HS011, HS015, HS016 and HS900 to HS902 are reported at build time and in the IDE, and HS019 as a suggestion, which the build output does not show: the IDE and the compiler log (`ErrorLog`) do. The other rules are architecture tests: they fail `dotnet test` and the check scripts, not `dotnet build`. HS900, and HS015 for an endpoint its module never maps, are reported at the end of the analysis of a project: the IDE shows them with full solution analysis only.
+- HS000 checks the suppressions written in source only: `<NoWarn>`, `<WarningsNotAsErrors>` and the severities of `.editorconfig` and `.globalconfig` are not detected, since the analysis modes turn rules off through a global config themselves; review and the CI of the solution protect these files. It checks the form and the length of a justification, never whether the reason is true.
 - HS016 is analyzed within one assembly: slices and modules are folders of the web project.
 - HS003 reads the body of the endpoint only: the methods it calls are not followed, and a delegate stored in a variable or declared in another assembly is not analyzed.
 - HS004 checks the slices of the project that declares them, by the namespaces `<Assembly>.Features.<Module>.<Slice>` and the folders below the project directory: the name and the number of the files of a slice are free, and generated code is not checked. A reaction slice is recognized by its domain event handler: whether the handler stays inside the transaction, without external effect, is a review matter.

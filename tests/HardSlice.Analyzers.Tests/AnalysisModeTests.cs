@@ -12,6 +12,7 @@ public sealed class AnalysisModeTests
     // turns it off. A rule ticket adds its line here and in the three global configs.
     private static readonly (string Rule, string Minimum, string Recommended, string All)[] Matrix =
     [
+        ("HS000", "error", "error", "error"),
         ("HS003", "error", "error", "error"),
         ("HS004", "none", "error", "error"),
         ("HS005", "none", "error", "error"),
@@ -92,6 +93,7 @@ public sealed class AnalysisModeTests
     // One probe per rule: files that violate it alone, by their path in the project, analyzed with or without hardslice.json.
     private static readonly Dictionary<string, ((string Path, string Source)[] Files, string? Configuration)> Probes = new()
     {
+        ["HS000"] = ([("Health/HealthEndpoint.cs", UnjustifiedSuppression)], Configuration),
         ["HS003"] = ([("Health/HealthEndpoint.cs", EndpointDatabaseAccess)], Configuration),
         ["HS004"] = ([("Features/Bookings/ArchiveBooking/ArchiveBooking.cs", MisnamedCommand)], Configuration),
         ["HS005"] = ([("Domain/Bookings/Booking.cs", Aggregate), ("Features/Bookings/ConfirmBooking/ConfirmBooking.cs", CommandReturningTheAggregate)], Configuration),
@@ -108,6 +110,16 @@ public sealed class AnalysisModeTests
         ["HS901"] = ([AmbiguousType()], Configuration),
         ["HS902"] = ([("Features/Rooms/RoomConfiguration.cs", UnclassifiedEntity)], Configuration)
     };
+
+    // A suppression of HS003 without justification, in a file without any violation.
+    private const string UnjustifiedSuppression =
+        """
+        #pragma warning disable HS003
+        namespace MyApp.Health
+        {
+            internal static class HealthEndpoint;
+        }
+        """;
 
     // A technical endpoint outside Features: HS015 does not check it.
     private const string EndpointDatabaseAccess =
@@ -358,12 +370,13 @@ public sealed class AnalysisModeTests
     }
 
     // dotnet_diagnostic.<rule>.severity = none in .editorconfig turns off a rule the mode keeps, and its severity turns
-    // on a rule the mode turns off.
+    // on a rule the mode turns off. A rule that is not configurable, HS000, stays on.
     [Theory]
     [MemberData(nameof(Cells))]
     public async Task An_editorconfig_setting_takes_precedence_over_the_mode(string mode, string rule)
     {
         var on = IsOn(rule, mode);
+        var configurable = !Descriptors().First(descriptor => descriptor.Id == rule).CustomTags.Contains(WellKnownDiagnosticTags.NotConfigurable);
         var setting = on ? "none" : Severity(Descriptors().First(descriptor => descriptor.Id == rule).DefaultSeverity);
         var editorConfig = $"""
             root = true
@@ -375,10 +388,10 @@ public sealed class AnalysisModeTests
         var diagnostics = await AnalyzeProbeAsync(rule, (ModePath(mode), ModeFile(mode)), ("/solution/.editorconfig", editorConfig));
 
         diagnostics.Select(diagnostic => diagnostic.Id).Distinct()
-            .ShouldBe(on ? [] : [rule], $"{rule} = {setting} in .editorconfig under {mode}.");
+            .ShouldBe(on && configurable ? [] : [rule], $"{rule} = {setting} in .editorconfig under {mode}.");
     }
 
-    // A suppression in source acts on the rule it names only: the other HardSlice rule of the same compilation stays.
+    // A suppression in source, justified for HS000, acts on the rule it names only: the other HardSlice rule of the same compilation stays.
     [Theory]
     [InlineData("HS016", "pragma", "HS901")]
     [InlineData("HS016", "attribute", "HS901")]
@@ -426,14 +439,14 @@ public sealed class AnalysisModeTests
             """),
         ("Features/Bookings/CancelBooking/CancelBooking.cs",
             $$"""
-            {{(suppression == "pragma" ? "#pragma warning disable HS016" : "")}}
+            {{(suppression == "pragma" ? $"{Justification}\n#pragma warning disable HS016" : "")}}
             using MyApp.Shared.Messaging;
 
             namespace MyApp.Features.Bookings.CancelBooking
             {
                 public sealed record CancelBookingCommand : ICommand<bool>;
 
-                {{(suppression == "attribute" ? "[System.Diagnostics.CodeAnalysis.SuppressMessage(\"HardSlice.Architecture\", \"HS016\")]" : "")}}
+                {{(suppression == "attribute" ? $"{Justification}\n[System.Diagnostics.CodeAnalysis.SuppressMessage(\"HardSlice.Architecture\", \"HS016\")]" : "")}}
                 internal sealed class CancelBookingHandler(MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingCommand command)
                     : IRequestHandler<CancelBookingCommand, bool>;
 
@@ -442,13 +455,15 @@ public sealed class AnalysisModeTests
             """)
     ];
 
+    private const string Justification = "// hardslice-justification: approved by the maintainer in review #42";
+
     // HS901: a domain type that is both an aggregate root and a domain event.
     private static (string Path, string Source) AmbiguousType(string? suppression = null) =>
         ("Domain/Bookings/BookingSnapshot.cs", $$"""
-        {{(suppression == "pragma" ? "#pragma warning disable HS901" : "")}}
+        {{(suppression == "pragma" ? $"{Justification}\n#pragma warning disable HS901" : "")}}
         namespace MyApp.Domain.Bookings
         {
-            {{(suppression == "attribute" ? "[System.Diagnostics.CodeAnalysis.SuppressMessage(\"HardSlice.Configuration\", \"HS901\")]" : "")}}
+            {{(suppression == "attribute" ? $"{Justification}\n[System.Diagnostics.CodeAnalysis.SuppressMessage(\"HardSlice.Configuration\", \"HS901\")]" : "")}}
             public sealed class BookingSnapshot : IAggregateRoot, IDomainEvent;
         }
         """);

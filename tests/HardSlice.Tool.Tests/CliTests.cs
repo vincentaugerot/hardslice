@@ -32,7 +32,7 @@ public sealed class CliTests
 
         exitCode.ShouldBe(2);
         output.ShouldBeEmpty();
-        error.ShouldContain("Rules with a sheet: HS001");
+        error.ShouldContain("Rules with a sheet: HS000, HS001");
     }
 
     // No option skips a step of the verification.

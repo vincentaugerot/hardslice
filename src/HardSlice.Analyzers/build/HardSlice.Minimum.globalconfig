@@ -7,6 +7,10 @@
 is_global = true
 global_level = -1
 
+# HS000: every suppression of a HardSlice rule in source carries its justification.
+# Not configurable: neither this line, .editorconfig, <NoWarn> nor a pragma turns it off.
+dotnet_diagnostic.HS000.severity = error
+
 # HS003: an endpoint never reaches the database.
 dotnet_diagnostic.HS003.severity = error
 
