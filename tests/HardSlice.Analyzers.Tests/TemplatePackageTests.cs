@@ -58,12 +58,58 @@ public sealed class TemplatePackageTests
             packedManifest.TrimEnd().ShouldBe(
                 File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")).Replace(VersionToken, version).TrimEnd());
             archive.Entries.Select(entry => entry.FullName).ShouldContain("README.md");
+            // The item templates ship in the same package, beside hardslice-api.
+            const string commandTemplate = "/hardslice-command/";
+            archive.Entries.Select(entry => entry.FullName.Replace('\\', '/'))
+                .Where(entry => entry.Contains(commandTemplate, StringComparison.Ordinal))
+                .Select(entry => entry[(entry.IndexOf(commandTemplate, StringComparison.Ordinal) + commandTemplate.Length)..])
+                .Order(StringComparer.Ordinal)
+                .ShouldBe(CommandTemplateFiles.Order(StringComparer.Ordinal));
         }
         finally
         {
             if (Directory.Exists(temporaryDirectory))
                 Directory.Delete(temporaryDirectory, recursive: true);
         }
+    }
+
+    // hardslice-command generates the three files of a command slice, at the paths of HS004 and HS018, and nothing else.
+    [Fact]
+    public void Command_item_template_generates_a_slice_its_validator_tests_and_its_integration_tests_only()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(CommandTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-command");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        config.GetProperty("sourceName").GetString().ShouldBe("CommandName");
+        // The application is read from the web project, never written in the template.
+        var application = config.GetProperty("symbols").GetProperty("AppName");
+        application.GetProperty("type").GetString().ShouldBe("bind");
+        application.GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        application.GetProperty("replaces").GetString().ShouldBe("MyApp");
+    }
+
+    // Every refusal fails the generation, after excluding every file, and says that nothing was created.
+    [Fact]
+    public void Command_item_template_refuses_with_an_error_that_creates_nothing()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(CommandTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Length.ShouldBe(7);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
     }
 
     // In the repository, the template holds the token in place of the version, in its reference to the analyzers and in its tool entry only.
@@ -227,6 +273,18 @@ public sealed class TemplatePackageTests
         using var reader = new StreamReader(entry.Open());
         return reader.ReadToEnd();
     }
+
+    private static readonly string[] CommandTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp/Features/ModuleName/CommandName/CommandName.cs",
+        "tests/MyApp.IntegrationTests/Features/ModuleName/CommandName/CommandNameTests.cs",
+        "tests/MyApp.Tests/Features/ModuleName/CommandName/CommandNameValidatorTests.cs"
+    ];
+
+    private static string CommandTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-command");
 
     private static string TemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");

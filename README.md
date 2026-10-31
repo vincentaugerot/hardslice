@@ -11,6 +11,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 **0.2.0-preview.1, local preview.** The packages are not published on NuGet.org yet: you build them from this repository, at the version of its `Directory.Build.props`, the only one the three packages share. This preview ships:
 
 - the `hardslice-api` solution template: an ASP.NET Core API in vertical slices around a rich domain, with a `Bookings` sample module, or empty with `--no-sample`;
+- the `hardslice-command` item template, which adds a command slice to a module of such a solution, its tests included;
 - the `HardSlice.Analyzers` package, which reports HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
 - architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
 - the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule;
@@ -132,6 +133,18 @@ When you are done, stop the API with Ctrl+C and remove the database with `docker
 
 Ask your agent to read `AGENTS.md`: it says where a use case goes, how to add a slice, a module or a migration, and that the work is not done until the check script exits 0. When a rule fails, its diagnostic points to its sheet in `docs/rules/`.
 
+A command slice is generated from the root of the solution, once it is restored (after a first build or check):
+
+```text
+dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
+```
+
+It creates `src/Rooms/Features/Bookings/ExtendBooking/ExtendBooking.cs`, with the command `ExtendBookingCommand`, its validator, its handler and its endpoint `POST /bookings/extend-booking`, the validator tests in `tests/Rooms.Tests/Features/Bookings/ExtendBooking/` and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/ExtendBooking/`. Then it prints the lines to add to `BookingsModule.cs`: the usings, the registrations of the handler and the validator, and the call of `Map`. It never edits an existing file. `--response` sets what the command returns: `id`, a `Guid`, by default; `none`, a `bool` whose `false` is answered with 404; or the name of a DTO of values, which the slice declares.
+
+`--project` names the web project: the template reads the name of the application, its `RootNamespace`, and its modules from it. Without it, before the first restore, with a name that is not PascalCase or ends with `Command`, or for a module without `Features/<Module>/<Module>Module.cs`, it exits with an error that says what to do and creates nothing. It refuses to overwrite an existing slice without `--force`.
+
+The generated code builds without any HardSlice diagnostic, and the validator tests pass. The handler throws `NotImplementedException` and the integration test ends with `Assert.Fail("TODO(hardslice): ...")`: the check fails until the use case and its assertion are written. A slice its module does not register fails the check too: a test of the host resolves every request handler and validator of the application from the container, and names the ones that are missing.
+
 ## Rules
 
 | Rule | Checks | Reported by |
@@ -201,7 +214,8 @@ A dash means the mode turns the rule off: `Minimum` keeps the rules that assume 
 - HS015 checks the endpoints mapped under `Features` only, and accepts the result types of `Microsoft.AspNetCore.Http.HttpResults` only: a custom `IResult` is reported. The module must call the method of the slice that maps the endpoint, not a helper of it.
 - PostgreSQL is the only database. SQL Server and Aspire orchestration are planned for v1.0.
 - Domain events are published to their handlers inside the transaction of the command, before saving: no outbox, no publication after commit, no bus and no asynchronous processing. A handler that sends a request through `IMediator` fails at runtime; an external effect in a handler is not detected.
-- `AGENTS.md` is the only agent guidance. `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, skills, hooks and item templates are planned for v0.3, the adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) for v0.5.
+- `AGENTS.md` is the only agent guidance. `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, skills, hooks and the item templates other than `hardslice-command` are planned for v0.3, the adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) for v0.5.
+- `dotnet new hardslice-command` reads the application and its modules through `--project` only, once the web project is restored: `dotnet new` evaluates no project from the root of a solution, and cannot read a file before it creates the others. A refusal prints `The template ... was created successfully.` before `Post action failed.` and its error, and exits with code 105: nothing is created. It only prints the registrations of the slice, which you or the agent add to the module.
 - The generated application has a Development configuration only: no production settings, authentication or deployment.
 - CI runs on Linux: `scripts/check.ps1` is verified with PowerShell 7 on Linux, not on Windows.
 
@@ -217,7 +231,7 @@ scripts/measure-analyzers.sh
 ```
 
 - `dotnet test` runs the analyzer tests and the tests of the template content, integration tests included: it needs a container runtime.
-- `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic and its sheet. It needs PowerShell 7.
+- `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic and its sheet. In both, it also generates command slices with `hardslice-command`, through each of its refusals, registers them with the lines it prints, and checks that only the `TODO(hardslice):` test fails until a reference completion makes the check pass. It needs PowerShell 7.
 - `scripts/demo-hs016-agent-fix.sh` prepares the [HS016 agent fix demonstration](demos/hs016-agent-fix/README.md).
 - `scripts/measure-analyzers.sh` measures the build time of a large generated application with and without the HardSlice analyzers, checks the thresholds and records the measurement in [the performance report](docs/performance/analyzers.md), in French.
 
@@ -227,6 +241,7 @@ CI runs three jobs on every push to `main` and every pull request, each on a fre
 |---|---|
 | `src/HardSlice.Analyzers/` | The Roslyn analyzer package. |
 | `src/HardSlice.Templates/content/hardslice-api/` | The solution template, `MyApp` being replaced by the name you choose. |
+| `src/HardSlice.Templates/content/hardslice-command/` | The item template of a command slice, `MyApp`, `ModuleName` and `CommandName` being replaced by the application, the module and the slice. |
 | `src/HardSlice.Tool/` | The `dotnet hardslice` local tool, which embeds the rule sheets of the template. |
 | `tests/HardSlice.Analyzers.Tests/` | Analyzer tests, and tests that compile the template content as is. |
 | `tests/HardSlice.Tool.Tests/` | Tests of `check` and `explain`, and of the versions and sheets the tool shares with the template. |

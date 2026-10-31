@@ -1,4 +1,10 @@
 <Project>
+  <!-- The module files of the web project, read by the item templates (dotnet new hardslice-command) through their project binding
+       to refuse a slice of a module that does not exist. Evaluated only: no target reads it. -->
+  <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)/Features')">
+    <HardSliceModuleFiles>$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*Module.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceModuleFiles>
+  </PropertyGroup>
+
   <!-- Read evaluated Compile items and symbols without compiling a potentially stale test assembly. -->
   <Target Name="HardSliceGetTestInputs"
           DependsOnTargets="AddImplicitDefineConstants;GenerateGlobalUsings"

@@ -7,8 +7,11 @@
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
+# It generates command slices with dotnet new hardslice-command through each of its refusals, registers them with the lines it prints, checks that the test of the host names a forgotten registration,
+# that only the TODO(hardslice): test fails, that the none and DTO responses build without HardSlice diagnostic, and that a reference completion passes the check.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
 # and that seeded violations of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them, and HS019 still reaches the compiler log: without the sample, the rules keep their targets.
+# There, a first module written by hand receives the same command slices.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -1269,6 +1272,259 @@ EOF
   rm "$app/src/$app_name.Domain/$module/RoomAvailability.cs"
 }
 
+# Runs dotnet new hardslice-command from the root of the solution under test, from the hive where generate-app.sh installed
+# the templates of the package. Prints its output, standard error included.
+new_command() {
+  (cd "$app" && dotnet new hardslice-command --debug:custom-hive "$work/template-hive" "$@" 2>&1)
+}
+
+# The sources and tests of the solution under test with their content: a refused generation leaves them unchanged.
+solution_snapshot() {
+  (cd "$app" && find src tests -type f -not -path '*/bin/*' -not -path '*/obj/*' -print0 | LC_ALL=C sort -z | xargs -0 cksum)
+}
+
+# A refused generation exits with a non-zero code, prints <message> and creates or changes nothing.
+expect_command_refused() {
+  local description="$1"
+  local message="$2"
+  shift 2
+  local before
+  local output
+  local status=0
+
+  before="$(solution_snapshot)"
+  output="$(new_command "$@")" || status=$?
+  if [[ "$status" == 0 ]]; then
+    printf '%s\n' "$output" >&2
+    echo "error: dotnet new hardslice-command accepted $description in $app_name." >&2
+    exit 1
+  fi
+  if [[ "$output" != *"$message"* ]]; then
+    printf '%s\n' "$output" >&2
+    echo "error: dotnet new hardslice-command refused $description in $app_name without saying: $message" >&2
+    exit 1
+  fi
+  if [[ "$(solution_snapshot)" != "$before" ]]; then
+    echo "error: dotnet new hardslice-command refused $description in $app_name but changed its files." >&2
+    exit 1
+  fi
+  echo "    $description: exit $status, $message"
+}
+
+# Generates the command slice <module>/<name> with the remaining options, checks that its three files exist, and leaves the
+# printed instructions in $command_output.
+generate_command() {
+  local module="$1"
+  local name="$2"
+  shift 2
+  local generated
+
+  if ! command_output="$(new_command --project "src/$app_name/$app_name.csproj" --module "$module" --name "$name" "$@")"; then
+    printf '%s\n' "$command_output" >&2
+    echo "error: dotnet new hardslice-command failed on the slice $module/$name of $app_name." >&2
+    exit 1
+  fi
+  for generated in "src/$app_name/Features/$module/$name/$name.cs" \
+    "tests/$app_name.Tests/Features/$module/$name/${name}ValidatorTests.cs" \
+    "tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"; do
+    if [[ ! -f "$app/$generated" ]]; then
+      printf '%s\n' "$command_output" >&2
+      echo "error: dotnet new hardslice-command did not create $generated in $app_name." >&2
+      exit 1
+    fi
+  done
+}
+
+# Adds to the module the lines that dotnet new hardslice-command printed in <output>, as the skill add-slice does: the usings the
+# file does not have yet, the registrations after 'services' (unless <registrations> is 'without-registrations'), and the call
+# of Map before 'return endpoints;'. Fails if the instructions do not name the module file or one of these lines.
+register_command() {
+  local output="$1"
+  local registrations="${2:-with-registrations}"
+  local module_file
+  local using
+  local usings=""
+  local lines
+  local mapping
+
+  module_file="$(sed -n 's/^Manual instructions: Register the slice in \(src\/.*Module\.cs\):$/\1/p' <<< "$output")"
+  lines="$(grep -E '^            \.AddScoped<(IRequestHandler|IValidator)<' <<< "$output" || true)"
+  mapping="$(grep -E '^        [A-Za-z0-9]+Endpoint\.Map\(group\);$' <<< "$output" || true)"
+  if [[ -z "$module_file" || ! -f "$app/$module_file" || "$(grep -c . <<< "$lines")" != 2 || -z "$mapping" ]]; then
+    printf '%s\n' "$output" >&2
+    echo "error: dotnet new hardslice-command did not print the module file, the two registrations and the call of Map of its slice." >&2
+    exit 1
+  fi
+  [[ "$registrations" == with-registrations ]] || lines=""
+  while read -r using; do
+    grep -Fxq "$using" "$app/$module_file" || usings+="$using"$'\n'
+  done < <(grep -E '^using [A-Za-z0-9.]+;$' <<< "$output")
+  if ! { printf '%s' "$usings"; REGISTRATIONS="$lines" MAPPING="$mapping" awk '
+      /^        services;?$/ && !registered {
+        count = split(ENVIRON["REGISTRATIONS"], added, "\n")
+        closed = $0 ~ /;$/
+        chain = (closed && count == 0) ? $0 : "        services"
+        print chain
+        for (i = 1; i <= count; i++) print added[i] ((closed && i == count) ? ";" : "")
+        registered = 1
+        next
+      }
+      /^        return endpoints;$/ && !mapped { print ENVIRON["MAPPING"]; mapped = 1 }
+      { print }
+      END { if (!registered || !mapped) exit 1 }' "$app/$module_file"; } > "$work/module.cs"; then
+    echo "error: $module_file has no 'services' chain or 'return endpoints;' line to register the slice in." >&2
+    exit 1
+  fi
+  mv "$work/module.cs" "$app/$module_file"
+}
+
+# Runs scripts/check.sh, which must fail on the tests marked TODO(hardslice): only, named by <expected-failures>, without any
+# HardSlice diagnostic.
+expect_check_fails_on_todo_tests_only() {
+  local description="$1"
+  local expected_failures="$2"
+  local check_output
+  local failures
+
+  if check_output="$(run_check check.sh 2>&1)"; then
+    echo "error: scripts/check.sh passed on $description, whose tests are marked TODO(hardslice):." >&2
+    exit 1
+  fi
+  failures="$(sed -n 's/^failed \([^ ]*\) (.*/\1/p' <<< "$check_output" | LC_ALL=C sort -u)"
+  if [[ "$failures" != "$expected_failures" || "$check_output" != *"TODO(hardslice): "* ]] ||
+    grep -Eq '(error|warning) HS[0-9]{3}' <<< "$check_output"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh did not fail on $description with the TODO(hardslice): tests alone (${expected_failures//$'\n'/, }), without HardSlice diagnostic." >&2
+    exit 1
+  fi
+  echo "    ${failures//$'\n'/, }: TODO(hardslice):"
+}
+
+# Generates a command slice of module <module>, which must exist, through every path of dotnet new hardslice-command: refusals,
+# instructions, a forgotten registration, the TODO(hardslice): tests, the other responses, then the reference completion.
+# The module file is restored and the slices removed at the end.
+probe_command_template() {
+  local module="$1"
+  local name="$2"
+  local none_name="$3"
+  local dto_name="$4"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local slice="$app_src/Features/$module/$name/$name.cs"
+  local integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
+  local unit_test="$app/tests/$app_name.Tests/Features/$module/$name/${name}ValidatorTests.cs"
+  local project="src/$app_name/$app_name.csproj"
+  local generated_slice
+  local test_output
+  local build_output
+
+  cp "$module_file" "$work/module.backup"
+
+  echo "==> Checking that dotnet new hardslice-command refuses an unreadable application, an invalid name or response, and a missing module in $app_name"
+  expect_command_refused "a run without the web project" "with --project src/<App>/<App>.csproj" --module "$module" --name "$name"
+  expect_command_refused "a run without name" "--name is required" --project "$project" --module "$module"
+  expect_command_refused "a name that is not PascalCase" "--name 'extend-slot' is not PascalCase" --project "$project" --module "$module" --name extend-slot
+  expect_command_refused "a name with the Command suffix" "--name '${name}Command' ends with Command" --project "$project" --module "$module" --name "${name}Command"
+  expect_command_refused "a module that is not PascalCase" "--module 'payments' is not PascalCase" --project "$project" --module payments --name "$name"
+  expect_command_refused "a module that does not exist" "module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --name Payments" --project "$project" --module Payments --name "$name"
+  expect_command_refused "an unknown response" "--response 'dto' is neither id, none nor the PascalCase name of a DTO" --project "$project" --module "$module" --name "$name" --response dto
+
+  echo "==> Generating the command slice $module/$name of $app_name with dotnet new hardslice-command"
+  generate_command "$module" "$name"
+  for expected in "Register the slice in src/$app_name/Features/$module/${module}Module.cs:" \
+    "using $app_name.Features.$module.$name;" \
+    "            .AddScoped<IRequestHandler<${name}Command, Guid>, ${name}Handler>()" \
+    "            .AddScoped<IValidator<${name}Command>, ${name}Validator>()" \
+    "        ${name}Endpoint.Map(group);"; do
+    if ! grep -Fxq -- "$expected" <<< "${command_output//Manual instructions: /}"; then
+      printf '%s\n' "$command_output" >&2
+      echo "error: dotnet new hardslice-command did not print the line '$expected'." >&2
+      exit 1
+    fi
+  done
+  if grep -q 'MyApp\|ModuleName\|CommandName\|ResponseTypeName\|command-route\|module-route' "$slice" "$unit_test" "$integration_test"; then
+    echo "error: the slice $module/$name generated in $app_name keeps a placeholder of the template." >&2
+    exit 1
+  fi
+  generated_slice="$(cat "$slice")"
+  expect_command_refused "a slice that exists" "--force" --project "$project" --module "$module" --name "$name"
+
+  # The endpoint is mapped, so the build passes: only the test of the host and the generated tests see the forgotten registrations.
+  echo "==> Checking that the test of the host names the handler and the validator of $module/$name that ${module}Module does not register"
+  register_command "$command_output" without-registrations
+  if test_output="$(
+    cd "$app"
+    dotnet build "$app_name.slnx" 2>&1 &&
+      dotnet test --project "tests/$app_name.IntegrationTests/$app_name.IntegrationTests.csproj" --no-build 2>&1
+  )"; then
+    echo "error: the integration tests of $app_name passed with a slice its module does not register." >&2
+    exit 1
+  fi
+  for expected in "failed $app_name.IntegrationTests.ProgramTests.Resolves_every_request_handler_and_validator_of_the_application_by_its_contract" \
+    "'${name}Handler' as 'IRequestHandler<${name}Command, Guid>'" \
+    "'${name}Validator' as 'IValidator<${name}Command>'" \
+    "failed $app_name.IntegrationTests.Features.$module.$name.${name}Tests.Handles_a_valid_command"; do
+    if [[ "$test_output" != *"$expected"* ]]; then
+      printf '%s\n' "$test_output" >&2
+      echo "error: the integration tests of $app_name did not report '$expected' for the unregistered slice $module/$name." >&2
+      exit 1
+    fi
+  done
+  echo "    ProgramTests names '${name}Handler' and '${name}Validator'"
+  cp "$work/module.backup" "$module_file"
+
+  echo "==> Checking that $app_name builds the registered slice $module/$name without HardSlice diagnostic and fails the check on its TODO(hardslice): test only"
+  register_command "$command_output"
+  expect_check_fails_on_todo_tests_only "the generated slice $module/$name" \
+    "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Handles_a_valid_command"
+  cp "$module_file" "$work/module-registered.backup"
+
+  echo "==> Checking that the none and DTO responses of dotnet new hardslice-command build without HardSlice diagnostic, HS005 included, in $app_name"
+  generate_command "$module" "$none_name" --response none
+  register_command "$command_output"
+  if ! grep -Fxq "            .AddScoped<IRequestHandler<${none_name}Command, bool>, ${none_name}Handler>()" "$module_file"; then
+    echo "error: dotnet new hardslice-command --response none did not register a handler that returns bool." >&2
+    exit 1
+  fi
+  generate_command "$module" "$dto_name" --response "${dto_name}Result"
+  register_command "$command_output"
+  if ! grep -Fxq "public sealed record ${dto_name}Result(Guid Id);" "$app_src/Features/$module/$dto_name/$dto_name.cs"; then
+    echo "error: dotnet new hardslice-command --response ${dto_name}Result did not declare the DTO in the slice." >&2
+    exit 1
+  fi
+  if ! build_output="$(cd "$app" && dotnet build "$app_name.slnx" 2>&1)" || grep -Eq '(error|warning) HS[0-9]{3}' <<< "$build_output"; then
+    printf '%s\n' "$build_output" >&2
+    echo "error: $app_name does not build the slices generated with --response none and --response ${dto_name}Result without HardSlice diagnostic." >&2
+    exit 1
+  fi
+  echo "    $none_name (bool, 204 or 404) and $dto_name (${dto_name}Result) build"
+  rm -r "$app_src/Features/$module/$none_name" "$app_src/Features/$module/$dto_name" \
+    "$app/tests/$app_name.Tests/Features/$module/$none_name" "$app/tests/$app_name.Tests/Features/$module/$dto_name" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$none_name" "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name"
+  cp "$work/module-registered.backup" "$module_file"
+
+  # The reference completion: the handler returns the identifier of the command, the test asserts it. No marker remains.
+  echo "==> Checking that the reference completion of $module/$name passes the check of $app_name"
+  if [[ "$(cat "$slice")" != "$generated_slice" ]]; then
+    echo "error: the slice $module/$name changed before its completion." >&2
+    exit 1
+  fi
+  sed '/throw new NotImplementedException(/,/Never call SaveChangesAsync\.");/c\
+        Task.FromResult(command.Id);' "$slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$slice"
+  sed 's/^        Assert\.Fail("TODO(hardslice): .*/        (await response.Content.ReadFromJsonAsync<Guid>(TestContext.Current.CancellationToken)).ShouldBe(command.Id);/' \
+    "$integration_test" > "$work/test.cs"
+  mv "$work/test.cs" "$integration_test"
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of $module/$name leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+
+  rm -r "$app_src/Features/$module/$name" "$app/tests/$app_name.Tests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$name"
+  mv "$work/module.backup" "$module_file"
+  rm "$work/module-registered.backup"
+}
+
 echo "==> Checking that HS003 fails both check scripts on an endpoint that receives AppDbContext"
 probe_endpoint_database_access Bookings
 
@@ -1379,6 +1635,8 @@ for script in check.sh check.ps1; do
 done
 echo "    $version_mismatch ..."
 mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
+
+probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking
 
 echo "==> $app_name OK: it restores the HardSlice packages $hardslice_version from the local feed, passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule, while they pass with the HS019 suggestion in the compiler log"
 
@@ -1632,5 +1890,40 @@ EOF
 expect_failure "HS001: 'Hs001Probe' in the domain uses 'IServiceCollection'" "docs/rules/HS001.md" "a domain type of $app_name using dependency injection" check.sh check.ps1
 mv "$work/domain-project.backup" "$domain_project"
 rm "$app/src/$app_name.Domain/Hs001Probe.cs"
+
+# Until hardslice-module (PB-038), the first module is written as "Adding a first module" of AGENTS.md describes it, and Program.cs
+# registers and maps it: dotnet new hardslice-command then adds its first command slice.
+echo "==> Writing the first module Rooms of $app_name, registered and mapped by Program.cs"
+cp "$app_src/Program.cs" "$work/Program.cs.backup"
+mkdir -p "$app_src/Features/Rooms"
+cat > "$app_src/Features/Rooms/RoomsModule.cs" <<EOF
+namespace $app_name.Features.Rooms;
+
+public static class RoomsModule
+{
+    public static IServiceCollection AddRoomsModule(this IServiceCollection services) =>
+        services;
+
+    public static IEndpointRouteBuilder MapRoomsModule(this IEndpointRouteBuilder endpoints)
+    {
+        var group = endpoints.MapGroup("/rooms");
+        return endpoints;
+    }
+}
+EOF
+if ! awk -v app_name="$app_name" '
+    NR == 1 { print "using " app_name ".Features.Rooms;" }
+    { print }
+    /^builder\.Services\.AddPipelineBehaviors\(\);$/ { print "builder.Services.AddRoomsModule();"; registered = 1 }
+    /^app\.UseExceptionHandler\(\);$/ { print "app.MapRoomsModule();"; mapped = 1 }
+    END { if (!registered || !mapped) exit 1 }' "$work/Program.cs.backup" > "$app_src/Program.cs"; then
+  echo "error: the Program.cs of $app_name no longer has the lines after which a first module is registered and mapped." >&2
+  exit 1
+fi
+
+probe_command_template Rooms RenameRoom CloseRoom ResizeRoom
+
+mv "$work/Program.cs.backup" "$app_src/Program.cs"
+rm -r "$app_src/Features"
 
 echo "==> Template OK: $sample_name and $blank_name, generated with --no-sample, pass both check scripts and the README path, and seeded violations fail them in both"

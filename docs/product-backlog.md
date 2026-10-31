@@ -1766,7 +1766,7 @@ scripts/test-template.sh
 
 **Résultat observable**
 
-Depuis la racine d'une solution générée, `dotnet new hardslice-command --module Bookings --name ExtendBooking` crée la slice, son test unitaire de validateur et son test d'intégration aux chemins de HS004 et HS018, puis affiche les deux lignes à ajouter dans `BookingsModule.cs`. Le build passe sans diagnostic HS ; la vérification échoue sur les tests `TODO(hardslice):` jusqu'à ce que la slice soit complétée.
+Depuis la racine d'une solution générée et restaurée, `dotnet new hardslice-command --project src/<App>/<App>.csproj --module Bookings --name ExtendBooking` crée la slice, son test unitaire de validateur et son test d'intégration aux chemins de HS004 et HS018, puis affiche les deux lignes à ajouter dans `BookingsModule.cs`. Le build passe sans diagnostic HS ; la vérification échoue sur les tests `TODO(hardslice):` jusqu'à ce que la slice soit complétée.
 
 **Périmètre**
 
@@ -1779,6 +1779,17 @@ Depuis la racine d'une solution générée, `dotnet new hardslice-command --modu
 - test de l'hôte dans `ProgramTests`, livré dans les deux variantes : chaque `IRequestHandler<,>` et chaque `IValidator<>` déclaré dans l'assembly de l'application se résout depuis le conteneur, et l'échec nomme le type oublié ;
 - tests générés : préparation, appel HTTP et assertion du statut écrits ; seule l'assertion métier est marquée `TODO(hardslice):` ;
 - `README.md` et section « Adding a slice » d'`AGENTS.md`.
+
+**Réalisation (31/10/2026)**
+
+Essais faits avec le SDK 10.0.401, qui fixent ce que `dotnet new` permet à un template d'éléments :
+
+- la liaison `msbuild:RootNamespace` n'est disponible qu'avec `--project src/<App>/<App>.csproj` (le chemin du fichier, pas du dossier) sur un projet restauré : depuis la racine, `dotnet new` ne trouve aucun projet, car il n'en cherche que dans le dossier de sortie et au-dessus. Le paramètre explicite est donc `--project`, l'option de `dotnet new` elle-même, et non un `--app` qui ne permettrait pas de vérifier le module ;
+- `dotnet new` ne lit aucun fichier avant de créer les autres. Le module est vérifié par la propriété `HardSliceModuleFiles` du `Directory.Build.targets` de la solution, liste des `*Module.cs` sous `Features/`, que le template lit par la même liaison ;
+- un refus (application illisible, nom absent, non PascalCase ou suffixé `Command`, module non PascalCase ou absent, réponse inconnue) exclut tous les fichiers et fait échouer une post-action sans script (ajout d'une propriété JSON à un fichier qui n'existe pas), dont les instructions portent l'erreur : code de sortie 105, rien n'est créé. `dotnet new` affiche malgré tout « The template ... was created successfully. » avant « Post action failed. » ;
+- les lignes d'enregistrement sont des instructions manuelles, dont les noms sont remplacés par `applyFileRenamesToManualInstructions` ; une slice existante est refusée par `dotnet new` lui-même (code 73, `--force`) ;
+- `--response id` renvoie un `Guid` et répond 200 ; `none` renvoie un `bool`, comme `CancelBooking`, et répond 204 ou 404 ; un DTO est déclaré dans la slice et répond 200. La commande a un champ `Id` à remplacer, la route de l'endpoint est le nom de la slice en kebab-case et celle du test suppose le groupe du module en kebab-case, convention de PB-038 ;
+- sans Bookings, `scripts/test-template.sh` écrit le module `Rooms` comme le décrit « Adding a first module », en attendant `hardslice-module` (PB-038) ; aucun agrégat n'est nécessaire à la commande ni à sa complétion de référence.
 
 **Dépendances**
 

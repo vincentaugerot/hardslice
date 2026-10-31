@@ -1,6 +1,8 @@
 using System.Net;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using MyApp.Shared.Messaging;
 using MyApp.Shared.Persistence;
 
 namespace MyApp.IntegrationTests;
@@ -9,6 +11,9 @@ namespace MyApp.IntegrationTests;
 // where starting the host also validates every service registration.
 public sealed class ProgramTests(PostgresDatabase database)
 {
+    // The contracts by which a module registers the handlers and validators of its slices.
+    private static readonly Type[] RegisteredContracts = [typeof(IRequestHandler<,>), typeof(IValidator<>)];
+
     [Fact]
     public async Task Starts_and_answers_HTTP_requests_on_its_migrated_database()
     {
@@ -22,4 +27,32 @@ public sealed class ProgramTests(PostgresDatabase database)
         (await db.Database.CanConnectAsync(TestContext.Current.CancellationToken)).ShouldBeTrue();
         (await db.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken)).ShouldBeEmpty();
     }
+
+    // A slice its module forgot to register compiles, but its endpoint fails at the first request: every handler and
+    // validator declared in the application must be resolved from the container, by its contract.
+    [Fact]
+    public async Task Resolves_every_request_handler_and_validator_of_the_application_by_its_contract()
+    {
+        await using var app = new MyAppFactory(database);
+        await using var scope = app.Services.CreateAsyncScope();
+
+        var unregistered = typeof(Program).Assembly.GetTypes()
+            .Where(type => type is { IsClass: true, IsAbstract: false, ContainsGenericParameters: false })
+            .SelectMany(type => type.GetInterfaces()
+                .Where(contract => contract.IsGenericType && RegisteredContracts.Contains(contract.GetGenericTypeDefinition()))
+                .Select(contract => (Type: type, Contract: contract)))
+            .Where(registration => !scope.ServiceProvider.GetServices(registration.Contract)
+                .Any(service => service?.GetType() == registration.Type))
+            .Select(registration => $"'{registration.Type.Name}' as '{Describe(registration.Contract)}'")
+            .ToArray();
+
+        unregistered.ShouldBeEmpty(
+            "These types are not registered: add each to the Add<Module>Module method of its module, by its contract, "
+            + "such as .AddScoped<IRequestHandler<TRequest, TResponse>, THandler>() or .AddScoped<IValidator<TRequest>, TValidator>().");
+    }
+
+    private static string Describe(Type type) =>
+        type.IsGenericType
+            ? $"{type.Name[..type.Name.IndexOf('`')]}<{string.Join(", ", type.GetGenericArguments().Select(Describe))}>"
+            : type.Name;
 }
