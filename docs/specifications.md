@@ -264,7 +264,7 @@ Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en 
 2. **Contraindre** : les analyseurs et les tests d'architecture font échouer `dotnet build` et `dotnet test`, pour tous les agents.
 3. **Boucler** (Claude Code d'abord) :
    - Après chaque édition d'un `.cs` (`PostToolUse`), un build incrémental. Les erreurs HS reviennent à l'agent (code de sortie 2). Budget : moins de 10 secondes.
-   - Avant que l'agent rende la main (`Stop`), `scripts/check.sh` lance le build complet, les tests d'architecture et les tests de la slice touchée. En cas d'échec, l'agent continue de corriger. Budget : moins de 60 secondes. Si la vérification complète dépasse ce budget, le hook lance une vérification réduite aux slices touchées ; seule la vérification complète fait foi (décision du 31/10/2026, selon la mesure de PB-045).
+   - Avant que l'agent rende la main (`Stop`), `scripts/check.sh` lance le build complet, les tests d'architecture et les tests de la slice touchée. En cas d'échec, l'agent continue de corriger. Budget : moins de 60 secondes. Si la vérification complète dépasse ce budget, le hook lance une vérification réduite aux slices touchées ; seule la vérification complète fait foi (décision du 31/10/2026, selon la mesure de PB-045). Mesure de PB-045 : la vérification complète tient le budget, le hook de fin lance `scripts/check.sh` tel quel et le mode réduit n'est pas livré ; le hook après édition lance `scripts/check.sh --build` ([coût mesuré](performance/analyzers.md)).
    - Les autres CLI : hooks équivalents quand ils existent, sinon `AGENTS.md` leur demande de lancer `scripts/check.sh` avant de finir. Codex (`.codex/hooks.json`) et Copilot CLI (`.github/hooks/`) ont un adaptateur natif ; Gemini CLI garde le fallback en v0.3 ([prise en charge des agents](agents/support.md), PB-034).
 
 ### Skills
@@ -351,7 +351,7 @@ Cette table décrit le périmètre produit promis. Le séquençage d'exécution 
 5. Seuil de découpage d'une slice en plusieurs fichiers : 200 lignes, ou au nombre de types ?
 6. Les modules restent-ils des dossiers d'un même projet, ou deviennent-ils des projets séparés quand la solution grossit ?
 7. ~~Où vit la persistance d'un module ?~~ **Résolu : `Shared/Persistence` contient `AppDbContext`, la connexion et les migrations ; chaque configuration EF Core d'agrégat vit à la racine de son module, hors de toute slice.**
-8. Temps réel du build incrémental après chaque édition sur une grosse solution : tenir les 10 secondes ?
+8. ~~Temps réel du build incrémental après chaque édition sur une grosse solution : tenir les 10 secondes ?~~ **Résolu pour la fixture de performance (Bookings et 20 modules de 10 slices) : `scripts/check.sh --build` tient les 10 secondes, et `scripts/check.sh` complet les 60 secondes du hook de fin sur une application générée avec Bookings ; le job `performance` les mesure à chaque exécution ([coût mesuré](performance/analyzers.md), PB-045). Une solution bien plus grosse reste à mesurer.**
 9. ~~Nom définitif ?~~ **Résolu : HardSlice.** La disponibilité exacte des identifiants NuGet et du domaine reste à vérifier avant publication.
 10. Licence du projet : MIT.
 

@@ -8,15 +8,21 @@
 #   C: full build with --no-incremental, as a reference.
 # Each scenario has one warm-up build per variant, then five measured ones; the median is kept. A build without any change
 # is never measured: it may analyze nothing. A last full build with -p:ReportAnalyzer=true explains the cost of each analyzer.
+# Then measures the verifications of the agent hooks, the same way, against their budgets (PB-045):
+#   D: scripts/check.sh --build, the hook after an edit, on the fixture with analyzers after the change of scenario A;
+#   E: scripts/check.sh, the full check that the hook before an agent hands back runs, on the application generated with
+#      Bookings alone (the synthetic modules have no tests), after a change to its GetBooking slice, PostgreSQL container included.
 #
 # Writes the measurement into the report (docs/performance/analyzers.md unless --report is given): replaces its latest measurement
 # and adds a line to its history. On GitHub Actions, also writes the measurement to the job summary and the verdict to the step outputs.
-# Exit code: 0 when the thresholds hold, or when only the build without HardSlice exceeds a budget (arbitrage, not a failure);
+# Exit code: 0 when the thresholds hold, or when only the build without HardSlice or a hook exceeds a budget (arbitrage, not a failure);
 # 3 when a threshold is exceeded by an unstable series (no conclusion: measure again on another runner);
 # 4 when a stable series exceeds a threshold because of the analyzers.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The check scripts restore dotnet hardslice from the private package folder of the fixture: their resolver cache lives there too.
+source "$repo_root/scripts/dotnet-cli-home.sh"
 report="$repo_root/docs/performance/analyzers.md"
 work=""
 keep_work=false
@@ -53,6 +59,12 @@ elif [[ -n "$(ls -A "$work")" ]]; then
   echo "error: $work is not empty." >&2
   exit 1
 fi
+isolate_dotnet_cli_home "$work"
+
+if ! docker info > /dev/null 2>&1; then
+  echo "error: scenario E runs the integration tests: start a Docker-compatible container runtime, check that 'docker info' succeeds." >&2
+  exit 1
+fi
 
 cleanup() {
   dotnet build-server shutdown > /dev/null 2>&1 || true
@@ -70,16 +82,24 @@ overhead_a=1000
 budget_b=20000
 overhead_b=2000
 overhead_c_percent=15
+# Budgets of the hook verifications: after an edit, and before the agent hands back, the full check.
+budget_d=10000
+budget_e=60000
 # Beyond this spread of a series (maximum minus minimum, over the median), its exceedances are not qualified.
 max_spread_percent=20
 
 with="$work/with-analyzers/$app_name"
 without="$work/without-analyzers/$app_name"
+check_app="$work/check-app/$app_name"
 slice_file="src/$app_name/Features/Module10/ListItems/ListItems.cs"
+check_slice_file="src/$app_name/Features/Bookings/GetBooking/GetBooking.cs"
 aggregate_file="src/$app_name.Domain/Module10/Item.cs"
 
 echo "==> Generating the $app_name fixture"
 "$repo_root/scripts/generate-app.sh" "$work" "$app_name"
+# The application of scenario E keeps Bookings alone, with its tests and migrations: the full check passes on it.
+mkdir -p "$(dirname "$check_app")"
+cp -R "$work/$app_name" "$check_app"
 "$repo_root/scripts/generate-perf-modules.sh" "$work/$app_name" "$app_name"
 mkdir -p "$(dirname "$with")" "$(dirname "$without")"
 mv "$work/$app_name" "$with"
@@ -113,9 +133,10 @@ build() {
   fi
 }
 
-echo "==> Restoring and building both variants"
+echo "==> Restoring and building both variants, and the application of scenario E"
 build "$with"
 build "$without"
+build "$check_app"
 
 has_hardslice_analyzer() {
   (cd "$1" && dotnet msbuild "src/$app_name/$app_name.csproj" -nologo -t:ResolveLockFileAnalyzers -getItem:Analyzer) \
@@ -135,25 +156,32 @@ declare -A recompiled=(
   [A]="src/$app_name/obj/Debug/net10.0/$app_name.dll"
   [B]="src/$app_name.Domain/obj/Debug/net10.0/$app_name.Domain.dll src/$app_name/obj/Debug/net10.0/$app_name.dll tests/$app_name.Tests/obj/Debug/net10.0/$app_name.Tests.dll"
   [C]="src/$app_name.Domain/obj/Debug/net10.0/$app_name.Domain.dll src/$app_name/obj/Debug/net10.0/$app_name.dll tests/$app_name.Tests/obj/Debug/net10.0/$app_name.Tests.dll"
+  [D]="src/$app_name/obj/Debug/net10.0/$app_name.dll"
+  [E]="src/$app_name/obj/Debug/net10.0/$app_name.dll"
 )
 
 # Each edit writes a value never written before in that variant, so that every measured build has a real change to compile.
-declare -A edits=([with]=0 [without]=0)
+declare -A edits=([with]=0 [without]=0 [check]=0)
 edit() {
   local variant="$1"
   local scenario="$2"
   local dir="$with"
   [[ "$variant" == with ]] || dir="$without"
+  [[ "$variant" != check ]] || dir="$check_app"
   local n=$(( ${edits[$variant]} + 1 ))
   edits[$variant]=$n
   case "$scenario" in
-    A)
+    A | D)
       sed -i -E "s|const int pageSize = [0-9]+; // measure-analyzers: method body|const int pageSize = $(( 50 + n )); // measure-analyzers: method body|" "$dir/$slice_file"
       grep -qF "pageSize = $(( 50 + n ));" "$dir/$slice_file"
       ;;
     B)
       sed -i -E "s|public int Revision[0-9]*\(\) => [0-9]+; // measure-analyzers: public API|public int Revision$n() => $n; // measure-analyzers: public API|" "$dir/$aggregate_file"
       grep -qF "public int Revision$n() => $n;" "$dir/$aggregate_file"
+      ;;
+    E)
+      sed -i -E '/^\/\/ measure-analyzers: end hook [0-9]+$/d' "$dir/$check_slice_file"
+      echo "// measure-analyzers: end hook $n" >> "$dir/$check_slice_file"
       ;;
   esac
 }
@@ -195,6 +223,50 @@ for scenario in A B C; do
       durations[$scenario/$variant]+="$duration "
       echo "    $scenario $variant analyzers, run $run: $duration ms"
     done
+  done
+done
+
+# Sets duration to the length of one run of the check script of a hook scenario, which must pass, in milliseconds.
+# D runs scripts/check.sh --build on the fixture with analyzers, E scripts/check.sh on the application with Bookings alone.
+check_log="$work/check.log"
+measure_hook() {
+  local scenario="$1"
+  local dir="$with"
+  local variant=with
+  local arguments=(--build)
+  if [[ "$scenario" == E ]]; then
+    dir="$check_app"
+    variant=check
+    arguments=()
+  fi
+  edit "$variant" "$scenario"
+  local start end
+  touch "$work/before-build"
+  start="$(date +%s%N)"
+  if ! bash "$dir/scripts/check.sh" "${arguments[@]}" > "$check_log" 2>&1; then
+    tail -n 50 "$check_log" >&2
+    echo "error: scripts/check.sh ${arguments[*]} failed in $dir during scenario $scenario." >&2
+    exit 1
+  fi
+  end="$(date +%s%N)"
+  duration=$(( (end - start) / 1000000 ))
+
+  local project
+  for project in ${recompiled[$scenario]}; do
+    if [[ -z "$(find "$dir/$project" -newer "$work/before-build")" ]]; then
+      echo "error: scenario $scenario did not recompile $project in $dir." >&2
+      exit 1
+    fi
+  done
+}
+
+for scenario in D E; do
+  echo "==> Scenario $scenario: one warm-up run, then $runs measured runs"
+  measure_hook "$scenario"
+  for run in $(seq "$runs"); do
+    measure_hook "$scenario"
+    durations[$scenario/hook]+="$duration "
+    echo "    $scenario run $run: $duration ms"
   done
 done
 
@@ -260,6 +332,30 @@ qualify() {
   fi
 }
 
+# Qualifies the budget of a hook scenario: an unstable series concludes nothing; a stable one above the budget reopens the
+# decision of docs/performance/analyzers.md on the verification of the hooks.
+hook_rows=""
+check_hook() {
+  local scenario="$1"
+  local budget="$2"
+  local label="$3"
+  local command="$4"
+  local key="$scenario/hook"
+  result="respecté"
+  if above "${median[$key]}" "$budget"; then
+    if above "${spread[$key]}" "$max_spread_percent"; then
+      raise_verdict unstable
+      result="dépassé, série instable : à mesurer de nouveau sur un autre runner, sans conclusion"
+    else
+      raise_verdict arbitrage
+      result="dépassé : arbitrage sur la vérification du hook (la décision du mainteneur prévoit alors une vérification réduite aux slices touchées)"
+    fi
+  fi
+  hook_rows+="| $scenario | $label | \`$command\` | $(seconds "${min[$key]}") | $(seconds "${median[$key]}") | $(seconds "${max[$key]}") | ${spread[$key]} % | ≤ $(seconds "$budget") s | $result |"$'\n'
+}
+check_hook D "$budget_d" "après édition" "scripts/check.sh --build"
+check_hook E "$budget_e" "avant de rendre la main" "scripts/check.sh"
+
 threshold_rows=""
 check_scenario() {
   local scenario="$1"
@@ -286,7 +382,7 @@ threshold_rows+="| C | Surcoût des analyseurs | $overhead_c % | ≤ $overhead_c
 
 case "$verdict" in
   pass) verdict_text="seuils respectés" ;;
-  arbitrage) verdict_text="seuils respectés par les analyseurs ; le build sans HardSlice dépasse un budget, arbitrage à ouvrir" ;;
+  arbitrage) verdict_text="seuils respectés par les analyseurs ; le build sans HardSlice ou un hook dépasse un budget, arbitrage à ouvrir" ;;
   unstable) verdict_text="seuil dépassé par une série instable : sans conclusion, à mesurer de nouveau sur un autre runner" ;;
   overhead) verdict_text="seuil dépassé par les analyseurs sur une série stable : une seconde exécution stable consécutive au-dessus du seuil confirme la régression" ;;
 esac
@@ -321,6 +417,7 @@ else
   runner="machine locale, $(uname -sr)"
 fi
 cs_files="$(find "$with/src" -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*' | wc -l)"
+check_cs_files="$(find "$check_app/src" "$check_app/tests" -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*' | wc -l)"
 cs_lines="$(find "$with/src" -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*' -exec cat {} + | wc -l)"
 date="$(date -u +%Y-%m-%d)"
 
@@ -345,6 +442,11 @@ Seuils, sur la médiane :
 | Scénario | Mesure | Valeur | Seuil | Résultat |
 |---|---|---:|---:|---|
 ${threshold_rows}
+Vérifications des hooks des agents, une exécution de chauffe puis $runs exécutions mesurées, en secondes. D sur la fixture avec analyseurs ; E sur $app_name généré avec Bookings seul ($check_cs_files fichiers C# sous \`src/\` et \`tests/\`), conteneur PostgreSQL compris :
+
+| Scénario | Hook | Commande | Minimum | Médiane | Maximum | Dispersion | Budget | Résultat |
+|---|---|---|---:|---:|---:|---:|---:|---|
+${hook_rows}
 \`-p:ReportAnalyzer=true\`, build complet avec analyseurs : temps cumulé de chaque analyseur HardSlice, puis de tous les analyseurs du projet.
 Ces temps se chevauchent (exécution concurrente) : ils expliquent un surcoût, seuls les seuils sur la durée totale font foi.
 
@@ -352,7 +454,7 @@ Ces temps se chevauchent (exécution concurrente) : ils expliquent un surcoût, 
 |---|---|---:|---:|
 ${analyzer_rows}"
 
-history_row="| $date | \`${commit%%,*}\` | $rules | $runner | $(seconds "${median[A/with]}") / $(seconds "${median[A/without]}") | $(seconds "${median[B/with]}") / $(seconds "${median[B/without]}") | $(seconds "${median[C/with]}") / $(seconds "${median[C/without]}") | $verdict |"
+history_row="| $date | \`${commit%%,*}\` | $rules | $runner | $(seconds "${median[A/with]}") / $(seconds "${median[A/without]}") | $(seconds "${median[B/with]}") / $(seconds "${median[B/without]}") | $(seconds "${median[C/with]}") / $(seconds "${median[C/without]}") | $(seconds "${median[D/hook]}") | $(seconds "${median[E/hook]}") | $verdict |"
 
 # Replaces the latest measurement and adds the history line, leaving the rest of the report untouched.
 awk -v measurement="$measurement" -v history="$history_row" '
@@ -380,7 +482,7 @@ case "$verdict" in
     echo "==> Thresholds respected"
     ;;
   arbitrage)
-    echo "::warning::The build without HardSlice already exceeds a budget of docs/performance/analyzers.md: open an arbitrage on the fixture, the runner or the budget."
+    echo "::warning::The build without HardSlice or the verification of a hook exceeds a budget of docs/performance/analyzers.md: open an arbitrage on the fixture, the runner, the budget or the verification of the hook."
     ;;
   unstable)
     echo "::error::A threshold is exceeded by an unstable series: no conclusion, measure again on another runner."

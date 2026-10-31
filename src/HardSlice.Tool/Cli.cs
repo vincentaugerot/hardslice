@@ -9,8 +9,11 @@ internal static class Cli
         Usage: dotnet hardslice <command>
 
         Commands:
-          check           Builds the solution, then runs its unit, architecture and integration tests.
-                          Exits with the code of the first step that fails.
+          check           Builds the solution, then runs its unit, architecture and integration tests,
+                          and fails while a TODO(hardslice): marker is left in src/ or tests/.
+                          Exits with the code of the first step that fails. The only verdict on the work.
+          check --build   The incremental build alone, errors only, then the TODO(hardslice): markers:
+                          the verification after an edit. Its success does not mean the work is done.
           explain <rule>  Prints the sheet of a HardSlice rule, such as HS016.
 
         Options:
@@ -23,10 +26,12 @@ internal static class Cli
         switch (args)
         {
             case ["check"]:
-                return new CheckCommand(runner, output, error).Run(currentDirectory);
+                return new CheckCommand(runner, output, error).Run(currentDirectory, CheckMode.Full);
+            case ["check", "--build"]:
+                return new CheckCommand(runner, output, error).Run(currentDirectory, CheckMode.Build);
             case ["check", ..]:
-                // Every step runs, every time: no option may skip one.
-                error.WriteLine("error: check takes no argument: it always runs every step of the verification.");
+                // Only the modes of the hooks reduce the verification; no option skips a step of the full check.
+                error.WriteLine($"error: check takes no argument, or --build for the incremental build alone. Unknown arguments: '{string.Join(' ', args[1..])}'.");
                 return UsageError;
             case ["explain", var ruleId]:
                 return Explain(ruleId, output, error);

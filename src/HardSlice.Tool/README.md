@@ -10,7 +10,8 @@ dotnet hardslice check
 dotnet hardslice explain HS016
 ```
 
-- `check` builds the solution, then runs its unit, architecture and integration tests, and exits with the code of the first step that fails. It stops before the build when `Directory.Packages.props` references another version of `HardSlice.Analyzers` than its own, and has no option to skip a step.
+- `check` builds the solution, then runs its unit, architecture and integration tests, then fails while a `TODO(hardslice):` marker is left in `src/` or `tests/`, listing each file and line. It exits with the code of the first step that fails. It stops before the build when `Directory.Packages.props` references another version of `HardSlice.Analyzers` than its own, and has no option to skip a step: it is the only verdict on the work.
+- `check --build` is the verification after an edit, for the hooks of the agents: the incremental build with `--no-restore`, after a restore only when a project needs one, printing the errors alone as the compiler wrote them, then the `TODO(hardslice):` markers. It runs no test and says that only `check` decides. Any other argument exits with code 2.
 - `explain <rule>` prints the sheet of a rule. An unknown rule exits with code 2 and lists the rules that have a sheet.
 - `--version` prints the version of the tool.
 

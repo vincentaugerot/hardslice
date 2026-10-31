@@ -125,7 +125,7 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-Both scripts restore the local tools, then run `dotnet hardslice check`: it builds the solution (restoring if needed), then runs the unit tests, the architecture tests and the integration tests. Integration tests need a Docker-compatible container runtime: without one, the check stops before them and says so. It exits with a non-zero code on any failure, the code of the first step that fails.
+Both scripts restore the local tools, then run `dotnet hardslice check`: it builds the solution (restoring if needed), then runs the unit tests, the architecture tests and the integration tests. Integration tests need a Docker-compatible container runtime: without one, the check stops before them and says so. Last, it fails while a `TODO(hardslice):` marker is left in `src/` or `tests/`, and lists each one. It exits with a non-zero code on any failure, the code of the first step that fails.
 
 **You are not done until the check script exits 0.** Do not hand back, report success or commit while it fails. If it cannot pass without breaking a rule, stop and explain the conflict instead.
 

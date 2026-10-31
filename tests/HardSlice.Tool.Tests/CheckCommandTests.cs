@@ -1,6 +1,7 @@
 namespace HardSlice.Tool.Tests;
 
-// check keeps the contract of the former check scripts: same steps, same order, same messages, exit code of the first failure.
+// check keeps the contract of the former check scripts: same steps, same order, same messages, exit code of the first failure,
+// then fails on the TODO(hardslice): markers left. check --build is the incremental build alone, then the same markers.
 public sealed class CheckCommandTests
 {
     private const string Build = "dotnet build Demo.slnx";
@@ -8,6 +9,8 @@ public sealed class CheckCommandTests
     private const string ArchitectureTests = "dotnet test --project tests/Demo.ArchitectureTests/Demo.ArchitectureTests.csproj --no-build";
     private const string ContainerRuntime = "docker info";
     private const string IntegrationTests = "dotnet test --project tests/Demo.IntegrationTests/Demo.IntegrationTests.csproj --no-build";
+    private const string IncrementalBuild = "dotnet build Demo.slnx --no-restore -nologo -tl:off -noconsolelogger -logger:Microsoft.Build.Logging.ConsoleLogger,Microsoft.Build;ErrorsOnly;NoSummary;Verbosity=minimal";
+    private const string Restore = "dotnet restore Demo.slnx -nologo -v:q";
 
     [Fact]
     public void A_passing_check_runs_every_step_in_order_from_the_solution_root()
@@ -26,9 +29,178 @@ public sealed class CheckCommandTests
             "==> Running architecture tests",
             "==> Checking the container runtime",
             "==> Running integration tests",
+            "==> Looking for TODO(hardslice): markers in src/ and tests/",
             "==> Check passed",
         ]);
         error.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Check_fails_after_every_step_while_a_TODO_hardslice_marker_is_left_and_names_each_file_and_line()
+    {
+        using var solution = new TemporarySolution();
+        solution.Write("src/Demo/Features/Rooms/BookRoom/BookRoom.cs",
+            "internal sealed class BookRoomHandler\n{\n    // TODO(hardslice): implement BookRoomHandler.\n}\n");
+        solution.Write("tests/Demo.IntegrationTests/Features/Rooms/BookRoom/BookRoomTests.cs",
+            "public sealed class BookRoomTests\r\n{\r\n    // A trivial assertion does not remove the marker.\r\n    // TODO(hardslice): assert the business outcome.\r\n}\r\n");
+        var runner = new FakeRunner();
+
+        var (exitCode, output, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(1);
+        runner.Commands.ShouldBe([Build, UnitTests, ArchitectureTests, ContainerRuntime, IntegrationTests]);
+        output.ShouldNotContain("Check passed");
+        Lines(error).ShouldBe([
+            "error: 2 TODO(hardslice): markers are left in src/ and tests/: each one is work a generated element leaves to do. "
+                + "Replace it with the logic or the real assertion it asks for, never with an empty test or one that asserts nothing.",
+            "src/Demo/Features/Rooms/BookRoom/BookRoom.cs:3: // TODO(hardslice): implement BookRoomHandler.",
+            "tests/Demo.IntegrationTests/Features/Rooms/BookRoom/BookRoomTests.cs:4: // TODO(hardslice): assert the business outcome.",
+        ]);
+    }
+
+    [Fact]
+    public void Markers_in_build_output_or_outside_src_and_tests_do_not_fail_the_check()
+    {
+        using var solution = new TemporarySolution();
+        solution.Write("src/Demo/obj/Debug/net10.0/Demo.Tests.cs", "// TODO(hardslice): a copy made by the build.");
+        solution.Write("tests/Demo.Tests/bin/Debug/net10.0/Demo.Tests.dll", "\0Assert.Fail(\"TODO(hardslice): compiled.\")");
+        solution.Write("tests/Demo.Tests/Binary.dat", "\0TODO(hardslice): not a source file.");
+        solution.Write("docs/notes.md", "TODO(hardslice): the documentation explains the markers.");
+        solution.Write("src/Demo/Todo.cs", "// TODO: an ordinary marker. todo(hardslice): another case.");
+
+        var (exitCode, _, error) = Check(new FakeRunner(), solution.Root);
+
+        exitCode.ShouldBe(0);
+        error.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void One_marker_left_is_named_in_the_singular()
+    {
+        using var solution = new TemporarySolution();
+        solution.Write("tests/Demo.Tests/Domain/Rooms/RoomTests.cs", "Assert.Fail(\"TODO(hardslice): assert the state.\");");
+
+        var (_, _, error) = Check(new FakeRunner(), solution.Root);
+
+        error.ShouldStartWith("error: 1 TODO(hardslice): marker is left in src/ and tests/: ");
+        error.ShouldContain("tests/Demo.Tests/Domain/Rooms/RoomTests.cs:1: Assert.Fail(\"TODO(hardslice): assert the state.\");");
+    }
+
+    [Fact]
+    public void Check_build_runs_the_incremental_build_alone_and_says_that_only_the_full_check_decides()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true), ("tests/Demo.Tests/Demo.Tests.csproj", true));
+        var runner = new FakeRunner();
+
+        var (exitCode, output, error) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldBe([IncrementalBuild]);
+        runner.WorkingDirectories.ShouldAllBe(directory => directory == solution.Root);
+        Lines(output).ShouldBe([
+            CheckCommand.BuildModeReduction,
+            "==> Building Demo.slnx",
+            "==> Looking for TODO(hardslice): markers in src/ and tests/",
+            "==> Build passed. Tests did not run: only the full check decides that the work is done.",
+        ]);
+        output.ShouldContain("Only the full check, 'dotnet hardslice check' or 'scripts/check.sh' without argument, decides that the work is done.");
+        error.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Check_build_restores_first_when_a_project_has_never_been_restored()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true), ("tests/Demo.Tests/Demo.Tests.csproj", false));
+        var runner = new FakeRunner();
+
+        var (exitCode, output, _) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldBe([Restore, IncrementalBuild]);
+        output.ShouldContain("==> Restoring Demo.slnx: tests/Demo.Tests/Demo.Tests.csproj has never been restored");
+    }
+
+    [Theory]
+    [InlineData("src/Demo/Demo.csproj")]
+    [InlineData("Directory.Packages.props")]
+    [InlineData("Directory.Build.props")]
+    [InlineData("NuGet.Config")]
+    public void Check_build_restores_first_when_a_file_read_by_the_restore_changed_since(string changed)
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        var file = Path.Combine(solution.Root, changed);
+        if (!File.Exists(file))
+            File.WriteAllText(file, "<configuration />");
+        File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(5));
+        var runner = new FakeRunner();
+
+        var (exitCode, output, _) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldBe([Restore, IncrementalBuild]);
+        output.ShouldContain($"==> Restoring Demo.slnx: {changed} changed since the last restore of src/Demo/Demo.csproj");
+    }
+
+    [Fact]
+    public void Check_build_stops_at_a_failing_restore_with_its_exit_code()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", false));
+        var runner = new FakeRunner().Failing(Restore, 1);
+
+        var (exitCode, _, _) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(1);
+        runner.Commands.ShouldBe([Restore]);
+    }
+
+    // The compiler output reaches the console as is: the tool never captures nor rewrites it.
+    [Fact]
+    public void Check_build_exits_with_the_code_of_a_failing_build_before_looking_for_markers()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        solution.Write("src/Demo/Todo.cs", "// TODO(hardslice): left.");
+        var runner = new FakeRunner().Failing(IncrementalBuild, 1);
+
+        var (exitCode, output, error) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(1);
+        runner.Commands.ShouldBe([IncrementalBuild]);
+        output.ShouldNotContain("TODO(hardslice): markers");
+        output.ShouldNotContain("Build passed");
+        error.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Check_build_fails_on_a_TODO_hardslice_marker_after_a_passing_build()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        solution.Write("src/Demo/Features/Rooms/BookRoom/BookRoom.cs", "throw new NotImplementedException(\"TODO(hardslice): implement.\");");
+
+        var (exitCode, output, error) = Check(new FakeRunner(), solution.Root, "--build");
+
+        exitCode.ShouldBe(1);
+        output.ShouldNotContain("Build passed");
+        error.ShouldContain("src/Demo/Features/Rooms/BookRoom/BookRoom.cs:1: throw new NotImplementedException(\"TODO(hardslice): implement.\");");
+    }
+
+    [Fact]
+    public void Check_build_fails_before_building_when_the_analyzers_have_another_version()
+    {
+        using var solution = new TemporarySolution(analyzerVersion: "9.9.9");
+        var runner = new FakeRunner();
+
+        var (exitCode, output, error) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(1);
+        runner.Commands.ShouldBeEmpty();
+        output.ShouldBeEmpty();
+        error.ShouldStartWith("error: Directory.Packages.props references HardSlice.Analyzers 9.9.9");
     }
 
     [Fact]
@@ -160,11 +332,11 @@ public sealed class CheckCommandTests
         }
     }
 
-    private static (int ExitCode, string Output, string Error) Check(FakeRunner runner, string currentDirectory)
+    private static (int ExitCode, string Output, string Error) Check(FakeRunner runner, string currentDirectory, params string[] mode)
     {
         var output = new StringWriter();
         var error = new StringWriter();
-        var exitCode = Cli.Run(["check"], currentDirectory, runner, output, error);
+        var exitCode = Cli.Run(["check", .. mode], currentDirectory, runner, output, error);
         return (exitCode, output.ToString(), error.ToString());
     }
 

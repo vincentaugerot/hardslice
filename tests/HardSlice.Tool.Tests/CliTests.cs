@@ -35,18 +35,25 @@ public sealed class CliTests
         error.ShouldContain("Rules with a sheet: HS000, HS001");
     }
 
-    // No option skips a step of the verification.
+    // No option skips a step of the full check: --build, the mode of the hook after an edit, is the only argument.
     [Theory]
     [InlineData("--skip-integration-tests")]
     [InlineData("--no-build")]
-    public void Check_takes_no_argument(string argument)
+    [InlineData("--affected")]
+    [InlineData("--build", "--build")]
+    [InlineData("--build", "--no-restore")]
+    [InlineData("build")]
+    public void Check_refuses_any_argument_but_build_with_exit_code_2(params string[] arguments)
     {
         var runner = new FakeRunner();
+        var error = new StringWriter();
 
-        var exitCode = Cli.Run(["check", argument], Repository.Root, runner, new StringWriter(), new StringWriter());
+        var exitCode = Cli.Run(["check", .. arguments], Repository.Root, runner, new StringWriter(), error);
 
         exitCode.ShouldBe(2);
         runner.Commands.ShouldBeEmpty();
+        error.ToString().ShouldBe(
+            $"error: check takes no argument, or --build for the incremental build alone. Unknown arguments: '{string.Join(' ', arguments)}'.{Environment.NewLine}");
     }
 
     [Theory]
@@ -69,6 +76,7 @@ public sealed class CliTests
 
         exitCode.ShouldBe(0);
         output.ShouldContain("check");
+        output.ShouldContain("check --build");
         output.ShouldContain("explain <rule>");
     }
 

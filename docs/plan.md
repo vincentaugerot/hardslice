@@ -45,7 +45,7 @@ Aucun composant HardSlice n'est requis au runtime de l'application générée.
 | Benchmark | Après une première boucle produit utilisable, jamais comme prérequis au premier code |
 | Templates d'éléments | Ils créent les fichiers de leur élément et affichent les enregistrements à ajouter, que la skill ajoute ; le code généré compile sans diagnostic HS, ses tests et la vérification échouent tant qu'un marqueur `TODO(hardslice):` reste (31/10/2026) |
 | Événements de domaine | Publiés à leurs gestionnaires dans la transaction de la commande ; un gestionnaire vit dans une slice de réaction, agit par `AppDbContext`, sans `IMediator` ni effet externe ; pas d'outbox (31/10/2026) |
-| Vérification des hooks | `check` complet reste le seul verdict ; `--build` après édition ; le hook de fin lance `check` s'il tient en 60 s, sinon un mode réduit aux slices touchées, selon la mesure de PB-045 (31/10/2026) |
+| Vérification des hooks | `check` complet reste le seul verdict ; `--build` après édition ; le hook de fin lance `check` s'il tient en 60 s, sinon un mode réduit aux slices touchées, selon la mesure de PB-045 (31/10/2026). Mesuré par PB-045 : `check` tient les 60 s, le hook de fin le lance, `--affected` n'est pas livré |
 | HS000 | Suppressions écrites dans le code source seulement ; les réglages globaux sont protégés par les hooks et la CI, puis repris en v0.5 avec la baseline (31/10/2026) |
 
 Les choix fonctionnels de la spécification restent engagés. Contraintes transverses retenues : niveaux d'analyse, baseline par occurrence, contrôle des faux positifs, budgets de performance et versions CLI/analyseurs identiques.

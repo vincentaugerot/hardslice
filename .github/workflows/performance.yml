@@ -1,6 +1,7 @@
 name: Performance
 
-# Cost of HardSlice analyzers on real builds of the PerfApp fixture, against the thresholds of docs/performance/analyzers.md.
+# Cost of HardSlice analyzers on real builds of the PerfApp fixture, and duration of the verifications of the agent hooks,
+# against the thresholds and budgets of docs/performance/analyzers.md. The full check needs Docker, which ubuntu-latest provides.
 on:
   push:
     branches: [main]
@@ -8,8 +9,10 @@ on:
     paths:
       - src/HardSlice.Analyzers/**
       - src/HardSlice.Templates/**
+      - src/HardSlice.Tool/**
       - scripts/generate-app.sh
       - scripts/generate-perf-modules.sh
+      - scripts/dotnet-cli-home.sh
       - scripts/measure-analyzers.sh
       - global.json
       - Directory.Build.props
