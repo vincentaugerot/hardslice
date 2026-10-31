@@ -449,6 +449,90 @@ public sealed class TemplatePackageTests
             .ShouldBeEmpty("AGENTS.md cites paths that the generated solution does not contain.");
     }
 
+    // docs/agents/support.md: Claude Code reads AGENTS.md only through an import once a CLAUDE.md exists, Gemini CLI through
+    // @./AGENTS.md, Copilot reads it natively. CLAUDE.md lives in .claude/, which Copilot does not read: at the root, Copilot would
+    // expand its import and load AGENTS.md twice. Copilot merges GEMINI.md too: each file names the CLI it is for before anything else.
+    [Theory]
+    [InlineData(".claude/CLAUDE.md", "For Claude Code only.", "@../AGENTS.md")]
+    [InlineData("GEMINI.md", "For Gemini CLI only.", "@./AGENTS.md")]
+    [InlineData(".github/copilot-instructions.md", "For GitHub Copilot only.", null)]
+    public void Agent_instruction_file_names_its_CLI_first_and_imports_AGENTS_md_by_the_mechanism_of_that_CLI(
+        string file, string firstSentence, string? import)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var lines = File.ReadAllLines(Path.Combine(templateRoot, file));
+        var text = lines.Where(line => line.Length > 0 && !line.StartsWith('#')).ToArray();
+
+        File.Exists(Path.Combine(templateRoot, "CLAUDE.md")).ShouldBeFalse("A CLAUDE.md at the root makes Copilot load AGENTS.md twice: it lives in .claude/.");
+
+        text[0].ShouldStartWith(firstSentence);
+        var imports = lines.Where(line => line.TrimStart().StartsWith('@')).ToArray();
+        if (import is null)
+            imports.ShouldBeEmpty($"{file} must not import AGENTS.md, which its CLI already reads.");
+        else
+            imports.ShouldBe([import]);
+    }
+
+    // The instruction files hold only what is specific to their CLI: a golden rule or a rule identifier belongs to AGENTS.md alone.
+    [Theory]
+    [MemberData(nameof(AgentInstructionFiles))]
+    public void Agent_instruction_file_copies_no_golden_rule_of_AGENTS_md(string file)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var instructions = File.ReadAllText(Path.Combine(templateRoot, file));
+        var goldenRules = File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md"))
+            .SkipWhile(line => line != "## Golden rules")
+            .Skip(1)
+            .TakeWhile(line => !line.StartsWith("## ", StringComparison.Ordinal) && !line.StartsWith("<!--#", StringComparison.Ordinal))
+            .Where(line => Regex.IsMatch(line, @"^\d+\. "))
+            .ToArray();
+
+        goldenRules.Length.ShouldBeGreaterThan(5);
+        Regex.Matches(instructions, @"HS\d{3}").Select(match => match.Value).ShouldBeEmpty($"{file} names a HardSlice rule: rules belong to AGENTS.md.");
+        goldenRules
+            .SelectMany(rule => Regex.Split(Regex.Replace(rule, @"^\d+\. ", ""), @"(?<=[.:;])\s+"))
+            .Select(sentence => sentence.Trim().TrimEnd('.', ':', ';'))
+            .Where(sentence => sentence.Length >= 20)
+            .Where(sentence => instructions.Contains(sentence, StringComparison.OrdinalIgnoreCase))
+            .ShouldBeEmpty($"{file} copies golden rules of AGENTS.md.");
+    }
+
+    // Every Markdown link of the agent guidance resolves to a file of the template, and its anchor to a heading of that file.
+    [Theory]
+    [InlineData("AGENTS.md")]
+    [MemberData(nameof(AgentInstructionFiles))]
+    public void Agent_guidance_links_resolve_to_files_and_headings_of_the_template(string file)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var source = Path.Combine(templateRoot, file);
+        var links = Regex.Matches(File.ReadAllText(source), @"\]\((?<target>[^)\s]+)\)")
+            .Select(match => match.Groups["target"].Value)
+            .ToArray();
+
+        links.ShouldNotBeEmpty();
+        var broken = new List<string>();
+        foreach (var link in links)
+        {
+            var parts = link.Split('#', 2);
+            var target = parts[0].Length == 0 ? source : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, parts[0]));
+            if (!target.StartsWith(templateRoot, StringComparison.Ordinal) || !File.Exists(target))
+                broken.Add($"{link}: no such file in the template");
+            else if (parts.Length == 2 && !Headings(target).Contains(parts[1]))
+                broken.Add($"{link}: no such heading");
+        }
+
+        broken.ShouldBeEmpty($"{file} has links that resolve to nothing the generated solution contains.");
+    }
+
+    public static TheoryData<string> AgentInstructionFiles() => new() { ".claude/CLAUDE.md", "GEMINI.md", ".github/copilot-instructions.md" };
+
+    // GitHub anchors of the headings of a Markdown file: lowercase, punctuation removed, spaces as hyphens.
+    private static HashSet<string> Headings(string markdown) =>
+        File.ReadAllLines(markdown)
+            .Where(line => Regex.IsMatch(line, @"^#{1,6} "))
+            .Select(line => Regex.Replace(line.TrimStart('#').Trim().ToLowerInvariant(), @"[^\w\- ]", "").Replace(' ', '-'))
+            .ToHashSet(StringComparer.Ordinal);
+
     // The analysis mode turns the rules on: .editorconfig keeps the HS016 line and the reminder that lowering it is a bypass.
     [Fact]
     public void Template_editorconfig_declares_only_HS016_as_an_error()

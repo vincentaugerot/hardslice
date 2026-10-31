@@ -19,8 +19,8 @@ Essais du 31/10/2026 (UTC) sur Linux x64, dans une solution générée par `scri
 
 | | Claude Code | Codex | Copilot CLI | Gemini CLI |
 |---|---|---|---|---|
-| Fichier d'instructions | `CLAUDE.md` (cwd et parents), `AGENTS.md` sans `CLAUDE.md` [S1] [E1] | `AGENTS.md` (racine du dépôt jusqu'au cwd, 32 Kio au plus) [S4] [E7] | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, tous fusionnés, à la racine git et dans le cwd [S7] [E6] | `GEMINI.md` (global, cwd et parents, sous-dossiers) [S10] ; non essayé [E10] |
-| Lecture d'`AGENTS.md` | native seulement sans `CLAUDE.md` ; avec `CLAUDE.md`, par `@AGENTS.md` [S1] [E1] | native [S4] [E7] | native [S7] [E6] | par `@./AGENTS.md` dans `GEMINI.md` ou `context.fileName` [S10] [S11] ; documenté, non essayé [E10] |
+| Fichier d'instructions | `CLAUDE.md` ou `.claude/CLAUDE.md` (cwd et parents), `AGENTS.md` sans `CLAUDE.md` [S1] [E1] [E14] | `AGENTS.md` (racine du dépôt jusqu'au cwd, 32 Kio au plus) [S4] [E7] | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, tous fusionnés, à la racine git et dans le cwd [S7] [E6] | `GEMINI.md` (global, cwd et parents, sous-dossiers) [S10] ; non essayé [E10] |
+| Lecture d'`AGENTS.md` | native seulement sans `CLAUDE.md` ; avec `CLAUDE.md`, par `@AGENTS.md` [S1] [E1] [E11] [E14] | native [S4] [E7] | native ; une seconde fois par l'import d'un `CLAUDE.md` racine [S7] [E6] [E12] | par `@./AGENTS.md` dans `GEMINI.md` ou `context.fileName` [S10] [S11] ; documenté, non essayé [E10] |
 | Hook après édition | `PostToolUse`, matcher `Edit\|Write`, `tool_input.file_path` [S2] [E1] [E2] | `PostToolUse`, matcher `Edit\|Write` qui couvre `apply_patch`, chemins dans le texte du patch [S5] [E8] | `postToolUse` (`.github/hooks/*.json`), `toolName` `edit` ou `create`, `toolArgs.path` [S8] [E4] | `AfterTool`, matcher `write_file\|replace` [S12] ; documenté, non essayé [E10] |
 | Erreur renvoyée à l'agent après édition | code `2`, message sur la sortie d'erreur [S2] [E1] | code `2`, message sur la sortie d'erreur [S5] [E8] | code `0` et `{"additionalContext": "..."}` ; le code `2` n'est qu'un avertissement affiché à l'utilisateur [S8] [E4] | code `2` ou `{"decision": "deny", "reason": "..."}` [S12] ; documenté, non essayé [E10] |
 | Hook de fin de tâche | `Stop`, `stop_hook_active` [S2] [E1] | `Stop`, `stop_hook_active` [S5] [E8] | `agentStop`, `stop_hook_active` [S8] [E4] | `AfterAgent`, `stop_hook_active` [S12] ; documenté, non essayé [E10] |
@@ -33,7 +33,7 @@ Essais du 31/10/2026 (UTC) sur Linux x64, dans une solution générée par `scri
 
 ### Claude Code 2.1.316
 
-- **Instructions.** Claude Code lit `CLAUDE.md` du dossier courant et de ses parents. Il lit `AGENTS.md` nativement depuis la 2.1.277, mais seulement quand aucun `CLAUDE.md` n'existe ; sinon seul `CLAUDE.md` est chargé, et `@AGENTS.md` l'importe [S1]. Dans la solution générée sans `CLAUDE.md`, `AGENTS.md` est chargé comme instructions du projet [E1].
+- **Instructions.** Claude Code lit `CLAUDE.md` du dossier courant et de ses parents. Il lit `AGENTS.md` nativement depuis la 2.1.277, mais seulement quand aucun `CLAUDE.md` n'existe ; sinon seul `CLAUDE.md` est chargé, et `@AGENTS.md` l'importe [S1]. Dans la solution générée sans `CLAUDE.md`, `AGENTS.md` est chargé comme instructions du projet [E1]. `.claude/CLAUDE.md` compte comme un `CLAUDE.md` : sans import, `AGENTS.md` n'est plus chargé ; avec `@../AGENTS.md`, il l'est une fois [E14].
 - **Après édition.** `PostToolUse` avec le matcher `Edit|Write`. La charge utile porte `tool_name`, `tool_input.file_path` et `tool_response` [S2]. Un code `2` renvoie la sortie d'erreur à l'agent, qui a corrigé le fichier comme demandé [E1]. Fixtures : `claude/PostToolUse.Edit.json`, `claude/PostToolUse.Write.json`, `claude/PreToolUse.Edit.json`, `claude/PreToolUse.Write.json`.
 - **Fin de tâche.** `Stop` : un code `2` bloque la fin et la sortie d'erreur devient la consigne ; l'agent a continué puis s'est arrêté au second appel, où `stop_hook_active` vaut `true` [E1]. Fixtures : `claude/Stop.json`, `claude/Stop.active.json`.
 - **Refus d'une édition.** `PreToolUse`, code `2` ou `permissionDecision: "deny"` [S2] ; documenté, non essayé (PB-046 l'essaie).
@@ -52,7 +52,7 @@ Essais du 31/10/2026 (UTC) sur Linux x64, dans une solution générée par `scri
 
 ### GitHub Copilot CLI 1.0.105
 
-- **Instructions.** Copilot fusionne, sans ordre de priorité, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md` de la racine git et du dossier courant, plus `.github/instructions/**/*.instructions.md` et `.claude/rules/**/*.md` [S7]. `copilot instruction list` les liste tous les quatre à la racine ; un `AGENTS.md` placé dans `src/Demo/` n'est lu que si `src/Demo/` est le dossier courant [E6]. Les imports `@chemin` sont suivis dans `AGENTS.md`, `CLAUDE.md` et `copilot-instructions.md` [S7].
+- **Instructions.** Copilot fusionne, sans ordre de priorité, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md` de la racine git et du dossier courant, plus `.github/instructions/**/*.instructions.md` et `.claude/rules/**/*.md` [S7]. `copilot instruction list` les liste tous les quatre à la racine ; un `AGENTS.md` placé dans `src/Demo/` n'est lu que si `src/Demo/` est le dossier courant [E6]. Les imports `@chemin` sont suivis dans `AGENTS.md`, `CLAUDE.md` et `copilot-instructions.md` [S7]. Ils ne sont pas dédupliqués : l'import d'`AGENTS.md` par un `CLAUDE.md` racine, en `@AGENTS.md` comme en `@./AGENTS.md`, ajoute une seconde copie entière d'`AGENTS.md` au prompt, après celle lue nativement ; l'import de `GEMINI.md` reste du texte [E12]. `.claude/CLAUDE.md` n'est pas lu [E13].
 - **Hooks natifs.** `.github/hooks/*.json`, format `{"version": 1, "hooks": {"postToolUse": [{"type": "command", "bash": "...", "powershell": "...", "timeoutSec": 30, "matcher": "..."}]}}`, matcher ancré sur `toolName` [S8]. Charge utile en camelCase : `toolName` (`view`, `edit`, `create`, `bash`), `toolArgs.path`, `toolResult` [E4].
 - **Après édition.** Le code `2` d'un `postToolUse` n'est qu'un avertissement affiché à l'utilisateur [S8]. L'erreur atteint l'agent par `{"additionalContext": "..."}` sur la sortie standard avec un code `0`, ajouté au résultat de l'outil : l'agent a corrigé le fichier [E4]. Un `postToolUse` part aussi après une lecture (`view`) : l'adaptateur filtre `edit` et `create`. Fixtures : `copilot/preToolUse.edit.json`, `copilot/preToolUse.bash.json`, `copilot/postToolUse.edit.json`, `copilot/postToolUse.create.json`.
 - **Fin de tâche.** `agentStop` avec `{"decision": "block", "reason": "..."}` : la raison devient un nouveau message et l'agent continue ; le second appel porte `stop_hook_active: true`. Après 8 blocages consécutifs, la CLI termine quand même [S8] [E4]. Fixtures : `copilot/agentStop.json`, `copilot/agentStop.active.json`.
@@ -72,11 +72,11 @@ Essais du 31/10/2026 (UTC) sur Linux x64, dans une solution générée par `scri
 
 ### Fichiers d'instructions (PB-042)
 
-- `CLAUDE.md` importe `AGENTS.md` (`@AGENTS.md`) : sans cet import, la seule présence de `CLAUDE.md` empêche Claude Code de lire `AGENTS.md` [S1].
-- `GEMINI.md` importe `AGENTS.md` (`@./AGENTS.md`) plutôt que `context.fileName` : pas de `.gemini/settings.json` à livrer et à protéger. Non essayé avec un modèle : PB-042 le consigne comme tel.
+- Claude Code lit `.claude/CLAUDE.md`, qui importe `AGENTS.md` (`@../AGENTS.md`) : sans cet import, la seule présence d'un `CLAUDE.md` empêche Claude Code de lire `AGENTS.md` [S1] [E14]. Pas de `CLAUDE.md` à la racine : Copilot le lirait et suivrait son import, et `AGENTS.md` figurerait deux fois dans son prompt [E12]. `.claude/`, que Copilot ne lit pas pour les instructions [E13], regroupe déjà les réglages et les skills de Claude Code.
+- `GEMINI.md` importe `AGENTS.md` (`@./AGENTS.md`) plutôt que `context.fileName` : pas de `.gemini/settings.json` à livrer et à protéger. Non essayé avec un modèle, faute de compte servi [E10].
 - `.github/copilot-instructions.md` ne réimporte pas `AGENTS.md`, que Copilot lit déjà ; il ne contient que ce qui est propre à Copilot.
 - Codex n'a besoin d'aucun fichier en plus d'`AGENTS.md`, qui reste très en dessous des 32 Kio.
-- Copilot lit aussi `CLAUDE.md` et `GEMINI.md` : chacun commence par la CLI qu'il vise et ne contient rien de contraire aux autres. PB-042 vérifie avec Copilot que l'import `@AGENTS.md` de `CLAUDE.md` ne charge pas `AGENTS.md` deux fois ; la documentation annonce que les copies identiques sont dédupliquées [S7], ce qui n'est pas essayé.
+- Copilot lit aussi `GEMINI.md`, sans suivre son import [E12] : `GEMINI.md` commence par la CLI qu'il vise et ne contient rien de contraire aux autres fichiers ; `.github/copilot-instructions.md` dit d'en ignorer la section propre à Gemini CLI. `.claude/CLAUDE.md` commence aussi par sa CLI. Vérifié avec Copilot sur la solution livrée : `AGENTS.md` n'y est chargé qu'une fois [E13].
 
 ### Skills (PB-043)
 
@@ -151,7 +151,14 @@ copilot -p "$prompt" --allow-tool write --deny-tool shell --deny-tool url --trus
 GEMINI_API_KEY=... GEMINI_CLI_TRUST_WORKSPACE=true gemini -p "$prompt" --approval-mode auto_edit < /dev/null
 ```
 
-Les skills se vérifient en plaçant une skill `spike-<dossier>` dans `.claude/skills/`, `.agents/skills/`, `.github/skills/` et `.gemini/skills/`, puis : `copilot skill list`, `gemini skills list`, et pour Claude Code et Codex une question sans outil (« list the names of every skill available to you whose name starts with spike- »). Les instructions de Copilot se listent par `copilot instruction list`.
+Les skills se vérifient en plaçant une skill `spike-<dossier>` dans `.claude/skills/`, `.agents/skills/`, `.github/skills/` et `.gemini/skills/`, puis : `copilot skill list`, `gemini skills list`, et pour Claude Code et Codex une question sans outil (« list the names of every skill available to you whose name starts with spike- »). Les instructions de Copilot se listent par `copilot instruction list`, qui ne montre pas les imports. Le prompt réellement envoyé, imports développés, se lit dans le journal d'une exécution sans outil : chaque fichier y est un bloc `<custom_instruction>`.
+
+```bash
+copilot -p 'Without using any tool, reply only: ok' --deny-tool shell --deny-tool write --deny-tool url --trust-folder --no-ask-user --max-ai-credits 30 --log-dir "$work/logs" --log-level all < /dev/null
+grep -o '<custom_instruction>\|# [A-Za-z]*\.md\|## Golden rules' "$work"/logs/process-*.log | head -n 20
+```
+
+Pour Claude Code, une question sans outil sur une règle d'or et sur la section propre à la CLI : `claude -p "<question>" --setting-sources project --model claude-haiku-5-5 --allowedTools "" < /dev/null`.
 
 ## Journal des essais
 
@@ -167,6 +174,10 @@ Les skills se vérifient en plaçant une skill `spike-<dossier>` dans `.claude/s
 | E8 | 31/10/2026 10:18 à 10:19 | Codex CLI 0.165.0 | Hooks approuvés par `/hooks` (empreintes dans `~/.codex/config.toml`, retirées après l'essai). `PostToolUse` sur `apply_patch` code `2` : `PostToolUse Blocked`, marqueur ajouté. `Stop` code `2` : `HOOK_STOP_SEEN.txt` créé, second `Stop` avec `stop_hook_active: true`. |
 | E9 | 31/10/2026 10:19 | Codex CLI 0.165.0 | Skills listées : `spike-agents` seulement (`.agents/skills/`). |
 | E10 | 31/10/2026 10:20 à 10:24 | Gemini CLI 0.64.0 | `gemini -p` : `IneligibleTierError` (`UNSUPPORTED_CLIENT`) sur le compte personnel. Sans confiance : `FatalUntrustedWorkspaceError`. Avec `GEMINI_CLI_TRUST_WORKSPACE=true` : hook `SessionStart` du projet exécuté avant l'échec d'authentification. `gemini skills list` : skills de `.agents/skills/` et `.gemini/skills/`. |
+| E11 | 31/10/2026 16:51 | Claude Code 2.1.316 | `CLAUDE.md` racine avec `@AGENTS.md` (`claude -p`, sans outil) : la règle d'or 9 d'`AGENTS.md` et la section « Claude Code » sont citées, une seule copie des règles d'or. |
+| E12 | 31/10/2026 16:50 et 16:51 | Copilot CLI 1.0.105 | `CLAUDE.md` racine avec `@AGENTS.md`, puis `@./AGENTS.md` (`copilot -p --log-level all`) : le prompt enregistré contient `AGENTS.md` lu nativement, puis une seconde copie entière dans le bloc de `CLAUDE.md` (29,4 k jetons en entrée). L'import `@./AGENTS.md` de `GEMINI.md` n'est pas développé. Le modèle, interrogé, a compté trois copies : seul le journal fait foi. |
+| E13 | 31/10/2026 16:52 et 16:54 | Copilot CLI 1.0.105 | `CLAUDE.md` dans `.claude/` : `copilot instruction list` ne liste plus que `.github/copilot-instructions.md`, `AGENTS.md` et `GEMINI.md`. Sur la solution livrée, le prompt enregistré contient `AGENTS.md` une fois (24,3 k jetons en entrée). |
+| E14 | 31/10/2026 16:52 à 16:54 | Claude Code 2.1.316 | `.claude/CLAUDE.md` sans `CLAUDE.md` racine : avec `@../AGENTS.md`, la règle d'or 9 et la section « Claude Code » sont citées, une copie ; sans l'import, `AGENTS.md` est absent du contexte. |
 
 ## Sources
 

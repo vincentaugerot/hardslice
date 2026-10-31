@@ -2025,6 +2025,8 @@ scripts/test-template.sh
 
 Une solution générée contient les quatre fichiers d'instructions. `CLAUDE.md` importe `AGENTS.md` (`@AGENTS.md`) ; `GEMINI.md` et `.github/copilot-instructions.md` y renvoient selon le mécanisme retenu par PB-034, sans dupliquer ses règles.
 
+Réalisé : `CLAUDE.md` est livré dans `.claude/CLAUDE.md` avec `@../AGENTS.md`. L'essai demandé ci-dessous a montré qu'un `CLAUDE.md` à la racine, lu par Copilot, lui faisait charger `AGENTS.md` deux fois ([prise en charge des agents](agents/support.md), E12 à E14).
+
 **Périmètre**
 
 - chaque fichier ne contient que ce qui est propre à son CLI : lien ou import d'`AGENTS.md`, hooks actifs ou fallback « run the check script before you finish », emplacement des skills ;

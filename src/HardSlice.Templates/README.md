@@ -21,7 +21,7 @@ dotnet new hardslice-query --project src/Rooms/Rooms.csproj --module Bookings --
 dotnet new hardslice-event --project src/Rooms/Rooms.csproj --module Bookings --name BookingExtended --reaction Payments/ChargeOnBookingExtended
 ```
 
-Every generated solution references [HardSlice.Analyzers](https://www.nuget.org/packages/HardSlice.Analyzers) and pins the [HardSlice.Tool](https://www.nuget.org/packages/HardSlice.Tool) local tool at the same version, holds architecture tests, an `AGENTS.md` for coding agents and the sheet of every rule in `docs/rules/`. The check scripts run `dotnet hardslice check`: the build, then the unit, architecture and integration tests. The integration tests start PostgreSQL with Testcontainers: they need a container runtime.
+Every generated solution references [HardSlice.Analyzers](https://www.nuget.org/packages/HardSlice.Analyzers) and pins the [HardSlice.Tool](https://www.nuget.org/packages/HardSlice.Tool) local tool at the same version, holds architecture tests, an `AGENTS.md` for coding agents with the instruction files of Claude Code (`.claude/CLAUDE.md`), Gemini CLI (`GEMINI.md`) and GitHub Copilot (`.github/copilot-instructions.md`), and the sheet of every rule in `docs/rules/`. The check scripts run `dotnet hardslice check`: the build, then the unit, architecture and integration tests. The integration tests start PostgreSQL with Testcontainers: they need a container runtime.
 
 ## Documentation
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template, generates a solution in a temporary directory,
-# verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
+# verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable and the instruction file of each agent,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS000 (test projects included), HS001, HS003, HS004 (a reaction slice included), HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
@@ -55,6 +55,39 @@ if ! command -v pwsh > /dev/null; then
   echo "error: pwsh is required to verify scripts/check.ps1." >&2
   exit 1
 fi
+
+# The instruction file of each agent (docs/agents/support.md): .claude/CLAUDE.md and GEMINI.md import AGENTS.md by the mechanism of their CLI,
+# .github/copilot-instructions.md does not, since Copilot reads AGENTS.md itself, and each names its CLI before anything else.
+# No CLAUDE.md at the root: Copilot would expand its import and load AGENTS.md twice.
+check_agent_instructions() {
+  local root="$1" name="$2" file first import
+  while IFS='|' read -r file first import; do
+    if [[ ! -f "$root/$file" ]]; then
+      echo "error: $name has no $file." >&2
+      exit 1
+    fi
+    if [[ "$(grep -v -e '^#' -e '^$' "$root/$file" | head -n 1)" != "$first"* ]]; then
+      echo "error: the $file of $name does not start with \"$first\"." >&2
+      exit 1
+    fi
+    if [[ "$(grep '^@' "$root/$file" || true)" != "$import" ]]; then
+      echo "error: the $file of $name does not import AGENTS.md as ${import:-nothing}, the mechanism of its CLI." >&2
+      exit 1
+    fi
+  done <<'FILES'
+.claude/CLAUDE.md|For Claude Code only.|@../AGENTS.md
+GEMINI.md|For Gemini CLI only.|@./AGENTS.md
+.github/copilot-instructions.md|For GitHub Copilot only.|
+FILES
+  if [[ -e "$root/CLAUDE.md" ]]; then
+    echo "error: $name has a CLAUDE.md at its root, whose import Copilot expands: AGENTS.md would be loaded twice." >&2
+    exit 1
+  fi
+  if ! grep -Fxq "## Agent kit" "$root/AGENTS.md"; then
+    echo "error: the AGENTS.md of $name lists no agent kit." >&2
+    exit 1
+  fi
+}
 
 # One container for both variants, started as README.md documents it, except for its name and a free host port instead of 5432.
 # Each variant migrates the database named by its own connection string.
@@ -247,6 +280,9 @@ if ! grep -rqF 'EXCLUDE USING gist ("RoomId" WITH =' "$app/src/$app_name/Shared/
   echo "error: the migrations of $app_name no longer create the constraint that keeps bookings of a room from overlapping." >&2
   exit 1
 fi
+
+echo "==> Checking the instruction file of each agent in $app_name"
+check_agent_instructions "$app" "$app_name"
 
 run_documented_path "$app" "$app_name" true
 
@@ -2477,6 +2513,7 @@ if ! grep -Fq -- "- None yet: start with [Adding a first module](#adding-a-first
   echo "error: the AGENTS.md of $blank_name does not map an empty application with the steps of a first module." >&2
   exit 1
 fi
+check_agent_instructions "$blank" "$blank_name"
 while read -r cited_path; do
   if [[ ! -e "$blank/$cited_path" ]]; then
     echo "error: the AGENTS.md of $blank_name cites $cited_path, which $blank_name does not contain." >&2

@@ -126,6 +126,16 @@ Both scripts restore the local tools, then run `dotnet hardslice check`: it buil
 
 **You are not done until the check script exits 0.** Do not hand back, report success or commit while it fails. If it cannot pass without breaking a rule, stop and explain the conflict instead.
 
+## Agent kit
+
+Codex reads this file only. Each other agent also reads its own file, which holds only what is specific to it:
+
+- `.claude/CLAUDE.md` for Claude Code, which imports this file;
+- `GEMINI.md` for Gemini CLI, which imports this file;
+- `.github/copilot-instructions.md` for GitHub Copilot, which reads this file and `GEMINI.md` too.
+
+Skills and hooks: none yet. No agent has its edits checked as it makes them: run the check script before you finish.
+
 ## Fixing a HardSlice failure
 
 A HardSlice failure starts with its rule: `HS000`, `HS003` to `HS011`, `HS015`, `HS016` and `HS900` to `HS902` from the analyzers at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests. `HS019` is a suggestion of the IDE that never fails the check: follow it when you name an event.
