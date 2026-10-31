@@ -43,6 +43,10 @@ Aucun composant HardSlice n'est requis au runtime de l'application générée.
 | HS010 et HS011 | Analyseurs HardSlice ciblés avec leurs propres identifiants, au lieu de `BannedApiAnalyzers` qui les confondrait sous `RS0030` (30/10/2026) |
 | Vérification outillée | `dotnet hardslice check` dès v0.2 ; `scripts/check.sh` et `check.ps1` le lancent ; `dotnet build` seul produit toujours les diagnostics |
 | Benchmark | Après une première boucle produit utilisable, jamais comme prérequis au premier code |
+| Templates d'éléments | Ils créent les fichiers de leur élément et affichent les enregistrements à ajouter, que la skill ajoute ; le code généré compile sans diagnostic HS, ses tests et la vérification échouent tant qu'un marqueur `TODO(hardslice):` reste (31/10/2026) |
+| Événements de domaine | Publiés à leurs gestionnaires dans la transaction de la commande ; un gestionnaire vit dans une slice de réaction, agit par `AppDbContext`, sans `IMediator` ni effet externe ; pas d'outbox (31/10/2026) |
+| Vérification des hooks | `check` complet reste le seul verdict ; `--build` après édition ; le hook de fin lance `check` s'il tient en 60 s, sinon un mode réduit aux slices touchées, selon la mesure de PB-045 (31/10/2026) |
+| HS000 | Suppressions écrites dans le code source seulement ; les réglages globaux sont protégés par les hooks et la CI, puis repris en v0.5 avec la baseline (31/10/2026) |
 
 Les choix fonctionnels de la spécification restent engagés. Contraintes transverses retenues : niveaux d'analyse, baseline par occurrence, contrôle des faux positifs, budgets de performance et versions CLI/analyseurs identiques.
 
@@ -117,7 +121,8 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 ### v0.3 — Génération et boucle agent
 
 - livrer les templates `hardslice-command`, `hardslice-query`, `hardslice-module`, `hardslice-aggregate` et `hardslice-event` ;
-- livrer les six skills de la spécification ;
+- publier les événements de domaine à leurs gestionnaires, prérequis de `hardslice-event` et de la skill `add-domain-event` ;
+- livrer les six skills de la spécification et HS000 ;
 - livrer `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md` ;
 - pour Claude Code, ajouter le build incrémental après édition et le hook de fin de tâche prévus par la spécification ;
 - cibler Claude Code, Codex, GitHub Copilot et Gemini CLI : adaptateur natif lorsqu'il existe, sinon fallback explicite par `AGENTS.md` et le script de vérification ;
@@ -206,3 +211,5 @@ Le protocole détaillé du benchmark, son isolation et ses règles d'intégrité
 Les incréments 1 « boucle verticale HardSlice » et 2 « Fondation v0.1 » sont terminés. Exécuter l'incrément actif « Analyseurs v0.2 » (PB-018 à PB-033) décrit dans [product-backlog.md](product-backlog.md).
 
 Commencer par PB-018 (classification), qui débloque les règles du domaine. PB-019 (performance), PB-020 (niveaux d'analyse), PB-021 (outil) et les règles HS003, HS011 et HS015 avancent en parallèle. Les prérequis de la préversion NuGet sont à réunir par le mainteneur pendant l'incrément ; seule la publication finale (PB-033) les attend.
+
+L'incrément suivant, « Boucle agent v0.3 », est découpé en PB-034 à PB-051 dans le [backlog](product-backlog.md) ; ses arbitrages ont été validés le 31/10/2026 et il peut démarrer en parallèle de la publication de PB-033, que seul PB-051 attend.

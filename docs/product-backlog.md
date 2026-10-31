@@ -1,6 +1,6 @@
 # HardSlice — backlog produit
 
-Statut : backlog actif, 30/10/2026.
+Statut : backlog actif, 31/10/2026.
 
 Source de vérité produit : [specifications.md](specifications.md).
 
@@ -1622,18 +1622,659 @@ L'incrément est terminé lorsque PB-018 à PB-033 sont satisfaits et que les jo
 - les seuils de PB-019 sont respectés ;
 - les paquets `0.2.0-preview.1` sont publiés et la solution générée depuis NuGet.org passe `dotnet hardslice check`.
 
-## 5. Incréments suivants
+## 5. Incrément suivant : Boucle agent v0.3
+
+Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. Il peut démarrer : PB-018 à PB-032 sont intégrés, et seule sa publication finale (PB-051) attend la préversion `0.2.0-preview.1` (PB-033) et son workflow.
+
+### Résultat attendu
+
+> Dans une solution générée par `dotnet new hardslice-api`, avec ou sans Bookings, un agent ajoute un module, un agrégat, une commande, une requête et un événement par `dotnet new hardslice-module`, `hardslice-aggregate`, `hardslice-command`, `hardslice-query` et `hardslice-event`, appelés par six skills, sans recréer leur structure à la main. Claude Code reçoit les diagnostics HS après chaque édition d'un `.cs` et ne rend pas la main tant que la vérification échoue. Codex, GitHub Copilot et Gemini CLI disposent chacun d'un adaptateur natif ou du fallback documenté par `AGENTS.md` et le script de vérification. Une suppression de règle sans justification échoue avec HS000. Chaque règle bloquante possède une boucle E2E qui prouve le diagnostic, la correction et le rejet des contournements. Les paquets `0.3.0-preview.1` sont publiés sur NuGet.org.
+
+### Arbitrages de l'incrément
+
+Décisions du mainteneur du 31/10/2026, reportées dans la [spécification](specifications.md) et le [plan](plan.md) :
+
+- **Les templates d'éléments génèrent, ils ne modifient pas.** `dotnet new` ne sait pas éditer un fichier existant : un template crée les fichiers de son élément et affiche les lignes à ajouter dans `<Module>Module.cs` ou `Program.cs`. La skill les ajoute. L'enregistrement reste explicite : pas de découverte par réflexion, qui le cacherait à l'agent et à HS015, ni de post-action « run script » de `dotnet new`, qui exige `--allow-scripts`. Un oubli échoue deux fois : le test d'intégration généré appelle l'endpoint, et un test de l'hôte vérifie que chaque `IRequestHandler<,>` et chaque `IValidator<>` déclaré dans l'assembly se résout depuis le conteneur de l'application.
+- **Un élément généré n'est jamais « fini ».** Le code généré compile sans aucun diagnostic HS ; ses tests sont de vrais tests (préparation, appel, assertion du statut) dont seule l'assertion métier reste à écrire, et qui échouent avec un message `TODO(hardslice):` explicite. En plus, `dotnet hardslice check` échoue tant qu'un marqueur `TODO(hardslice):` reste dans `src/` ou `tests/`, et liste les fichiers : remplacer l'échec par une assertion triviale ne suffit pas. La vérification ne passe donc jamais sur un squelette, et aucun test vide ne satisfait HS014 ou HS018. Générer un comportement trivial qui passe est écarté : l'agent rendrait la main sur un squelette vert.
+- **Les événements de domaine sont publiés dans la transaction de la commande.** Prérequis de `hardslice-event` et de la skill `add-domain-event` : après le handler et avant l'enregistrement, le pipeline publie les événements des agrégats suivis à leurs gestionnaires, dans la même transaction. Une erreur d'un gestionnaire annule la commande. Un gestionnaire n'envoie jamais de requête par `IMediator`, ce qui imbriquerait une transaction dans celle de la commande : il modifie les agrégats par `AppDbContext`, dans la transaction en cours. Il vit dans une slice de réaction ; HS004 admet qu'une slice ait exactement une entrée, une requête avec son handler et son endpoint, ou un gestionnaire d'événement. Pas d'effet externe (e-mail, appel HTTP) dans un gestionnaire, qui s'exécuterait même si la transaction est ensuite annulée. Pas de boîte d'envoi (outbox) ni de bus, hors périmètre (section 5 de la spécification).
+- **La vérification complète reste le seul verdict, et la mesure décide du mode du hook de fin.** `dotnet hardslice check` est inchangé et seul utilisé par `AGENTS.md`, le pre-commit et la CI. Le hook après édition utilise `--build` (moins de 10 s). PB-045 mesure d'abord `check` complet sur une application générée : s'il tient en 60 s, le hook de fin le lance tel quel et `--affected` n'est pas livré. Sinon `--affected` est livré, avec les tests unitaires et d'architecture toujours complets, la vérification complète dès qu'une modification sort d'une slice, et une sortie qui rappelle que seul `check` fait foi. Les modes sont appelés par `scripts/check.sh` et `scripts/check.ps1`, qui restent le point unique. Cet arbitrage remplace la limite « pas d'option qui saute une étape » de PB-021, pour ces modes seulement.
+- **Les adaptateurs suivent l'état réel des CLI.** Les hooks, skills et fichiers d'instructions de Codex, Copilot CLI et Gemini CLI sont vérifiés par PB-034 à leur version du moment. Un adaptateur natif n'est livré que pour un mécanisme documenté et testé ; sinon le fallback s'applique. Les questions 3 et 4 de la spécification sont tranchées par ce ticket.
+- **Une seule source par skill.** Les skills sont écrites une fois au format Agent Skills (`SKILL.md`) dans `.claude/skills/`. Un autre emplacement exigé par un CLI est produit au pack du template depuis cette source, jamais maintenu à la main.
+- **HS000 contrôle les suppressions écrites dans le code source.** HS000 signale `#pragma warning disable` et `[SuppressMessage]` d'une règle HS sans commentaire `// hardslice-justification: <raison>`. Les suppressions globales (`<NoWarn>`, sévérités de `.editorconfig` ou `.globalconfig`) ne sont pas détectées : les niveaux d'analyse de PB-020 désactivent eux-mêmes des règles par `.globalconfig`, et l'analyseur ne distingue pas de façon fiable un niveau HardSlice d'un réglage manuel, ce qui ferait de HS000 une règle non déterministe. Ces fichiers, comme `hardslice.json`, les tests d'architecture et les scripts, sont protégés par le hook d'édition de Claude Code et, pour tous les agents, par la CI. Le traitement des réglages globaux est repris en v0.5 avec la baseline, qui doit connaître les règles actives.
+- **Les messages nomment leur skill.** Les diagnostics et les messages des tests d'architecture gagnent `Skill: <nom>.` avant `Doc:`, une fois la skill livrée (section 8 de la spécification). Pas de `CodeFixProvider` en v0.3 non plus.
+
+### Critères communs à tous les tickets de l'incrément
+
+- tout ticket qui modifie le template étend `scripts/test-template.sh` dans les deux variantes, sur la solution générée depuis les paquets locaux, et l'exécute ;
+- un template d'éléments est testé en l'appliquant à une solution générée : sans Bookings, la suite module, agrégat, commande, requête et événement doit aboutir à une solution dont la vérification passe une fois la complétion de référence appliquée ;
+- `BookingsReferenceTests` reste vert et la référence Bookings ne produit aucun diagnostic HS ;
+- tout le contenu livré à l'application (code, skills, hooks, fichiers d'instructions) est en anglais, sans tiret cadratin ;
+- `AGENTS.md` généré reste sous 150 lignes dans les deux variantes, vérifié par un test ;
+- aucun assembly HardSlice n'est chargé au runtime de l'application générée, et aucune dépendance runtime n'est ajoutée ;
+- un hook ou un adaptateur est testé par un test automatisé qui lui fournit la charge utile documentée du CLI et vérifie son code de sortie et sa sortie, sans lancer d'agent ;
+- les jobs CI build, template, démonstration et performance restent verts.
+
+### Graphe des dépendances
+
+| Ticket | Dépend de | Peut avancer en parallèle de |
+|---|---|---|
+| PB-034 (état des CLI) | aucun | tous |
+| PB-035 (publication des événements) | incrément 3 | PB-034, PB-036 à PB-039, PB-041, PB-045 |
+| PB-036 (`hardslice-command`) | incrément 3 | PB-034, PB-035, PB-037 à PB-039, PB-041, PB-045 |
+| PB-037 (`hardslice-query`) | incrément 3 | PB-034 à PB-036, PB-038, PB-039, PB-041, PB-045 |
+| PB-038 (`hardslice-module`) | incrément 3 | PB-034 à PB-037, PB-039, PB-041, PB-045 |
+| PB-039 (`hardslice-aggregate`) | incrément 3 | PB-034 à PB-038, PB-041, PB-045 |
+| PB-040 (`hardslice-event`) | PB-035 | PB-041 à PB-045 |
+| PB-041 (HS000) | incrément 3 | tous sauf PB-049 |
+| PB-042 (fichiers d'instructions) | PB-034 | PB-035 à PB-041, PB-045 |
+| PB-043 (skills de génération) | PB-034, PB-036 à PB-040 | PB-041, PB-045 à PB-048 |
+| PB-044 (skills de correction, `Skill:`) | PB-043 | PB-045 à PB-048 |
+| PB-045 (modes des hooks, marqueurs `TODO`) | incrément 3 | PB-034 à PB-044 |
+| PB-046 (hooks Claude Code) | PB-045 | PB-042 à PB-044, PB-047, PB-048 |
+| PB-047 (adaptateurs Codex, Copilot, Gemini) | PB-034, PB-042, PB-045 | PB-043, PB-044, PB-046, PB-048 |
+| PB-048 (pre-commit et CI générée) | PB-045 | PB-042 à PB-047 |
+| PB-049 (boucles E2E par règle) | PB-041, PB-044, PB-046 | PB-047, PB-048 |
+| PB-050 (scénario agent complet) | PB-043, PB-044, PB-046 | PB-049 |
+| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, PB-033 | aucun |
+
+```text
+PB-034 état des CLI ────────────┬─ PB-042 instructions ──────────────┐
+                                │                                    │
+incrément 3 ─┬─ PB-035 ── PB-040 hardslice-event ──┐                 │
+             ├─ PB-036 hardslice-command ──────────┤                 │
+             ├─ PB-037 hardslice-query ────────────┼─ PB-043 skills ─┼─ PB-044 skills, Skill: ─┐
+             ├─ PB-038 hardslice-module ───────────┤                 │                         │
+             ├─ PB-039 hardslice-aggregate ────────┘                 │                         ├─ PB-049 boucles E2E
+             ├─ PB-041 HS000 ────────────────────────────────────────┼─────────────────────────┤
+             └─ PB-045 modes ─┬─ PB-046 hooks Claude Code ───────────┼─────────────────────────┴─ PB-050 scénario agent
+                              ├─ PB-047 adaptateurs ◀────────────────┘
+                              └─ PB-048 pre-commit et CI
+(tout), PB-033 ── PB-051 publication
+```
+
+PB-036 à PB-040 modifient `content/` et la configuration du paquet de templates : ce sont des points de fusion, pas des dépendances. PB-042, PB-043 et PB-044 modifient tous `AGENTS.md` : le ticket intégré en dernier vérifie la limite de 150 lignes.
+
+### PB-034 : Établir les hooks, skills et instructions que lisent Codex, Copilot CLI et Gemini CLI
+
+**Résultat observable**
+
+`docs/agents/support.md` dit, pour Claude Code, Codex, GitHub Copilot CLI et Gemini CLI, à une version datée de chacun : le fichier d'instructions lu, la lecture d'`AGENTS.md`, l'existence d'un hook après édition et d'un hook de fin de tâche (nom, charge utile, code de sortie qui renvoie une erreur à l'agent), le lieu et le format des skills. Les questions 3 et 4 de la spécification sont tranchées.
+
+**Périmètre**
+
+- spike borné : documentation officielle et essai réel de chaque mécanisme dans une solution générée, avec la commande d'essai consignée ;
+- pour chaque mécanisme retenu : un exemple de configuration minimale, sa charge utile réelle enregistrée comme fixture de test pour PB-046 et PB-047, et sa limite connue ;
+- emplacement des skills exigé par chaque CLI, et décision : lecture directe de `.claude/skills/` ou copie produite au pack ;
+- `specifications.md`, section 13 : questions 3 et 4 marquées résolues avec renvoi au document.
+
+**Limites**
+
+Pas de code de produit : ce ticket décide le contenu de PB-042, PB-043 et PB-047. Un mécanisme seulement annoncé, expérimental sans documentation, ou impossible à tester sans compte payant est noté et non retenu.
+
+**Dépendances**
+
+Aucune.
+
+**Acceptation**
+
+Le document liste les quatre CLI, chaque cellule renvoie à une source et à un essai daté, et chaque charge utile retenue existe comme fixture.
+
+### PB-035 : Publier les événements de domaine à leurs gestionnaires
+
+**Résultat observable**
+
+Confirmer une réservation publie `BookingConfirmed` à un gestionnaire `IDomainEventHandler<BookingConfirmed>` dans la transaction de la commande. Si le gestionnaire lève une exception, la réservation n'est pas enregistrée et la réponse est celle de l'exception.
+
+**Périmètre**
+
+- `IDomainEventHandler<TEvent>` dans `Shared/Messaging`, contrainte `TEvent : IDomainEvent` ;
+- les agrégats exposent leurs événements par un contrat du Domain (méthode qui lit et vide la liste), sans dépendance du Domain vers `Shared` ;
+- publication par le pipeline après le handler et avant `SaveChanges` : événements de tous les agrégats suivis par `AppDbContext`, dans l'ordre où ils ont été levés, y compris les événements levés par un gestionnaire, avec une profondeur bornée et une erreur explicite au-delà ;
+- requêtes : aucune publication ;
+- emplacement du gestionnaire : slice de réaction `Features/<Module>/<Reaction>/`, par exemple `NotifyOnBookingConfirmed`, qui contient le seul gestionnaire `internal`. HS004 admet qu'une slice ait exactement une entrée : une requête avec son handler et son endpoint, ou un gestionnaire d'événement sans endpoint ; HS014 et HS018 s'appliquent au gestionnaire comme à un handler de commande ;
+- le gestionnaire modifie les agrégats par `AppDbContext` dans la transaction en cours ; un appel à `IMediator.Send` pendant la publication lève une erreur explicite qui nomme le gestionnaire ;
+- `hardslice.json` : contrat `domainEventHandler`, lu par la classification (PB-018) ; HS900 si absent alors qu'il est référencé ;
+- Bookings : pas de nouvelle réaction métier ; la publication est prouvée par des tests d'intégration avec un gestionnaire de test ;
+- `AGENTS.md` : la phrase « They are not published to handlers yet » est remplacée par la règle de publication, avec l'interdiction des effets externes dans un gestionnaire.
+
+**Limites**
+
+Pas d'outbox, de publication après commit, de bus ni de traitement asynchrone. Un gestionnaire ne publie pas vers un autre processus.
+
+**Dépendances**
+
+Incrément 3.
+
+**Cas vérifiés**
+
+- un gestionnaire reçoit l'événement une fois, dans la transaction, et voit l'état non encore validé ;
+- exception d'un gestionnaire : rien n'est enregistré, `DomainEvents` est vidé, la réponse est 400 ou 409 selon l'exception ;
+- deux gestionnaires du même événement : tous deux appelés, ordre d'enregistrement ;
+- boucle d'événements au-delà de la profondeur : erreur qui nomme l'événement ;
+- `IMediator.Send` depuis un gestionnaire : erreur qui nomme le gestionnaire, rien n'est enregistré ;
+- HS004, HS014 et HS018 sur une slice de réaction, conforme et fautive ;
+- `--no-sample` : compile et vérifie sans gestionnaire.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-036 : Générer une slice de commande avec `dotnet new hardslice-command`
+
+**Résultat observable**
+
+Depuis la racine d'une solution générée, `dotnet new hardslice-command --module Bookings --name ExtendBooking` crée la slice, son test unitaire de validateur et son test d'intégration aux chemins de HS004 et HS018, puis affiche les deux lignes à ajouter dans `BookingsModule.cs`. Le build passe sans diagnostic HS ; la vérification échoue sur les tests `TODO(hardslice):` jusqu'à ce que la slice soit complétée.
+
+**Périmètre**
+
+- template d'éléments dans le paquet `HardSlice.Templates`, `content/hardslice-command/`, type `item` ;
+- paramètres : `--module` et `--name` requis, PascalCase, sans suffixe `Command` ; `--response` (`id` par défaut, `none`, ou nom d'un DTO) ; nom de l'application lu depuis la solution (`RootNamespace` du projet web, ou paramètre explicite si la liaison n'est pas disponible), jamais `MyApp` en dur ;
+- fichiers : `src/<App>/Features/<Module>/<Name>/<Name>.cs` (commande publique, validateur, handler et endpoint `internal`, forme de `ConfirmBooking`), `tests/<App>.Tests/Features/<Module>/<Name>/<Name>ValidatorTests.cs`, `tests/<App>.IntegrationTests/Features/<Module>/<Name>/<Name>Tests.cs` ;
+- le handler lève `NotImplementedException` avec un message qui renvoie à l'agrégat ; l'endpoint renvoie des `TypedResults` ; aucune lecture de l'horloge ni appel bloquant ;
+- module inexistant : erreur explicite qui renvoie à `hardslice-module`, rien n'est créé ; slice existante : refus sans `--force` ;
+- instructions affichées après génération : lignes d'enregistrement du handler et du validateur, appel de `Map` ;
+- test de l'hôte dans `ProgramTests`, livré dans les deux variantes : chaque `IRequestHandler<,>` et chaque `IValidator<>` déclaré dans l'assembly de l'application se résout depuis le conteneur, et l'échec nomme le type oublié ;
+- tests générés : préparation, appel HTTP et assertion du statut écrits ; seule l'assertion métier est marquée `TODO(hardslice):` ;
+- `README.md` et section « Adding a slice » d'`AGENTS.md`.
+
+**Dépendances**
+
+Incrément 3.
+
+**Cas vérifiés**
+
+- avec Bookings et sans Bookings (après `hardslice-module` et `hardslice-aggregate`) : build sans diagnostic HS, échec de la vérification sur les seuls tests `TODO(hardslice):` ;
+- complétion de référence appliquée par `scripts/test-template.sh` : vérification verte ;
+- slice non enregistrée : le test de l'hôte nomme le handler et le validateur oubliés, et le test d'intégration généré échoue ;
+- nom invalide, module absent, slice existante ;
+- `--response none` et DTO : HS005 ne signale rien.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-037 : Générer une slice de requête avec `dotnet new hardslice-query`
+
+**Résultat observable**
+
+`dotnet new hardslice-query --module Bookings --name ListRoomBookings` crée la requête, son DTO, son handler `AsNoTracking` avec projection, son endpoint et son test d'intégration. Le build passe sans diagnostic HS, en particulier HS006.
+
+**Périmètre**
+
+- `content/hardslice-query/`, mêmes conventions de paramètres, de nom d'application et d'erreurs que PB-036 ;
+- `--result` : `single` (réponse `null` répondue par 404, forme de `GetBooking`) ou `list` ;
+- handler : `Set<T>().AsNoTracking()` puis `Select` vers le DTO, sur l'agrégat passé par `--aggregate` (requis) ;
+- fichiers de tests aux chemins de HS018, test d'intégration `TODO(hardslice):` ;
+- `AGENTS.md` : le paragraphe sur les requêtes renvoie au template.
+
+**Dépendances**
+
+Incrément 3.
+
+**Cas vérifiés**
+
+Mêmes cas que PB-036, plus : aucune variante ne produit HS006 ; `--aggregate` inconnu rend une erreur de compilation lisible, pas un diagnostic HS trompeur.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-038 : Générer un module avec `dotnet new hardslice-module`
+
+**Résultat observable**
+
+`dotnet new hardslice-module --name Rooms` crée `Features/Rooms/RoomsModule.cs`, le dossier `src/<App>.Domain/Rooms/` et les dossiers de tests, puis affiche les deux lignes à ajouter dans `Program.cs`. La solution compile et sa vérification passe.
+
+**Périmètre**
+
+- `content/hardslice-module/` : classe publique statique `<Module>Module` avec `Add<Module>Module` et `Map<Module>Module` sur un `MapGroup` (route en kebab-case par défaut, `--route`), forme de `BookingsModule` ;
+- un module vide ne fait échouer ni HS012, ni HS017, ni HS018 ;
+- module existant : refus sans `--force` ;
+- section « Adding a first module » d'`AGENTS.md` en variante `--no-sample` : renvoie au template.
+
+**Dépendances**
+
+Incrément 3.
+
+**Cas vérifiés**
+
+Variante sans Bookings : module créé, `Program.cs` complété, vérification verte. Variante Bookings : second module à côté de Bookings, vérification verte, HS012 actif entre les deux.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-039 : Générer un agrégat avec `dotnet new hardslice-aggregate`
+
+**Résultat observable**
+
+`dotnet new hardslice-aggregate --module Rooms --name Room` crée l'agrégat, son identifiant typé, son mapping EF Core au niveau du module et son test unitaire. Le build passe sans HS007, HS008 ni HS902 ; le message de fin rappelle d'ajouter la migration.
+
+**Périmètre**
+
+- `content/hardslice-aggregate/` : classe `sealed` qui implémente `IAggregateRoot`, constructeur privé sans paramètre pour la persistance, fabrique statique qui vérifie ses règles, état sans `set` ni `init` public, liste privée d'événements ; `readonly record struct <Name>Id` ; `<Name>Configuration` `internal` en API fluente dans `Features/<Module>/` ;
+- test unitaire `tests/<App>.Tests/Domain/<Module>/<Name>Tests.cs` en `TODO(hardslice):` ;
+- pas de migration générée : la commande `dotnet ef migrations add` à lancer est affichée, et le test d'intégration existant sur les modifications en attente la rend obligatoire ;
+- module inexistant : erreur qui renvoie à `hardslice-module`.
+
+**Dépendances**
+
+Incrément 3.
+
+**Cas vérifiés**
+
+HS007, HS008, HS901 et HS902 muets sur l'agrégat généré ; migration manquante détectée par la vérification ; après migration et complétion de référence, vérification verte.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-040 : Générer un événement de domaine et sa réaction avec `dotnet new hardslice-event`
+
+**Résultat observable**
+
+`dotnet new hardslice-event --module Rooms --name RoomRenamed` crée le `record` dans `src/<App>.Domain/Rooms/Events/`. Avec `--reaction <Module>/<Slice>`, il crée aussi la slice de réaction et ses tests, puis affiche la ligne d'enregistrement du gestionnaire.
+
+**Périmètre**
+
+- `content/hardslice-event/` : `sealed record` qui implémente `IDomainEvent` ;
+- nom qui n'est pas au passé selon la règle de HS019 : avertissement à la génération, sans refus (HS019 reste une suggestion) ;
+- réaction : gestionnaire `internal` `IDomainEventHandler<TEvent>` qui agit par `AppDbContext`, sans `IMediator`, test d'intégration `TODO(hardslice):` aux chemins de HS018 ; la réaction peut être dans un autre module que l'événement, sans dépendre de ce module (HS012) ;
+- l'agrégat qui lève l'événement n'est pas modifié : la skill `add-domain-event` le fait.
+
+**Dépendances**
+
+PB-035.
+
+**Cas vérifiés**
+
+HS009 muet ; réaction dans le même module et dans un autre module, HS012 et HS016 muets ; complétion de référence appliquée, vérification verte.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-041 : HS000, toute suppression d'une règle HS porte sa justification
+
+**Résultat observable**
+
+Un `#pragma warning disable HS016` ou un `[SuppressMessage("HardSlice.Architecture", "HS016")]` sans commentaire `// hardslice-justification: <raison>` fait échouer le build avec HS000.
+
+**Périmètre**
+
+- `#pragma warning disable` et `#pragma warning restore` absent : chaque identifiant HS de la directive ; identifiants hors HS ignorés ;
+- `SuppressMessageAttribute` et `UnconditionalSuppressMessageAttribute` reconnus par symbole, sur tout membre, type ou assembly, catégorie quelconque ;
+- justification valide : commentaire sur la ligne de la directive ou sur la ligne précédente, de la forme `// hardslice-justification: ` suivie d'au moins dix caractères qui ne sont pas des espaces ; la propriété `Justification` de l'attribut ne suffit pas ;
+- HS000 elle-même n'est pas justifiable : `#pragma warning disable HS000` produit HS000 ;
+- s'applique aux projets de tests, qui ne peuvent pas cacher une règle HS ;
+- niveau d'analyse : `error` dans `Minimum`, `Recommended` et `All` ;
+- livrables communs des tickets de règle de la section 4 (descripteur, fiche, `README.md`, `AGENTS.md`, tests, sonde, matrice, mesure).
+
+**Limites**
+
+HS000 ne voit pas les suppressions globales (`<NoWarn>`, sévérités de `.editorconfig` ou `.globalconfig`) : les niveaux d'analyse en produisent eux-mêmes, et les distinguer d'un réglage manuel ne serait pas déterministe. Ces fichiers et les tests d'architecture sont protégés par PB-046 et la CI (PB-048), et la fiche le dit dans « ce que la règle ne détecte pas ». Reprise en v0.5 avec la baseline. Une justification fausse n'est pas détectée : elle reste visible en revue.
+
+**Dépendances**
+
+Incrément 3.
+
+**Sévérité et diagnostic**
+
+```text
+HS000: '#pragma warning disable HS016' in 'CancelBooking.cs' has no justification. A HardSlice rule is suppressed only with a reason a reviewer can read. Fix: remove the suppression and fix the code; if a maintainer approved it, add '// hardslice-justification: <reason>' on the line above. Doc: 'docs/rules/HS000.md'.
+```
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-042 : Livrer `CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md`
+
+**Résultat observable**
+
+Une solution générée contient les quatre fichiers d'instructions. `CLAUDE.md` importe `AGENTS.md` (`@AGENTS.md`) ; `GEMINI.md` et `.github/copilot-instructions.md` y renvoient selon le mécanisme retenu par PB-034, sans dupliquer ses règles.
+
+**Périmètre**
+
+- chaque fichier ne contient que ce qui est propre à son CLI : lien ou import d'`AGENTS.md`, hooks actifs ou fallback « run the check script before you finish », emplacement des skills ;
+- test : aucun fichier ne recopie une règle d'or d'`AGENTS.md` ; chaque lien résout vers un fichier livré ;
+- `AGENTS.md` : section « Agent kit » courte qui liste les quatre fichiers, les skills et les hooks ;
+- `README.md` : agents pris en charge et leur niveau (adaptateur natif ou fallback).
+
+**Dépendances**
+
+PB-034.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-043 : Livrer les skills `add-slice`, `add-module`, `add-aggregate` et `add-domain-event`
+
+**Résultat observable**
+
+Une solution générée contient quatre skills au format Agent Skills qui ajoutent chacune leur élément en appelant son template, sans écrire la structure à la main, puis lancent la vérification.
+
+**Périmètre**
+
+- `.claude/skills/<skill>/SKILL.md` dans le template, avec en-tête `name` et `description` qui déclenchent la skill sur la demande correspondante ;
+- `add-slice` : lit l'agrégat, cherche si le domaine porte déjà la règle métier et l'y ajoute avec son test sinon, choisit `hardslice-command` ou `hardslice-query`, enregistre la slice, remplit la logique, remplace chaque `TODO(hardslice):` par une vraie assertion, lance la vérification ;
+- `add-module` : `hardslice-module`, enregistrement dans `Program.cs`, carte des modules d'`AGENTS.md` ;
+- `add-aggregate` : `hardslice-aggregate`, invariants et tests, migration ;
+- `add-domain-event` : `hardslice-event`, levée par l'agrégat, réaction et ses tests ;
+- chaque skill rappelle les contournements interdits et ne propose jamais de modifier un fichier protégé ;
+- copies vers les emplacements des autres CLI produites au pack si PB-034 l'exige ; test d'égalité avec la source ;
+- `AGENTS.md` : « Adding a slice » et « Adding a first module » renvoient aux skills et aux templates, ce qui libère la place sous 150 lignes.
+
+**Dépendances**
+
+PB-034, PB-036 à PB-040.
+
+**Cas vérifiés**
+
+- test de structure : en-tête valide, chaque commande `dotnet new` citée existe dans le paquet avec ses paramètres, chaque chemin cité existe dans une solution générée ;
+- exécution manuelle consignée par skill, avec Claude Code, sur une solution `--no-sample` : élément ajouté, vérification verte, aucun fichier protégé modifié.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-044 : Livrer `extract-to-domain` et `fix-architecture-violation`, et nommer la skill dans chaque message
+
+**Résultat observable**
+
+Un diagnostic HS ou un échec de test d'architecture se termine par `Skill: <nom>. Doc: 'docs/rules/HSxxx.md'.` et la skill nommée existe dans la solution générée.
+
+**Périmètre**
+
+- `fix-architecture-violation` : lit le diagnostic, ouvre la fiche (`dotnet hardslice explain`), applique la première correction qui convient, relance la vérification, et s'arrête en expliquant le conflit si la correction exige un contournement ;
+- `extract-to-domain` : repère la règle dupliquée dans deux slices, la déplace dans l'agrégat avec son test unitaire, fait appeler la méthode du domaine par les deux slices, relance la vérification ;
+- correspondance règle et skill, une skill par message :
+
+| Skill | Règles |
+|---|---|
+| `add-slice` | HS004, HS013, HS014, HS015, HS018 |
+| `extract-to-domain` | HS007, HS016 |
+| `add-aggregate` | HS008, HS902 |
+| `add-domain-event` | HS009, HS012, HS019 |
+| `fix-architecture-violation` | HS000, HS001, HS003, HS005, HS006, HS010, HS011, HS017, HS900, HS901 |
+
+- messages des descripteurs, des tests d'architecture et de leurs tests mis à jour ; fiches : section « Skill » ; chaîne attendue de la démonstration PB-008 adaptée ;
+- format des messages de la section 4 : `Skill:` entre `Fix:` et `Doc:`.
+
+**Dépendances**
+
+PB-043.
+
+**Cas vérifiés**
+
+Test : chaque descripteur et chaque test d'architecture nomme une skill livrée par le template, et la fiche de la règle nomme la même.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
+```
+
+### PB-045 : Donner aux hooks une vérification après édition et une vérification avant de rendre la main
+
+**Résultat observable**
+
+`scripts/check.sh --build` rend les erreurs du build incrémental en moins de 10 s sur la fixture de performance. Le hook de fin dispose d'une vérification qui tient en 60 s : `check` complet si la mesure le permet, sinon `scripts/check.sh --affected`. `scripts/check.sh` sans argument reste la vérification complète, et échoue tant qu'un marqueur `TODO(hardslice):` reste dans la solution.
+
+**Périmètre**
+
+- d'abord, mesure de `check` complet sur une application générée avec Bookings, sur le runner `ubuntu-latest` documenté (médiane de cinq exécutions, conteneur PostgreSQL compris), consignée dans `docs/performance/analyzers.md` avec la décision : sous 60 s, le hook de fin utilise `check` et `--affected` n'est pas livré ; au-delà, `--affected` est livré comme ci-dessous ;
+- `check`, tous modes : étape qui échoue tant qu'un marqueur `TODO(hardslice):` reste dans `src/` ou `tests/`, et liste les fichiers et les lignes ;
+- `dotnet hardslice check --build` : `dotnet build --no-restore` de la solution, restauration seulement si nécessaire ; sortie réduite aux erreurs, diagnostics du compilateur inchangés ;
+- si la mesure l'exige, `dotnet hardslice check --affected` : slices touchées lues depuis `git` (modifications non validées et non suivies par rapport à `HEAD`), mappées sur `Features/<Module>/<Slice>/` et leurs tests ; tests unitaires et d'architecture toujours complets ; tests d'intégration filtrés sur les slices touchées ; toute modification hors d'une slice (Domain, `Shared`, configuration, migrations, projets) ou un dépôt sans `git` déclenche la vérification complète ;
+- chaque mode affiche ce qu'il a réduit et rappelle que seule la vérification complète fait foi ;
+- `scripts/check.sh` et `scripts/check.ps1` : les modes livrés transmis, tout autre argument refusé ;
+- `docs/performance/analyzers.md` : mesure de `--build` sur la fixture et du mode de fin retenu sur l'application générée ; question 8 de la spécification tranchée pour ces mesures.
+
+**Limites**
+
+Pas de cache de résultats de tests ni de serveur de build propre à HardSlice.
+
+**Dépendances**
+
+Incrément 3.
+
+**Cas vérifiés**
+
+- marqueur `TODO(hardslice):` restant dans un test ou dans un handler : `check` échoue et nomme le fichier ;
+- si `--affected` est livré : modification d'une slice, seuls ses tests d'intégration tournent ; modification du Domain, vérification complète ;
+- erreur HS dans le mode `--build` : code non nul, message du compilateur intact ;
+- si `--affected` est livré, sans Docker et avec des tests d'intégration à lancer : message actuel et code `1` ;
+- argument inconnu : code `2`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+scripts/measure-analyzers.sh
+```
+
+### PB-046 : Boucler Claude Code sur les diagnostics par ses hooks
+
+**Résultat observable**
+
+Dans une solution générée, après chaque édition d'un `.cs` par Claude Code, les erreurs du build lui reviennent ; avant de rendre la main, il relance la vérification retenue par PB-045 et continue tant qu'elle échoue ; une édition d'un fichier protégé est refusée avec la raison.
+
+**Périmètre**
+
+- `.claude/settings.json` du template :
+  - `PostToolUse` sur les outils d'édition, seulement pour un `.cs` : `scripts/check.sh --build` ; en échec, erreurs sur la sortie d'erreur et code `2` ;
+  - `Stop` : la vérification retenue par PB-045, `scripts/check.sh` ou `scripts/check.sh --affected` ; en échec, la fin est bloquée avec les erreurs ; si le hook de fin est déjà actif pour la même erreur, au plus trois relances, puis l'agent rend la main en disant que la vérification échoue ;
+  - `PreToolUse` sur les outils d'édition : refus des fichiers protégés (`.editorconfig`, `hardslice.json`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `.config/dotnet-tools.json`, `scripts/`, `tests/<App>.ArchitectureTests/`, `.claude/`), avec renvoi à la section « Forbidden » ;
+- la traduction entre la charge utile du hook et le script est faite par `dotnet hardslice hook claude <événement>`, qui lit l'entrée standard ; une commande identique sous Linux, macOS et Windows ;
+- `AGENTS.md` et `CLAUDE.md` : hooks actifs et leur budget.
+
+**Limites**
+
+Les hooks accélèrent et ne sont pas le garde-fou : un agent ou un humain qui les désactive est arrêté par la vérification complète et la CI.
+
+**Dépendances**
+
+PB-045.
+
+**Cas vérifiés**
+
+Tests de `HardSlice.Tool` avec les charges utiles de PB-034 : `.cs` fautif (code `2`, diagnostic), fichier non `.cs` (aucun build), fichier protégé (refus), fin sur échec puis plafond de relances, chemin Windows.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-047 : Adapter Codex, GitHub Copilot et Gemini CLI, ou documenter leur fallback
+
+**Résultat observable**
+
+Pour chacun des trois CLI, la solution générée contient l'adaptateur natif retenu par PB-034, qui appelle les mêmes modes que PB-046, ou bien `AGENTS.md` et son fichier d'instructions lui demandent de lancer `scripts/check.sh` avant de finir. `README.md` dit lequel des deux s'applique.
+
+**Périmètre**
+
+- configuration native à l'emplacement exigé par le CLI, versionnée dans le template ; traduction de sa charge utile par `dotnet hardslice hook <cli> <événement>` ;
+- protection des fichiers protégés là où le CLI la permet ;
+- tableau des capacités par CLI dans `docs/agents/support.md` et `README.md`, tenu à jour par ce ticket ;
+- un CLI sans mécanisme retenu n'a pas de configuration morte dans le template.
+
+**Dépendances**
+
+PB-034, PB-042, PB-045.
+
+**Cas vérifiés**
+
+Tests de `HardSlice.Tool` avec les charges utiles enregistrées de chaque CLI ; essai manuel daté de chaque adaptateur consigné dans `docs/agents/support.md`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-048 : Appeler la vérification depuis le pre-commit et la CI de l'application générée
+
+**Résultat observable**
+
+Une solution générée contient un hook git `pre-commit` et un workflow GitHub Actions, qui lancent tous deux `scripts/check.sh` sans argument. Un commit qui casse une règle est refusé une fois le hook activé ; le workflow échoue sur la même règle.
+
+**Périmètre**
+
+- `.githooks/pre-commit`, activé par `git config core.hooksPath .githooks`, commande documentée dans `AGENTS.md` et `README.md` ; jamais activé à l'insu de l'utilisateur ;
+- `.github/workflows/hardslice.yml` : checkout, SDK de `global.json`, `scripts/check.sh` ; sur une pull request, échoue aussi si un fichier protégé est modifié sans étiquette d'approbation du mainteneur, ce qui remplace pour tous les CLI la protection du hook d'édition ;
+- actions épinglées par empreinte, comme la CI du dépôt.
+
+**Limites**
+
+Azure Pipelines et la politique de branche protégée restent en v1.0.
+
+**Dépendances**
+
+PB-045.
+
+**Cas vérifiés**
+
+`scripts/test-template.sh` : dépôt git temporaire, hook activé, commit fautif refusé et commit conforme accepté ; workflow validé par un analyseur de syntaxe et exécuté sur la solution générée par un job CI du dépôt.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+```
+
+### PB-049 : Prouver la boucle de correction de chaque règle bloquante
+
+**Résultat observable**
+
+`scripts/demo-agent-fix.sh prepare <règle> <dossier>` prépare, pour chaque règle bloquante, une solution générée qui échoue avec le diagnostic attendu ; `verify` accepte une correction conforme et rejette chaque contournement connu. La CI exécute `prepare` et une correction de référence pour toutes les règles.
+
+**Périmètre**
+
+- généralisation de `scripts/demo-hs016-agent-fix.sh` et de `demos/hs016-agent-fix/` : une fixture par règle bloquante (HS000, HS001, HS003 à HS018, HS900 à HS902), avec son diagnostic exact, son invite d'agent et une correction de référence ;
+- `verify` : vérification complète verte, aucun fichier protégé modifié, aucun motif de contournement (expressions de la démonstration PB-008 étendues à HS000) ;
+- job CI `demo` : `prepare` puis correction de référence et `verify` pour chaque règle ;
+- traces d'agent réelles consignées pour un échantillon, au moins une règle du domaine, une de la messagerie, une d'architecture et HS000, avec Claude Code et hooks actifs.
+
+**Dépendances**
+
+PB-041, PB-044, PB-046.
+
+**Cas vérifiés**
+
+Chaque fixture produit exactement son diagnostic, et lui seul ; chaque correction de référence passe `verify` ; chaque contournement connu échoue `verify`.
+
+**Acceptation**
+
+```text
+scripts/demo-agent-fix.sh prepare-all "$(mktemp -d)"
+scripts/demo-agent-fix.sh verify-reference "$(mktemp -d)"
+```
+
+### PB-050 : Démontrer qu'un agent ajoute une fonctionnalité par les chemins officiels
+
+**Résultat observable**
+
+À partir d'une solution `--no-sample`, Claude Code reçoit une demande métier (un module, son agrégat, une commande, une requête et un événement avec sa réaction) et la livre par les skills et les templates ; la vérification complète est verte, aucun fichier protégé n'est modifié, et la trace montre l'usage des templates. La trace et une courte vidéo servent de démonstration publique de v0.3.
+
+**Périmètre**
+
+- `demos/add-feature/` : invite, vérificateur qui contrôle la présence des éléments aux chemins attendus, l'absence de `TODO(hardslice):` restant, l'usage des commandes `dotnet new hardslice-*` dans la trace, et la vérification complète ;
+- deux exécutions consignées avec Claude Code ; une exécution avec chacun des trois autres CLI dans son mode (adaptateur ou fallback), résultat publié même défavorable ;
+- `README.md` : lien vers la démonstration.
+
+**Limites**
+
+Ce n'est pas le benchmark de v0.4 : pas de répétitions statistiques ni de comparaison A/B/C.
+
+**Dépendances**
+
+PB-043, PB-044, PB-046.
+
+**Acceptation**
+
+Le vérificateur passe sur les exécutions Claude Code consignées ; chaque exécution des autres CLI est consignée avec son résultat.
+
+### PB-051 : Publier la préversion `0.3.0-preview.1`
+
+**Résultat observable**
+
+Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org, génère une application, ajoute une slice par `dotnet new hardslice-command` et passe `dotnet hardslice check`.
+
+**Périmètre**
+
+- version `0.3.0-preview.1` dans `Directory.Build.props` ;
+- workflow de publication de PB-033, déclenché par l'étiquette `v0.3.0-preview.1` ; job de contrôle étendu aux cinq templates d'éléments et aux hooks Claude Code ;
+- `README.md` et notes de version : templates, skills, hooks, agents pris en charge, HS000.
+
+**Dépendances**
+
+PB-034 à PB-050, PB-033.
+
+**Acceptation**
+
+Le workflow de publication et le job de contrôle sont verts ; les trois paquets sont visibles sur NuGet.org en `0.3.0-preview.1`.
+
+### Définition de fini
+
+L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. Concrètement :
+
+- les cinq templates d'éléments génèrent leur élément dans les deux variantes, sans diagnostic HS, et une solution construite uniquement par eux passe la vérification après complétion ;
+- les six skills sont livrées et nommées par les messages de toutes les règles ;
+- les quatre fichiers d'instructions sont livrés et `AGENTS.md` reste sous 150 lignes ;
+- Claude Code boucle sur le build après édition et sur la vérification avant de rendre la main, dans les budgets de 10 et 60 secondes mesurés ;
+- Codex, Copilot CLI et Gemini CLI ont chacun un adaptateur natif testé ou le fallback documenté ;
+- HS000 est livrée, et le pre-commit et la CI générée appellent la vérification complète ;
+- chaque règle bloquante a sa boucle E2E en CI, et la démonstration d'ajout de fonctionnalité est publiée ;
+- les paquets `0.3.0-preview.1` sont publiés.
+
+## 6. Incréments suivants
 
 | Incrément | Résultat produit | Contenu principal | Acceptation globale |
 |---|---|---|---|
 | **3 — Analyseurs v0.2** | Les dérives principales sont détectées par des diagnostics réparables | Détaillé en section 4 (PB-018 à PB-033) : classification par contrats, HS003 à HS011, HS015 et HS019, diagnostics de configuration HS900 à HS902, niveaux d'analyse, `check`, `explain`, performance, préversion NuGet | Définition de fini de la section 4 |
-| **4 — Boucle agent v0.3** | Un agent génère puis corrige par les chemins officiels | Templates d'éléments, six skills, fichiers de guidage des quatre agents, hooks après édition et de fin de tâche, scripts uniques pour hooks/pre-commit/CI, scénarios E2E | Une slice est générée, complétée et vérifiée sans recréer manuellement sa structure ; les quatre agents ciblés disposent d'un adaptateur natif ou du fallback documenté |
+| **4 — Boucle agent v0.3** | Un agent génère puis corrige par les chemins officiels | Détaillé en section 5 (PB-034 à PB-051) : templates d'éléments, six skills, fichiers de guidage des quatre agents, hooks après édition et de fin de tâche, HS000, scripts uniques pour hooks, pre-commit et CI, boucles E2E, préversion NuGet | Une slice est générée, complétée et vérifiée sans recréer manuellement sa structure ; les quatre agents ciblés disposent d'un adaptateur natif ou du fallback documenté |
 | **5 — Benchmark v0.4** | L'effet des garde-fous est mesuré et publié | Configurations A/B/C, tâches Bookings, runner, répétitions, coûts et qualité | Protocole, prompts, versions, résultats bruts et analyse sont publiables et reproductibles |
 | **6 — Adoption v0.5** | Une équipe ajoute HardSlice sans corriger toute sa dette | `init`, `map`, conventions, baseline, cliquet, `report`, `verify`, mode couches applicable | Les violations existantes sont baselinées, une nouvelle violation est bloquée et une correction réduit la baseline |
 | **7 — Comparaison v0.6** | Les architectures couches et slices sont comparées | Applications équivalentes, mêmes tâches, agents, modèles et budgets | Les conclusions distinguent l'effet de l'architecture de celui des garde-fous |
 | **8 — Distribution v1.0** | HardSlice devient un produit open source installable et maintenable | Paquets stables, documentation, site, CI de publication, compatibilité, sécurité et contribution, options de template `--aspire` et SQL Server | Un utilisateur externe réussit les parcours greenfield et adoption depuis la documentation publique |
 
-## 6. Différé, mais non abandonné
+## 7. Différé, mais non abandonné
 
 | Élément | Incrément prévu |
 |---|---:|

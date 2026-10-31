@@ -2,13 +2,14 @@
 
 # HardSlice : spécifications du kit d'architecture .NET pour agents IA
 
-Statut : spécification produit v2.2, 30 octobre 2026. Le contenu fonctionnel provient de la v2 du 27 octobre 2026, complétée par les décisions de la v2.2 sur les analyseurs v0.2.
+Statut : spécification produit v2.3, 31 octobre 2026. Le contenu fonctionnel provient de la v2 du 27 octobre 2026, complétée par les décisions de la v2.2 sur les analyseurs v0.2 et de la v2.3 sur la boucle agent v0.3.
 
 Historique :
 - v1 : architecture en couches.
 - v2, sous le nom provisoire « Keel » : le template passe en **vertical slices avec un domaine riche**. Nouvelles règles HS016 à HS018, outil d'adoption compatible couches et slices, comparaison couches contre slices dans le benchmark.
 - v2.1 : « Keel » devient **HardSlice** ; les identifiants `KEELxxx` deviennent `HSxxx` et la CLI canonique devient `dotnet hardslice`.
 - v2.2 (préparation de v0.2) : classification des types par les contrats applicatifs `IEntity` et `IAggregateRoot` ; HS010 et HS011 deviennent des analyseurs HardSlice au lieu de `BannedApiAnalyzers` ; HS009 est séparée en contrôle structurel (HS009) et convention de nommage non bloquante (HS019) ; diagnostics de configuration HS900 à HS902 ; niveaux d'analyse ; `check` et `explain` livrés dès v0.2.
+- v2.3 (préparation de v0.3) : les templates d'éléments génèrent sans modifier les fichiers existants et leurs tests échouent tant que l'élément n'est pas complété ; les événements de domaine sont publiés dans la transaction de la commande ; le hook de fin lance la vérification complète si elle tient dans son budget ; HS000 porte sur les suppressions écrites dans le code source.
 
 ## 1. En une phrase
 
@@ -66,6 +67,7 @@ Sans garde-fous, les agents dégradent une architecture en slices plus vite qu'u
 - Les slices sont regroupées par **module** (`Features/Bookings/`). Entre modules, on passe par un événement de domaine ou le contrat public du module.
 - **Un fichier par slice par défaut**, découpable en plusieurs fichiers dans le même dossier quand elle dépasse environ 200 lignes.
 - Les **requêtes** lisent directement la base avec des projections, sans charger d'agrégat. Les **commandes** passent par les agrégats.
+- Les **événements de domaine** sont publiés à leurs gestionnaires dans la transaction de la commande, sans outbox ni bus. Un gestionnaire vit dans une slice de réaction, modifie les agrégats par le contexte de données, n'envoie aucune requête par le médiateur et ne produit aucun effet externe.
 
 ## 5. Périmètre
 
@@ -86,7 +88,7 @@ Sans garde-fous, les agents dégradent une architecture en slices plus vite qu'u
 | Livrable | Forme | Rôle |
 |---|---|---|
 | Template de solution | `dotnet new hardslice-api` (paquet NuGet de templates) | Démarrer un projet neuf |
-| Templates d'éléments | `dotnet new hardslice-command`, `hardslice-query` (une slice complète chacun, endpoint et test compris), `hardslice-module`, `hardslice-aggregate`, `hardslice-event` | Générer le code répétitif de façon déterministe. Les skills les appellent au lieu d'écrire le code à la main |
+| Templates d'éléments | `dotnet new hardslice-command`, `hardslice-query` (une slice complète chacun, endpoint et test compris), `hardslice-module`, `hardslice-aggregate`, `hardslice-event` | Générer le code répétitif de façon déterministe. Les skills les appellent au lieu d'écrire le code à la main. Un template crée les fichiers de son élément et affiche les enregistrements à ajouter ; le code généré compile, mais ses tests et la vérification échouent tant que l'élément n'est pas complété (marqueur `TODO(hardslice):`) |
 | Analyseurs Roslyn | Paquet NuGet `HardSlice.Analyzers` dès le premier incrément | Règles appliquées à la compilation, dans l'IDE et en CI, sans copie susceptible de dériver |
 | Tests d'architecture | Projet `tests/MyApp.ArchitectureTests` | Règles de dépendances entre projets, modules et slices |
 | Kit agents | `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `GEMINI.md`, skills, hooks | Guider les agents et boucler sur les erreurs |
@@ -195,7 +197,7 @@ Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modif
 
 | Id | Règle | Mécanisme | Style |
 |---|---|---|---|
-| HS000 | Toute suppression d'une règle HS porte un commentaire `// hardslice-justification: …` | Analyseur | Les deux |
+| HS000 | Toute suppression d'une règle HS écrite dans le code source (`#pragma warning disable`, `[SuppressMessage]`) porte un commentaire `// hardslice-justification: …`. Les suppressions globales (`<NoWarn>`, `.editorconfig`, `.globalconfig`) sont protégées par les hooks et la CI, puis par la baseline en v0.5 | Analyseur | Les deux |
 | HS001 | Le Domain ne dépend d'aucun autre projet ni d'EF Core, d'ASP.NET Core ou de la DI | Test d'architecture | Les deux |
 | HS002 | Couches : Application ne dépend ni d'Infrastructure ni d'Api, ni d'EF Core, ni de `HttpContext` | Test d'architecture | Couches |
 | HS003 | Un endpoint n'accède jamais directement à la base : il envoie une commande ou une requête | Analyseur | Les deux |
@@ -262,7 +264,7 @@ Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en 
 2. **Contraindre** : les analyseurs et les tests d'architecture font échouer `dotnet build` et `dotnet test`, pour tous les agents.
 3. **Boucler** (Claude Code d'abord) :
    - Après chaque édition d'un `.cs` (`PostToolUse`), un build incrémental. Les erreurs HS reviennent à l'agent (code de sortie 2). Budget : moins de 10 secondes.
-   - Avant que l'agent rende la main (`Stop`), `scripts/check.sh` lance le build complet, les tests d'architecture et les tests de la slice touchée. En cas d'échec, l'agent continue de corriger. Budget : moins de 60 secondes.
+   - Avant que l'agent rende la main (`Stop`), `scripts/check.sh` lance le build complet, les tests d'architecture et les tests de la slice touchée. En cas d'échec, l'agent continue de corriger. Budget : moins de 60 secondes. Si la vérification complète dépasse ce budget, le hook lance une vérification réduite aux slices touchées ; seule la vérification complète fait foi (décision du 31/10/2026, selon la mesure de PB-045).
    - Les autres CLI : hooks équivalents quand ils existent (à vérifier pour Codex, Copilot et Gemini), sinon `AGENTS.md` leur demande de lancer `scripts/check.sh` avant de finir.
 
 ### Skills
