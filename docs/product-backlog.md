@@ -2063,6 +2063,17 @@ Une solution générée contient quatre skills au format Agent Skills qui ajoute
 - copie de chaque skill dans `.agents/skills/`, produite au pack, pour Codex et Gemini CLI (PB-034 : Copilot lit `.claude/skills/` et ne garde qu'une skill par nom) ; test d'égalité avec la source ;
 - `AGENTS.md` : « Adding a slice » et « Adding a first module » renvoient aux skills et aux templates, ce qui libère la place sous 150 lignes.
 
+**Réalisation (31/10/2026)**
+
+- skills `add-module`, `add-aggregate`, `add-slice` et `add-domain-event` dans `content/hardslice-api/.claude/skills/<skill>/SKILL.md`, en-tête `name` (nom du dossier) et `description` (ce que fait la skill, son template, et « Use when » avec des demandes métier) ; corps : prérequis, étapes, puis une section « Never » ;
+- chaque skill lance son template avec `--project src/<App>/<App>.csproj`, recopie les lignes qu'il imprime, remplit l'élément, remplace les marqueurs `TODO(hardslice):`, met à jour la carte des modules d'`AGENTS.md`, et lance `scripts/check.sh` ou `scripts/check.ps1` jusqu'au code `0`. `add-slice` lit l'agrégat et y ajoute la règle avec ses tests si elle manque ; `add-aggregate` ajoute la migration imprimée et la relit ; `add-domain-event` lève l'événement dans la méthode de l'agrégat, teste qu'il est enregistré, et implémente la réaction par `AppDbContext` ;
+- la section « Never » renvoie à « Forbidden » d'`AGENTS.md`, rappelle les contournements propres à l'élément, nomme les fichiers protégés de PB-046 (plus `.agents/`) et dit de s'arrêter en expliquant le conflit. Hors de cette section, une skill ne nomme aucun fichier protégé, sauf pour lancer les scripts de vérification ;
+- aucune condition de template ni mention de Bookings : la même skill sert les deux variantes ;
+- copie au pack : un élément `None` du projet de templates écrit `.claude/skills/**` dans `content/hardslice-api/.agents/skills/` du paquet. Le dossier `.agents/` n'existe pas dans les sources ;
+- `AGENTS.md` : « Adding a first module » et « Adding a slice » renvoient aux skills et gardent les commandes des templates et ce que contient une slice ; « Agent kit » liste les skills. 139 lignes avec l'exemple, 146 avec `--no-sample` ; `.claude/CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md` nomment les skills de leur dossier ;
+- tests (`TemplatePackageTests`) : en-tête valide et nom du dossier, quatre skills et pas de `.agents/` dans les sources ; chaque `dotnet new` cité nomme un template du paquet, des options qu'il déclare et une valeur parmi ses choix, y compris les options citées dans le texte ; chaque chemin cité existe dans le template hors exemple ; liens résolus ; « Never » complet ; dans le paquet, la copie de `.agents/skills/` est identique à la source. `scripts/test-template.sh` vérifie dans les deux variantes générées les deux dossiers, leur égalité, le nom et les chemins cités ;
+- exécutions manuelles avec Claude Code 2.1.316 (`claude-sonnet-5-5`) sur une solution `--no-sample`, une demande métier qui ne nomme pas la skill : [prise en charge des agents](agents/support.md), E15 à E18. Chaque fois la skill attendue est chargée, l'élément est généré par son template, la vérification relancée hors de l'agent passe, aucun fichier protégé n'est modifié et aucun marqueur ne reste.
+
 **Dépendances**
 
 PB-034, PB-036 à PB-040.

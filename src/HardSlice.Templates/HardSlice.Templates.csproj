@@ -22,6 +22,12 @@
     <None Update="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
+  <!-- docs/agents/support.md: Claude Code and Copilot read the skills of .claude/skills/, Codex and Gemini CLI those of .agents/skills/.
+       .claude/skills/ is the only source: the pack copies it into .agents/skills/, which Copilot reads too and keeps once per name. -->
+  <ItemGroup>
+    <None Include="content/hardslice-api/.claude/skills/**/*" Pack="true" PackagePath="$(ContentTargetFolders)/content/hardslice-api/.agents/skills/" />
+  </ItemGroup>
+
   <!-- The template pins HardSlice.Analyzers and the hardslice.tool local tool at the version of the HardSlice packages,
        the Version of Directory.Build.props: the pack writes it in place of the token, dotnet-ef keeps its own version. -->
   <PropertyGroup>

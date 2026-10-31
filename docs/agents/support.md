@@ -26,7 +26,7 @@ Essais du 31/10/2026 (UTC) sur Linux x64, dans une solution générée par `scri
 | Hook de fin de tâche | `Stop`, `stop_hook_active` [S2] [E1] | `Stop`, `stop_hook_active` [S5] [E8] | `agentStop`, `stop_hook_active` [S8] [E4] | `AfterAgent`, `stop_hook_active` [S12] ; documenté, non essayé [E10] |
 | Fin bloquée, l'agent continue | code `2`, raison sur la sortie d'erreur [S2] [E1] | code `2`, raison sur la sortie d'erreur [S5] [E8] | code `0` et `{"decision": "block", "reason": "..."}`, 8 relances au plus [S8] [E4] | code `2` ou `{"decision": "deny", "reason": "..."}` [S12] ; documenté, non essayé [E10] |
 | Condition de chargement des hooks du dépôt | aucune en `-p` [S16] [E1] ; en interactif, confiance du dossier demandée au premier lancement [S16] | projet de confiance et chaque hook approuvé par `/hooks`, sinon ignoré sans message [S5] [E7] [E8] | dossier de confiance (`--trust-folder` ou `COPILOT_ALLOW_ALL=true` en `-p`) [S8] [E4] | dossier de confiance [S13] [E10] |
-| Skills (`SKILL.md`) lues | `.claude/skills/` [S3] [E3] | `.agents/skills/` [S6] [E9] | `.github/skills/`, `.agents/skills/`, `.claude/skills/` [S9] [E6] | `.agents/skills/`, `.gemini/skills/` [S14] [E10] |
+| Skills (`SKILL.md`) lues | `.claude/skills/` [S3] [E3] [E15] | `.agents/skills/` [S6] [E9] | `.github/skills/`, `.agents/skills/`, `.claude/skills/` [S9] [E6] | `.agents/skills/`, `.gemini/skills/` [S14] [E10] |
 | Adaptateur retenu | natif (PB-046) | natif (PB-047) | natif (PB-047) | fallback (PB-047) |
 
 ## Constats par CLI
@@ -83,6 +83,7 @@ Essais du 31/10/2026 (UTC) sur Linux x64, dans une solution générée par `scri
 - Source unique : `.claude/skills/<skill>/SKILL.md`, lue par Claude Code et Copilot.
 - Copie produite au pack dans `.agents/skills/<skill>/SKILL.md`, lue par Codex et Gemini CLI. Copilot lit les deux dossiers et ne garde qu'une skill par nom [E6] : les copies sont identiques, il n'y a pas de doublon.
 - Pas de copie dans `.github/skills/` ni `.gemini/skills/`, inutiles.
+- Réalisé : `add-module`, `add-aggregate`, `add-slice` et `add-domain-event`, copiées dans `.agents/skills/` par le pack du paquet de templates. Exécutées avec Claude Code sur une solution `--no-sample` [E15] à [E18], selon le [protocole des skills](#protocole-dessai-des-skills).
 
 ### Hooks (PB-046 et PB-047)
 
@@ -160,6 +161,32 @@ grep -o '<custom_instruction>\|# [A-Za-z]*\.md\|## Golden rules' "$work"/logs/pr
 
 Pour Claude Code, une question sans outil sur une règle d'or et sur la section propre à la CLI : `claude -p "<question>" --setting-sources project --model claude-haiku-5-5 --allowedTools "" < /dev/null`.
 
+## Protocole d'essai des skills
+
+Une solution `--no-sample` reçoit, l'une après l'autre, quatre demandes métier qui ne nomment pas la skill ; l'essai est réussi quand la skill attendue est chargée (appel de l'outil `Skill` dans la trace), que son template est lancé, que `scripts/check.sh` relancé hors de l'agent sort avec le code `0`, qu'aucun fichier protégé n'a changé et qu'aucun marqueur `TODO(hardslice):` ne reste. Les templates sont installés dans un dossier personnel isolé, comme un utilisateur les installe, et le dépôt de la solution ignore `bin/` et `obj/`.
+
+```bash
+work="$(mktemp -d)"
+scripts/generate-app.sh "$work" Demo
+source scripts/dotnet-cli-home.sh && isolate_dotnet_cli_home "$work"
+dotnet new install "$work"/feed/HardSlice.Templates.*.nupkg
+dotnet new hardslice-api --name Shop --output "$work/Shop" --no-sample
+cd "$work/Shop" && dotnet build && printf 'bin/\nobj/\nTestResults/\n' > .gitignore && git init -q && git add -A && git commit -qm init
+unset $(env | grep -o '^SIDEHUB_[A-Z_]*')
+claude -p "$prompt" --setting-sources project --model claude-sonnet-5-5 --permission-mode acceptEdits \
+  --allowedTools Read Edit Write Glob Grep Skill "Bash(dotnet *)" "Bash(bash scripts/check.sh*)" "Bash(git status*)" "Bash(git diff*)" "Bash(grep *)" "Bash(ls *)" "Bash(find *)" "Bash(cat *)" \
+  --output-format stream-json --verbose < /dev/null > "$work/trace.jsonl"
+git add -A && git diff --cached --name-only HEAD | grep -E '^(\.editorconfig|hardslice\.json|Directory\.|\.config/|scripts/|tests/[^/]*\.ArchitectureTests/|\.claude/|\.agents/)'
+grep -rn 'TODO(hardslice)' src tests; bash scripts/check.sh; git commit -qm "<essai>"
+```
+
+Les demandes, dans l'ordre :
+
+1. `add-module` : « Add a Catalog module to this application: it will hold the products we sell. »
+2. `add-aggregate` : « The Catalog module needs the products we sell: a product has a name, required and at most 100 characters, and a price in euros that must be greater than zero. Add them to the domain and the database; the use cases come later. »
+3. `add-slice` : « Let the shop register a new product in the catalog, with its name and its price: the API answers with the identifier of the product. »
+4. `add-domain-event` : « When a product is registered, the catalog must open its stock at a quantity of zero: a stock of the Catalog module holds the identifier of its product and its quantity, which is never negative. React to the registration rather than changing the use case that registers the product. »
+
 ## Journal des essais
 
 | Essai | Date (UTC) | CLI | Résultat |
@@ -178,6 +205,10 @@ Pour Claude Code, une question sans outil sur une règle d'or et sur la section 
 | E12 | 31/10/2026 16:50 et 16:51 | Copilot CLI 1.0.105 | `CLAUDE.md` racine avec `@AGENTS.md`, puis `@./AGENTS.md` (`copilot -p --log-level all`) : le prompt enregistré contient `AGENTS.md` lu nativement, puis une seconde copie entière dans le bloc de `CLAUDE.md` (29,4 k jetons en entrée). L'import `@./AGENTS.md` de `GEMINI.md` n'est pas développé. Le modèle, interrogé, a compté trois copies : seul le journal fait foi. |
 | E13 | 31/10/2026 16:52 et 16:54 | Copilot CLI 1.0.105 | `CLAUDE.md` dans `.claude/` : `copilot instruction list` ne liste plus que `.github/copilot-instructions.md`, `AGENTS.md` et `GEMINI.md`. Sur la solution livrée, le prompt enregistré contient `AGENTS.md` une fois (24,3 k jetons en entrée). |
 | E14 | 31/10/2026 16:52 à 16:54 | Claude Code 2.1.316 | `.claude/CLAUDE.md` sans `CLAUDE.md` racine : avec `@../AGENTS.md`, la règle d'or 9 et la section « Claude Code » sont citées, une copie ; sans l'import, `AGENTS.md` est absent du contexte. |
+| E15 | 31/10/2026 17:34 | Claude Code 2.1.316 | `add-module`, demande 1 : skill chargée, `dotnet new hardslice-module --name Catalog`, trois lignes ajoutées à `Program.cs`, carte d'`AGENTS.md` mise à jour, vérification verte (12 tours, 48 s). Aucun fichier protégé modifié. La consigne d'écriture de la carte a été précisée après l'essai (nom entre accents graves). |
+| E16 | 31/10/2026 17:36 | Claude Code 2.1.316 | `add-aggregate`, demande 2 : skill chargée, `dotnet new hardslice-aggregate --name Product`, `Create` renommé `Register`, invariants du nom et du prix levant `DomainException` avec leurs tests, mapping, migration `AddProducts` relue, vérification verte (11 tours, 67 s). Aucun fichier protégé ni marqueur restant. |
+| E17 | 31/10/2026 17:38 | Claude Code 2.1.316 | `add-slice`, demande 3 : skill chargée, règle trouvée dans `Product.Register`, rien ajouté au domaine, `dotnet new hardslice-command --name RegisterProduct`, enregistrement, validateur, gestionnaire sans `SaveChangesAsync`, test d'intégration qui relit le produit dans PostgreSQL et test du 400, vérification verte (14 tours, 68 s). Aucun fichier protégé ni marqueur restant. |
+| E18 | 31/10/2026 17:40 | Claude Code 2.1.316 | `add-domain-event`, demande 4 : skills `add-domain-event` puis `add-aggregate` chargées, `Stock` généré avec sa migration, `dotnet new hardslice-event --name ProductRegistered --reaction Catalog/OpenStockOnProductRegistered`, événement levé par `Product.Register` et testé, réaction par `AppDbContext`, vérification verte : 32 tests unitaires, 84 d'architecture, 7 d'intégration (32 tours, 105 s). Aucun fichier protégé ni marqueur restant. |
 
 ## Sources
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template, generates a solution in a temporary directory,
-# verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable and the instruction file of each agent,
+# verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable and the instruction file of each agent and the skills they read,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS000 (test projects included), HS001, HS003, HS004 (a reaction slice included), HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
@@ -85,6 +85,33 @@ FILES
   fi
   if ! grep -Fxq "## Agent kit" "$root/AGENTS.md"; then
     echo "error: the AGENTS.md of $name lists no agent kit." >&2
+    exit 1
+  fi
+  # The skills (PB-043): .claude/skills/ for Claude Code and Copilot, the copy that the pack writes in .agents/skills/ for Codex and
+  # Gemini CLI, identical so that Copilot, which reads both, keeps one per name. Each names its folder and cites only paths of $name.
+  local skill cited_path
+  for skill in add-module add-aggregate add-slice add-domain-event; do
+    if [[ ! -f "$root/.claude/skills/$skill/SKILL.md" || ! -f "$root/.agents/skills/$skill/SKILL.md" ]]; then
+      echo "error: $name lacks the skill $skill in .claude/skills/ or .agents/skills/." >&2
+      exit 1
+    fi
+    if ! cmp -s "$root/.claude/skills/$skill/SKILL.md" "$root/.agents/skills/$skill/SKILL.md"; then
+      echo "error: the skill $skill of $name differs between .claude/skills/ and .agents/skills/." >&2
+      exit 1
+    fi
+    if [[ "$(sed -n 2p "$root/.claude/skills/$skill/SKILL.md")" != "name: $skill" ]]; then
+      echo "error: the skill $skill of $name is not named after its folder." >&2
+      exit 1
+    fi
+    while read -r cited_path; do
+      if [[ ! -e "$root/$cited_path" ]]; then
+        echo "error: the skill $skill of $name cites $cited_path, which $name does not contain." >&2
+        exit 1
+      fi
+    done < <(grep -o '`\(src\|tests\|docs\|scripts\)/[^`<>[:space:]]*`' "$root/.claude/skills/$skill/SKILL.md" | tr -d '`' | sort -u)
+  done
+  if [[ "$(find "$root/.claude/skills" "$root/.agents/skills" -type f | wc -l)" -ne 8 ]]; then
+    echo "error: $name holds other files than the four skills in .claude/skills/ and .agents/skills/." >&2
     exit 1
   fi
 }
@@ -281,7 +308,7 @@ if ! grep -rqF 'EXCLUDE USING gist ("RoomId" WITH =' "$app/src/$app_name/Shared/
   exit 1
 fi
 
-echo "==> Checking the instruction file of each agent in $app_name"
+echo "==> Checking the instruction file of each agent and the skills in $app_name"
 check_agent_instructions "$app" "$app_name"
 
 run_documented_path "$app" "$app_name" true

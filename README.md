@@ -19,7 +19,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 - the `HardSlice.Analyzers` package, which reports HS000, HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
 - architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
 - the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule;
-- `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, `scripts/check.sh` and `scripts/check.ps1` in every generated solution.
+- `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, the skills `add-module`, `add-aggregate`, `add-slice` and `add-domain-event`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution.
 
 `scripts/test-template.sh` runs the commands of [Getting started](#getting-started) in CI, from a fresh runner, on every push to `main` and every pull request: in temporary folders, on free ports, with and without the sample.
 
@@ -148,6 +148,17 @@ Each supported agent loads `AGENTS.md` by itself, through its own instruction fi
 
 A native adapter runs the check through the hooks of the agent, after each edit and before it hands back. With the fallback, nothing checks an edit as it is made: the agent follows `AGENTS.md`, which tells it to run the check script before it finishes. `CLAUDE.md` lives in `.claude/` because Copilot reads a `CLAUDE.md` at the root and expands its import, which would load `AGENTS.md` twice. Gemini CLI is not tried: it no longer serves personal Google accounts. [Agent support](docs/agents/support.md) records what each CLI reads, at a dated version.
 
+Four skills, in the Agent Skills format (`SKILL.md`), turn a business request into the template that generates its element, the code that completes it and the check:
+
+| Skill | Adds | Template |
+|---|---|---|
+| `add-module` | a module, registered in `Program.cs` and the map of `AGENTS.md` | `hardslice-module` |
+| `add-aggregate` | an aggregate with its invariants, their unit tests, its mapping and its migration | `hardslice-aggregate` |
+| `add-slice` | a command or a query, its business rule in the aggregate, its registration and its tests | `hardslice-command`, `hardslice-query` |
+| `add-domain-event` | a domain event raised by its aggregate, and the reaction that handles it with its tests | `hardslice-event` |
+
+Their source is `.claude/skills/`, which Claude Code and Copilot read; the template package copies them into `.agents/skills/`, which Codex and Gemini CLI read. Copilot reads both and keeps one skill per name. Each skill recalls the forbidden workarounds and never edits a protected file.
+
 A module is generated from the root of the solution, once it is restored (after a first build or check):
 
 ```text
@@ -270,7 +281,7 @@ A dash means the mode turns the rule off: `Minimum` keeps the rules that assume 
 - HS015 checks the endpoints mapped under `Features` only, and accepts the result types of `Microsoft.AspNetCore.Http.HttpResults` only: a custom `IResult` is reported. The module must call the method of the slice that maps the endpoint, not a helper of it.
 - PostgreSQL is the only database. SQL Server and Aspire orchestration are planned for v1.0.
 - Domain events are published to their handlers inside the transaction of the command, before saving: no outbox, no publication after commit, no bus and no asynchronous processing. A handler that sends a request through `IMediator` fails at runtime; an external effect in a handler is not detected.
-- Agents get instructions only: no skills or hooks yet, so every agent is at the fallback level. Skills, and the hooks of Claude Code, Codex and Copilot CLI, are planned for v0.3, the adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) for v0.5.
+- Agents get instructions and skills, but no hooks yet, so every agent is at the fallback level. The skills that fix a failure, and the hooks of Claude Code, Codex and Copilot CLI, are planned for v0.3, the adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) for v0.5.
 - `dotnet new hardslice-module`, `hardslice-aggregate`, `hardslice-command`, `hardslice-query` and `hardslice-event` read the application and its modules through `--project` only, once the web project is restored: `dotnet new` evaluates no project from the root of a solution, and cannot read a file before it creates the others. A refusal prints `The template ... was created successfully.` before `Post action failed.` and its error, and exits with code 105: nothing is created. They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module, `hardslice-aggregate` the migration to add, and `hardslice-event` how to raise the event. `hardslice-module` puts a `.gitkeep` in the folders it creates without file, as `dotnet new` creates no empty folder; with `--force`, it overwrites the contract of an existing module, its registrations included. The tests that `hardslice-command` and `hardslice-query` generate call the route of the group in kebab-case: after `--route`, change theirs. `hardslice-query` cannot check the aggregate: the compiler does. Its list result is `--result many`, not `list`, which `dotnet new` would read as its own `list` command. `hardslice-event` always creates its event: a reaction is generated with it, or with `--force` on an event left unchanged, and a reaction to an event already completed is written by hand, in the shape of the generated one.
 - The generated application has a Development configuration only: no production settings, authentication or deployment.
 - CI runs on Linux: `scripts/check.ps1` is verified with PowerShell 7 on Linux, not on Windows.

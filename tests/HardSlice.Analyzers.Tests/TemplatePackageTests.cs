@@ -64,6 +64,15 @@ public sealed class TemplatePackageTests
             PackedFiles(archive, "/hardslice-module/").ShouldBe(ModuleTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-aggregate/").ShouldBe(AggregateTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-event/").ShouldBe(EventTemplateFiles.Order(StringComparer.Ordinal));
+            // docs/agents/support.md: .claude/skills/ is the only source, the pack copies it into .agents/skills/ for Codex and Gemini CLI.
+            PackedFiles(archive, "/hardslice-api/.claude/skills/").ShouldBe(SkillNames.Select(skill => $"{skill}/SKILL.md").Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-api/.agents/skills/").ShouldBe(SkillNames.Select(skill => $"{skill}/SKILL.md").Order(StringComparer.Ordinal));
+            foreach (var skill in SkillNames)
+            {
+                var source = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", skill, "SKILL.md"));
+                TemplateEntry(archive, $".claude/skills/{skill}/SKILL.md").ShouldBe(source);
+                TemplateEntry(archive, $".agents/skills/{skill}/SKILL.md").ShouldBe(source, $"The copy of {skill} in .agents/skills/ differs from its source.");
+            }
         }
         finally
         {
@@ -501,6 +510,7 @@ public sealed class TemplatePackageTests
     [Theory]
     [InlineData("AGENTS.md")]
     [MemberData(nameof(AgentInstructionFiles))]
+    [MemberData(nameof(SkillFiles))]
     public void Agent_guidance_links_resolve_to_files_and_headings_of_the_template(string file)
     {
         var templateRoot = TemplateRoot(FindRepositoryRoot());
@@ -525,6 +535,180 @@ public sealed class TemplatePackageTests
     }
 
     public static TheoryData<string> AgentInstructionFiles() => new() { ".claude/CLAUDE.md", "GEMINI.md", ".github/copilot-instructions.md" };
+
+    // The skills of the template, each generating its element with the item template it names (PB-043).
+    private static readonly string[] SkillNames = ["add-aggregate", "add-domain-event", "add-module", "add-slice"];
+
+    public static TheoryData<string> SkillFiles()
+    {
+        var files = new TheoryData<string>();
+        foreach (var skill in SkillNames)
+            files.Add($".claude/skills/{skill}/SKILL.md");
+        return files;
+    }
+
+    // The files that an agent never edits (PB-046, PB-048): a skill names them only to forbid them.
+    private static readonly string[] ProtectedPaths =
+    [
+        ".editorconfig", "hardslice.json", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props",
+        ".config/dotnet-tools.json", "scripts/", "tests/MyApp.ArchitectureTests/", ".claude/", ".agents/"
+    ];
+
+    // The Agent Skills format: a header with the name of the folder (lowercase words and hyphens, at most 64 characters) and a
+    // description of at most 1024 characters, which says what the skill does and when to use it. The template holds the source
+    // only: the pack writes .agents/skills/.
+    [Fact]
+    public void Template_ships_each_skill_once_with_a_header_named_after_its_folder()
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var skillsRoot = Path.Combine(templateRoot, ".claude", "skills");
+
+        Directory.Exists(Path.Combine(templateRoot, ".agents")).ShouldBeFalse(".agents/skills/ is written by the pack from .claude/skills/, never by hand.");
+        Directory.EnumerateFiles(skillsRoot, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(skillsRoot, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(SkillNames.Select(skill => $"{skill}/SKILL.md"));
+
+        foreach (var skill in SkillNames)
+        {
+            var lines = File.ReadAllLines(Path.Combine(skillsRoot, skill, "SKILL.md"));
+            lines[0].ShouldBe("---", $"{skill} does not start with its header.");
+            var end = Array.IndexOf(lines, "---", 1);
+            end.ShouldBeGreaterThan(0, $"{skill} has no end to its header.");
+            var header = lines[1..end]
+                .Select(line => line.Split(':', 2))
+                .ToDictionary(field => field[0], field => field[1].Trim(), StringComparer.Ordinal);
+
+            header.Keys.Order(StringComparer.Ordinal).ShouldBe(["description", "name"]);
+            header["name"].ShouldBe(skill);
+            header["name"].ShouldMatch("^[a-z0-9]+(-[a-z0-9]+)*$");
+            header["name"].Length.ShouldBeLessThanOrEqualTo(64);
+            header["description"].Length.ShouldBeInRange(100, 1024);
+            header["description"].ShouldContain("Use when", Case.Sensitive, $"The description of {skill} does not say when to use it.");
+            header["description"].ShouldContain("dotnet new hardslice-", Case.Sensitive, $"The description of {skill} does not name its template.");
+            lines.Skip(end + 1).ShouldContain(line => line.StartsWith("# ", StringComparison.Ordinal));
+        }
+    }
+
+    // Each dotnet new command of a skill names an item template of the package, options that the template declares, and a
+    // value among its choices. The skill generates its element with its own template and runs the check after.
+    [Theory]
+    [InlineData("add-module", "hardslice-module")]
+    [InlineData("add-aggregate", "hardslice-aggregate")]
+    [InlineData("add-slice", "hardslice-command")]
+    [InlineData("add-slice", "hardslice-query")]
+    [InlineData("add-domain-event", "hardslice-event")]
+    public void Skill_generates_its_element_with_dotnet_new_commands_that_exist_in_the_package(string skill, string template)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var text = File.ReadAllText(Path.Combine(TemplateRoot(repositoryRoot), ".claude", "skills", skill, "SKILL.md"));
+        var commands = Regex.Matches(text, @"dotnet new (?<template>[\w-]+)(?<arguments>(?:[ ]+(?:--[a-z-]+|[^\s`'""-][^\s`'""]*))*)")
+            .Select(match => (Template: match.Groups["template"].Value, Arguments: match.Groups["arguments"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)))
+            .ToArray();
+
+        commands.ShouldContain(command => command.Template == template && command.Arguments.Contains("--project"), $"{skill} does not run {template} on the web project.");
+        commands.SelectMany(command => command.Arguments.SkipWhile(argument => argument != "--project").Skip(1).Take(1))
+            .ShouldAllBe(project => project == "src/MyApp/MyApp.csproj" && File.Exists(Path.Combine(TemplateRoot(repositoryRoot), project)));
+        foreach (var (name, arguments) in commands)
+        {
+            var options = TemplateOptions(repositoryRoot, name, skill);
+            for (var index = 0; index < arguments.Length; index++)
+            {
+                if (arguments[index].StartsWith("--", StringComparison.Ordinal))
+                    AcceptsOption(options, arguments[index], index + 1 < arguments.Length ? arguments[index + 1] : null)
+                        .ShouldBeTrue($"{skill} runs dotnet new {name} with {arguments[index]} {(index + 1 < arguments.Length ? arguments[index + 1] : "")}, which it does not declare among its options and choices.");
+            }
+        }
+
+        // The options that the text quotes, such as `--result many`, belong to one of the templates the skill runs.
+        var templates = commands.Select(command => command.Template).Distinct().Select(name => TemplateOptions(repositoryRoot, name, skill)).ToArray();
+        foreach (Match quoted in Regex.Matches(text, @"`(?<option>--[a-z-]+)(?: (?<value>[^`\s]+))?`"))
+        {
+            var value = quoted.Groups["value"].Success ? quoted.Groups["value"].Value : null;
+            templates.Any(options => AcceptsOption(options, quoted.Groups["option"].Value, value))
+                .ShouldBeTrue($"{skill} quotes {quoted.Value}, which no template it runs declares among its options and choices.");
+        }
+
+        text.ShouldContain("bash scripts/check.sh");
+        text.ShouldContain("pwsh scripts/check.ps1");
+    }
+
+    // The options of an item template, by long name, with the values of a choice: those of dotnet new itself that a skill may use
+    // accept any value.
+    private static Dictionary<string, string[]?> TemplateOptions(string repositoryRoot, string template, string skill)
+    {
+        var root = Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", template);
+        Directory.Exists(root).ShouldBeTrue($"{skill} runs dotnet new {template}, which the package does not ship.");
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
+        var options = host.RootElement.GetProperty("symbolInfo").EnumerateObject().ToDictionary(
+            symbol => $"--{symbol.Value.GetProperty("longName").GetString()}",
+            symbol => symbols.GetProperty(symbol.Name).GetProperty("datatype").GetString() == "choice"
+                ? symbols.GetProperty(symbol.Name).GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()!).ToArray()
+                : null,
+            StringComparer.Ordinal);
+        options["--project"] = null;
+        options["--name"] = null;
+        options["--force"] = null;
+        return options;
+    }
+
+    // A placeholder such as <Dto>, or no value, stands for any value.
+    private static bool AcceptsOption(Dictionary<string, string[]?> options, string option, string? value) =>
+        options.TryGetValue(option, out var choices)
+        && (choices is null || value is null || value.StartsWith('<') || value.StartsWith("--", StringComparison.Ordinal) || choices.Contains(value));
+
+    // A skill cites only paths of a solution generated with or without --no-sample: never the Bookings sample.
+    [Theory]
+    [MemberData(nameof(SkillFiles))]
+    public void Every_path_a_skill_cites_exists_in_a_solution_generated_without_the_sample(string file)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var text = File.ReadAllText(Path.Combine(templateRoot, file));
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(templateRoot, ".template.config", "template.json")));
+        var sampleOnly = template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("exclude").EnumerateArray()
+            .Select(exclude => exclude.GetString()!.Replace("/**", "/", StringComparison.Ordinal))
+            .ToArray();
+
+        text.ShouldNotContain("Booking", Case.Insensitive, $"{file} mentions the Bookings sample, which --no-sample leaves out.");
+        text.ShouldNotContain("<!--#", customMessage: $"{file} holds a template condition: both variants share the same skill.");
+        var citedPaths = Regex.Matches(text, @"`(?<path>(?:src|tests|docs|scripts)/[^`<>\s]*|[\w.]+\.(?:md|slnx|json))`")
+            .Select(match => match.Groups["path"].Value)
+            .Distinct()
+            .ToArray();
+
+        citedPaths.ShouldContain("AGENTS.md");
+        citedPaths
+            .Where(path => !File.Exists(Path.Combine(templateRoot, path)) && !Directory.Exists(Path.Combine(templateRoot, path)))
+            .ShouldBeEmpty($"{file} cites paths that the generated solution does not contain.");
+        citedPaths
+            .Where(path => sampleOnly.Any(excluded => path.StartsWith(excluded, StringComparison.Ordinal)))
+            .ShouldBeEmpty($"{file} cites paths that only the Bookings sample holds.");
+    }
+
+    // A skill recalls the forbidden workarounds in its own Never section, which links to Forbidden and names every protected file.
+    // Outside that section, it never names a protected file, except to run the check scripts.
+    [Theory]
+    [MemberData(nameof(SkillFiles))]
+    public void Skill_recalls_the_forbidden_workarounds_and_never_proposes_to_edit_a_protected_file(string file)
+    {
+        var lines = File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), file));
+        var never = lines.SkipWhile(line => line != "## Never").ToArray();
+        var steps = string.Join('\n', lines.TakeWhile(line => line != "## Never"))
+            .Replace("bash scripts/check.sh", "", StringComparison.Ordinal)
+            .Replace("pwsh scripts/check.ps1", "", StringComparison.Ordinal);
+        var neverText = string.Join('\n', never);
+
+        never.ShouldNotBeEmpty($"{file} has no Never section.");
+        neverText.ShouldContain("](../../../AGENTS.md#forbidden)");
+        neverText.ShouldContain("stop and explain the conflict");
+        foreach (var path in ProtectedPaths)
+        {
+            neverText.ShouldContain($"`{path}`", Case.Sensitive, $"The Never section of {file} does not name the protected {path}.");
+            steps.ShouldNotContain(path, Case.Sensitive, $"{file} names the protected {path} outside its Never section.");
+        }
+    }
 
     // GitHub anchors of the headings of a Markdown file: lowercase, punctuation removed, spaces as hyphens.
     private static HashSet<string> Headings(string markdown) =>

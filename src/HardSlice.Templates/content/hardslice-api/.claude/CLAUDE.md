@@ -7,4 +7,4 @@ For Claude Code only. `AGENTS.md`, imported below, holds the rules of every agen
 ## Claude Code
 
 - Hooks: none yet. Nothing checks your edits as you make them: before you finish, run the check script as [Verify](../AGENTS.md#verify) says.
-- Skills: Claude Code reads the skills of `.claude/skills/`. HardSlice ships none yet.
+- Skills: Claude Code reads the skills of `.claude/skills/`: `add-module`, `add-aggregate`, `add-slice` and `add-domain-event`, listed in the [Agent kit](../AGENTS.md#agent-kit).
