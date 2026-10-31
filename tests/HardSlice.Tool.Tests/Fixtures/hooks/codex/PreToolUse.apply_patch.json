@@ -1,0 +1,14 @@
+{
+  "session_id": "01a19178-4fb3-7b20-a080-0ce9948cfcb6",
+  "turn_id": "01a19178-5132-7f12-ac92-511afd1bb59c",
+  "transcript_path": "/home/dev/.codex/sessions/2026/10/31/rollout-2026-10-31T10-19-03-01a19178-4fb3-7b20-a080-0ce9948cfcb6.jsonl",
+  "cwd": "/home/dev/Demo",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-6-astra",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: /home/dev/Demo/src/Demo.Domain/Bookings/BookingStatus.cs\n@@\n-public enum BookingStatus\n+/// <summary>Status of a booking.</summary>\n+public enum BookingStatus\n*** End Patch"
+  },
+  "tool_use_id": "exec-a1a4b98a-d659-4eab-bbfb-058858673a8b"
+}

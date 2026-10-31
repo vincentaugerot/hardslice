@@ -1,0 +1,11 @@
+{
+  "sessionId": "0b306005-06da-41bb-b80e-4a6fff5b87ee",
+  "timestamp": 1793441699590,
+  "cwd": "/home/dev/Demo",
+  "toolName": "edit",
+  "toolArgs": {
+    "path": "/home/dev/Demo/src/Demo.Domain/Bookings/BookingStatus.cs",
+    "old_str": "namespace Demo.Domain.Bookings;\n\npublic enum BookingStatus",
+    "new_str": "namespace Demo.Domain.Bookings;\n\n/// <summary>Status of a booking.</summary>\npublic enum BookingStatus"
+  }
+}

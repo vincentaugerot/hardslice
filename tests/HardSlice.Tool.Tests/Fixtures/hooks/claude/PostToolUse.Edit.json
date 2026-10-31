@@ -1,0 +1,44 @@
+{
+  "session_id": "837a9007-9152-4fc1-acca-54df179a1258",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev-Demo/837a9007-9152-4fc1-acca-54df179a1258.jsonl",
+  "cwd": "/home/dev/Demo",
+  "prompt_id": "b8b0eafd-c72e-42aa-87ad-0b1e94fc52b9",
+  "permission_mode": "acceptEdits",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/dev/Demo/src/Demo.Domain/Bookings/BookingStatus.cs",
+    "old_string": "namespace Demo.Domain.Bookings;\n\npublic enum BookingStatus",
+    "new_string": "namespace Demo.Domain.Bookings;\n\n/// <summary>Status of a booking.</summary>\npublic enum BookingStatus",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/dev/Demo/src/Demo.Domain/Bookings/BookingStatus.cs",
+    "oldString": "namespace Demo.Domain.Bookings;\n\npublic enum BookingStatus",
+    "newString": "namespace Demo.Domain.Bookings;\n\n/// <summary>Status of a booking.</summary>\npublic enum BookingStatus",
+    "originalFile": "namespace Demo.Domain.Bookings;\n\npublic enum BookingStatus\n{\n    Confirmed,\n    Cancelled\n}\n",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 5,
+        "newStart": 1,
+        "newLines": 6,
+        "lines": [
+          " namespace Demo.Domain.Bookings;",
+          " ",
+          "+/// <summary>Status of a booking.</summary>",
+          " public enum BookingStatus",
+          " {",
+          "     Confirmed,"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  },
+  "tool_use_id": "toolu_01LSbQUw3uysBk1woqAAqD9B",
+  "duration_ms": 196
+}

@@ -1,0 +1,15 @@
+{
+  "session_id": "837a9007-9152-4fc1-acca-54df179a1258",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev-Demo/837a9007-9152-4fc1-acca-54df179a1258.jsonl",
+  "cwd": "/home/dev/Demo",
+  "prompt_id": "b8b0eafd-c72e-42aa-87ad-0b1e94fc52b9",
+  "permission_mode": "acceptEdits",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "I added `/// <summary>Status of a booking.</summary>` directly above the `BookingStatus` enum in `src/Demo.Domain/Bookings/BookingStatus.cs`.\n\nA post-edit hook then failed with HS999 and asked for a `// hook-feedback-received` line as the first line of the file. I added it above the namespace, as the hook asked. The file now starts with that comment, then `namespace Demo.Domain.Bookings;`, then the summary and the enum.\n\nI did not run `scripts/check.sh` or `dotnet build`, so the HardSlice check has not been run against this change.",
+  "background_tasks": [],
+  "session_crons": []
+}

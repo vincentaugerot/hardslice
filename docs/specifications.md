@@ -265,7 +265,7 @@ Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en 
 3. **Boucler** (Claude Code d'abord) :
    - Après chaque édition d'un `.cs` (`PostToolUse`), un build incrémental. Les erreurs HS reviennent à l'agent (code de sortie 2). Budget : moins de 10 secondes.
    - Avant que l'agent rende la main (`Stop`), `scripts/check.sh` lance le build complet, les tests d'architecture et les tests de la slice touchée. En cas d'échec, l'agent continue de corriger. Budget : moins de 60 secondes. Si la vérification complète dépasse ce budget, le hook lance une vérification réduite aux slices touchées ; seule la vérification complète fait foi (décision du 31/10/2026, selon la mesure de PB-045).
-   - Les autres CLI : hooks équivalents quand ils existent (à vérifier pour Codex, Copilot et Gemini), sinon `AGENTS.md` leur demande de lancer `scripts/check.sh` avant de finir.
+   - Les autres CLI : hooks équivalents quand ils existent, sinon `AGENTS.md` leur demande de lancer `scripts/check.sh` avant de finir. Codex (`.codex/hooks.json`) et Copilot CLI (`.github/hooks/`) ont un adaptateur natif ; Gemini CLI garde le fallback en v0.3 ([prise en charge des agents](agents/support.md), PB-034).
 
 ### Skills
 
@@ -278,7 +278,7 @@ Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en 
 | `extract-to-domain` | Déplace une règle dupliquée dans deux slices vers l'agrégat |
 | `fix-architecture-violation` | Lit la fiche de la règle, applique la correction, relance la vérification |
 
-Les skills sont au format Agent Skills (`SKILL.md`). Vérifier quels autres CLI le lisent.
+Les skills sont au format Agent Skills (`SKILL.md`), lu par les quatre CLI : la source est `.claude/skills/`, et une copie produite au pack dans `.agents/skills/` sert Codex et Gemini CLI ([prise en charge des agents](agents/support.md)).
 
 ### Garde-fous pour les agents
 
@@ -344,8 +344,8 @@ Cette table décrit le périmètre produit promis. Le séquençage d'exécution 
 
 1. ~~ArchUnitNET ou NetArchTest (maintenance, expressivité, vitesse) ?~~ **Résolu : ArchUnitNET, maintenu, expose la cible de chaque dépendance et permet de nommer le type fautif (évaluation dans PB-014).**
 2. ~~Analyseurs dans la solution puis paquet NuGet ?~~ **Résolu : paquet `HardSlice.Analyzers` dès le premier incrément.**
-3. Quels hooks existent aujourd'hui pour Codex, Copilot CLI et Gemini CLI ?
-4. Quels CLI lisent les skills au format `SKILL.md` ?
+3. ~~Quels hooks existent aujourd'hui pour Codex, Copilot CLI et Gemini CLI ?~~ **Résolu : les trois ont un hook après outil et un hook de fin de tour qui renvoient une erreur à l'agent et le font continuer. Ceux de Codex et de Copilot CLI sont essayés et retenus ; ceux de Gemini CLI, non essayés faute de compte servi, laissent le fallback en v0.3 ([prise en charge des agents](agents/support.md), PB-034).**
+4. ~~Quels CLI lisent les skills au format `SKILL.md` ?~~ **Résolu : les quatre. Claude Code lit `.claude/skills/`, Codex `.agents/skills/`, Gemini CLI `.agents/skills/` et `.gemini/skills/`, Copilot CLI les trois ([prise en charge des agents](agents/support.md), PB-034).**
 5. Seuil de découpage d'une slice en plusieurs fichiers : 200 lignes, ou au nombre de types ?
 6. Les modules restent-ils des dossiers d'un même projet, ou deviennent-ils des projets séparés quand la solution grossit ?
 7. ~~Où vit la persistance d'un module ?~~ **Résolu : `Shared/Persistence` contient `AppDbContext`, la connexion et les migrations ; chaque configuration EF Core d'agrégat vit à la racine de son module, hors de toute slice.**

@@ -1,0 +1,26 @@
+{
+  "session_id": "0c5ea0c0-f6b7-4e75-ae52-9f1e49b640e7",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev-Demo/0c5ea0c0-f6b7-4e75-ae52-9f1e49b640e7.jsonl",
+  "cwd": "/home/dev/Demo",
+  "prompt_id": "ca48e51e-bcea-43c7-a58f-c61c74036237",
+  "permission_mode": "acceptEdits",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/dev/Demo/src/Demo.Domain/Bookings/BookingNote.cs",
+    "content": "namespace Demo.Domain.Bookings;\n\npublic sealed record BookingNote(string Text);\n"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/dev/Demo/src/Demo.Domain/Bookings/BookingNote.cs",
+    "content": "namespace Demo.Domain.Bookings;\n\npublic sealed record BookingNote(string Text);\n",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  },
+  "tool_use_id": "toolu_01SeyS2WY2WrWBzCMjBpy23F",
+  "duration_ms": 21
+}

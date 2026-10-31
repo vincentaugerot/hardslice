@@ -1,0 +1,10 @@
+{
+  "sessionId": "f901caa0-1d8c-4c9e-bae4-38c500cae336",
+  "timestamp": 1793441552786,
+  "cwd": "/home/dev/Demo",
+  "toolName": "bash",
+  "toolArgs": {
+    "command": "cd /home/dev/Demo && cat > /tmp/bookingstatus.tmp << 'EOF'\nnamespace Demo.Domain.Bookings;\n\n/// <summary>Status of a booking.</summary>\npublic enum BookingStatus\n{\n    Confirmed,\n    Cancelled\n}\nEOF\ncat /tmp/bookingstatus.tmp > src/Demo.Domain/Bookings/BookingStatus.cs && cat src/Demo.Domain/Bookings/BookingStatus.cs",
+    "description": "Add XML doc comment to BookingStatus.cs"
+  }
+}

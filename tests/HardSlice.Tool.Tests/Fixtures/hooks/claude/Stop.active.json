@@ -1,0 +1,15 @@
+{
+  "session_id": "837a9007-9152-4fc1-acca-54df179a1258",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev-Demo/837a9007-9152-4fc1-acca-54df179a1258.jsonl",
+  "cwd": "/home/dev/Demo",
+  "prompt_id": "b8b0eafd-c72e-42aa-87ad-0b1e94fc52b9",
+  "permission_mode": "acceptEdits",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": true,
+  "last_assistant_message": "I created `HOOK_STOP_SEEN.txt` in the Demo directory with the word `ok`, as the stop hook asked. No `.sln` file was listed there, so I used the Demo directory as the solution root.\n\nThe `BookingStatus` doc comment from the earlier task is still in place. The `// hook-feedback-received` line is still the first line of `src/Demo.Domain/Bookings/BookingStatus.cs`. I have not run the check script, so the HardSlice build is still unverified.",
+  "background_tasks": [],
+  "session_crons": []
+}

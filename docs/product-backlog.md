@@ -1958,6 +1958,7 @@ Une solution générée contient les quatre fichiers d'instructions. `CLAUDE.md`
 **Périmètre**
 
 - chaque fichier ne contient que ce qui est propre à son CLI : lien ou import d'`AGENTS.md`, hooks actifs ou fallback « run the check script before you finish », emplacement des skills ;
+- mécanismes retenus par PB-034 ([prise en charge des agents](agents/support.md)) : `GEMINI.md` importe `@./AGENTS.md` ; `.github/copilot-instructions.md` ne réimporte pas `AGENTS.md`, que Copilot lit déjà ; Copilot lit aussi `CLAUDE.md` et `GEMINI.md`, qui commencent donc par la CLI qu'ils visent ; essai à consigner dans `docs/agents/support.md` : Copilot ne charge pas `AGENTS.md` une seconde fois par l'import de `CLAUDE.md` ;
 - test : aucun fichier ne recopie une règle d'or d'`AGENTS.md` ; chaque lien résout vers un fichier livré ;
 - `AGENTS.md` : section « Agent kit » courte qui liste les quatre fichiers, les skills et les hooks ;
 - `README.md` : agents pris en charge et leur niveau (adaptateur natif ou fallback).
@@ -1987,7 +1988,7 @@ Une solution générée contient quatre skills au format Agent Skills qui ajoute
 - `add-aggregate` : `hardslice-aggregate`, invariants et tests, migration ;
 - `add-domain-event` : `hardslice-event`, levée par l'agrégat, réaction et ses tests ;
 - chaque skill rappelle les contournements interdits et ne propose jamais de modifier un fichier protégé ;
-- copies vers les emplacements des autres CLI produites au pack si PB-034 l'exige ; test d'égalité avec la source ;
+- copie de chaque skill dans `.agents/skills/`, produite au pack, pour Codex et Gemini CLI (PB-034 : Copilot lit `.claude/skills/` et ne garde qu'une skill par nom) ; test d'égalité avec la source ;
 - `AGENTS.md` : « Adding a slice » et « Adding a first module » renvoient aux skills et aux templates, ce qui libère la place sous 150 lignes.
 
 **Dépendances**
@@ -2098,6 +2099,7 @@ Dans une solution générée, après chaque édition d'un `.cs` par Claude Code,
   - `Stop` : la vérification retenue par PB-045, `scripts/check.sh` ou `scripts/check.sh --affected` ; en échec, la fin est bloquée avec les erreurs ; si le hook de fin est déjà actif pour la même erreur, au plus trois relances, puis l'agent rend la main en disant que la vérification échoue ;
   - `PreToolUse` sur les outils d'édition : refus des fichiers protégés (`.editorconfig`, `hardslice.json`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `.config/dotnet-tools.json`, `scripts/`, `tests/<App>.ArchitectureTests/`, `.claude/`), avec renvoi à la section « Forbidden » ;
 - la traduction entre la charge utile du hook et le script est faite par `dotnet hardslice hook claude <événement>`, qui lit l'entrée standard ; une commande identique sous Linux, macOS et Windows ;
+- Copilot CLI exécute aussi les hooks de `.claude/settings.json`, sans renvoyer leur code `2` à l'agent (PB-034) : quand `COPILOT_CLI` est défini, `dotnet hardslice hook claude` sort avec le code `0` sans rien lancer ;
 - `AGENTS.md` et `CLAUDE.md` : hooks actifs et leur budget.
 
 **Limites**
@@ -2110,7 +2112,7 @@ PB-045.
 
 **Cas vérifiés**
 
-Tests de `HardSlice.Tool` avec les charges utiles de PB-034 : `.cs` fautif (code `2`, diagnostic), fichier non `.cs` (aucun build), fichier protégé (refus), fin sur échec puis plafond de relances, chemin Windows.
+Tests de `HardSlice.Tool` avec les charges utiles de PB-034 (`tests/HardSlice.Tool.Tests/Fixtures/hooks/claude/`) : `.cs` fautif (code `2`, diagnostic), fichier non `.cs` (aucun build), fichier protégé (refus), fin sur échec puis plafond de relances, chemin Windows, charge utile de Copilot en mode compatible (`copilot-claude-compat/`, aucun build).
 
 **Acceptation**
 
@@ -2128,6 +2130,7 @@ Pour chacun des trois CLI, la solution générée contient l'adaptateur natif re
 **Périmètre**
 
 - configuration native à l'emplacement exigé par le CLI, versionnée dans le template ; traduction de sa charge utile par `dotnet hardslice hook <cli> <événement>` ;
+- retenus par PB-034 ([prise en charge des agents](agents/support.md)) : Codex, `.codex/hooks.json` (`PostToolUse` sur `apply_patch` et `Stop`, code `2`), avec l'approbation par `/hooks` décrite dans `README.md` et `AGENTS.md` et une commande stable d'une version à l'autre ; Copilot CLI, `.github/hooks/hardslice.json` (`postToolUse` sur `edit` et `create` par `additionalContext`, `agentStop` par `decision: "block"`) ; Gemini CLI, fallback, faute d'essai possible sans clé API ;
 - protection des fichiers protégés là où le CLI la permet ;
 - tableau des capacités par CLI dans `docs/agents/support.md` et `README.md`, tenu à jour par ce ticket ;
 - un CLI sans mécanisme retenu n'a pas de configuration morte dans le template.

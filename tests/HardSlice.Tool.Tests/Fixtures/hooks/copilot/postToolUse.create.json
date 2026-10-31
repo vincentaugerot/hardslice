@@ -1,0 +1,14 @@
+{
+  "sessionId": "0b306005-06da-41bb-b80e-4a6fff5b87ee",
+  "timestamp": 1793441709829,
+  "cwd": "/home/dev/Demo",
+  "toolName": "create",
+  "toolArgs": {
+    "path": "/home/dev/Demo/HOOK_STOP_SEEN.txt",
+    "file_text": "ok"
+  },
+  "toolResult": {
+    "resultType": "success",
+    "textResultForLlm": "Created file /home/dev/Demo/HOOK_STOP_SEEN.txt with 2 characters"
+  }
+}
