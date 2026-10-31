@@ -6,14 +6,14 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 
 | Path | Contains |
 |---|---|
-| `src/MyApp.Domain/` | The contracts that classify domain types: `IEntity`, `IAggregateRoot` (an entity) and `IDomainEvent`. |
+| `src/MyApp.Domain/` | The contracts that classify domain types: `IEntity`, `IAggregateRoot` (an entity that records its domain events) and `IDomainEvent`. |
 | `src/MyApp.Domain/<Module>/` | Aggregates, value objects and business rules. Depends on the base class library only. |
 | `src/MyApp.Domain/<Module>/Events/` | Domain events raised by the module aggregates. |
-| `src/MyApp/Features/<Module>/<Slice>/` | One use case: its command or query, validator, handler and endpoint. |
+| `src/MyApp/Features/<Module>/<Slice>/` | One use case: its command or query, validator, handler and endpoint. Or one reaction to a domain event: its handler. |
 | `src/MyApp/Features/<Module>/` | Module registration (`<Module>Module.cs`), EF Core mapping of its aggregates (`<Aggregate>Configuration.cs`) and the public contract shared by its slices. |
 | `src/MyApp/Shared/` | Cross-cutting code only, never a use case. |
-| `src/MyApp/Shared/Messaging/` | The in-house mediator: `IMediator`, `ICommand<T>`, `IQuery<T>`, `IRequestHandler<,>`, `IPipelineBehavior<,>`. |
-| `src/MyApp/Shared/Behaviors/` | The pipeline every request goes through, in order: logs, validation, then one transaction per command. Also the HTTP answers to validation and domain errors. |
+| `src/MyApp/Shared/Messaging/` | The in-house mediator: `IMediator`, `ICommand<T>`, `IQuery<T>`, `IRequestHandler<,>`, `IPipelineBehavior<,>`, and `IDomainEventHandler<>`. |
+| `src/MyApp/Shared/Behaviors/` | The pipeline every request goes through, in order: logs, validation, then one transaction per command, which publishes its domain events before saving. Also the HTTP answers to validation and domain errors. |
 | `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations. It declares no module type. |
 | `tests/MyApp.Tests/` | Unit tests of the domain, the validators and `Shared`, at the same path as the code they test. |
 | `tests/MyApp.IntegrationTests/` | Tests on a real PostgreSQL (Testcontainers), at the same path as the slice they test. |
@@ -35,8 +35,8 @@ Modules and slices:
 
 ## Golden rules
 
-1. For a use case, read its slice and the aggregate it uses, nothing else. A slice is the folder `Features/<Module>/<Slice>/` and its namespace, nothing outside: one request `<Slice>Command` or `<Slice>Query`, `<Slice>Handler`, `<Slice>Validator` if any, and the static class `<Slice>Endpoint` (HS004).
-2. A slice never uses a type from another slice, and its handler, validator and endpoint stay `internal` (HS016). Share through the domain, a domain event or the module public contract.
+1. For a use case, read its slice and the aggregate it uses, nothing else. A slice is the folder `Features/<Module>/<Slice>/` and its namespace, nothing outside: one request `<Slice>Command` or `<Slice>Query`, `<Slice>Handler`, `<Slice>Validator` if any, and the static class `<Slice>Endpoint` (HS004). A reaction slice holds one domain event handler `<Slice>Handler` and no request nor endpoint.
+2. A slice never uses a type from another slice, and its handlers, validator and endpoint stay `internal` (HS016). Share through the domain, a domain event or the module public contract.
 3. A module uses another module only through its public contract: the types directly in `MyApp.Features.<Module>` (HS012).
 4. Business rules live in the domain aggregates, not in handlers or endpoints: an entity has no public setter, `init` accessor or writable field, and its state changes through its methods (HS007). An aggregate holds another aggregate by its identifier only, `Guid RoomId` and never `Room Room`, from its root and from its child entities (HS008). An endpoint never reaches the database: it sends a command or a query through `IMediator` (HS003). It is mapped in its slice, on the group of its module, and returns `TypedResults` (HS015).
 5. A command handler returns an identifier, a DTO of values or nothing: never an entity, not even in a collection, a `Result<T>` or a DTO (HS005). A query handler never writes, never calls `Find` nor `AsTracking`, and starts each query on an entity with `AsNoTracking()` before projecting it to a DTO (HS006).
@@ -50,7 +50,7 @@ Modules and slices:
 
 ## Adding a first module
 
-1. Create the aggregate in `src/MyApp.Domain/<Module>/`, namespace `MyApp.Domain.<Module>`: a `sealed` class implementing `IAggregateRoot` whose state changes only through its methods, created by a static factory method that checks its rules, with a private parameterless constructor for persistence. Unit test it in `tests/MyApp.Tests/Domain/<Module>/`.
+1. Create the aggregate in `src/MyApp.Domain/<Module>/`, namespace `MyApp.Domain.<Module>`: a `sealed` class implementing `IAggregateRoot` whose state changes only through its methods, with a private list of events that `DequeueDomainEvents()` returns and empties, created by a static factory method that checks its rules, with a private parameterless constructor for persistence. Unit test it in `tests/MyApp.Tests/Domain/<Module>/`.
 2. Create `src/MyApp/Features/<Module>/<Module>Module.cs`, namespace `MyApp.Features.<Module>`: a public static class with `Add<Module>Module(this IServiceCollection services)`, which registers the slices, and `Map<Module>Module(this IEndpointRouteBuilder endpoints)`, which maps them under one `MapGroup`. Call both from `Program.cs`.
 3. Map the aggregate and add the first migration: see [Changing the database](#changing-the-database).
 4. Add its slices as below, then add the module to the map above.
@@ -62,11 +62,11 @@ Modules and slices:
 <!--#if (!NoSample) -->
    A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as an overlapping booking, throws a `ConflictException`, answered with 409.
    `BookingPeriod` normalizes to UTC and truncates to microseconds before checking its duration and overlaps; a period that becomes empty is invalid. The database also requires `End > Start`; repair any legacy empty periods explicitly before applying `AddBookingPositivePeriodConstraint`.
-   When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` (HS009) named in the past tense (HS019), implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`. Follow `BookingConfirmed`, recorded by `Booking.Confirm` and exposed through `Booking.DomainEvents`. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
+   When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` (HS009) named in the past tense (HS019), implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`. Follow `BookingConfirmed`, recorded by `Booking.Confirm` and taken by `Booking.DequeueDomainEvents()`. Events are not stored: the EF Core mapping ignores `DomainEvents`. The pipeline publishes them to their `IDomainEventHandler<TEvent>` after the command handler and before saving, in the same transaction: an exception of a handler rolls the whole command back. A handler lives alone in a reaction slice `Features/<Module>/<Reaction>/`, such as `NotifyOnBookingConfirmed`, stays `internal`, is registered in `<Module>Module.cs` and tested at its path (HS014, HS018). It changes aggregates through `AppDbContext`, never sends a request through `IMediator` (an error names it), and never has an external effect, such as an e-mail or an HTTP call, which would happen even if the transaction rolls back.
 2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`. Follow `ConfirmBooking` as the example:
 <!--#else -->
    A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as a duplicate, throws a `ConflictException`, answered with 409.
-   When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` (HS009) named in the past tense (HS019), implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`, kept in a private list and exposed through a read-only `DomainEvents` property. Events are not stored: the EF Core mapping ignores `DomainEvents`. They are not published to handlers yet.
+   When the use case produces a fact other code may react to, the aggregate records a domain event: a `record` (HS009) named in the past tense (HS019), implementing `IDomainEvent`, in `src/MyApp.Domain/<Module>/Events/`, kept in a private list, exposed through a read-only `DomainEvents` property and taken by `DequeueDomainEvents()` of `IAggregateRoot`, which empties the list. Events are not stored: the EF Core mapping ignores `DomainEvents`. The pipeline publishes them to their `IDomainEventHandler<TEvent>` after the command handler and before saving, in the same transaction: an exception of a handler rolls the whole command back. A handler lives alone in a reaction slice `Features/<Module>/<Reaction>/`, such as `NotifyOnOrderShipped`, stays `internal`, is registered in `<Module>Module.cs` and tested at its path (HS014, HS018). It changes aggregates through `AppDbContext`, never sends a request through `IMediator` (an error names it), and never has an external effect, such as an e-mail or an HTTP call, which would happen even if the transaction rolls back.
 2. Create `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs` with namespace `MyApp.Features.<Module>.<Slice>`, containing:
 <!--#endif -->
    - a public request: an `ICommand<TResponse>` when it changes state, an `IQuery<TResponse>` when it only reads. The response type is exact (invariant), matching its handler and pipeline;

@@ -5,7 +5,7 @@ using MyApp.Shared.Messaging;
 
 namespace MyApp.ArchitectureTests;
 
-// Commands, command handlers and validators, identified by the contracts of Shared/Messaging and FluentValidation.
+// Commands, command handlers, domain event handlers and validators, identified by the contracts of Shared/Messaging and FluentValidation.
 // A generic validator must accept the command's actual arguments and constraints, including an open command's parameters.
 internal static class RequestTypes
 {
@@ -16,6 +16,12 @@ internal static class RequestTypes
     public static Type? CommandHandledBy(Type type) =>
         IsConcrete(type)
             ? GenericArguments(type, typeof(IRequestHandler<,>)).Select(arguments => arguments[0]).FirstOrDefault(IsCommandContract)
+            : null;
+
+    // The first domain event a concrete domain event handler handles, or null when it is no domain event handler.
+    public static Type? EventHandledBy(Type type) =>
+        IsConcrete(type)
+            ? GenericArguments(type, typeof(IDomainEventHandler<>)).Select(arguments => arguments[0]).FirstOrDefault()
             : null;
 
     public static IReadOnlyList<Type> ValidatorsIn(IEnumerable<Type> types) =>

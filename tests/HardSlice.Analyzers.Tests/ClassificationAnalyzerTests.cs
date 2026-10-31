@@ -18,7 +18,8 @@ public sealed class ClassificationAnalyzerTests
             "domainEvent": "MyApp.Domain.IDomainEvent, MyApp.Domain",
             "command": "MyApp.Shared.Messaging.ICommand`1, MyApp",
             "query": "MyApp.Shared.Messaging.IQuery`1, MyApp",
-            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp"
+            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp",
+            "domainEventHandler": "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp"
           },
           "shared": {
             "allowedFolders": ["Messaging", "Persistence", "Behaviors"]
@@ -50,6 +51,11 @@ public sealed class ClassificationAnalyzerTests
         public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse>
         {
             Task<TResponse> Handle(TRequest request, CancellationToken cancellationToken);
+        }
+
+        public interface IDomainEventHandler<in TEvent>
+        {
+            Task Handle(TEvent domainEvent, CancellationToken cancellationToken);
         }
         """;
 
@@ -586,6 +592,21 @@ public sealed class ClassificationAnalyzerTests
             .ShouldBeEmpty();
         (await AnalyzeAllAsync(application, configuration)).ShouldHaveSingleItem().GetMessage().ShouldStartWith(
             "hardslice.json declares no contract 'contracts.requestHandler'. The contracts of hardslice.json classify the types checked by HS004, HS005 and HS006. ");
+    }
+
+    // Only HS004 needs the domain event handler contract, to recognize reaction slices.
+    [Fact]
+    public async Task Reports_a_missing_domain_event_handler_contract_while_HS004_is_active()
+    {
+        var configuration = Configuration.Replace(",\n    \"domainEventHandler\": \"MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp\"", "");
+        configuration.ShouldNotContain("domainEventHandler");
+        var application = CompileApplication(CompileDomain().ToMetadataReference());
+
+        (await AnalyzeAllAsync(WithSeverities(application, ("HS004", ReportDiagnostic.Suppress)), configuration)).ShouldBeEmpty();
+        (await AnalyzeAllAsync(application, configuration)).ShouldHaveSingleItem().GetMessage().ShouldBe(
+            "hardslice.json declares no contract 'contracts.domainEventHandler'. The contracts of hardslice.json classify the types checked by HS004. "
+            + "Fix: restore hardslice.json from version control; it declares \"domainEventHandler\": \"MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp\". "
+            + "Doc: 'docs/rules/HS900.md'.");
     }
 
     [Fact]

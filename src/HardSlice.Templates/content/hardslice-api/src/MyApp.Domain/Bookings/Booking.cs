@@ -29,7 +29,7 @@ public sealed class Booking : IAggregateRoot
 
     public BookingStatus Status => _status;
 
-    // Events raised since the booking was created or loaded. Not persisted: a reloaded booking has none.
+    // Events raised and not yet published. Not persisted: a reloaded booking has none.
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
     // A room cannot hold two confirmed bookings whose periods overlap. existingBookings must include every
@@ -50,5 +50,12 @@ public sealed class Booking : IAggregateRoot
             throw new DomainException($"Booking '{Id}' is already cancelled.");
 
         _status = BookingStatus.Cancelled;
+    }
+
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents()
+    {
+        var domainEvents = _domainEvents.ToArray();
+        _domainEvents.Clear();
+        return domainEvents;
     }
 }

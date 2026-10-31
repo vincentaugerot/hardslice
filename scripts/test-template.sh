@@ -3,7 +3,7 @@
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable,
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
+# then proves a seeded violation of HS001, HS003, HS004 (a reaction slice included), HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
 # that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
@@ -258,6 +258,12 @@ echo "==> Checking that commands go through the generated solution's own mediato
     "Shared.Behaviors.TransactionBehaviorTests.Rolls_back_everything_a_command_saved_when_it_throws" \
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_never_commits_a_failed_commands_additions" \
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_reloads_the_state_before_a_failed_commands_changes" \
+    "Shared.Behaviors.DomainEventPublisherTests.Publishes_the_event_once_inside_the_transaction_before_anything_is_committed" \
+    "Shared.Behaviors.DomainEventPublisherTests.A_failing_handler_saves_nothing_drops_the_pending_events_and_answers_with_its_exception" \
+    "Shared.Behaviors.DomainEventPublisherTests.Calls_every_handler_of_the_event_in_registration_order" \
+    "Shared.Behaviors.DomainEventPublisherTests.Fails_with_the_name_of_the_event_when_handlers_raise_events_beyond_the_maximum_depth" \
+    "Shared.Behaviors.DomainEventPublisherTests.Fails_with_the_name_of_the_handler_when_it_sends_a_request_through_the_mediator" \
+    "Shared.Messaging.MediatorTests.Refuses_a_request_sent_while_a_domain_event_handler_runs_and_names_the_handler" \
     "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Rejects_a_command_without_room_with_a_validation_problem_before_its_handler" \
     "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Stores_offset_dates_in_UTC_and_rejects_the_equivalent_UTC_booking" \
     "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Rejects_sub_microsecond_periods_without_storing_or_blocking_the_room" \
@@ -893,7 +899,10 @@ probe_ambiguous_type() {
   cat > "$app/src/$app_name.Domain/$module/RoomSnapshot.cs" <<EOF
 namespace $app_name.Domain.$module;
 
-public sealed class RoomSnapshot : IAggregateRoot, IDomainEvent;
+public sealed class RoomSnapshot : IAggregateRoot, IDomainEvent
+{
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => [];
+}
 EOF
   expect_failure "HS901: 'RoomSnapshot' is both an entity and a domain event: it implements 'IAggregateRoot' and 'IDomainEvent'." "docs/rules/HS901.md" "a domain type of $app_name that is both an entity and an event" check.sh check.ps1
   rm "$app/src/$app_name.Domain/$module/RoomSnapshot.cs"
@@ -956,6 +965,75 @@ EOF
   rm -r "$app_src/Features/$module/PurgeProbes"
 }
 
+# Seeds a domain event of module <module> and a reaction slice that handles it, with its test: HS004, HS014 and HS018 accept it.
+# Then a misnamed handler fails HS004, a public one HS016, a test folder without test HS014 and no test folder HS018.
+write_reaction_handler() {
+  local module="$1"
+  local visibility="$2"
+  local name="$3"
+  cat > "$app_src/Features/$module/NotifyOnReactionProbed/NotifyOnReactionProbed.cs" <<EOF
+using $app_name.Domain.$module.Events;
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.$module.NotifyOnReactionProbed;
+
+$visibility sealed class $name : IDomainEventHandler<ReactionProbed>
+{
+    public Task Handle(ReactionProbed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+EOF
+}
+
+probe_reaction_slice() {
+  local module="$1"
+  local events="$app/src/$app_name.Domain/$module/Events"
+  local tests="$app/tests/$app_name.IntegrationTests/Features/$module/NotifyOnReactionProbed"
+  local events_existed=false
+  [[ -d "$events" ]] && events_existed=true
+  mkdir -p "$events" "$app_src/Features/$module/NotifyOnReactionProbed" "$tests"
+  cat > "$events/ReactionProbed.cs" <<EOF
+namespace $app_name.Domain.$module.Events;
+
+public sealed record ReactionProbed(Guid Id) : IDomainEvent;
+EOF
+  write_reaction_handler "$module" internal NotifyOnReactionProbedHandler
+  cat > "$tests/NotifyOnReactionProbedTests.cs" <<EOF
+namespace $app_name.IntegrationTests.Features.$module.NotifyOnReactionProbed;
+
+public sealed class NotifyOnReactionProbedTests
+{
+    [Fact]
+    public void Probe() => Assert.True(true);
+}
+EOF
+  expect_architecture_tests_pass "a reaction slice of $module with its handler and its test"
+
+  write_reaction_handler "$module" internal NotifyHandler
+  expect_failure "HS004: slice '$module/NotifyOnReactionProbed' declares 'NotifyHandler'." "docs/rules/HS004.md" "a domain event handler of $app_name not named after its reaction slice" check.sh check.ps1
+  write_reaction_handler "$module" public NotifyOnReactionProbedHandler
+  expect_failure "HS016: domain event handler 'NotifyOnReactionProbedHandler'" "docs/rules/HS016.md" "a public domain event handler of $app_name" check.sh check.ps1
+  write_reaction_handler "$module" internal NotifyOnReactionProbedHandler
+
+  # The folder keeps a file, so HS018 passes: only HS014 sees that it holds no test.
+  cat > "$tests/NotifyOnReactionProbedTests.cs" <<EOF
+namespace $app_name.IntegrationTests.Features.$module.NotifyOnReactionProbed;
+
+internal static class NotifyOnReactionProbedFixture
+{
+    internal static readonly Guid Id = Guid.NewGuid();
+}
+EOF
+  expect_failure "HS014: domain event handler 'NotifyOnReactionProbedHandler' in slice '$module/NotifyOnReactionProbed' has no test" "docs/rules/HS014.md" "a domain event handler of $app_name without tests" check.sh check.ps1
+  rm -r "$tests"
+  expect_failure "HS018: slice '$module/NotifyOnReactionProbed' has no tests" "docs/rules/HS018.md" "a reaction slice of $app_name without tests" check.sh check.ps1
+
+  rm -r "$app_src/Features/$module/NotifyOnReactionProbed"
+  rm "$events/ReactionProbed.cs"
+  if [[ "$events_existed" == false ]]; then
+    rmdir "$events"
+  fi
+}
+
 # Seeds an aggregate of module <module> and a complete slice whose command handler returns a DTO holding a list of it: the
 # analyzer of the web project reports HS005, reading the aggregate from the domain it references.
 probe_command_response() {
@@ -967,6 +1045,8 @@ namespace $app_name.Domain.$module;
 public sealed class RoomHold : IAggregateRoot
 {
     public Guid Id { get; } = Guid.NewGuid();
+
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => [];
 }
 EOF
   cat > "$app_src/Features/$module/HoldProbes/HoldProbes.cs" <<EOF
@@ -1002,6 +1082,8 @@ namespace $app_name.Domain.$module;
 public sealed class RoomVisit : IAggregateRoot
 {
     public Guid Id { get; } = Guid.NewGuid();
+
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => [];
 }
 EOF
   cat > "$app_src/Features/$module/VisitProbes/VisitProbes.cs" <<EOF
@@ -1041,6 +1123,8 @@ public sealed class RoomInspection : IAggregateRoot
     public bool Passed { get; set; }
 
     public void Pass() => Passed = true;
+
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => [];
 }
 EOF
   expect_failure "HS007: entity 'RoomInspection' exposes 'Passed' with a public setter." "docs/rules/HS007.md" "an aggregate of $app_name whose state has a public setter" check.sh check.ps1
@@ -1058,6 +1142,8 @@ namespace $app_name.Domain.$module;
 public sealed class RoomKey : IAggregateRoot
 {
     public Guid Id { get; } = Guid.NewGuid();
+
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => [];
 }
 
 public sealed class RoomTour : IAggregateRoot
@@ -1067,6 +1153,8 @@ public sealed class RoomTour : IAggregateRoot
     public Guid Id { get; } = Guid.NewGuid();
 
     public IReadOnlyList<TourStop> Stops => _stops;
+
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => [];
 }
 
 public sealed class TourStop : IEntity
@@ -1189,6 +1277,9 @@ probe_unmapped_endpoint Bookings
 
 echo "==> Checking that HS004 fails both check scripts on a slice whose command is not named after it"
 probe_slice_structure Bookings
+
+echo "==> Checking that HS004, HS014, HS016 and HS018 accept a reaction slice and fail both check scripts on a faulty one"
+probe_reaction_slice Bookings
 
 echo "==> Checking that HS005 fails both check scripts on a command handler that returns its aggregate in a DTO"
 probe_command_response Bookings
@@ -1481,6 +1572,9 @@ probe_unmapped_endpoint Rooms
 
 echo "==> Checking that HS004 fails both check scripts on the first slice of $app_name whose command is not named after it"
 probe_slice_structure Rooms
+
+echo "==> Checking that HS004, HS014, HS016 and HS018 accept the first reaction slice of $app_name and fail both check scripts on a faulty one"
+probe_reaction_slice Rooms
 
 echo "==> Checking that HS005 fails both check scripts on the first command handler of $app_name that returns its aggregate in a DTO"
 probe_command_response Rooms

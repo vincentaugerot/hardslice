@@ -20,7 +20,8 @@ public sealed class SliceStructureAnalyzerTests
             "domainEvent": "MyApp.Domain.IDomainEvent, MyApp.Domain",
             "command": "MyApp.Shared.Messaging.ICommand`1, MyApp",
             "query": "MyApp.Shared.Messaging.IQuery`1, MyApp",
-            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp"
+            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp",
+            "domainEventHandler": "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp"
           },
           "shared": {
             "allowedFolders": ["Messaging", "Persistence", "Behaviors"]
@@ -42,6 +43,11 @@ public sealed class SliceStructureAnalyzerTests
             public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse>
             {
                 Task<TResponse> Handle(TRequest request, CancellationToken cancellationToken);
+            }
+
+            public interface IDomainEventHandler<in TEvent>
+            {
+                Task Handle(TEvent domainEvent, CancellationToken cancellationToken);
             }
             """);
 
@@ -173,6 +179,154 @@ public sealed class SliceStructureAnalyzerTests
             ("Program.cs", "namespace MyApp; public static class Program;"));
     }
 
+    // A reaction slice: one domain event handler named after the slice, no request, no endpoint.
+    private const string ReactionRule = "A reaction slice holds one domain event handler named after it, and no request nor endpoint.";
+
+    private static readonly (string Path, string Source) BookingEvents =
+        ("Features/Bookings/BookingEvents.cs",
+            """
+            namespace MyApp.Features.Bookings;
+
+            public sealed record BookingConfirmed(Guid BookingId);
+
+            public sealed record BookingCancelled(Guid BookingId);
+            """);
+
+    private static (string Path, string Source) NotifyOnBookingConfirmed(string body) =>
+        ("Features/Bookings/NotifyOnBookingConfirmed/NotifyOnBookingConfirmed.cs",
+            $$"""
+            using Microsoft.AspNetCore.Routing;
+            using MyApp.Shared.Messaging;
+
+            namespace MyApp.Features.Bookings.NotifyOnBookingConfirmed;
+
+            {{body}}
+            """);
+
+    [Fact]
+    public async Task Reports_nothing_on_a_reaction_slice_with_its_handler()
+    {
+        await VerifyAsync(
+            ArchiveBooking(),
+            BookingEvents,
+            NotifyOnBookingConfirmed(
+                """
+                internal sealed class NotifyOnBookingConfirmedHandler : IDomainEventHandler<BookingConfirmed>
+                {
+                    public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+
+                internal sealed record Notification(Guid BookingId);
+                """));
+    }
+
+    [Fact]
+    public async Task Reports_a_domain_event_handler_that_is_not_named_after_its_reaction_slice()
+    {
+        var diagnostics = await VerifyAsync(
+            BookingEvents,
+            NotifyOnBookingConfirmed(
+                """
+                internal sealed class [|NotifyHandler|] : IDomainEventHandler<BookingConfirmed>
+                {
+                    public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+                """));
+
+        diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
+            "slice 'Bookings/NotifyOnBookingConfirmed' declares 'NotifyHandler'. " + ReactionRule
+            + " Fix: rename the domain event handler to 'NotifyOnBookingConfirmedHandler'. Doc: 'docs/rules/HS004.md'.");
+    }
+
+    [Fact]
+    public async Task Reports_a_reaction_slice_with_a_second_handler_an_endpoint_or_a_handler_of_two_events()
+    {
+        var diagnostics = await VerifyAsync(
+            BookingEvents,
+            NotifyOnBookingConfirmed(
+                """
+                internal sealed class [|NotifyOnBookingConfirmedHandler|] : IDomainEventHandler<BookingConfirmed>, IDomainEventHandler<BookingCancelled>
+                {
+                    public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+
+                    public Task Handle(BookingCancelled domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+
+                internal sealed class [|AuditBookingConfirmedHandler|] : IDomainEventHandler<BookingConfirmed>
+                {
+                    public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+
+                internal static class [|NotifyOnBookingConfirmedEndpoint|]
+                {
+                    public static void Map(RouteGroupBuilder group) { }
+                }
+                """));
+
+        Subjects(diagnostics).ShouldBe(
+        [
+            "slice 'Bookings/NotifyOnBookingConfirmed' declares a second domain event handler, 'AuditBookingConfirmedHandler', besides 'NotifyOnBookingConfirmedHandler'",
+            "domain event handler 'NotifyOnBookingConfirmedHandler' of slice 'Bookings/NotifyOnBookingConfirmed' handles 2 events, 'BookingConfirmed' and 'BookingCancelled'",
+            "reaction slice 'Bookings/NotifyOnBookingConfirmed' declares endpoint 'NotifyOnBookingConfirmedEndpoint'"
+        ], ignoreOrder: true);
+        Fixes(diagnostics).ShouldContain(
+            "move 'AuditBookingConfirmedHandler' into a reaction slice of its own, 'Features/Bookings/AuditBookingConfirmed/'");
+    }
+
+    [Fact]
+    public async Task Reports_a_domain_event_handler_beside_a_request_or_outside_any_slice()
+    {
+        var diagnostics = await VerifyAsync(
+            BookingEvents,
+            ArchiveBooking(endpoint: ArchiveBookingEndpoint +
+                """
+
+
+                internal sealed class [|ArchiveOnBookingCancelledHandler|] : IDomainEventHandler<BookingCancelled>
+                {
+                    public Task Handle(BookingCancelled domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+                """),
+            ("Features/Bookings/NotifyOnBookingConfirmedHandler.cs",
+                """
+                using MyApp.Shared.Messaging;
+
+                namespace MyApp.Features.Bookings;
+
+                internal sealed class [|NotifyOnBookingConfirmedHandler|] : IDomainEventHandler<BookingConfirmed>
+                {
+                    public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+                """),
+            ("Shared/Messaging/Auditor.cs",
+                """
+                namespace MyApp.Shared.Messaging;
+
+                internal sealed class [|Auditor|] : IDomainEventHandler<MyApp.Features.Bookings.BookingCancelled>
+                {
+                    public Task Handle(MyApp.Features.Bookings.BookingCancelled domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+                """));
+
+        diagnostics.Select(diagnostic => diagnostic.GetMessage()).ShouldBe(
+        [
+            "slice 'Bookings/ArchiveBooking' declares domain event handler 'ArchiveOnBookingCancelledHandler' besides request 'ArchiveBookingCommand'. "
+                + ReactionRule
+                + " Fix: move 'ArchiveOnBookingCancelledHandler' into a reaction slice of its own, 'Features/Bookings/ArchiveOnBookingCancelled/'. "
+                + "Doc: 'docs/rules/HS004.md'.",
+            "domain event handler 'NotifyOnBookingConfirmedHandler' of 'BookingConfirmed' is declared in module 'Bookings', outside any slice. "
+                + "A domain event handler belongs to a reaction slice of its own. "
+                + "Fix: move 'NotifyOnBookingConfirmedHandler' into a reaction slice of its own, 'Bookings/NotifyOnBookingConfirmed': "
+                + "folder 'Features/Bookings/NotifyOnBookingConfirmed/', namespace 'MyApp.Features.Bookings.NotifyOnBookingConfirmed'. "
+                + "Doc: 'docs/rules/HS004.md'.",
+            "domain event handler 'Auditor' of 'BookingCancelled' is declared in namespace 'MyApp.Shared.Messaging', outside any slice. "
+                + "A domain event handler belongs to a reaction slice of its own. "
+                + "Fix: move 'Auditor' into a reaction slice of its own, named after what it does, such as '<Module>/NotifyOnBookingCancelled': "
+                + "folder 'Features/<Module>/NotifyOnBookingCancelled/', namespace 'MyApp.Features.<Module>.NotifyOnBookingCancelled', "
+                + "renamed '<Reaction>Handler'. Doc: 'docs/rules/HS004.md'."
+        ], ignoreOrder: true);
+    }
+
     // The blank template: Shared and Program, no slice.
     [Fact]
     public async Task Reports_nothing_on_an_application_without_slices()
@@ -218,10 +372,11 @@ public sealed class SliceStructureAnalyzerTests
                 """));
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
-            "slice 'Bookings/ArchiveBooking' declares no request. "
+            "slice 'Bookings/ArchiveBooking' declares no request nor domain event handler. "
             + StructureRule + " "
             + "Fix: declare the command 'ArchiveBookingCommand', which implements 'ICommand<TResponse>', "
-            + "or the query 'ArchiveBookingQuery', which implements 'IQuery<TResponse>'; "
+            + "or the query 'ArchiveBookingQuery', which implements 'IQuery<TResponse>', "
+            + "or, for a reaction to a domain event, the handler 'ArchiveBookingHandler', which implements 'IDomainEventHandler<TEvent>'; "
             + "types the slices of the module share belong to namespace 'MyApp.Features.Bookings'. Doc: 'docs/rules/HS004.md'.");
     }
 
@@ -508,7 +663,7 @@ public sealed class SliceStructureAnalyzerTests
 
         Subjects(diagnostics).ShouldBe(
         [
-            "slice 'Bookings/RestoreBooking' declares no request",
+            "slice 'Bookings/RestoreBooking' declares no request nor domain event handler",
             "slice 'Bookings/RestoreBooking' declares no endpoint 'RestoreBookingEndpoint'",
             "'RestorePolicy' of slice 'Bookings/RestoreBooking' is declared in 'Features/Bookings/ArchiveBooking/Restore.cs', outside the folder of its slice"
         ], ignoreOrder: true);
@@ -640,7 +795,8 @@ public sealed class SliceStructureAnalyzerTests
         var configuration = Configuration
             .Replace("MyApp.Shared.Messaging.ICommand`1, MyApp\"", "MyApp.Messaging.ICommand`1, MyApp.Messaging\"")
             .Replace("MyApp.Shared.Messaging.IQuery`1, MyApp\"", "MyApp.Messaging.IQuery`1, MyApp.Messaging\"")
-            .Replace("MyApp.Shared.Messaging.IRequestHandler`2, MyApp\"", "MyApp.Messaging.IRequestHandler`2, MyApp.Messaging\"");
+            .Replace("MyApp.Shared.Messaging.IRequestHandler`2, MyApp\"", "MyApp.Messaging.IRequestHandler`2, MyApp.Messaging\"")
+            .Replace("MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp\"", "MyApp.Messaging.IDomainEventHandler`1, MyApp.Messaging\"");
 
         var diagnostics = await AnalyzerHarness.VerifyAsync(
             new SliceStructureAnalyzer(),

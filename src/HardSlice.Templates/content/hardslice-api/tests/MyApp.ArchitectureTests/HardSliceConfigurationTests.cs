@@ -14,7 +14,8 @@ public sealed class HardSliceConfigurationTests : IDisposable
             "domainEvent": "MyApp.Domain.IDomainEvent, MyApp.Domain",
             "command": "MyApp.Shared.Messaging.ICommand`1, MyApp",
             "query": "MyApp.Shared.Messaging.IQuery`1, MyApp",
-            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp"
+            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp",
+            "domainEventHandler": "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp"
         }
         """;
 
@@ -24,7 +25,7 @@ public sealed class HardSliceConfigurationTests : IDisposable
         var configuration = HardSliceConfiguration.Current;
 
         configuration.Style.ShouldBe("slices");
-        configuration.Contracts.Keys.ShouldBe(["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler"], ignoreOrder: true);
+        configuration.Contracts.Keys.ShouldBe(["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler", "domainEventHandler"], ignoreOrder: true);
         configuration.SharedFolders.ShouldNotBeEmpty();
     }
 

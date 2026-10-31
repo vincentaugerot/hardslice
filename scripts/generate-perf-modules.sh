@@ -92,6 +92,13 @@ public sealed class Item : IAggregateRoot
 
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents()
+    {
+        var domainEvents = _domainEvents.ToArray();
+        _domainEvents.Clear();
+        return domainEvents;
+    }
+
     public static Item Create(string name, int quantity)
     {
         if (quantity < 0)

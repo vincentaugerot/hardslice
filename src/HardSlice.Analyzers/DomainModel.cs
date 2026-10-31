@@ -35,6 +35,8 @@ internal sealed class DomainModel
 
     public bool IsRequestHandler(ITypeSymbol? type) => Implements(type, ContractKeys.RequestHandler);
 
+    public bool IsDomainEventHandler(ITypeSymbol? type) => Implements(type, ContractKeys.DomainEventHandler);
+
     // Directly or through a base class or a derived interface. A constructed generic type is classified by its definition:
     // Entity<Guid> is an entity when Entity<TId> implements IEntity. The contract itself belongs to no category.
     public bool Implements(ITypeSymbol? type, string key) =>

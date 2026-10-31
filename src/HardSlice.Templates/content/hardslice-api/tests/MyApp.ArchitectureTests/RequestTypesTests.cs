@@ -1,4 +1,5 @@
 using FluentValidation;
+using MyApp.Domain;
 using MyApp.Shared.Messaging;
 
 namespace MyApp.ArchitectureTests;
@@ -20,6 +21,14 @@ public sealed class RequestTypesTests
         RequestTypes.ParametersOf(typeof(ProbeCommand)).ShouldBe(["OrderId", "Reason"], ignoreOrder: true);
         RequestTypes.ParametersOf(typeof(ProbeStructCommand)).ShouldBe(["Count"]);
         RequestTypes.ParametersOf(typeof(ParameterlessProbeCommand)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_domain_event_handler_is_a_concrete_IDomainEventHandler()
+    {
+        RequestTypes.EventHandledBy(typeof(ProbeEventHandler)).ShouldBe(typeof(ProbeEvent));
+        RequestTypes.EventHandledBy(typeof(AbstractProbeEventHandler)).ShouldBeNull();
+        RequestTypes.EventHandledBy(typeof(ProbeCommandHandler)).ShouldBeNull();
     }
 
     [Fact]
@@ -214,4 +223,16 @@ public sealed class RequestTypesTests
     private sealed class ListProbeCommandValidator<T> : AbstractValidator<GenericProbeCommand<List<T>>>;
 
     private abstract class AbstractProbeValidator : AbstractValidator<ProbeStructCommand>;
+
+    private sealed record ProbeEvent : IDomainEvent;
+
+    private sealed class ProbeEventHandler : IDomainEventHandler<ProbeEvent>
+    {
+        public Task Handle(ProbeEvent domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private abstract class AbstractProbeEventHandler : IDomainEventHandler<ProbeEvent>
+    {
+        public abstract Task Handle(ProbeEvent domainEvent, CancellationToken cancellationToken);
+    }
 }

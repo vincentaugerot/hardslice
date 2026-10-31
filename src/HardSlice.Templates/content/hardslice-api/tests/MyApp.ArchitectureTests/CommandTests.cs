@@ -1,6 +1,7 @@
 namespace MyApp.ArchitectureTests;
 
-// HS013: every command with parameters has a validator. HS014: every command handler has tests at the path of its slice.
+// HS013: every command with parameters has a validator. HS014: every command handler and every domain event handler, which
+// changes state inside the transaction of a command, has tests at the path of its slice.
 // Queries only read: they are out of both rules, but their slices still have tests (HS018).
 public sealed class CommandTests
 {
@@ -41,6 +42,22 @@ public sealed class CommandTests
                 + "Every command handler has at least one test at the path of its slice. "
                 + $"Fix: add an integration test that sends '{Name(command)}', an invalid one included, in '{TestSources.PathOf(Tests.IntegrationTests, folder)}', "
                 + $"and the unit tests of its validator in '{TestSources.PathOf(Tests.UnitTests, folder)}'. Doc: 'docs/rules/HS014.md'.");
+    }
+
+    [Fact]
+    public void Domain_event_handlers_have_tests_at_the_path_of_their_slice()
+    {
+        Violations.ShouldBeNone(
+            from handler in Application.WebAssembly.GetTypes()
+            let domainEvent = RequestTypes.EventHandledBy(handler)
+            where domainEvent is not null
+            let location = Location.Of(handler.Namespace)
+            let folder = FolderOf(handler)
+            where !Tests.HasTestsIn(folder, recursive: location.Slice is not null)
+            select $"HS014: domain event handler '{Name(handler)}' {location.Describe()} has no test in {Tests.Describe(folder)}. "
+                + "Every domain event handler has at least one test at the path of its slice. "
+                + $"Fix: add an integration test in '{TestSources.PathOf(Tests.IntegrationTests, folder)}' that sends a command whose aggregate raises "
+                + $"'{Name(domainEvent)}' and checks what the handler changed. Doc: 'docs/rules/HS014.md'.");
     }
 
     // The folder of a type below 'src/<App>/', read from its namespace: 'Features/Orders/PlaceOrder' for a type of that slice or below.

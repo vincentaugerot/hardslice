@@ -32,7 +32,8 @@
             "tests/MyApp.Tests/Domain/Bookings/**",
             "tests/MyApp.Tests/Features/Bookings/**",
             "tests/MyApp.IntegrationTests/Features/Bookings/**",
-            "tests/MyApp.IntegrationTests/Shared/Behaviors/TransactionBehaviorTests.cs"
+            "tests/MyApp.IntegrationTests/Shared/Behaviors/TransactionBehaviorTests.cs",
+            "tests/MyApp.IntegrationTests/Shared/Behaviors/DomainEventPublisherTests.cs"
           ]
         }
       ]

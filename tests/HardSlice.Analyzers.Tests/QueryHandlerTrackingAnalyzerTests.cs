@@ -23,7 +23,8 @@ public sealed class QueryHandlerTrackingAnalyzerTests
             "domainEvent": "MyApp.Domain.IDomainEvent, MyApp.Domain",
             "command": "MyApp.Shared.Messaging.ICommand`1, MyApp",
             "query": "MyApp.Shared.Messaging.IQuery`1, MyApp",
-            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp"
+            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp",
+            "domainEventHandler": "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp"
           },
           "shared": {
             "allowedFolders": ["Messaging", "Persistence", "Behaviors"]
@@ -91,6 +92,11 @@ public sealed class QueryHandlerTrackingAnalyzerTests
             public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse>
             {
                 Task<TResponse> Handle(TRequest request, CancellationToken cancellationToken);
+            }
+
+            public interface IDomainEventHandler<in TEvent>
+            {
+                Task Handle(TEvent domainEvent, CancellationToken cancellationToken);
             }
 
             public sealed record Result<T>(T? Value, string? Error);

@@ -306,7 +306,7 @@ public sealed class BookingsReferenceTests
                 CompileDomain(),
                 Configuration.Replace("\"MyApp.Domain.IEntity, MyApp.Domain\"", "\"MyApp.Domain.Entity, MyApp.Domain\"")),
             ClassificationAnalyzer.AmbiguityId => await AnalyzeAllAsync(
-                CompileDomain(("Bookings/BookingSnapshot.cs", "namespace MyApp.Domain.Bookings; public sealed class BookingSnapshot : IAggregateRoot, IDomainEvent;")),
+                CompileDomain(("Bookings/BookingSnapshot.cs", "namespace MyApp.Domain.Bookings; public sealed class BookingSnapshot : IAggregateRoot, IDomainEvent { public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => []; }")),
                 Configuration),
             _ => await AnalyzeAllAsync(MapRoomWithoutContract(), Configuration)
         };
@@ -536,7 +536,7 @@ public sealed class BookingsReferenceTests
         return CompileDomain(
             (path, booking.Replace(status, status + "\n    private readonly List<BookingLine> _lines = [];")),
             ("Bookings/BookingLine.cs", "namespace MyApp.Domain.Bookings; public sealed class BookingLine : IEntity { public Room Room { get; private set; } = null!; }"),
-            ("Bookings/Room.cs", "namespace MyApp.Domain.Bookings; public sealed class Room : IAggregateRoot { public Guid Id { get; } }"));
+            ("Bookings/Room.cs", "namespace MyApp.Domain.Bookings; public sealed class Room : IAggregateRoot { public Guid Id { get; } public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => []; }"));
     }
 
     // BookingConfirmed becomes a sealed class with the same constructor and properties.

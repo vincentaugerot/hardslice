@@ -1864,7 +1864,7 @@ scripts/test-template.sh
 
 **Périmètre**
 
-- `content/hardslice-aggregate/` : classe `sealed` qui implémente `IAggregateRoot`, constructeur privé sans paramètre pour la persistance, fabrique statique qui vérifie ses règles, état sans `set` ni `init` public, liste privée d'événements ; `readonly record struct <Name>Id` ; `<Name>Configuration` `internal` en API fluente dans `Features/<Module>/` ;
+- `content/hardslice-aggregate/` : classe `sealed` qui implémente `IAggregateRoot`, constructeur privé sans paramètre pour la persistance, fabrique statique qui vérifie ses règles, état sans `set` ni `init` public, liste privée d'événements que `DequeueDomainEvents()`, membre du contrat `IAggregateRoot` depuis PB-035, renvoie et vide ; `readonly record struct <Name>Id` ; `<Name>Configuration` `internal` en API fluente dans `Features/<Module>/` ;
 - test unitaire `tests/<App>.Tests/Domain/<Module>/<Name>Tests.cs` en `TODO(hardslice):` ;
 - pas de migration générée : la commande `dotnet ef migrations add` à lancer est affichée, et le test d'intégration existant sur les modifications en attente la rend obligatoire ;
 - module inexistant : erreur qui renvoie à `hardslice-module`.
@@ -1894,7 +1894,7 @@ scripts/test-template.sh
 
 - `content/hardslice-event/` : `sealed record` qui implémente `IDomainEvent` ;
 - nom qui n'est pas au passé selon la règle de HS019 : avertissement à la génération, sans refus (HS019 reste une suggestion) ;
-- réaction : gestionnaire `internal` `IDomainEventHandler<TEvent>` qui agit par `AppDbContext`, sans `IMediator`, test d'intégration `TODO(hardslice):` aux chemins de HS018 ; la réaction peut être dans un autre module que l'événement, sans dépendre de ce module (HS012) ;
+- réaction : gestionnaire `internal` `IDomainEventHandler<TEvent>` nommé `<Reaction>Handler`, seul dans sa slice (HS004, PB-035), qui agit par `AppDbContext`, sans `IMediator`, test d'intégration `TODO(hardslice):` aux chemins de HS018 ; la réaction peut être dans un autre module que l'événement, sans dépendre de ce module (HS012) ;
 - l'agrégat qui lève l'événement n'est pas modifié : la skill `add-domain-event` le fait.
 
 **Dépendances**

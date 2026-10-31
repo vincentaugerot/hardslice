@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using MyApp.Domain;
 using MyApp.Shared.Messaging;
 
 namespace MyApp.Tests.Shared.Messaging;
@@ -90,6 +91,24 @@ public sealed class MediatorTests
         }
     }
 
+    // A domain event handler runs inside the transaction of a command: a request it sends would open another one.
+    [Fact]
+    public async Task Refuses_a_request_sent_while_a_domain_event_handler_runs_and_names_the_handler()
+    {
+        using var services = Services().BuildServiceProvider();
+        var mediator = services.GetRequiredService<IMediator>();
+
+        using (DomainEventHandlerScope.Enter(typeof(SampleEventHandler), typeof(SampleEvent)))
+        {
+            var exception = await Should.ThrowAsync<InvalidOperationException>(() => mediator.Send(new Ping("hello"), TestContext.Current.CancellationToken));
+
+            exception.Message.ShouldStartWith("Domain event handler 'SampleEventHandler' sent 'Ping' through IMediator while handling 'SampleEvent'. ");
+        }
+
+        services.GetRequiredService<Calls>().ShouldBeEmpty();
+        (await mediator.Send(new Ping("again"), TestContext.Current.CancellationToken)).ShouldBe("pong again");
+    }
+
     private static IServiceCollection Services() =>
         new ServiceCollection()
             .AddMediator()
@@ -113,6 +132,13 @@ public sealed class MediatorTests
     }
 
     private sealed class Calls : List<string>;
+
+    private sealed record SampleEvent : IDomainEvent;
+
+    private sealed class SampleEventHandler : IDomainEventHandler<SampleEvent>
+    {
+        public Task Handle(SampleEvent domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
 
     private sealed class PingHandler(Calls calls) : IRequestHandler<Ping, string>
     {

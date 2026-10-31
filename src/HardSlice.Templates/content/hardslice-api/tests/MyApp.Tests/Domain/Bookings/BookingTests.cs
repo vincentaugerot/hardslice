@@ -37,6 +37,16 @@ public sealed class BookingTests
     }
 
     [Fact]
+    public void DequeueDomainEvents_returns_the_raised_events_once_and_empties_the_list()
+    {
+        var booking = Booking.Confirm(RoomId, Period, []);
+
+        booking.DequeueDomainEvents().ShouldHaveSingleItem().ShouldBe(new BookingConfirmed(booking.Id, RoomId, Period));
+        booking.DomainEvents.ShouldBeEmpty();
+        booking.DequeueDomainEvents().ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Confirm_rejects_a_period_overlapping_a_confirmed_booking_of_the_room()
     {
         var existing = Booking.Confirm(RoomId, Period, []);

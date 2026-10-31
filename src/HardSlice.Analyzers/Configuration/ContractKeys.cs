@@ -11,8 +11,9 @@ internal static class ContractKeys
     public const string Command = "command";
     public const string Query = "query";
     public const string RequestHandler = "requestHandler";
+    public const string DomainEventHandler = "domainEventHandler";
 
-    public static ImmutableArray<string> All { get; } = [Entity, AggregateRoot, DomainEvent, Command, Query, RequestHandler];
+    public static ImmutableArray<string> All { get; } = [Entity, AggregateRoot, DomainEvent, Command, Query, RequestHandler, DomainEventHandler];
 
     // The value the template generates for each key, as an example in diagnostics.
     public static string Example(string key) => key switch
@@ -23,6 +24,7 @@ internal static class ContractKeys
         Command => "MyApp.Shared.Messaging.ICommand`1, MyApp",
         Query => "MyApp.Shared.Messaging.IQuery`1, MyApp",
         RequestHandler => "MyApp.Shared.Messaging.IRequestHandler`2, MyApp",
+        DomainEventHandler => "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp",
         _ => throw new ArgumentOutOfRangeException(nameof(key), key, null)
     };
 }

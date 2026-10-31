@@ -6,7 +6,7 @@ using MyApp.Shared.Messaging;
 
 namespace MyApp.ArchitectureTests;
 
-// HS016: slices never reference each other, and their handlers, validators and endpoints are internal.
+// HS016: slices never reference each other, and their handlers, domain event handlers, validators and endpoints are internal.
 // HardSlice.Analyzers reports the same references in the source at build time; this test reads the compiled assembly.
 public sealed class SliceTests
 {
@@ -35,7 +35,7 @@ public sealed class SliceTests
             where TypeVisibility.IsExternallyAccessible(type) && !type.IsDefined(typeof(CompilerGeneratedAttribute))
             let role = RoleOf(type)
             where role is not null
-            select $"HS016: {role} '{type.Name}' {Location.Of(type.Namespace).Describe()} is accessible outside the assembly. Handlers, validators and endpoints are internal: "
+            select $"HS016: {role} '{type.Name}' {Location.Of(type.Namespace).Describe()} is accessible outside the assembly. Handlers, domain event handlers, validators and endpoints are internal: "
                 + "other code reaches a slice through IMediator and its public request. "
                 + $"Fix: declare '{type.Name}' internal. Doc: 'docs/rules/HS016.md'.");
     }
@@ -44,6 +44,8 @@ public sealed class SliceTests
     {
         if (Implements(type, typeof(IRequestHandler<,>)))
             return "handler";
+        if (Implements(type, typeof(IDomainEventHandler<>)))
+            return "domain event handler";
         if (Implements(type, typeof(IValidator<>)))
             return "validator";
         return Location.Of(type.Namespace).Slice is not null && IsEndpoint(type) ? "endpoint" : null;

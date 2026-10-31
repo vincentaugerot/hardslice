@@ -55,7 +55,8 @@ public sealed class AnalysisModeTests
             "domainEvent": "MyApp.Domain.IDomainEvent, MyApp",
             "command": "MyApp.Shared.Messaging.ICommand`1, MyApp",
             "query": "MyApp.Shared.Messaging.IQuery`1, MyApp",
-            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp"
+            "requestHandler": "MyApp.Shared.Messaging.IRequestHandler`2, MyApp",
+            "domainEventHandler": "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp"
           },
           "shared": {
             "allowedFolders": ["Messaging"]
@@ -83,6 +84,8 @@ public sealed class AnalysisModeTests
             public interface IQuery<TResponse> : IRequest<TResponse>;
 
             public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse>;
+
+            public interface IDomainEventHandler<in TEvent>;
         }
         """;
 

@@ -6,12 +6,13 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace HardSlice.Analyzers;
 
-// HS004: a slice '<AssemblyName>.Features.<Module>.<Slice>' holds exactly one request named after it, '<Slice>Command' or
-// '<Slice>Query', its handler '<Slice>Handler' and its static endpoint '<Slice>Endpoint'; the validator of its request, if
-// any, is '<Slice>Validator'. No request, handler or request validator lives outside a slice, and the folder
-// 'Features/<Module>/<Slice>/' of the project and the namespace of the slice hold the same types. Requests and handlers
-// are recognized by the contracts of hardslice.json, validators by IValidator<T> of FluentValidation. A handler or a
-// validator of another slice is left to HS016. Generated code is not checked. Not applied to test projects.
+// HS004: a slice '<AssemblyName>.Features.<Module>.<Slice>' has exactly one entry. Either one request named after it,
+// '<Slice>Command' or '<Slice>Query', its handler '<Slice>Handler' and its static endpoint '<Slice>Endpoint', the validator
+// of its request, if any, being '<Slice>Validator'; or, for a reaction slice, one domain event handler '<Slice>Handler'
+// that handles one event, without request nor endpoint. No request, handler or request validator lives outside a slice,
+// and the folder 'Features/<Module>/<Slice>/' of the project and the namespace of the slice hold the same types. Requests
+// and handlers are recognized by the contracts of hardslice.json, validators by IValidator<T> of FluentValidation. A handler
+// or a validator of another slice is left to HS016. Generated code is not checked. Not applied to test projects.
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 {
@@ -21,13 +22,17 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
     private const string StructureRule = "A slice holds one request named after it, its handler and its endpoint.";
 
+    private const string ReactionRule = "A reaction slice holds one domain event handler named after it, and no request nor endpoint.";
+
     private const string OutsideRule = "A request, its handler and its validator belong to the slice of their use case.";
+
+    private const string OutsideReactionRule = "A domain event handler belongs to a reaction slice of its own.";
 
     private const string FolderRule = "The folder and the namespace of a slice hold the same types.";
 
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
-        title: "A slice is not one request, its handler and its endpoint, named after it and declared in its folder",
+        title: "A slice is not one entry named after it, a request with its handler and endpoint or a domain event handler, declared in its folder",
         messageFormat: "{0}. {1} Fix: {2}. Doc: 'docs/rules/HS004.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
@@ -87,16 +92,38 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         if (messaging is not null)
         {
             var requests = files.InSourceOrder(checkedTypes.Where(type => messaging.RequestKind(type) is not null)).ToArray();
+            var eventHandlers = files.InSourceOrder(checkedTypes.Where(messaging.IsEventHandler)).ToArray();
             request = requests.FirstOrDefault(candidate => candidate.Name == ExpectedRequestName(messaging, candidate, sliceName)) ?? requests.FirstOrDefault();
             if (request is null)
             {
                 if (types.Any(type => messaging.RequestKind(type) is not null))
                     return;
 
-                Report(context, sliceLocation, $"slice '{slice}' declares no request", StructureRule, NoRequestFix(messaging, types, module, sliceName, context.Compilation.AssemblyName));
+                if (eventHandlers.Length > 0)
+                {
+                    AnalyzeReaction(context, messaging, files, slice, module, sliceName, checkedTypes, eventHandlers);
+                    return;
+                }
+
+                Report(
+                    context,
+                    sliceLocation,
+                    $"slice '{slice}' declares no request nor domain event handler",
+                    StructureRule,
+                    NoRequestFix(messaging, types, module, sliceName, context.Compilation.AssemblyName));
             }
             else
             {
+                foreach (var eventHandler in eventHandlers)
+                {
+                    Report(
+                        context,
+                        files.FirstLocation(eventHandler),
+                        $"slice '{slice}' declares domain event handler '{eventHandler.Name}' besides request '{request.Name}'",
+                        ReactionRule,
+                        ReactionFix(messaging, eventHandler, module));
+                }
+
                 var expected = ExpectedRequestName(messaging, request, sliceName);
                 if (request.Name != expected)
                     Report(context, files.FirstLocation(request), $"slice '{slice}' declares '{request.Name}'", StructureRule, $"rename the {messaging.RequestKind(request)} to '{expected}'");
@@ -203,6 +230,16 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
             ReportOutside(messaging.HandledRequests(type), "handler", "Handler");
             ReportOutside(messaging.ValidatedRequests(type), "validator", "Validator");
 
+            if (messaging.IsEventHandler(type))
+            {
+                Report(
+                    context,
+                    location,
+                    $"domain event handler '{type.Name}' of {messaging.DescribeEvents(type)} is declared in {where}, outside any slice",
+                    OutsideReactionRule,
+                    ReactionFix(messaging, type, path?.FirstOrDefault(), assemblyName));
+            }
+
             void ReportOutside(ImmutableArray<INamedTypeSymbol> requests, string role, string suffix)
             {
                 if (requests.IsEmpty)
@@ -287,6 +324,71 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    // A slice without request whose entry is a domain event handler: one handler named after the slice, for one event,
+    // and no endpoint. Validators and other types are free, as in any slice.
+    private static void AnalyzeReaction(
+        SymbolAnalysisContext context,
+        Messaging messaging,
+        ProjectFiles files,
+        string slice,
+        string module,
+        string sliceName,
+        INamedTypeSymbol[] checkedTypes,
+        INamedTypeSymbol[] eventHandlers)
+    {
+        var expected = sliceName + "Handler";
+        var handler = eventHandlers.FirstOrDefault(candidate => candidate.Name == expected) ?? eventHandlers[0];
+        if (handler.Name != expected)
+            Report(context, files.FirstLocation(handler), $"slice '{slice}' declares '{handler.Name}'", ReactionRule, $"rename the domain event handler to '{expected}'");
+
+        foreach (var extra in eventHandlers.Where(candidate => !SymbolEqualityComparer.Default.Equals(candidate, handler)))
+        {
+            Report(
+                context,
+                files.FirstLocation(extra),
+                $"slice '{slice}' declares a second domain event handler, '{extra.Name}', besides '{handler.Name}'",
+                ReactionRule,
+                ReactionFix(messaging, extra, module));
+        }
+
+        foreach (var eventHandler in eventHandlers.Where(candidate => messaging.HandledEventCount(candidate) > 1))
+        {
+            Report(
+                context,
+                files.FirstLocation(eventHandler),
+                $"domain event handler '{eventHandler.Name}' of slice '{slice}' handles {messaging.DescribeEvents(eventHandler)}",
+                ReactionRule,
+                "keep one event in this handler and react to each other event in a reaction slice of its own");
+        }
+
+        foreach (var endpoint in checkedTypes.Where(type => type.Name.EndsWith("Endpoint", StringComparison.Ordinal)))
+        {
+            Report(
+                context,
+                files.FirstLocation(endpoint),
+                $"reaction slice '{slice}' declares endpoint '{endpoint.Name}'",
+                ReactionRule,
+                $"remove '{endpoint.Name}' and its call from '{module}Module': a domain event triggers the reaction; an HTTP entry point is a command slice of its own");
+        }
+    }
+
+    // Into a reaction slice of its own: the one its name gives, 'AuditBookingConfirmed' for 'AuditBookingConfirmedHandler',
+    // or one named after what it does, such as 'NotifyOnBookingConfirmed'.
+    private static string ReactionFix(Messaging messaging, INamedTypeSymbol eventHandler, string? module, string? assemblyName = null)
+    {
+        module ??= "<Module>";
+        var named = eventHandler.Name.Length > "Handler".Length && eventHandler.Name.EndsWith("Handler", StringComparison.Ordinal);
+        var reaction = named
+            ? eventHandler.Name.Substring(0, eventHandler.Name.Length - "Handler".Length)
+            : messaging.HandledEvents(eventHandler).FirstOrDefault() is { } handled ? $"NotifyOn{handled.Name}" : "NotifyOn<Event>";
+        var where = assemblyName is null
+            ? $"'{FeaturesFolder}/{module}/{reaction}/'"
+            : $"'{module}/{reaction}': folder '{FeaturesFolder}/{module}/{reaction}/', namespace '{assemblyName}.{FeaturesFolder}.{module}.{reaction}'";
+        return named
+            ? $"move '{eventHandler.Name}' into a reaction slice of its own, {where}"
+            : $"move '{eventHandler.Name}' into a reaction slice of its own, named after what it does, such as {where}, renamed '<Reaction>Handler'";
+    }
+
     private static string MoveFix(string? module, string useCase, string name, string expectedName, string? assemblyName, string? companions)
     {
         module ??= "<Module>";
@@ -311,7 +413,8 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         }
 
         return $"declare the command '{sliceName}Command', which implements '{messaging.Command.ToDisplayString(DisplayFormat)}', "
-            + $"or the query '{sliceName}Query', which implements '{messaging.Query.ToDisplayString(DisplayFormat)}'; "
+            + $"or the query '{sliceName}Query', which implements '{messaging.Query.ToDisplayString(DisplayFormat)}', "
+            + $"or, for a reaction to a domain event, the handler '{sliceName}Handler', which implements '{messaging.EventHandler.ToDisplayString(DisplayFormat)}'; "
             + $"types the slices of the module share belong to namespace '{assemblyName}.{FeaturesFolder}.{module}'";
     }
 
@@ -361,12 +464,21 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         private readonly INamedTypeSymbol? _validator;
         private readonly Lazy<ImmutableHashSet<ISymbol>> _handledRequests;
 
-        private Messaging(DomainModel model, INamedTypeSymbol command, INamedTypeSymbol query, INamedTypeSymbol handler, INamedTypeSymbol? validator, Compilation compilation, CancellationToken cancellationToken)
+        private Messaging(
+            DomainModel model,
+            INamedTypeSymbol command,
+            INamedTypeSymbol query,
+            INamedTypeSymbol handler,
+            INamedTypeSymbol eventHandler,
+            INamedTypeSymbol? validator,
+            Compilation compilation,
+            CancellationToken cancellationToken)
         {
             _model = model;
             Command = command;
             Query = query;
             _handler = handler;
+            EventHandler = eventHandler;
             _validator = validator;
             _handledRequests = new Lazy<ImmutableHashSet<ISymbol>>(() => CollectHandledRequests(compilation, cancellationToken));
         }
@@ -375,11 +487,14 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
         public INamedTypeSymbol Query { get; }
 
+        public INamedTypeSymbol EventHandler { get; }
+
         public static Messaging? Create(DomainModel model, Compilation compilation, CancellationToken cancellationToken) =>
             model.Contract(ContractKeys.Command) is { } command
             && model.Contract(ContractKeys.Query) is { } query
             && model.Contract(ContractKeys.RequestHandler) is { } handler
-                ? new Messaging(model, command, query, handler, compilation.GetTypeByMetadataName("FluentValidation.IValidator`1"), compilation, cancellationToken)
+            && model.Contract(ContractKeys.DomainEventHandler) is { } eventHandler
+                ? new Messaging(model, command, query, handler, eventHandler, compilation.GetTypeByMetadataName("FluentValidation.IValidator`1"), compilation, cancellationToken)
                 : null;
 
         // "command" or "query" for a class or a struct that can be sent; a type both is reported by HS901 and named as a command.
@@ -401,6 +516,30 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
             _validator is null ? [] : Arguments(type, _validator, validated => RequestKind(validated) is not null);
 
         public bool HasHandler(INamedTypeSymbol request) => _handledRequests.Value.Contains(request.OriginalDefinition);
+
+        // A concrete class that implements the domainEventHandler contract, for an event or a type parameter.
+        public bool IsEventHandler(INamedTypeSymbol type) =>
+            type is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false } && _model.IsDomainEventHandler(type);
+
+        public int HandledEventCount(INamedTypeSymbol type) => DomainModel.Implementations(type, EventHandler).Count();
+
+        // The events a concrete domain event handler handles, by their definition.
+        public ImmutableArray<INamedTypeSymbol> HandledEvents(INamedTypeSymbol type) => Arguments(type, EventHandler, domainEvent => true);
+
+        // "'BookingConfirmed'", or "2 events, 'BookingConfirmed' and 'BookingCancelled'".
+        public string DescribeEvents(INamedTypeSymbol type)
+        {
+            var names = DomainModel.Implementations(type, EventHandler)
+                .Select(implementation => $"'{implementation.TypeArguments[0].ToDisplayString(DisplayFormat)}'")
+                .Distinct()
+                .ToArray();
+            return names.Length switch
+            {
+                0 => "an event",
+                1 => names[0],
+                _ => $"{names.Length} events, {string.Join(", ", names.Take(names.Length - 1))} and {names[names.Length - 1]}"
+            };
+        }
 
         // 'IRequestHandler<ArchiveBookingCommand, bool>'.
         public string HandlerContract(INamedTypeSymbol request)

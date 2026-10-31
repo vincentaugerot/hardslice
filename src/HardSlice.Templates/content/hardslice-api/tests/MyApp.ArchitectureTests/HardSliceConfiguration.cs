@@ -12,7 +12,7 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
 
     private const string Fix = "Fix: restore hardslice.json from version control; changing it requires a maintainer decision.";
 
-    private static readonly string[] ContractKeys = ["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler"];
+    private static readonly string[] ContractKeys = ["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler", "domainEventHandler"];
 
     private static readonly Lazy<HardSliceConfiguration> Solution =
         new(() => Load(Path.Combine(Application.SolutionRoot, FileName)));
@@ -70,7 +70,7 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
     {
         const string Doc = "docs/rules/HS900.md";
         if (!root.TryGetProperty("contracts", out var contracts))
-            throw Invalid("'contracts' is missing: it declares the types that classify entities, aggregate roots, domain events, commands, queries and handlers.", Doc);
+            throw Invalid("'contracts' is missing: it declares the types that classify entities, aggregate roots, domain events, commands, queries, request handlers and domain event handlers.", Doc);
         ExpectObjectWithKeys(contracts, "'contracts'", ContractKeys, Doc);
 
         var values = new Dictionary<string, string>();
