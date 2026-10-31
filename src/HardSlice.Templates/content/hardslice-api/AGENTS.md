@@ -22,7 +22,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 | `hardslice.json` | HardSlice configuration: the `slices` style, the `contracts` that classify entities, events, commands, queries and handlers, and the folders allowed in `Shared`. |
 | `.editorconfig` | Severity of the HardSlice analyzer rules. |
 | `Directory.Build.props` | Build settings of every project, including `HardSliceAnalysisMode`, set to `All`: every HardSlice analyzer rule is on. |
-| `Directory.Build.targets` | Supplies each test project's compilation symbols and compiled source paths to HS014, and the module files of the web project to `dotnet new hardslice-command` and `hardslice-query`. |
+| `Directory.Build.targets` | Supplies each test project's compilation symbols and compiled source paths to HS014, and the module files of the web project to `dotnet new hardslice-aggregate`, `hardslice-command` and `hardslice-query`. |
 | `.config/dotnet-tools.json` | Local tools: `dotnet-ef` at the version of EF Core, and `dotnet hardslice` at the version of `HardSlice.Analyzers`. |
 
 Modules and slices:
@@ -51,8 +51,8 @@ Modules and slices:
 ## Adding a first module
 
 1. Generate the module from the root of the solution: `dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name <Module>`, with `--route <route>` for a group other than the module name in kebab-case. It creates `src/MyApp/Features/<Module>/<Module>Module.cs`, namespace `MyApp.Features.<Module>`: a public static class whose `Add<Module>Module` registers the slices and `Map<Module>Module` maps them under one `MapGroup`. It also creates the folder of the domain of the module and its test folders, refuses an existing module, never edits a file, and prints the lines that register and map the module in `Program.cs`: add them.
-2. Create the aggregate in `src/MyApp.Domain/<Module>/`, namespace `MyApp.Domain.<Module>`: a `sealed` class implementing `IAggregateRoot` whose state changes only through its methods, with a private list of events that `DequeueDomainEvents()` returns and empties, created by a static factory method that checks its rules, with a private parameterless constructor for persistence. Unit test it in `tests/MyApp.Tests/Domain/<Module>/`.
-3. Map the aggregate and add the first migration: see [Changing the database](#changing-the-database).
+2. Generate the aggregate: `dotnet new hardslice-aggregate --project src/MyApp/MyApp.csproj --module <Module> --name <Aggregate>`. It creates in `src/MyApp.Domain/<Module>/` a `sealed` class implementing `IAggregateRoot` whose state changes only through its methods, with a private list of events that `DequeueDomainEvents()` returns and empties, a static factory method `Create` and a private parameterless constructor for persistence, its `<Aggregate>Id`, its mapping and its unit tests in `tests/MyApp.Tests/Domain/<Module>/`. Rename `Create` after the business fact, give it the state and the rules of the aggregate, map that state, and replace the `TODO(hardslice):` marker.
+3. Add the first migration with the command it prints: see [Changing the database](#changing-the-database).
 4. Add its slices as below, then add the module to the map above.
 <!--#endif -->
 
@@ -87,7 +87,7 @@ Modules and slices:
 
 ## Changing the database
 
-1. Map a new aggregate in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`: an `internal` `IEntityTypeConfiguration<T>` in fluent API. The aggregate implements `IAggregateRoot` (HS902). Never add EF Core attributes or references to the domain, and never declare module types in `AppDbContext`.
+1. Map a new aggregate in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`, which `dotnet new hardslice-aggregate` generates with the aggregate: an `internal` `IEntityTypeConfiguration<T>` in fluent API. The aggregate implements `IAggregateRoot` (HS902). Never add EF Core attributes or references to the domain, and never declare module types in `AppDbContext`.
 <!--#if (!NoSample) -->
 2. After any mapping change, add a migration. A constraint EF Core cannot model, such as the exclusion constraint that keeps confirmed bookings of a room from overlapping, goes in a migration through `migrationBuilder.Sql`. Never edit a migration that may already be applied.
 <!--#else -->

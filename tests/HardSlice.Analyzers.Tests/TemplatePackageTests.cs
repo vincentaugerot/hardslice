@@ -62,6 +62,7 @@ public sealed class TemplatePackageTests
             PackedFiles(archive, "/hardslice-command/").ShouldBe(CommandTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-query/").ShouldBe(QueryTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-module/").ShouldBe(ModuleTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-aggregate/").ShouldBe(AggregateTemplateFiles.Order(StringComparer.Ordinal));
         }
         finally
         {
@@ -225,6 +226,76 @@ public sealed class TemplatePackageTests
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
         template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
         postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+    }
+
+    // hardslice-aggregate generates the root, its identifier, its mapping in the module and its unit tests, and nothing else: no migration.
+    [Fact]
+    public void Aggregate_item_template_generates_the_aggregate_its_identifier_its_mapping_and_its_unit_tests_only()
+    {
+        var root = AggregateTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(AggregateTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-aggregate");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        config.GetProperty("sourceName").GetString().ShouldBe("AggregateName");
+        var symbols = config.GetProperty("symbols");
+        var application = symbols.GetProperty("AppName");
+        application.GetProperty("type").GetString().ShouldBe("bind");
+        application.GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        application.GetProperty("replaces").GetString().ShouldBe("MyApp");
+        symbols.GetProperty("Module").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+        // The table has no default value: the name of the aggregate followed by s replaces it.
+        symbols.GetProperty("Table").TryGetProperty("defaultValue", out _).ShouldBeFalse();
+        symbols.GetProperty("TableOrDefault").GetProperty("replaces").GetString().ShouldBe("AggregateTable");
+    }
+
+    // The aggregate has the shape of Booking, which HS007, HS008, HS901 and HS902 accept, and its mapping the shape of BookingConfiguration.
+    [Fact]
+    public void Aggregate_item_template_encapsulates_its_state_and_maps_it_in_the_module()
+    {
+        var root = AggregateTemplateRoot(FindRepositoryRoot());
+        var aggregate = File.ReadAllLines(Path.Combine(root, "src", "MyApp.Domain", "ModuleName", "AggregateName.cs"));
+        var identifier = File.ReadAllLines(Path.Combine(root, "src", "MyApp.Domain", "ModuleName", "AggregateNameId.cs"));
+        var configuration = File.ReadAllLines(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "AggregateNameConfiguration.cs"));
+
+        aggregate.ShouldContain("namespace MyApp.Domain.ModuleName;");
+        aggregate.ShouldContain("public sealed class AggregateName : IAggregateRoot");
+        aggregate.ShouldContain("    private readonly List<IDomainEvent> _domainEvents = [];");
+        aggregate.ShouldContain("    private AggregateName()");
+        aggregate.ShouldContain("    public AggregateNameId Id { get; }");
+        aggregate.ShouldContain("    public IReadOnlyList<IDomainEvent> DequeueDomainEvents()");
+        aggregate.ShouldNotContain(line => line.Contains(" set;", StringComparison.Ordinal) || line.Contains(" init;", StringComparison.Ordinal));
+        aggregate.ShouldNotContain(line => line.StartsWith("using ", StringComparison.Ordinal));
+        identifier.ShouldContain("public readonly record struct AggregateNameId(Guid Value)");
+        configuration.ShouldContain("namespace MyApp.Features.ModuleName;");
+        configuration.ShouldContain("internal sealed class AggregateNameConfiguration : IEntityTypeConfiguration<AggregateName>");
+        configuration.ShouldContain("        builder.ToTable(\"AggregateTable\");");
+        configuration.ShouldContain("            .HasConversion(id => id.Value, value => new AggregateNameId(value))");
+        configuration.ShouldContain("        builder.Ignore(aggregate => aggregate.DomainEvents);");
+    }
+
+    // Every refusal fails the generation, after excluding every file, and says that nothing was created; the last action prints the migration.
+    [Fact]
+    public void Aggregate_item_template_refuses_with_an_error_that_creates_nothing()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(AggregateTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Length.ShouldBe(6);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+        postActions.Last().GetProperty("manualInstructions")[0].GetProperty("text").GetString()!
+            .ShouldContain("dotnet ef migrations add AddAggregateTable --project src/MyApp --output-dir Shared/Persistence/Migrations");
     }
 
     // In the repository, the template holds the token in place of the version, in its reference to the analyzers and in its tool entry only.
@@ -417,6 +488,16 @@ public sealed class TemplatePackageTests
         "tests/MyApp.Tests/Features/ModuleName/.gitkeep"
     ];
 
+    private static readonly string[] AggregateTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp.Domain/ModuleName/AggregateName.cs",
+        "src/MyApp.Domain/ModuleName/AggregateNameId.cs",
+        "src/MyApp/Features/ModuleName/AggregateNameConfiguration.cs",
+        "tests/MyApp.Tests/Domain/ModuleName/AggregateNameTests.cs"
+    ];
+
     // The files of the item template under <folder> of the package, relative to that folder.
     private static IEnumerable<string> PackedFiles(ZipArchive archive, string folder) =>
         archive.Entries.Select(entry => entry.FullName.Replace('\\', '/'))
@@ -432,6 +513,9 @@ public sealed class TemplatePackageTests
 
     private static string ModuleTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-module");
+
+    private static string AggregateTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-aggregate");
 
     private static string TemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");

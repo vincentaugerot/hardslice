@@ -1903,6 +1903,18 @@ scripts/test-template.sh
 - pas de migration générée : la commande `dotnet ef migrations add` à lancer est affichée, et le test d'intégration existant sur les modifications en attente la rend obligatoire ;
 - module inexistant : erreur qui renvoie à `hardslice-module`.
 
+**Réalisation (31/10/2026)**
+
+Essais faits avec le SDK 10.0.401 :
+
+- mêmes liaisons et mêmes refus que PB-036 et PB-037 : `dotnet new hardslice-aggregate --project src/<App>/<App>.csproj --module Rooms --name Room`, application lue par `msbuild:RootNamespace`, module vérifié par `HardSliceModuleFiles`, post-action sans script et code 105 pour une application illisible, un nom absent ou non PascalCase, un module non PascalCase ou absent ; `--module` absent est refusé par `dotnet new` lui-même (code 102), un agrégat existant aussi (code 73, `--force`) ;
+- fichiers : `src/<App>.Domain/<Module>/<Name>.cs`, `<Name>Id.cs`, `src/<App>/Features/<Module>/<Name>Configuration.cs` et `tests/<App>.Tests/Domain/<Module>/<Name>Tests.cs`. L'agrégat a la forme de `Booking`, sans état autre que son `Id` : constructeur privé qui reçoit l'identifiant, constructeur privé sans paramètre pour la persistance, liste privée d'événements exposée en lecture seule par `DomainEvents` et vidée par `DequeueDomainEvents()`, fabrique `Create()` qui fonctionne telle quelle, à renommer d'après le fait métier et à compléter de l'état et des règles. Le template ne connaît pas l'état : une fabrique qui lèverait `NotImplementedException` rendrait l'agrégat inutilisable par `hardslice-query` ;
+- le mapping convertit l'identifiant, ignore `DomainEvents` et nomme la table d'après l'agrégat suivi de `s` (`Room` donne `Rooms`) ; `--table` en donne une autre, faite de lettres, de chiffres et de soulignés, sinon refus (code 105). Une valeur vide revient au défaut ;
+- les noms des paramètres des lambdas et des variables de test sont fixes (`aggregate`) : un nom dérivé de l'agrégat donnerait un mot clé C# pour `Event` ou `Class` ;
+- la vérification arrête au premier échec, tests unitaires avant tests d'intégration : elle échoue d'abord sur le test `TODO(hardslice):` de l'état, puis, une fois complété, sur la migration manquante. `MigrationsTests` échoue toujours ; dès que la solution a une migration, EF Core refuse aussi de migrer la base des autres tests d'intégration tant que le modèle a des changements en attente (`PendingModelChangesWarning`), et tous échouent avec « Add a new migration before updating the database ». Sans aucune migration (variante `--no-sample`), seul `MigrationsTests` échoue ;
+- les instructions affichées donnent `dotnet tool restore` et `dotnet ef migrations add Add<Table> --project src/<App> --output-dir Shared/Persistence/Migrations` : rien à enregistrer, `AppDbContext` applique la configuration lui-même ;
+- `scripts/test-template.sh` génère `BookingCategory` (`--table BookingCategories`) dans Bookings, puis le retire avec sa migration ; sans Bookings, il génère `Room` dans le module `Rooms` à la place de l'agrégat écrit à la main, le migre par la commande affichée, et les slices de requête le lisent par `Room.Create()`. La complétion de référence retire le marqueur : l'état de l'agrégat généré est son identifiant, déjà vérifié.
+
 **Dépendances**
 
 Incrément 3.
