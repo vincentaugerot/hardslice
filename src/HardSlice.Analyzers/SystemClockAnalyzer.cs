@@ -18,7 +18,7 @@ public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "The domain or a slice reads the system clock",
-        messageFormat: "{0} reads '{1}'. The domain and the slices never read the system clock. Fix: {2}. Doc: 'docs/rules/HS010.md'.",
+        messageFormat: "{0} reads '{1}'. The domain and the slices never read the system clock. Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS010.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

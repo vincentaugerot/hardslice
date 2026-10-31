@@ -22,7 +22,7 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "Code blocks on asynchronous work or declares async void",
-        messageFormat: "{0}. {1} Fix: {2}. Doc: 'docs/rules/HS011.md'.",
+        messageFormat: "{0}. {1} Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

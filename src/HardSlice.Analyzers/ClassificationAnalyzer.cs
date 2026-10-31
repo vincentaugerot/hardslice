@@ -41,7 +41,7 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor ConfigurationRule = new(
         ConfigurationId,
         title: "The HardSlice configuration is unusable",
-        messageFormat: "{0}. The contracts of hardslice.json classify the types checked by {1}. Fix: {2}. Doc: 'docs/rules/HS900.md'.",
+        messageFormat: "{0}. The contracts of hardslice.json classify the types checked by {1}. Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -50,7 +50,7 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor AmbiguityRule = new(
         AmbiguityId,
         title: "A type is classified in two incompatible categories",
-        messageFormat: "'{0}' is both {1} and {2}: it implements '{3}' and '{4}'. {5}. Fix: {6}. Doc: 'docs/rules/HS901.md'.",
+        messageFormat: "'{0}' is both {1} and {2}: it implements '{3}' and '{4}'. {5}. Fix: {6}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS901.md'.",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -60,7 +60,7 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
         title: "A domain type mapped as an EF Core entity implements no entity contract",
         messageFormat: "'{0}' is mapped as an EF Core entity by '{1}' but implements neither '{2}' nor '{3}'. "
             + "HardSlice classifies domain types only through these contracts. "
-            + "Fix: implement {3} if '{0}' is the root of its aggregate, {2} otherwise. Doc: 'docs/rules/HS902.md'.",
+            + "Fix: implement {3} if '{0}' is the root of its aggregate, {2} otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);

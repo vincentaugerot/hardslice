@@ -2,7 +2,7 @@
 
 Vertical slices, kept clean by the build.
 
-HardSlice is a .NET kit that makes AI coding agents (and humans) respect a vertical slice architecture with a rich domain. The rules are not advice in a prompt: a violation fails `dotnet build` or `dotnet test`, with a one-line diagnostic that names the offending symbol, the expected fix and a rule sheet. An agent reads it and repairs the architecture instead of working around it.
+HardSlice is a .NET kit that makes AI coding agents (and humans) respect a vertical slice architecture with a rich domain. The rules are not advice in a prompt: a violation fails `dotnet build` or `dotnet test`, with a one-line diagnostic that names the offending symbol, the expected fix, the skill that fixes it and a rule sheet. An agent reads it and repairs the architecture instead of working around it.
 
 HardSlice adds nothing to the runtime of your application: its analyzer runs at build time only, and its architecture tests live in your test projects.
 
@@ -19,7 +19,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 - the `HardSlice.Analyzers` package, which reports HS000, HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
 - architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
 - the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule;
-- `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, the skills `add-module`, `add-aggregate`, `add-slice` and `add-domain-event`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution.
+- `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, the skills `add-module`, `add-aggregate`, `add-slice`, `add-domain-event`, `extract-to-domain` and `fix-architecture-violation`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution.
 
 `scripts/test-template.sh` runs the commands of [Getting started](#getting-started) in CI, from a fresh runner, on every push to `main` and every pull request: in temporary folders, on free ports, with and without the sample.
 
@@ -148,7 +148,7 @@ Each supported agent loads `AGENTS.md` by itself, through its own instruction fi
 
 A native adapter runs the check through the hooks of the agent, after each edit and before it hands back. With the fallback, nothing checks an edit as it is made: the agent follows `AGENTS.md`, which tells it to run the check script before it finishes. `CLAUDE.md` lives in `.claude/` because Copilot reads a `CLAUDE.md` at the root and expands its import, which would load `AGENTS.md` twice. Gemini CLI is not tried: it no longer serves personal Google accounts. [Agent support](docs/agents/support.md) records what each CLI reads, at a dated version.
 
-Four skills, in the Agent Skills format (`SKILL.md`), turn a business request into the template that generates its element, the code that completes it and the check:
+Six skills, in the Agent Skills format (`SKILL.md`), are shipped. Four turn a business request into the template that generates its element, the code that completes it and the check:
 
 | Skill | Adds | Template |
 |---|---|---|
@@ -156,6 +156,22 @@ Four skills, in the Agent Skills format (`SKILL.md`), turn a business request in
 | `add-aggregate` | an aggregate with its invariants, their unit tests, its mapping and its migration | `hardslice-aggregate` |
 | `add-slice` | a command or a query, its business rule in the aggregate, its registration and its tests | `hardslice-command`, `hardslice-query` |
 | `add-domain-event` | a domain event raised by its aggregate, and the reaction that handles it with its tests | `hardslice-event` |
+
+Two fix the code that a failure names. `extract-to-domain` moves a business rule that slices share, or that a slice writes into an entity, into its aggregate with its unit tests, and makes each slice call it. `fix-architecture-violation` reads the diagnostic, applies the first fix of the sheet of its rule, runs the check again, and stops to explain the conflict when only a workaround would pass.
+
+Every HardSlice diagnostic and every architecture test failure names its skill between `Fix:` and `Doc:`:
+
+```text
+HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingHandler' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.
+```
+
+| Skill | Named by |
+|---|---|
+| `add-slice` | HS004, HS013, HS014, HS015, HS018 |
+| `extract-to-domain` | HS007, HS016 |
+| `add-aggregate` | HS008, HS902 |
+| `add-domain-event` | HS009, HS012, HS019 |
+| `fix-architecture-violation` | HS000, HS001, HS003, HS005, HS006, HS010, HS011, HS017, HS900, HS901 |
 
 Their source is `.claude/skills/`, which Claude Code and Copilot read; the template package copies them into `.agents/skills/`, which Codex and Gemini CLI read. Copilot reads both and keeps one skill per name. Each skill recalls the forbidden workarounds and never edits a protected file.
 
@@ -281,7 +297,7 @@ A dash means the mode turns the rule off: `Minimum` keeps the rules that assume 
 - HS015 checks the endpoints mapped under `Features` only, and accepts the result types of `Microsoft.AspNetCore.Http.HttpResults` only: a custom `IResult` is reported. The module must call the method of the slice that maps the endpoint, not a helper of it.
 - PostgreSQL is the only database. SQL Server and Aspire orchestration are planned for v1.0.
 - Domain events are published to their handlers inside the transaction of the command, before saving: no outbox, no publication after commit, no bus and no asynchronous processing. A handler that sends a request through `IMediator` fails at runtime; an external effect in a handler is not detected.
-- Agents get instructions and skills, but no hooks yet, so every agent is at the fallback level. The skills that fix a failure, and the hooks of Claude Code, Codex and Copilot CLI, are planned for v0.3, the adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) for v0.5.
+- Agents get instructions and skills, but no hooks yet, so every agent is at the fallback level. The hooks of Claude Code, Codex and Copilot CLI are planned for v0.3, the adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) for v0.5.
 - `dotnet new hardslice-module`, `hardslice-aggregate`, `hardslice-command`, `hardslice-query` and `hardslice-event` read the application and its modules through `--project` only, once the web project is restored: `dotnet new` evaluates no project from the root of a solution, and cannot read a file before it creates the others. A refusal prints `The template ... was created successfully.` before `Post action failed.` and its error, and exits with code 105: nothing is created. They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module, `hardslice-aggregate` the migration to add, and `hardslice-event` how to raise the event. `hardslice-module` puts a `.gitkeep` in the folders it creates without file, as `dotnet new` creates no empty folder; with `--force`, it overwrites the contract of an existing module, its registrations included. The tests that `hardslice-command` and `hardslice-query` generate call the route of the group in kebab-case: after `--route`, change theirs. `hardslice-query` cannot check the aggregate: the compiler does. Its list result is `--result many`, not `list`, which `dotnet new` would read as its own `list` command. `hardslice-event` always creates its event: a reaction is generated with it, or with `--force` on an event left unchanged, and a reaction to an event already completed is written by hand, in the shape of the generated one.
 - The generated application has a Development configuration only: no production settings, authentication or deployment.
 - CI runs on Linux: `scripts/check.ps1` is verified with PowerShell 7 on Linux, not on Windows.
@@ -298,7 +314,7 @@ scripts/measure-analyzers.sh
 ```
 
 - `dotnet test` runs the analyzer tests and the tests of the template content, integration tests included: it needs a container runtime.
-- `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic and its sheet. In both, it also generates a module with `hardslice-module`, registers it in `Program.cs` with the lines it prints and checks that the empty module passes the check, and, with the sample, that HS012 sees it reach into a slice of `Bookings`. It generates an aggregate with `hardslice-aggregate` through each of its refusals, checks that it builds without HardSlice diagnostic, that the check fails on its `TODO(hardslice):` test, then on the missing migration, and passes once the migration is added. It generates command slices with `hardslice-command` and query slices with `hardslice-query`, through each of their refusals, registers them with the lines they print, and checks that only the `TODO(hardslice):` tests fail until a reference completion makes the check pass, and that a query on an unknown aggregate fails the build with a compiler error alone. It generates events with `hardslice-event` the same way, with a reaction in the module of the event and one in a second module, and checks that the test of the host names a reaction left unregistered. It needs PowerShell 7.
+- `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic, its sheet and a skill that the solution ships. In both, it also generates a module with `hardslice-module`, registers it in `Program.cs` with the lines it prints and checks that the empty module passes the check, and, with the sample, that HS012 sees it reach into a slice of `Bookings`. It generates an aggregate with `hardslice-aggregate` through each of its refusals, checks that it builds without HardSlice diagnostic, that the check fails on its `TODO(hardslice):` test, then on the missing migration, and passes once the migration is added. It generates command slices with `hardslice-command` and query slices with `hardslice-query`, through each of their refusals, registers them with the lines they print, and checks that only the `TODO(hardslice):` tests fail until a reference completion makes the check pass, and that a query on an unknown aggregate fails the build with a compiler error alone. It generates events with `hardslice-event` the same way, with a reaction in the module of the event and one in a second module, and checks that the test of the host names a reaction left unregistered. It needs PowerShell 7.
 - `scripts/demo-hs016-agent-fix.sh` prepares the [HS016 agent fix demonstration](demos/hs016-agent-fix/README.md).
 - `scripts/measure-analyzers.sh` measures the build time of a large generated application with and without the HardSlice analyzers, checks the thresholds and records the measurement in [the performance report](docs/performance/analyzers.md), in French.
 

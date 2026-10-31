@@ -71,7 +71,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'. "
             + "HardSlice classifies domain types only through these contracts. "
-            + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Doc: 'docs/rules/HS902.md'.");
+            + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.");
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "endpoint 'GET /' in slice 'Bookings/ListBookings' uses 'AppDbContext' (parameter 'db'). "
             + "Endpoints never reach the database. "
-            + "Fix: move the data access into the handler of a query and send the query with IMediator. Doc: 'docs/rules/HS003.md'.");
+            + "Fix: move the data access into the handler of a query and send the query with IMediator. Skill: fix-architecture-violation. Doc: 'docs/rules/HS003.md'.");
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class BookingsReferenceTests
             "endpoint 'GET /{id:guid}' in slice 'Bookings/GetBooking' returns 'IResult'. "
             + "A slice endpoint returns TypedResults, so its responses are part of its signature. "
             + "Fix: build every response with TypedResults instead of Results, and declare them all as the return type of the endpoint, "
-            + "such as 'Task<Results<Ok<T>, NotFound>>'. Doc: 'docs/rules/HS015.md'.");
+            + "such as 'Task<Results<Ok<T>, NotFound>>'. Skill: add-slice. Doc: 'docs/rules/HS015.md'.");
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class BookingsReferenceTests
             + "which 'BookingsModule' never calls. "
             + "A slice endpoint is exposed only through its module, which maps every endpoint of its slices. "
             + "Fix: call 'ArchiveBookingEndpoint.Map' with the group of the module from the mapping method of 'BookingsModule'. "
-            + "Doc: 'docs/rules/HS015.md'.");
+            + "Skill: add-slice. Doc: 'docs/rules/HS015.md'.");
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "slice 'Bookings/ArchiveBooking' declares 'ArchiveCommand'. "
             + "A slice holds one request named after it, its handler and its endpoint. "
-            + "Fix: rename the command to 'ArchiveBookingCommand'. Doc: 'docs/rules/HS004.md'.");
+            + "Fix: rename the command to 'ArchiveBookingCommand'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     // ConfirmBooking.cs moved to the root of the module, its namespace unchanged: each type of the slice is reported.
@@ -171,7 +171,7 @@ public sealed class BookingsReferenceTests
         diagnostics.First(diagnostic => diagnostic.GetMessage().StartsWith("'ConfirmBookingCommand'")).GetMessage().ShouldBe(
             "'ConfirmBookingCommand' of slice 'Bookings/ConfirmBooking' is declared in 'Features/Bookings/ConfirmBooking.cs', "
             + "outside the folder of its slice. The folder and the namespace of a slice hold the same types. "
-            + "Fix: move the declaration into a file under 'Features/Bookings/ConfirmBooking/'. Doc: 'docs/rules/HS004.md'.");
+            + "Fix: move the declaration into a file under 'Features/Bookings/ConfirmBooking/'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "'ConfirmBookingHandler.Handle' blocks on 'Task<TResult>.Result'. "
             + "Code never blocks on asynchronous work. "
-            + "Fix: make the caller async and await the task. Doc: 'docs/rules/HS011.md'.");
+            + "Fix: make the caller async and await the task. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.");
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "'ConfirmBookingHandler.Handle' in slice 'Bookings/ConfirmBooking' reads 'DateTimeOffset.UtcNow'. "
             + "The domain and the slices never read the system clock. "
-            + "Fix: inject TimeProvider and call GetUtcNow(), or pass the instant to the domain as a parameter. Doc: 'docs/rules/HS010.md'.");
+            + "Fix: inject TimeProvider and call GetUtcNow(), or pass the instant to the domain as a parameter. Skill: fix-architecture-violation. Doc: 'docs/rules/HS010.md'.");
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "handler 'ConfirmBookingHandler' of command 'ConfirmBookingCommand' returns 'ConfirmationDto', whose property 'Booking' holds the entity 'Booking'. "
             + "Command handlers return an identifier, a DTO of values or nothing. "
-            + "Fix: return 'BookingId', or a DTO built from the entity's values. Doc: 'docs/rules/HS005.md'.");
+            + "Fix: return 'BookingId', or a DTO built from the entity's values. Skill: fix-architecture-violation. Doc: 'docs/rules/HS005.md'.");
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "query handler 'GetBookingHandler' reads 'Booking' from 'Set<Booking>()' without a local guarantee that it is not tracked. "
             + "Query handlers read without tracking and never write. "
-            + "Fix: add AsNoTracking() where the query starts, and project to a DTO. Doc: 'docs/rules/HS006.md'.");
+            + "Fix: add AsNoTracking() where the query starts, and project to a DTO. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "entity 'Booking' exposes 'Status' with a public setter. "
             + "The state of an entity changes only through its methods, which protect its invariants. "
-            + "Fix: make the setter private and change the state in a domain method, such as 'Booking.Cancel()'. Doc: 'docs/rules/HS007.md'.");
+            + "Fix: make the setter private and change the state in a domain method, such as 'Booking.Cancel()'. Skill: extract-to-domain. Doc: 'docs/rules/HS007.md'.");
     }
 
     [Fact]
@@ -243,7 +243,7 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "entity 'BookingLine' of aggregate 'Booking' references aggregate 'Room' through property 'Room'. "
             + "An aggregate references another aggregate only by its identifier. "
-            + "Fix: replace the property with 'RoomId' and load 'Room' in the handler that needs it. Doc: 'docs/rules/HS008.md'.");
+            + "Fix: replace the property with 'RoomId' and load 'Room' in the handler that needs it. Skill: add-aggregate. Doc: 'docs/rules/HS008.md'.");
     }
 
     [Fact]
@@ -254,7 +254,7 @@ public sealed class BookingsReferenceTests
         diagnostic.Id.ShouldBe(DomainEventRecordAnalyzer.DiagnosticId);
         diagnostic.GetMessage().ShouldBe(
             "domain event 'BookingConfirmed' is a class. Domain events are records. "
-            + "Fix: declare it as 'public sealed record BookingConfirmed(...) : IDomainEvent'. Doc: 'docs/rules/HS009.md'.");
+            + "Fix: declare it as 'public sealed record BookingConfirmed(...) : IDomainEvent'. Skill: add-domain-event. Doc: 'docs/rules/HS009.md'.");
     }
 
     // A suggestion of the All mode only: the Recommended mode, the default, does not report it.
@@ -268,7 +268,7 @@ public sealed class BookingsReferenceTests
         diagnostic.Severity.ShouldBe(DiagnosticSeverity.Info);
         diagnostic.GetMessage().ShouldBe(
             "domain event 'ConfirmBooking' is not named as a past fact. Domain events are named in the past tense. "
-            + "Fix: rename it, for example to 'BookingConfirmed'. Doc: 'docs/rules/HS019.md'.");
+            + "Fix: rename it, for example to 'BookingConfirmed'. Skill: add-domain-event. Doc: 'docs/rules/HS019.md'.");
     }
 
     [Fact]
@@ -281,7 +281,7 @@ public sealed class BookingsReferenceTests
             "'#pragma warning disable HS016' in 'CancelBooking.cs' has no justification. "
             + "A HardSlice rule is suppressed only with a reason a reviewer can read. "
             + "Fix: remove the suppression and fix the code; if a maintainer approved it, add '// hardslice-justification: <reason>' on the line above. "
-            + "Doc: 'docs/rules/HS000.md'.");
+            + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS000.md'.");
     }
 
     [Fact]
@@ -373,7 +373,7 @@ public sealed class BookingsReferenceTests
             "'CancelBookingPolicy' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingHandler' from slice 'Bookings/ConfirmBooking'. "
             + "Slices never reference each other. "
             + "Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. "
-            + "Doc: 'docs/rules/HS016.md'.");
+            + "Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.");
     }
 
     [Fact]

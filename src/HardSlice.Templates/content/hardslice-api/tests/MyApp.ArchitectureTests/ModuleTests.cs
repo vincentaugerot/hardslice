@@ -19,6 +19,6 @@ public sealed class ModuleTests
             select $"HS012: '{Application.DisplayName(type)}' {source.Describe()} uses '{Application.DisplayName(used)}' from slice '{target.Slice}' "
                 + $"of module '{target.Module}'. A module uses another module only through its public contract. "
                 + $"Fix: use a type declared directly in namespace '{Application.WebName}.Features.{target.Module}', react to a domain event, "
-                + "or move the shared rule into the domain. Doc: 'docs/rules/HS012.md'.");
+                + "or move the shared rule into the domain. Skill: add-domain-event. Doc: 'docs/rules/HS012.md'.");
     }
 }

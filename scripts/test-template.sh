@@ -87,10 +87,10 @@ FILES
     echo "error: the AGENTS.md of $name lists no agent kit." >&2
     exit 1
   fi
-  # The skills (PB-043): .claude/skills/ for Claude Code and Copilot, the copy that the pack writes in .agents/skills/ for Codex and
+  # The skills (PB-043, PB-044): .claude/skills/ for Claude Code and Copilot, the copy that the pack writes in .agents/skills/ for Codex and
   # Gemini CLI, identical so that Copilot, which reads both, keeps one per name. Each names its folder and cites only paths of $name.
   local skill cited_path
-  for skill in add-module add-aggregate add-slice add-domain-event; do
+  for skill in add-module add-aggregate add-slice add-domain-event extract-to-domain fix-architecture-violation; do
     if [[ ! -f "$root/.claude/skills/$skill/SKILL.md" || ! -f "$root/.agents/skills/$skill/SKILL.md" ]]; then
       echo "error: $name lacks the skill $skill in .claude/skills/ or .agents/skills/." >&2
       exit 1
@@ -110,8 +110,8 @@ FILES
       fi
     done < <(grep -o '`\(src\|tests\|docs\|scripts\)/[^`<>[:space:]]*`' "$root/.claude/skills/$skill/SKILL.md" | tr -d '`' | sort -u)
   done
-  if [[ "$(find "$root/.claude/skills" "$root/.agents/skills" -type f | wc -l)" -ne 8 ]]; then
-    echo "error: $name holds other files than the four skills in .claude/skills/ and .agents/skills/." >&2
+  if [[ "$(find "$root/.claude/skills" "$root/.agents/skills" -type f | wc -l)" -ne 12 ]]; then
+    echo "error: $name holds other files than the six skills in .claude/skills/ and .agents/skills/." >&2
     exit 1
   fi
 }
@@ -399,6 +399,7 @@ expect_failure() {
   local script
   local check_output
   local diagnostic
+  local skill
 
   if [[ ! -f "$app/$doc" ]]; then
     echo "error: $doc does not exist from the generated solution root." >&2
@@ -409,14 +410,20 @@ expect_failure() {
       echo "error: scripts/$script passed despite $description." >&2
       exit 1
     fi
-    diagnostic="$(printf '%s\n' "$check_output" | grep -o "$marker.* Doc: '[^']*'" | head -n 1 || true)"
+    diagnostic="$(printf '%s\n' "$check_output" | grep -o "$marker.* Skill: [a-z-]*\. Doc: '[^']*'" | head -n 1 || true)"
     if [[ -z "$diagnostic" ]]; then
       printf '%s\n' "$check_output" >&2
-      echo "error: scripts/$script failed on $description without a \"$marker\" diagnostic announcing a Doc path." >&2
+      echo "error: scripts/$script failed on $description without a \"$marker\" diagnostic announcing a skill and a Doc path." >&2
       exit 1
     fi
     if [[ "$diagnostic" != *" Doc: '$doc'" ]]; then
       echo "error: scripts/$script reports \"$diagnostic\", which does not announce $doc." >&2
+      exit 1
+    fi
+    # PB-044: the skill that the message names ships with the generated solution.
+    skill="$(printf '%s\n' "$diagnostic" | sed -n "s/.* Skill: \([a-z-]*\)\. Doc: .*/\1/p")"
+    if [[ ! -f "$app/.claude/skills/$skill/SKILL.md" || ! -f "$app/.agents/skills/$skill/SKILL.md" ]]; then
+      echo "error: scripts/$script reports \"$diagnostic\", whose skill $skill the generated solution does not contain." >&2
       exit 1
     fi
   done
@@ -1275,7 +1282,7 @@ EOF
   fi
   if ! grep -Fq '"ruleId": "HS019"' "$sarif" ||
     ! grep -Fq "domain event 'InspectRoom' is not named as a past fact. Domain events are named in the past tense." "$sarif" ||
-    ! grep -Fq "Doc: 'docs/rules/HS019.md'." "$sarif"; then
+    ! grep -Fq "Skill: add-domain-event. Doc: 'docs/rules/HS019.md'." "$sarif"; then
     cat "$sarif" >&2 || true
     echo "error: the compiler log of $app_name.Domain does not hold the HS019 suggestion on InspectRoom." >&2
     exit 1

@@ -23,7 +23,7 @@ public sealed class SliceTests
             where target.Slice is not null && target.Slice != source.Slice
             select $"HS016: '{Application.DisplayName(type)}' in slice '{source.Slice}' uses '{Application.DisplayName(used)}' from slice '{target.Slice}'. "
                 + "Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, "
-                + $"or use the public contract of module '{target.Module}'. Doc: 'docs/rules/HS016.md'.");
+                + $"or use the public contract of module '{target.Module}'. Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.");
     }
 
     // Includes protected nesting reachable through inheritance, but excludes nesting inside internal/private containers.
@@ -37,7 +37,7 @@ public sealed class SliceTests
             where role is not null
             select $"HS016: {role} '{type.Name}' {Location.Of(type.Namespace).Describe()} is accessible outside the assembly. Handlers, domain event handlers, validators and endpoints are internal: "
                 + "other code reaches a slice through IMediator and its public request. "
-                + $"Fix: declare '{type.Name}' internal. Doc: 'docs/rules/HS016.md'.");
+                + $"Fix: declare '{type.Name}' internal. Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.");
     }
 
     private static string? RoleOf(Type type)

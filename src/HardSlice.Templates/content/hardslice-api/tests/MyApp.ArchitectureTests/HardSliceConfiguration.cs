@@ -12,6 +12,10 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
 
     private const string Fix = "Fix: restore hardslice.json from version control; changing it requires a maintainer decision.";
 
+    // The skill and the sheet that end each message: HS017 for the file and its Shared folders, HS900 for its contracts.
+    private const string SharedRule = "Skill: fix-architecture-violation. Doc: 'docs/rules/HS017.md'.";
+    private const string ContractsRule = "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.";
+
     private static readonly string[] ContractKeys = ["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler", "domainEventHandler"];
 
     private static readonly Lazy<HardSliceConfiguration> Solution =
@@ -68,18 +72,17 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
     // Each contract is '<metadata name>, <declaring assembly>'. The analyzers resolve them: HS900 reports a contract they cannot find.
     private static Dictionary<string, string> ReadContracts(JsonElement root)
     {
-        const string Doc = "docs/rules/HS900.md";
         if (!root.TryGetProperty("contracts", out var contracts))
-            throw Invalid("'contracts' is missing: it declares the types that classify entities, aggregate roots, domain events, commands, queries, request handlers and domain event handlers.", Doc);
-        ExpectObjectWithKeys(contracts, "'contracts'", ContractKeys, Doc);
+            throw Invalid("'contracts' is missing: it declares the types that classify entities, aggregate roots, domain events, commands, queries, request handlers and domain event handlers.", ContractsRule);
+        ExpectObjectWithKeys(contracts, "'contracts'", ContractKeys, ContractsRule);
 
         var values = new Dictionary<string, string>();
         foreach (var key in ContractKeys)
         {
             if (!contracts.TryGetProperty(key, out var contract))
-                throw Invalid($"'contracts.{key}' is missing.", Doc);
+                throw Invalid($"'contracts.{key}' is missing.", ContractsRule);
             if (contract.ValueKind != JsonValueKind.String || !ContractName().IsMatch(contract.GetString()!))
-                throw Invalid($"'contracts.{key}' is {contract.GetRawText()}, not \"<metadata name>, <assembly>\" such as \"MyApp.Domain.IEntity, MyApp.Domain\".", Doc);
+                throw Invalid($"'contracts.{key}' is {contract.GetRawText()}, not \"<metadata name>, <assembly>\" such as \"MyApp.Domain.IEntity, MyApp.Domain\".", ContractsRule);
             values.Add(key, contract.GetString()!);
         }
 
@@ -88,22 +91,22 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
 
     // Unknown keys are rejected: a misspelled key would otherwise be ignored without notice.
     private static void ExpectObject(JsonElement element, string name, params string[] keys) =>
-        ExpectObjectWithKeys(element, name, keys, "docs/rules/HS017.md");
+        ExpectObjectWithKeys(element, name, keys, SharedRule);
 
-    private static void ExpectObjectWithKeys(JsonElement element, string name, string[] keys, string doc)
+    private static void ExpectObjectWithKeys(JsonElement element, string name, string[] keys, string rule)
     {
         if (element.ValueKind != JsonValueKind.Object)
-            throw Invalid($"{name} must be a JSON object.", doc);
+            throw Invalid($"{name} must be a JSON object.", rule);
 
         foreach (var property in element.EnumerateObject())
         {
             if (!keys.Contains(property.Name))
-                throw Invalid($"unknown key '{property.Name}' in {name}. Allowed keys: {string.Join(", ", keys.Select(key => $"'{key}'"))}.", doc);
+                throw Invalid($"unknown key '{property.Name}' in {name}. Allowed keys: {string.Join(", ", keys.Select(key => $"'{key}'"))}.", rule);
         }
     }
 
-    private static InvalidOperationException Invalid(string reason, string doc = "docs/rules/HS017.md") =>
-        new($"{FileName}: {reason} {Fix} Doc: '{doc}'.");
+    private static InvalidOperationException Invalid(string reason, string rule = SharedRule) =>
+        new($"{FileName}: {reason} {Fix} {rule}");
 
     // A namespace segment, so that the folder matches the namespace of the code it holds.
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]

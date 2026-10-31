@@ -75,7 +75,7 @@ public sealed class DomainEventNameAnalyzerTests
         diagnostic.Severity.ShouldBe(DiagnosticSeverity.Info);
         diagnostic.GetMessage().ShouldBe(
             "domain event 'ConfirmBooking' is not named as a past fact. Domain events are named in the past tense. "
-            + "Fix: rename it, for example to 'BookingConfirmed'. Doc: 'docs/rules/HS019.md'.");
+            + "Fix: rename it, for example to 'BookingConfirmed'. Skill: add-domain-event. Doc: 'docs/rules/HS019.md'.");
         diagnostic.Location.SourceTree!.GetText(TestContext.Current.CancellationToken).ToString(diagnostic.Location.SourceSpan).ShouldBe("ConfirmBooking");
     }
 

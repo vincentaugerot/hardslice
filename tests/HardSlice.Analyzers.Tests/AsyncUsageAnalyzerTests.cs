@@ -39,7 +39,7 @@ public sealed class AsyncUsageAnalyzerTests
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "'ConfirmBookingHandler.Handle' blocks on 'Task<TResult>.Result'. "
             + "Code never blocks on asynchronous work. "
-            + "Fix: make the caller async and await the task. Doc: 'docs/rules/HS011.md'.");
+            + "Fix: make the caller async and await the task. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.");
     }
 
     [Fact]
@@ -148,14 +148,14 @@ public sealed class AsyncUsageAnalyzerTests
 
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1]).ShouldBe(
         [
-            "make the caller async and await 'WaitAsync' with the same timeout or token. Doc: 'docs/rules/HS011.md'.",
-            "make the caller async and await 'WaitAsync' with the same timeout or token. Doc: 'docs/rules/HS011.md'.",
-            "make the caller async and await 'WaitAsync' with the same timeout or token. Doc: 'docs/rules/HS011.md'.",
-            "make the caller async and await 'Task.WhenAll' with the same tasks. Doc: 'docs/rules/HS011.md'.",
-            "make the caller async and await 'Task.WhenAll' with the same tasks. Doc: 'docs/rules/HS011.md'.",
-            "make the caller async and await 'Task.WhenAll' with the same tasks. Doc: 'docs/rules/HS011.md'.",
-            "make the caller async and await 'Task.WhenAny' with the same tasks. Doc: 'docs/rules/HS011.md'.",
-            "make the caller async and await the task. Doc: 'docs/rules/HS011.md'."
+            "make the caller async and await 'WaitAsync' with the same timeout or token. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make the caller async and await 'WaitAsync' with the same timeout or token. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make the caller async and await 'WaitAsync' with the same timeout or token. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make the caller async and await 'Task.WhenAll' with the same tasks. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make the caller async and await 'Task.WhenAll' with the same tasks. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make the caller async and await 'Task.WhenAll' with the same tasks. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make the caller async and await 'Task.WhenAny' with the same tasks. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make the caller async and await the task. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'."
         ]);
     }
 
@@ -244,11 +244,11 @@ public sealed class AsyncUsageAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage()).ShouldBe(
         [
             "'BookingNotifier.Notify' is async void. " + AsyncVoidRule
-                + " Fix: return Task instead of void, and await it where it is called. Doc: 'docs/rules/HS011.md'.",
+                + " Fix: return Task instead of void, and await it where it is called. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
             "an async lambda of 'BookingNotifier.NotifyAll' is async void: it is converted to 'Action<Guid>', which returns void. " + AsyncVoidRule
-                + " Fix: replace 'List<T>.ForEach' with a foreach loop that awaits each call. Doc: 'docs/rules/HS011.md'.",
+                + " Fix: replace 'List<T>.ForEach' with a foreach loop that awaits each call. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
             "local function 'Send' of 'BookingNotifier.NotifyAll' is async void. " + AsyncVoidRule
-                + " Fix: return Task instead of void, and await it where it is called. Doc: 'docs/rules/HS011.md'."
+                + " Fix: return Task instead of void, and await it where it is called. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'."
         ]);
     }
 
@@ -289,11 +289,11 @@ public sealed class AsyncUsageAnalyzerTests
         ]);
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1]).ShouldBe(
         [
-            "give it a delegate type that returns Task, such as 'Func<Task>', and await the task it returns. Doc: 'docs/rules/HS011.md'.",
-            "subscribe a synchronous handler, and hand the asynchronous work to code that awaits it. Doc: 'docs/rules/HS011.md'.",
-            "give it a delegate type that returns Task, such as 'Func<Guid, string, Task>', and await the task it returns. Doc: 'docs/rules/HS011.md'.",
-            "give it a delegate type that returns Task, such as 'Func<int, Task>', and await the task it returns. Doc: 'docs/rules/HS011.md'.",
-            "give it a delegate type that returns Task, such as 'Func<Task>', and await the task it returns. Doc: 'docs/rules/HS011.md'."
+            "give it a delegate type that returns Task, such as 'Func<Task>', and await the task it returns. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "subscribe a synchronous handler, and hand the asynchronous work to code that awaits it. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "give it a delegate type that returns Task, such as 'Func<Guid, string, Task>', and await the task it returns. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "give it a delegate type that returns Task, such as 'Func<int, Task>', and await the task it returns. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "give it a delegate type that returns Task, such as 'Func<Task>', and await the task it returns. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'."
         ]);
     }
 
@@ -334,10 +334,10 @@ public sealed class AsyncUsageAnalyzerTests
 
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1]).ShouldBe(
         [
-            "make it synchronous, or, if the application declares 'IStartable.Start', make both return Task and await it where it is called. Doc: 'docs/rules/HS011.md'.",
-            "make it synchronous, or, if the application declares 'Component.Stop', make both return Task and await it where it is called. Doc: 'docs/rules/HS011.md'.",
-            "make it synchronous, or, if the application declares 'IDisposable.Dispose', make both return Task and await it where it is called. Doc: 'docs/rules/HS011.md'.",
-            "return Task instead of void, and await it where it is called. Doc: 'docs/rules/HS011.md'."
+            "make it synchronous, or, if the application declares 'IStartable.Start', make both return Task and await it where it is called. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make it synchronous, or, if the application declares 'Component.Stop', make both return Task and await it where it is called. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "make it synchronous, or, if the application declares 'IDisposable.Dispose', make both return Task and await it where it is called. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
+            "return Task instead of void, and await it where it is called. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'."
         ]);
         Subjects(diagnostics).ShouldBe(
         [

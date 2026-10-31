@@ -72,7 +72,7 @@ public sealed class AggregateReferenceAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(". ")[0]);
 
     private static IEnumerable<string> Fixes(ImmutableArray<Diagnostic> diagnostics) =>
-        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Doc: ")[0]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Skill: ")[0]);
 
     [Fact]
     public async Task Reports_a_child_entity_that_references_another_aggregate()
@@ -98,7 +98,7 @@ public sealed class AggregateReferenceAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "entity 'BookingLine' of aggregate 'Booking' references aggregate 'Room' through property 'Room'. " + Rule
-            + " Fix: replace the property with 'RoomId' and load 'Room' in the handler that needs it. Doc: 'docs/rules/HS008.md'.");
+            + " Fix: replace the property with 'RoomId' and load 'Room' in the handler that needs it. Skill: add-aggregate. Doc: 'docs/rules/HS008.md'.");
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public sealed class AggregateReferenceAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "aggregate 'Booking' references another aggregate 'Booking' through property 'PreviousBooking'. " + Rule
-            + " Fix: replace the property with 'PreviousBookingId' and load 'Booking' in the handler that needs it. Doc: 'docs/rules/HS008.md'.");
+            + " Fix: replace the property with 'PreviousBookingId' and load 'Booking' in the handler that needs it. Skill: add-aggregate. Doc: 'docs/rules/HS008.md'.");
     }
 
     [Fact]
@@ -374,7 +374,7 @@ public sealed class AggregateReferenceAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "aggregate 'Booking' references aggregate 'Room' through property 'Room', inherited from 'RoomHolder'. " + Rule
-            + " Fix: replace the property 'RoomHolder.Room' with 'RoomId' and load 'Room' in the handler that needs it. Doc: 'docs/rules/HS008.md'.");
+            + " Fix: replace the property 'RoomHolder.Room' with 'RoomId' and load 'Room' in the handler that needs it. Skill: add-aggregate. Doc: 'docs/rules/HS008.md'.");
     }
 
     // The base root is an entity of the same compilation: it reports its own member, once, and its derived roots do not repeat it.

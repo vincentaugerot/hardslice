@@ -21,7 +21,7 @@ public sealed class EntityStateAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "The state of an entity can be written from outside",
-        messageFormat: "entity '{0}' {1}. The state of an entity changes only through its methods, which protect its invariants. Fix: {2}. Doc: 'docs/rules/HS007.md'.",
+        messageFormat: "entity '{0}' {1}. The state of an entity changes only through its methods, which protect its invariants. Fix: {2}. Skill: extract-to-domain. Doc: 'docs/rules/HS007.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

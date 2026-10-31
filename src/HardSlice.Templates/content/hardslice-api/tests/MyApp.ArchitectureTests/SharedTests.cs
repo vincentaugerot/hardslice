@@ -3,7 +3,7 @@ namespace MyApp.ArchitectureTests;
 // HS017: Shared stays cross-cutting. It never depends on Features and holds only the folders hardslice.json allows.
 public sealed class SharedTests
 {
-    private const string Doc = "Doc: 'docs/rules/HS017.md'.";
+    private const string Doc = "Skill: fix-architecture-violation. Doc: 'docs/rules/HS017.md'.";
 
     [Fact]
     public void Shared_never_depends_on_features()

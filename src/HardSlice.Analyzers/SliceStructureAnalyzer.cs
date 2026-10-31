@@ -33,7 +33,7 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A slice is not one entry named after it, a request with its handler and endpoint or a domain event handler, declared in its folder",
-        messageFormat: "{0}. {1} Fix: {2}. Doc: 'docs/rules/HS004.md'.",
+        messageFormat: "{0}. {1} Fix: {2}. Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

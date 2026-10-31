@@ -18,7 +18,7 @@ public sealed class EndpointDatabaseAccessAnalyzer : DiagnosticAnalyzer
         DiagnosticId,
         title: "An endpoint reaches the database",
         messageFormat: "endpoint '{0}' in {1} uses '{2}' ({3}). Endpoints never reach the database. "
-            + "Fix: move the data access into the handler of {4} and send {5} with IMediator. Doc: 'docs/rules/HS003.md'.",
+            + "Fix: move the data access into the handler of {4} and send {5} with IMediator. Skill: fix-architecture-violation. Doc: 'docs/rules/HS003.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

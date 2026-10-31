@@ -7,7 +7,7 @@ namespace MyApp.ArchitectureTests;
 public sealed class DomainTests
 {
     private const string Rule = "The domain depends on the base class library only: no other project, EF Core, ASP.NET Core or dependency injection.";
-    private const string Doc = "Doc: 'docs/rules/HS001.md'.";
+    private const string Doc = "Skill: fix-architecture-violation. Doc: 'docs/rules/HS001.md'.";
 
     private static readonly string[] DependencyItems = ["FrameworkReference", "PackageReference", "ProjectReference", "Reference"];
 

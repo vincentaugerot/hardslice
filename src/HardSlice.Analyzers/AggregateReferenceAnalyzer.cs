@@ -22,7 +22,7 @@ public sealed class AggregateReferenceAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "An aggregate references another aggregate other than by its identifier",
-        messageFormat: "{0} references {1} through {2}. An aggregate references another aggregate only by its identifier. Fix: {3} and load '{4}' in the handler that needs it. Doc: 'docs/rules/HS008.md'.",
+        messageFormat: "{0} references {1} through {2}. An aggregate references another aggregate only by its identifier. Fix: {3} and load '{4}' in the handler that needs it. Skill: add-aggregate. Doc: 'docs/rules/HS008.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

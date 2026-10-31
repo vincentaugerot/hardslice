@@ -193,7 +193,7 @@ Les licences sont à revérifier au moment du développement.
 
 ## 8. Le catalogue de règles
 
-Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modifiable dans `.editorconfig`), un mécanisme et une fiche `docs/rules/HSxxx.md` (pourquoi, mauvais exemple, bon exemple, contournements interdits, limites de détection, skill à utiliser dès qu'elle existe). La colonne « Style » dit si la règle s'applique aux slices, aux couches (adoption d'une solution existante) ou aux deux.
+Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modifiable dans `.editorconfig`), un mécanisme et une fiche `docs/rules/HSxxx.md` (pourquoi, mauvais exemple, bon exemple, contournements interdits, limites de détection, skill à utiliser). La colonne « Style » dit si la règle s'applique aux slices, aux couches (adoption d'une solution existante) ou aux deux.
 
 | Id | Règle | Mécanisme | Style |
 |---|---|---|---|
@@ -245,13 +245,13 @@ La propriété MSBuild `HardSliceAnalysisMode` choisit `Minimum`, `Recommended` 
 Chaque message doit permettre à un agent de corriger sans rien deviner :
 
 ```
-HS016: 'CancelBookingHandler' (slice Bookings/CancelBooking) uses 'ConfirmBookingHandler'
-(slice Bookings/ConfirmBooking). Slices never call each other.
-Fix: move the shared rule into the Booking aggregate (MyApp.Domain/Bookings/Booking.cs), or raise a
-domain event. Skill: add-slice. Rule: docs/rules/HS016.md
+HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingHandler'
+from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule
+into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'.
+Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.
 ```
 
-Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en une phrase, la correction attendue, la skill à utiliser, la fiche. Messages en anglais (langue des agents et de la communauté). La mention `Skill:` n'apparaît qu'une fois la skill livrée (v0.3) ; les diagnostics ne fournissent pas de correction automatique (`CodeFixProvider`) en v0.2.
+Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en une phrase, la correction attendue, la skill à utiliser, la fiche. Messages en anglais (langue des agents et de la communauté). Chaque message nomme une seule skill, entre `Fix:` et `Doc:`, et la fiche de la règle nomme la même dans sa section « Skill » (v0.3, PB-044) ; les diagnostics ne fournissent pas de correction automatique (`CodeFixProvider`).
 
 ## 9. Le kit agents
 
@@ -275,8 +275,10 @@ Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en 
 | `add-module` | Crée un module (`hardslice-module`) : dossier, `XxxModule.cs`, enregistrement, dossier de domaine |
 | `add-aggregate` | Agrégat, identifiant typé, invariants, tests |
 | `add-domain-event` | Événement, gestionnaire, et la slice ou le module qui y réagit |
-| `extract-to-domain` | Déplace une règle dupliquée dans deux slices vers l'agrégat |
-| `fix-architecture-violation` | Lit la fiche de la règle, applique la correction, relance la vérification |
+| `extract-to-domain` | Déplace une règle dupliquée dans deux slices, ou écrite par une slice dans une entité, vers l'agrégat avec son test, et la fait appeler par les slices |
+| `fix-architecture-violation` | Lit le diagnostic et la fiche de la règle, applique la première correction qui convient, relance la vérification, s'arrête en expliquant le conflit si seul un contournement passerait |
+
+Règles et skill nommée par leur message : `add-slice` (HS004, HS013, HS014, HS015, HS018), `extract-to-domain` (HS007, HS016), `add-aggregate` (HS008, HS902), `add-domain-event` (HS009, HS012, HS019), `fix-architecture-violation` (HS000, HS001, HS003, HS005, HS006, HS010, HS011, HS017, HS900, HS901).
 
 Les skills sont au format Agent Skills (`SKILL.md`), lu par les quatre CLI : la source est `.claude/skills/`, et une copie produite au pack dans `.agents/skills/` sert Codex et Gemini CLI ([prise en charge des agents](agents/support.md)).
 

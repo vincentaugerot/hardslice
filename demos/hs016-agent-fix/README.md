@@ -19,7 +19,7 @@ The fixture applies to the v0.1 `hardslice-api` template, with the Bookings samp
 |---|---|
 | `fixture/` | Files laid over a freshly generated `Demo` solution. They add a business rule (a booking that has started can no longer be confirmed or cancelled) whose check lives in the `ConfirmBooking` slice and is reused by `CancelBooking`: a deliberate HS016 violation. The integration tests describing the rule are included, with the fixed clock they use. |
 | `prompt.md` | The development prompt given to the agent, as is. It does not mention HS016 or how to fix it. |
-| `trace.md` | Concise trace of a run recorded on the increment 1 template, before slices used PostgreSQL. On the v0.1 template, the handlers use `AppDbContext`, the rule's tests are integration tests and `scripts/check.sh` also runs them: a new run differs in these details, not in the loop. |
+| `trace.md` | Concise trace of a run recorded on the increment 1 template, before slices used PostgreSQL. On the v0.1 template, the handlers use `AppDbContext`, the rule's tests are integration tests and `scripts/check.sh` also runs them: a new run differs in these details, not in the loop. Its diagnostic also predates `Skill:`: the message now ends with `Skill: extract-to-domain.` before `Doc:`. |
 
 ## Running it
 

@@ -20,7 +20,7 @@ public sealed class DomainEventRecordAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A domain event is not a record",
-        messageFormat: "domain event '{0}' is a {1}. Domain events are records. Fix: declare it as '{2}'. Doc: 'docs/rules/HS009.md'.",
+        messageFormat: "domain event '{0}' is a {1}. Domain events are records. Fix: declare it as '{2}'. Skill: add-domain-event. Doc: 'docs/rules/HS009.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

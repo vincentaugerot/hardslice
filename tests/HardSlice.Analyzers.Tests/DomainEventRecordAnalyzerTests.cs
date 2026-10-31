@@ -64,7 +64,7 @@ public sealed class DomainEventRecordAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(". ")[0]);
 
     private static IEnumerable<string> Fixes(ImmutableArray<Diagnostic> diagnostics) =>
-        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Doc: ")[0]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Skill: ")[0]);
 
     [Fact]
     public async Task Reports_a_sealed_class_that_implements_the_domain_event_contract()
@@ -83,7 +83,7 @@ public sealed class DomainEventRecordAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "domain event 'BookingConfirmed' is a class. Domain events are records. "
-            + "Fix: declare it as 'public sealed record BookingConfirmed(...) : IDomainEvent'. Doc: 'docs/rules/HS009.md'.");
+            + "Fix: declare it as 'public sealed record BookingConfirmed(...) : IDomainEvent'. Skill: add-domain-event. Doc: 'docs/rules/HS009.md'.");
         diagnostics[0].Severity.ShouldBe(DiagnosticSeverity.Error);
     }
 

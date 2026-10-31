@@ -27,7 +27,7 @@ public sealed class SuppressionJustificationAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A HardSlice rule is suppressed without a justification",
-        messageFormat: "{0} in '{1}' {2}. A HardSlice rule is suppressed only with a reason a reviewer can read. Fix: {3}. Doc: 'docs/rules/HS000.md'.",
+        messageFormat: "{0} in '{1}' {2}. A HardSlice rule is suppressed only with a reason a reviewer can read. Fix: {3}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS000.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,

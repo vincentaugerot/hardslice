@@ -740,7 +740,7 @@ public sealed class SliceReferenceAnalyzerTests
     private static string Message(string source, string sourceSlice, string target, string targetSlice, string targetModule) =>
         $"'{source}' in slice '{sourceSlice}' uses '{target}' from slice '{targetSlice}'. Slices never reference each other. "
         + $"Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module '{targetModule}'. "
-        + "Doc: 'docs/rules/HS016.md'.";
+        + "Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.";
 
     [Fact]
     public void Reports_an_error_by_default()

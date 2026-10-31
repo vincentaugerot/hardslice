@@ -81,7 +81,7 @@ public sealed class SystemClockAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(". ")[0]);
 
     private static IEnumerable<string> Fixes(ImmutableArray<Diagnostic> diagnostics) =>
-        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Doc: ")[0]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Skill: ")[0]);
 
     [Fact]
     public async Task Reports_a_handler_that_reads_DateTimeOffset_UtcNow()
@@ -99,7 +99,7 @@ public sealed class SystemClockAnalyzerTests
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "'ConfirmBookingHandler.Handle' in slice 'Bookings/ConfirmBooking' reads 'DateTimeOffset.UtcNow'. "
             + "The domain and the slices never read the system clock. "
-            + "Fix: inject TimeProvider and call GetUtcNow(), or pass the instant to the domain as a parameter. Doc: 'docs/rules/HS010.md'.");
+            + "Fix: inject TimeProvider and call GetUtcNow(), or pass the instant to the domain as a parameter. Skill: fix-architecture-violation. Doc: 'docs/rules/HS010.md'.");
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public sealed class SystemClockAnalyzerTests
         diagnostics[0].GetMessage().ShouldBe(
             "'Booking.Confirm' in domain project 'MyApp.Domain' reads 'DateTimeOffset.UtcNow'. "
             + "The domain and the slices never read the system clock. "
-            + "Fix: take the instant as a parameter; the handler reads it from an injected TimeProvider with GetUtcNow(). Doc: 'docs/rules/HS010.md'.");
+            + "Fix: take the instant as a parameter; the handler reads it from an injected TimeProvider with GetUtcNow(). Skill: fix-architecture-violation. Doc: 'docs/rules/HS010.md'.");
     }
 
     // Without a usable entity contract, the domain cannot be recognized: HS900 reports the configuration instead.

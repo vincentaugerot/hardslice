@@ -137,7 +137,7 @@ Codex reads this file only. Each other agent also reads its own file, which hold
 - `GEMINI.md` for Gemini CLI, which imports this file;
 - `.github/copilot-instructions.md` for GitHub Copilot, which reads this file and `GEMINI.md` too.
 
-Skills, in `.claude/skills/` and their copies in `.agents/skills/`, which every agent reads: `add-module`, `add-aggregate`, `add-slice` and `add-domain-event`. Each generates its element with its template, then runs the check.
+Skills, in `.claude/skills/` and their copies in `.agents/skills/`, which every agent reads: `add-module`, `add-aggregate`, `add-slice` and `add-domain-event` generate their element with its template; `extract-to-domain` moves a business rule from the slices into its aggregate; `fix-architecture-violation` fixes a HardSlice failure from the sheet of its rule. Each runs the check.
 
 Hooks: none yet. No agent has its edits checked as it makes them: run the check script before you finish.
 
@@ -145,7 +145,7 @@ Hooks: none yet. No agent has its edits checked as it makes them: run the check 
 
 A HardSlice failure starts with its rule: `HS000`, `HS003` to `HS011`, `HS015`, `HS016` and `HS900` to `HS902` from the analyzers at build time, or `HS001`, `HS012` to `HS014`, `HS016` to `HS018` from the architecture tests. `HS019` is a suggestion of the IDE that never fails the check: follow it when you name an event.
 
-1. Read the diagnostic: it names the offending symbol, the rule, the expected fix and its sheet after `Doc:`.
+1. Read the diagnostic: it names the offending symbol, the rule, the expected fix, the skill to use after `Skill:` and the sheet after `Doc:`. Use that skill.
 2. Open the sheet, or print it with `dotnet hardslice explain <rule>`, and apply the first fix that matches: `docs/rules/HS000.md` (suppressions without justification), `docs/rules/HS001.md` (domain dependencies), `docs/rules/HS003.md` (endpoints), `docs/rules/HS004.md` (shape of a slice), `docs/rules/HS005.md` (command responses), `docs/rules/HS006.md` (query handlers), `docs/rules/HS007.md` (entity state), `docs/rules/HS008.md` (references between aggregates), `docs/rules/HS009.md` (domain events), `docs/rules/HS010.md` (system clock), `docs/rules/HS011.md` (blocking calls and async void), `docs/rules/HS012.md` (modules), `docs/rules/HS013.md` (validators), `docs/rules/HS014.md` (command handler tests), `docs/rules/HS015.md` (slice endpoints), `docs/rules/HS016.md` (slices), `docs/rules/HS017.md` (Shared), `docs/rules/HS018.md` (test folders), `docs/rules/HS019.md` (names of domain events), `docs/rules/HS900.md` (contracts of `hardslice.json`), `docs/rules/HS901.md` (one role per type), `docs/rules/HS902.md` (mapped entities).
 3. Run the check script again.
 

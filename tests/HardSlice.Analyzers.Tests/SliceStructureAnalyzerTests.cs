@@ -126,7 +126,7 @@ public sealed class SliceStructureAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(". ")[0]);
 
     private static IEnumerable<string> Fixes(ImmutableArray<Diagnostic> diagnostics) =>
-        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Doc: ")[0]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Skill: ")[0]);
 
     [Fact]
     public async Task Reports_nothing_on_complete_slices_and_their_module()
@@ -235,7 +235,7 @@ public sealed class SliceStructureAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "slice 'Bookings/NotifyOnBookingConfirmed' declares 'NotifyHandler'. " + ReactionRule
-            + " Fix: rename the domain event handler to 'NotifyOnBookingConfirmedHandler'. Doc: 'docs/rules/HS004.md'.");
+            + " Fix: rename the domain event handler to 'NotifyOnBookingConfirmedHandler'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -313,17 +313,17 @@ public sealed class SliceStructureAnalyzerTests
             "slice 'Bookings/ArchiveBooking' declares domain event handler 'ArchiveOnBookingCancelledHandler' besides request 'ArchiveBookingCommand'. "
                 + ReactionRule
                 + " Fix: move 'ArchiveOnBookingCancelledHandler' into a reaction slice of its own, 'Features/Bookings/ArchiveOnBookingCancelled/'. "
-                + "Doc: 'docs/rules/HS004.md'.",
+                + "Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
             "domain event handler 'NotifyOnBookingConfirmedHandler' of 'BookingConfirmed' is declared in module 'Bookings', outside any slice. "
                 + "A domain event handler belongs to a reaction slice of its own. "
                 + "Fix: move 'NotifyOnBookingConfirmedHandler' into a reaction slice of its own, 'Bookings/NotifyOnBookingConfirmed': "
                 + "folder 'Features/Bookings/NotifyOnBookingConfirmed/', namespace 'MyApp.Features.Bookings.NotifyOnBookingConfirmed'. "
-                + "Doc: 'docs/rules/HS004.md'.",
+                + "Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
             "domain event handler 'Auditor' of 'BookingCancelled' is declared in namespace 'MyApp.Shared.Messaging', outside any slice. "
                 + "A domain event handler belongs to a reaction slice of its own. "
                 + "Fix: move 'Auditor' into a reaction slice of its own, named after what it does, such as '<Module>/NotifyOnBookingCancelled': "
                 + "folder 'Features/<Module>/NotifyOnBookingCancelled/', namespace 'MyApp.Features.<Module>.NotifyOnBookingCancelled', "
-                + "renamed '<Reaction>Handler'. Doc: 'docs/rules/HS004.md'."
+                + "renamed '<Reaction>Handler'. Skill: add-slice. Doc: 'docs/rules/HS004.md'."
         ], ignoreOrder: true);
     }
 
@@ -346,7 +346,7 @@ public sealed class SliceStructureAnalyzerTests
         diagnostic.GetMessage().ShouldBe(
             "slice 'Bookings/ArchiveBooking' declares 'ArchiveCommand'. "
             + "A slice holds one request named after it, its handler and its endpoint. "
-            + "Fix: rename the command to 'ArchiveBookingCommand'. Doc: 'docs/rules/HS004.md'.");
+            + "Fix: rename the command to 'ArchiveBookingCommand'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -377,7 +377,7 @@ public sealed class SliceStructureAnalyzerTests
             + "Fix: declare the command 'ArchiveBookingCommand', which implements 'ICommand<TResponse>', "
             + "or the query 'ArchiveBookingQuery', which implements 'IQuery<TResponse>', "
             + "or, for a reaction to a domain event, the handler 'ArchiveBookingHandler', which implements 'IDomainEventHandler<TEvent>'; "
-            + "types the slices of the module share belong to namespace 'MyApp.Features.Bookings'. Doc: 'docs/rules/HS004.md'.");
+            + "types the slices of the module share belong to namespace 'MyApp.Features.Bookings'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -429,7 +429,7 @@ public sealed class SliceStructureAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "slice 'Bookings/ArchiveBooking' declares 'ArchiveHandler'. " + StructureRule + " "
-            + "Fix: rename the handler to 'ArchiveBookingHandler'. Doc: 'docs/rules/HS004.md'.");
+            + "Fix: rename the handler to 'ArchiveBookingHandler'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -442,7 +442,7 @@ public sealed class SliceStructureAnalyzerTests
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "slice 'Bookings/ArchiveBooking' declares no handler for 'ArchiveBookingCommand'. " + StructureRule + " "
             + "Fix: declare 'internal sealed class ArchiveBookingHandler : IRequestHandler<ArchiveBookingCommand, bool>' in the slice. "
-            + "Doc: 'docs/rules/HS004.md'.");
+            + "Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -455,7 +455,7 @@ public sealed class SliceStructureAnalyzerTests
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "slice 'Bookings/ArchiveBooking' declares no endpoint 'ArchiveBookingEndpoint'. " + StructureRule + " "
             + "Fix: declare the internal static class 'ArchiveBookingEndpoint' in the slice: its Map(RouteGroupBuilder group) method maps "
-            + "the endpoint, and 'BookingsModule' calls it. Doc: 'docs/rules/HS004.md'.");
+            + "the endpoint, and 'BookingsModule' calls it. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -470,7 +470,7 @@ public sealed class SliceStructureAnalyzerTests
         notStatic.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "endpoint 'ArchiveBookingEndpoint' of slice 'Bookings/ArchiveBooking' is not static. " + StructureRule + " "
             + "Fix: declare 'ArchiveBookingEndpoint' as a static class: its Map(RouteGroupBuilder group) method maps the endpoint, "
-            + "and 'BookingsModule' calls it. Doc: 'docs/rules/HS004.md'.");
+            + "and 'BookingsModule' calls it. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -482,7 +482,7 @@ public sealed class SliceStructureAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "slice 'Bookings/ArchiveBooking' declares 'ArchiveRules'. " + StructureRule + " "
-            + "Fix: rename the validator to 'ArchiveBookingValidator'. Doc: 'docs/rules/HS004.md'.");
+            + "Fix: rename the validator to 'ArchiveBookingValidator'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     // A validator of a type that is no request, such as a DTO of the command, is not the validator of the slice.
@@ -513,7 +513,7 @@ public sealed class SliceStructureAnalyzerTests
             "validator 'ArchiveBookingValidator' of 'ArchiveBookingCommand' is declared in module 'Bookings', outside any slice. "
             + "A request, its handler and its validator belong to the slice of their use case. "
             + "Fix: move 'ArchiveBookingValidator' into slice 'Bookings/ArchiveBooking': folder 'Features/Bookings/ArchiveBooking/', "
-            + "namespace 'MyApp.Features.Bookings.ArchiveBooking'. Doc: 'docs/rules/HS004.md'.");
+            + "namespace 'MyApp.Features.Bookings.ArchiveBooking'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -622,7 +622,7 @@ public sealed class SliceStructureAnalyzerTests
         diagnostics[0].GetMessage().ShouldBe(
             "'ArchiveBookingCommand' of slice 'Bookings/ArchiveBooking' is declared in 'Features/Bookings/ArchiveBooking.cs', outside the folder of its slice. "
             + "The folder and the namespace of a slice hold the same types. "
-            + "Fix: move the declaration into a file under 'Features/Bookings/ArchiveBooking/'. Doc: 'docs/rules/HS004.md'.");
+            + "Fix: move the declaration into a file under 'Features/Bookings/ArchiveBooking/'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }
 
     [Fact]
@@ -639,15 +639,15 @@ public sealed class SliceStructureAnalyzerTests
             "'ArchivePolicy' is declared in 'Features/Bookings/ArchiveBooking/ArchivePolicy.cs', in the folder of slice 'Bookings/ArchiveBooking', "
                 + "but in namespace 'MyApp.Features.Bookings'. The folder and the namespace of a slice hold the same types. "
                 + "Fix: declare it in namespace 'MyApp.Features.Bookings.ArchiveBooking' if it belongs to the slice, "
-                + "or move its file to 'Features/Bookings/'. Doc: 'docs/rules/HS004.md'.",
+                + "or move its file to 'Features/Bookings/'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
             "'Clock' is declared in 'Features/Bookings/ArchiveBooking/Clock.cs', in the folder of slice 'Bookings/ArchiveBooking', "
                 + "but in namespace 'MyApp.Shared'. The folder and the namespace of a slice hold the same types. "
                 + "Fix: declare it in namespace 'MyApp.Features.Bookings.ArchiveBooking' if it belongs to the slice, "
-                + "or move its file to 'Shared/'. Doc: 'docs/rules/HS004.md'.",
+                + "or move its file to 'Shared/'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
             "'ArchiveGlobals' is declared in 'Features/Bookings/ArchiveBooking/Global.cs', in the folder of slice 'Bookings/ArchiveBooking', "
                 + "but in the global namespace. The folder and the namespace of a slice hold the same types. "
                 + "Fix: declare it in namespace 'MyApp.Features.Bookings.ArchiveBooking' if it belongs to the slice, "
-                + "or move its file out of the folder of the slice. Doc: 'docs/rules/HS004.md'."
+                + "or move its file out of the folder of the slice. Skill: add-slice. Doc: 'docs/rules/HS004.md'."
         ], ignoreOrder: true);
     }
 

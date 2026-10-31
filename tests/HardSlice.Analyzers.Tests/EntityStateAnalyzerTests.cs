@@ -69,7 +69,7 @@ public sealed class EntityStateAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(". ")[0]);
 
     private static IEnumerable<string> Fixes(ImmutableArray<Diagnostic> diagnostics) =>
-        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Doc: ")[0]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Skill: ")[0]);
 
     [Fact]
     public async Task Reports_a_public_setter_of_an_aggregate_root()
@@ -88,7 +88,7 @@ public sealed class EntityStateAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "entity 'Booking' exposes 'Status' with a public setter. " + Rule
-            + " Fix: make the setter private and change the state in a domain method, such as 'Booking.Cancel()'. Doc: 'docs/rules/HS007.md'.");
+            + " Fix: make the setter private and change the state in a domain method, such as 'Booking.Cancel()'. Skill: extract-to-domain. Doc: 'docs/rules/HS007.md'.");
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class EntityStateAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "entity 'Booking' lets 'IEditableBooking.Status' be set from outside. " + Rule
-            + " Fix: remove the setter from the public interface and change the state in a domain method, such as 'Booking.Cancel()'. Doc: 'docs/rules/HS007.md'.");
+            + " Fix: remove the setter from the public interface and change the state in a domain method, such as 'Booking.Cancel()'. Skill: extract-to-domain. Doc: 'docs/rules/HS007.md'.");
     }
 
     [Fact]

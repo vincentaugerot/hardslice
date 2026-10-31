@@ -17,7 +17,7 @@ public sealed class CommandResponseAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A command handler returns an entity",
-        messageFormat: "handler '{0}' of command '{1}' returns {2}. Command handlers return an identifier, a DTO of values or nothing. Fix: {3}. Doc: 'docs/rules/HS005.md'.",
+        messageFormat: "handler '{0}' of command '{1}' returns {2}. Command handlers return an identifier, a DTO of values or nothing. Fix: {3}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS005.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

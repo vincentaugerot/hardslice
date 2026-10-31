@@ -11,7 +11,7 @@ public sealed class QueryHandlerTrackingAnalyzerTests
 {
     private const string Rule = "Query handlers read without tracking and never write.";
 
-    private const string ReadFix = "Fix: add AsNoTracking() where the query starts, and project to a DTO. Doc: 'docs/rules/HS006.md'.";
+    private const string ReadFix = "Fix: add AsNoTracking() where the query starts, and project to a DTO. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.";
 
     private const string Configuration =
         """
@@ -218,7 +218,7 @@ public sealed class QueryHandlerTrackingAnalyzerTests
 
         diagnostics[0].GetMessage().ShouldBe(
             "query handler 'ListBookingsHandler' writes through 'ExecuteDeleteAsync'. "
-            + Rule + " Fix: move the write into a command slice. Doc: 'docs/rules/HS006.md'.");
+            + Rule + " Fix: move the write into a command slice. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
     }
 
     [Fact]
@@ -250,8 +250,8 @@ public sealed class QueryHandlerTrackingAnalyzerTests
         ]);
         diagnostics[0].GetMessage().ShouldEndWith(
             "Fix: remove the assignment, which changes the context for every component of the scope, and start each query with AsNoTracking(). "
-            + "Doc: 'docs/rules/HS006.md'.");
-        diagnostics[3].GetMessage().ShouldEndWith("Fix: remove AsTracking(): the query starts with AsNoTracking(). Doc: 'docs/rules/HS006.md'.");
+            + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
+        diagnostics[3].GetMessage().ShouldEndWith("Fix: remove AsTracking(): the query starts with AsNoTracking(). Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
     }
 
     [Fact]

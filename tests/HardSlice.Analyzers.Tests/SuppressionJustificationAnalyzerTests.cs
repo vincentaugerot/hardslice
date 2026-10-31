@@ -36,7 +36,7 @@ public sealed class SuppressionJustificationAnalyzerTests
 
         diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
         diagnostic.GetMessage().ShouldBe(
-            $"'#pragma warning disable HS016' in 'File0.cs' has no justification. {Rule} {AddJustification} Doc: 'docs/rules/HS000.md'.");
+            $"'#pragma warning disable HS016' in 'File0.cs' has no justification. {Rule} {AddJustification} Skill: fix-architecture-violation. Doc: 'docs/rules/HS000.md'.");
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public sealed class SuppressionJustificationAnalyzerTests
         diagnostic.GetMessage().ShouldBe(
             "'#pragma warning disable' in 'File0.cs' disables every warning, the HardSlice rules included, and has no justification. "
             + $"{Rule} Fix: name the warnings it disables; for a HardSlice rule, remove the suppression and fix the code; "
-            + "if a maintainer approved it, add '// hardslice-justification: <reason>' on the line above. Doc: 'docs/rules/HS000.md'.");
+            + "if a maintainer approved it, add '// hardslice-justification: <reason>' on the line above. Skill: fix-architecture-violation. Doc: 'docs/rules/HS000.md'.");
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public sealed class SuppressionJustificationAnalyzerTests
 
         diagnostics[0].GetMessage().ShouldBe(
             $"'#pragma warning disable HS000' in 'File0.cs' suppresses HS000, which no justification allows. {Rule} "
-            + "Fix: remove it; HS000 reports every suppression of a HardSlice rule that has no justification. Doc: 'docs/rules/HS000.md'.");
+            + "Fix: remove it; HS000 reports every suppression of a HardSlice rule that has no justification. Skill: fix-architecture-violation. Doc: 'docs/rules/HS000.md'.");
     }
 
     [Fact]

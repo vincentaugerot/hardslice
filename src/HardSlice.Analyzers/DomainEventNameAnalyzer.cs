@@ -19,7 +19,7 @@ public sealed class DomainEventNameAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A domain event is not named as a past fact",
-        messageFormat: "domain event '{0}' is not named as a past fact. Domain events are named in the past tense. Fix: rename it, for example to 'BookingConfirmed'. Doc: 'docs/rules/HS019.md'.",
+        messageFormat: "domain event '{0}' is not named as a past fact. Domain events are named in the past tense. Fix: rename it, for example to 'BookingConfirmed'. Skill: add-domain-event. Doc: 'docs/rules/HS019.md'.",
         category: "HardSlice.Naming",
         defaultSeverity: DiagnosticSeverity.Info,
         // Off by default, as in the Recommended mode: the All mode turns it on as a suggestion. HS900 knows it from OffByDefault.

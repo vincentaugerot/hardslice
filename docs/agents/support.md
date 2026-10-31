@@ -78,12 +78,13 @@ Essais du 31/10/2026 (UTC) sur Linux x64, dans une solution générée par `scri
 - Codex n'a besoin d'aucun fichier en plus d'`AGENTS.md`, qui reste très en dessous des 32 Kio.
 - Copilot lit aussi `GEMINI.md`, sans suivre son import [E12] : `GEMINI.md` commence par la CLI qu'il vise et ne contient rien de contraire aux autres fichiers ; `.github/copilot-instructions.md` dit d'en ignorer la section propre à Gemini CLI. `.claude/CLAUDE.md` commence aussi par sa CLI. Vérifié avec Copilot sur la solution livrée : `AGENTS.md` n'y est chargé qu'une fois [E13].
 
-### Skills (PB-043)
+### Skills (PB-043, PB-044)
 
 - Source unique : `.claude/skills/<skill>/SKILL.md`, lue par Claude Code et Copilot.
 - Copie produite au pack dans `.agents/skills/<skill>/SKILL.md`, lue par Codex et Gemini CLI. Copilot lit les deux dossiers et ne garde qu'une skill par nom [E6] : les copies sont identiques, il n'y a pas de doublon.
 - Pas de copie dans `.github/skills/` ni `.gemini/skills/`, inutiles.
 - Réalisé : `add-module`, `add-aggregate`, `add-slice` et `add-domain-event`, copiées dans `.agents/skills/` par le pack du paquet de templates. Exécutées avec Claude Code sur une solution `--no-sample` [E15] à [E18], selon le [protocole des skills](#protocole-dessai-des-skills).
+- Réalisé (PB-044) : `extract-to-domain` et `fix-architecture-violation`, que chaque diagnostic HS et chaque échec de test d'architecture nomme après `Skill:`. Pas encore exécutées par un agent : les boucles de PB-049 les essaient règle par règle.
 
 ### Hooks (PB-046 et PB-047)
 

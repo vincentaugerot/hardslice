@@ -170,7 +170,7 @@ public sealed class SliceEndpointAnalyzerTests
             "endpoint 'POST /bookings' in slice 'Bookings/ConfirmBooking' is mapped on 'WebApplication', not on a group. "
             + "A slice endpoint is mapped on the RouteGroupBuilder of its module, which owns the route prefix and the policies of its endpoints. "
             + "Fix: take the 'RouteGroupBuilder group' that 'BookingsModule' creates with MapGroup as a parameter, and map the endpoint on it. "
-            + "Doc: 'docs/rules/HS015.md'.");
+            + "Skill: add-slice. Doc: 'docs/rules/HS015.md'.");
         diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
     }
 
@@ -242,11 +242,11 @@ public sealed class SliceEndpointAnalyzerTests
             "endpoint 'GET /bookings/{id:guid}' in 'BookingsModule' is mapped outside a slice. "
                 + "An endpoint belongs to the slice of its use case: its module only maps the endpoints of its slices on its group. "
                 + "Fix: move the mapping into the 'Map(RouteGroupBuilder group)' method of an internal endpoint class in 'Features/Bookings/<Slice>/', "
-                + "and call that method from 'BookingsModule' with the group of the module. Doc: 'docs/rules/HS015.md'.",
+                + "and call that method from 'BookingsModule' with the group of the module. Skill: add-slice. Doc: 'docs/rules/HS015.md'.",
             "endpoint 'GET /version' in 'FeatureEndpoints' is mapped outside a slice. "
                 + "An endpoint belongs to the slice of its use case: its module only maps the endpoints of its slices on its group. "
                 + "Fix: move the mapping into the 'Map(RouteGroupBuilder group)' method of an internal endpoint class in 'Features/<Module>/<Slice>/', "
-                + "and call that method from '<Module>Module' with the group of the module. Doc: 'docs/rules/HS015.md'."
+                + "and call that method from '<Module>Module' with the group of the module. Skill: add-slice. Doc: 'docs/rules/HS015.md'."
         ]);
     }
 
@@ -269,7 +269,7 @@ public sealed class SliceEndpointAnalyzerTests
             "endpoint 'GET /{id:guid}' in slice 'Bookings/GetBooking' returns 'IResult'. "
             + "A slice endpoint returns TypedResults, so its responses are part of its signature. "
             + "Fix: build every response with TypedResults instead of Results, and declare them all as the return type of the endpoint, "
-            + "such as 'Task<Results<Ok<T>, NotFound>>'. Doc: 'docs/rules/HS015.md'.");
+            + "such as 'Task<Results<Ok<T>, NotFound>>'. Skill: add-slice. Doc: 'docs/rules/HS015.md'.");
     }
 
     [Fact]
@@ -376,7 +376,7 @@ public sealed class SliceEndpointAnalyzerTests
             + "which 'BookingsModule' never calls. "
             + "A slice endpoint is exposed only through its module, which maps every endpoint of its slices. "
             + "Fix: call 'ArchiveBookingEndpoint.Map' with the group of the module from the mapping method of 'BookingsModule'. "
-            + "Doc: 'docs/rules/HS015.md'.");
+            + "Skill: add-slice. Doc: 'docs/rules/HS015.md'.");
         diagnostic.Descriptor.CustomTags.ShouldContain(WellKnownDiagnosticTags.CompilationEnd);
     }
 

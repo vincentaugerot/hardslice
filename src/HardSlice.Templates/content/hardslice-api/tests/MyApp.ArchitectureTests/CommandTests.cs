@@ -24,7 +24,7 @@ public sealed class CommandTests
                 + "Every command with parameters has a validator that checks the shape of its input before its handler runs. "
                 + $"Fix: declare an internal '{ValidatorName(name)} : AbstractValidator<{name}>' next to the command, "
                 + $"register it as 'IValidator<{name}>' in its module and test it in '{TestSources.PathOf(Tests.UnitTests, FolderOf(command))}'. "
-                + "Doc: 'docs/rules/HS013.md'.");
+                + "Skill: add-slice. Doc: 'docs/rules/HS013.md'.");
     }
 
     // Tests anywhere under the slice folder count; outside a slice, only those directly in the folder of the handler's namespace.
@@ -41,7 +41,7 @@ public sealed class CommandTests
             select $"HS014: command handler '{Name(handler)}' {location.Describe()} has no test in {Tests.Describe(folder)}. "
                 + "Every command handler has at least one test at the path of its slice. "
                 + $"Fix: add an integration test that sends '{Name(command)}', an invalid one included, in '{TestSources.PathOf(Tests.IntegrationTests, folder)}', "
-                + $"and the unit tests of its validator in '{TestSources.PathOf(Tests.UnitTests, folder)}'. Doc: 'docs/rules/HS014.md'.");
+                + $"and the unit tests of its validator in '{TestSources.PathOf(Tests.UnitTests, folder)}'. Skill: add-slice. Doc: 'docs/rules/HS014.md'.");
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public sealed class CommandTests
             select $"HS014: domain event handler '{Name(handler)}' {location.Describe()} has no test in {Tests.Describe(folder)}. "
                 + "Every domain event handler has at least one test at the path of its slice. "
                 + $"Fix: add an integration test in '{TestSources.PathOf(Tests.IntegrationTests, folder)}' that sends a command whose aggregate raises "
-                + $"'{Name(domainEvent)}' and checks what the handler changed. Doc: 'docs/rules/HS014.md'.");
+                + $"'{Name(domainEvent)}' and checks what the handler changed. Skill: add-slice. Doc: 'docs/rules/HS014.md'.");
     }
 
     // The folder of a type below 'src/<App>/', read from its namespace: 'Features/Orders/PlaceOrder' for a type of that slice or below.

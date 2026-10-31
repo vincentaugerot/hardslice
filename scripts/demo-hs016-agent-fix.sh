@@ -7,7 +7,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/scripts/dotnet-cli-home.sh"
 demo="$repo_root/demos/hs016-agent-fix"
-expected_hs016="error HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'BookingSchedule' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. Doc: 'docs/rules/HS016.md'."
+expected_hs016="error HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'BookingSchedule' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'."
 forbidden_source_regex='^[[:space:]]*#|SuppressMessage|System[.]Reflection|Type[.]GetType|Activator[.]|(^|[^[:alnum:]_])dynamic([^[:alnum:]_]|$)|Skip[[:space:]]*=|if[[:space:]]*[(][[:space:]]*false'
 
 usage() {

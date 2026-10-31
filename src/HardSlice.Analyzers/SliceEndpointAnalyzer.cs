@@ -18,7 +18,7 @@ public sealed class SliceEndpointAnalyzer : DiagnosticAnalyzer
 
     private const string Title = "A slice endpoint leaves its slice, the group of its module or its TypedResults";
 
-    private const string MessageFormat = "endpoint '{0}' in {1} {2}. {3} Fix: {4}. Doc: 'docs/rules/HS015.md'.";
+    private const string MessageFormat = "endpoint '{0}' in {1} {2}. {3} Fix: {4}. Skill: add-slice. Doc: 'docs/rules/HS015.md'.";
 
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,

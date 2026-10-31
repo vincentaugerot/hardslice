@@ -4,7 +4,7 @@ namespace MyApp.ArchitectureTests;
 // 'tests/<App>.Tests/' or 'tests/<App>.IntegrationTests/': every slice has one, and every test folder of 'Features' has its slice.
 public sealed class TestLayoutTests
 {
-    private const string Doc = "Doc: 'docs/rules/HS018.md'.";
+    private const string Doc = "Skill: add-slice. Doc: 'docs/rules/HS018.md'.";
 
     private static readonly TestSources Tests = TestSources.Solution;
 

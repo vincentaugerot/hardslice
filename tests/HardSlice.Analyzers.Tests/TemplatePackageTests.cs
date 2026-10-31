@@ -536,8 +536,11 @@ public sealed class TemplatePackageTests
 
     public static TheoryData<string> AgentInstructionFiles() => new() { ".claude/CLAUDE.md", "GEMINI.md", ".github/copilot-instructions.md" };
 
-    // The skills of the template, each generating its element with the item template it names (PB-043).
-    private static readonly string[] SkillNames = ["add-aggregate", "add-domain-event", "add-module", "add-slice"];
+    // The skills of the template: four generate their element with the item template they name (PB-043), two fix the code that a
+    // HardSlice failure names after Skill: (PB-044).
+    private static readonly string[] GeneratingSkills = ["add-aggregate", "add-domain-event", "add-module", "add-slice"];
+    private static readonly string[] FixingSkills = ["extract-to-domain", "fix-architecture-violation"];
+    private static readonly string[] SkillNames = [.. GeneratingSkills.Concat(FixingSkills).Order(StringComparer.Ordinal)];
 
     public static TheoryData<string> SkillFiles()
     {
@@ -585,7 +588,10 @@ public sealed class TemplatePackageTests
             header["name"].Length.ShouldBeLessThanOrEqualTo(64);
             header["description"].Length.ShouldBeInRange(100, 1024);
             header["description"].ShouldContain("Use when", Case.Sensitive, $"The description of {skill} does not say when to use it.");
-            header["description"].ShouldContain("dotnet new hardslice-", Case.Sensitive, $"The description of {skill} does not name its template.");
+            if (GeneratingSkills.Contains(skill))
+                header["description"].ShouldContain("dotnet new hardslice-", Case.Sensitive, $"The description of {skill} does not name its template.");
+            else
+                header["description"].ShouldContain($"Skill {skill}", Case.Sensitive, $"The description of {skill} does not say that a message names it.");
             lines.Skip(end + 1).ShouldContain(line => line.StartsWith("# ", StringComparison.Ordinal));
         }
     }
@@ -631,6 +637,27 @@ public sealed class TemplatePackageTests
 
         text.ShouldContain("bash scripts/check.sh");
         text.ShouldContain("pwsh scripts/check.ps1");
+    }
+
+    // A fixing skill starts from the message, follows the sheet of its rule, stops on a conflict, and runs the check after (PB-044).
+    [Theory]
+    [InlineData("extract-to-domain")]
+    [InlineData("fix-architecture-violation")]
+    public void Fixing_skill_reads_the_message_and_runs_the_check(string skill)
+    {
+        var text = File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".claude", "skills", skill, "SKILL.md"));
+
+        Regex.Matches(text, @"dotnet new ").ShouldBeEmpty($"{skill} generates no element: the skills that do are named instead.");
+        text.ShouldContain("Read the message");
+        text.ShouldContain("bash scripts/check.sh");
+        text.ShouldContain("pwsh scripts/check.ps1");
+        if (skill == "fix-architecture-violation")
+        {
+            text.ShouldContain("dotnet hardslice explain <rule>");
+            // The skills that the messages of the other rules name (RuleSkillTests).
+            foreach (var other in new[] { "add-slice", "extract-to-domain", "add-aggregate", "add-domain-event" })
+                text.ShouldContain($"`{other}`", Case.Sensitive, $"{skill} does not hand the rules of {other} over to it.");
+        }
     }
 
     // The options of an item template, by long name, with the values of a choice: those of dotnet new itself that a skill may use

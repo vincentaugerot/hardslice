@@ -196,7 +196,7 @@ public sealed class ClassificationAnalyzerTests
                 "contract 'contracts.entity' of hardslice.json, 'MyApp.Domain.IEntity', is not declared by assembly 'MyApp.Domain'. "
                 + "The contracts of hardslice.json classify the types checked by HS005, HS006, HS007, HS008, HS010, HS901 and HS902. "
                 + "Fix: restore the contract type 'MyApp.Domain.IEntity' in project 'MyApp.Domain', or hardslice.json, from version control. "
-                + "Doc: 'docs/rules/HS900.md'.");
+                + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
             var position = diagnostic.Location.GetLineSpan();
             position.Path.ShouldBe(ConfigurationPath);
             position.StartLinePosition.Line.ShouldBe(3);
@@ -236,13 +236,13 @@ public sealed class ClassificationAnalyzerTests
             [
                 "'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'. "
                 + "HardSlice classifies domain types only through these contracts. "
-                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Doc: 'docs/rules/HS902.md'.",
+                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
                 "'Room' is mapped as an EF Core entity by 'RoomsContext.Rooms' but implements neither 'IEntity' nor 'IAggregateRoot'. "
                 + "HardSlice classifies domain types only through these contracts. "
-                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Doc: 'docs/rules/HS902.md'.",
+                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
                 "'Room' is mapped as an EF Core entity by 'RoomsContext.OnModelCreating' but implements neither 'IEntity' nor 'IAggregateRoot'. "
                 + "HardSlice classifies domain types only through these contracts. "
-                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Doc: 'docs/rules/HS902.md'."
+                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'."
             ],
             ignoreOrder: true);
     }
@@ -440,7 +440,7 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.GetMessage().ShouldBe(
             "'BookingSnapshot' is both an entity and a domain event: it implements 'IAggregateRoot' and 'IDomainEvent'. "
             + "A type is either an entity, which has an identity and changes through its methods, or a domain event, an immutable fact an entity records. "
-            + "Fix: keep 'BookingSnapshot' as the entity and declare the event as a separate record that it records. Doc: 'docs/rules/HS901.md'.");
+            + "Fix: keep 'BookingSnapshot' as the entity and declare the event as a separate record that it records. Skill: fix-architecture-violation. Doc: 'docs/rules/HS901.md'.");
     }
 
     [Fact]
@@ -472,11 +472,11 @@ public sealed class ClassificationAnalyzerTests
         diagnostics.Single(diagnostic => diagnostic.GetMessage().StartsWith("'BookOrRead' ")).GetMessage().ShouldBe(
             "'BookOrRead' is both a command and a query: it implements 'ICommand<TResponse>' and 'IQuery<TResponse>'. "
             + "A request either changes state, as a command, or only reads, as a query. "
-            + "Fix: split it into a command that changes state and a query that reads. Doc: 'docs/rules/HS901.md'.");
+            + "Fix: split it into a command that changes state and a query that reads. Skill: fix-architecture-violation. Doc: 'docs/rules/HS901.md'.");
         diagnostics.Single(diagnostic => diagnostic.GetMessage().StartsWith("'RoomRequest' ")).GetMessage().ShouldBe(
             "'RoomRequest' is both an entity and a query: it implements 'IEntity' and 'IQuery<TResponse>'. "
             + "A request is a message sent through the mediator, never a domain entity. "
-            + "Fix: declare the request as its own record in its slice, carrying the values 'RoomRequest' needs. Doc: 'docs/rules/HS901.md'.");
+            + "Fix: declare the request as its own record in its slice, carrying the values 'RoomRequest' needs. Skill: fix-architecture-violation. Doc: 'docs/rules/HS901.md'.");
     }
 
     [Fact]
@@ -489,7 +489,7 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.GetMessage().ShouldBe(
             "hardslice.json was not found in '/solution/src/MyApp' or above it. "
             + "The contracts of hardslice.json classify the types checked by HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS901 and HS902. "
-            + "Fix: restore hardslice.json at the solution root from version control. Doc: 'docs/rules/HS900.md'.");
+            + "Fix: restore hardslice.json at the solution root from version control. Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
     }
 
     [Theory]
@@ -527,7 +527,7 @@ public sealed class ClassificationAnalyzerTests
             "'contracts.entity' in hardslice.json is not '<metadata name>, <assembly>'. "
             + "The contracts of hardslice.json classify the types checked by HS005, HS006, HS007, HS008, HS010, HS901 and HS902. "
             + "Fix: restore hardslice.json from version control; it expects the metadata name of the contract type then its declaring assembly, "
-            + "such as \"MyApp.Domain.IEntity, MyApp.Domain\". Doc: 'docs/rules/HS900.md'.");
+            + "such as \"MyApp.Domain.IEntity, MyApp.Domain\". Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
         diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(3);
     }
 
@@ -567,7 +567,7 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.GetMessage().ShouldBe(
             "contract 'contracts.aggregateRoot', 'IAggregateRoot', does not derive from contract 'contracts.entity', 'IEntity'. "
             + "The contracts of hardslice.json classify the types checked by HS005, HS006, HS007, HS008, HS010, HS901 and HS902. "
-            + "Fix: declare 'IAggregateRoot' as deriving from 'IEntity': an aggregate root is an entity. Doc: 'docs/rules/HS900.md'.");
+            + "Fix: declare 'IAggregateRoot' as deriving from 'IEntity': an aggregate root is an entity. Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
     }
 
     [Fact]
@@ -606,7 +606,7 @@ public sealed class ClassificationAnalyzerTests
         (await AnalyzeAllAsync(application, configuration)).ShouldHaveSingleItem().GetMessage().ShouldBe(
             "hardslice.json declares no contract 'contracts.domainEventHandler'. The contracts of hardslice.json classify the types checked by HS004. "
             + "Fix: restore hardslice.json from version control; it declares \"domainEventHandler\": \"MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp\". "
-            + "Doc: 'docs/rules/HS900.md'.");
+            + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
     }
 
     [Fact]

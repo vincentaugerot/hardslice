@@ -118,7 +118,7 @@ public sealed class CommandResponseAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(". ")[0]);
 
     private static IEnumerable<string> Fixes(ImmutableArray<Diagnostic> diagnostics) =>
-        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Doc: ")[0]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(" Fix: ")[1].Split(". Skill: ")[0]);
 
     [Fact]
     public async Task Reports_a_command_handler_that_returns_the_aggregate()
@@ -140,7 +140,7 @@ public sealed class CommandResponseAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "handler 'ConfirmBookingHandler' of command 'ConfirmBookingCommand' returns the entity 'Booking'. "
-            + Rule + " Fix: return 'BookingId', or a DTO built from the entity's values. Doc: 'docs/rules/HS005.md'.");
+            + Rule + " Fix: return 'BookingId', or a DTO built from the entity's values. Skill: fix-architecture-violation. Doc: 'docs/rules/HS005.md'.");
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public sealed class CommandResponseAnalyzerTests
 
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "handler 'ConfirmBookingHandler' of command 'ConfirmBookingCommand' returns 'ConfirmationDto', whose property 'Booking' holds the entity 'Booking'. "
-            + Rule + " Fix: return 'BookingId', or a DTO built from the entity's values. Doc: 'docs/rules/HS005.md'.");
+            + Rule + " Fix: return 'BookingId', or a DTO built from the entity's values. Skill: fix-architecture-violation. Doc: 'docs/rules/HS005.md'.");
     }
 
     [Fact]

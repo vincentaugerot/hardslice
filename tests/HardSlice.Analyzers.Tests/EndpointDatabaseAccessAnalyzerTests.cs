@@ -79,7 +79,7 @@ public sealed class EndpointDatabaseAccessAnalyzerTests
         diagnostic.GetMessage().ShouldBe(
             "endpoint 'POST /bookings' in slice 'Bookings/ConfirmBooking' uses 'AppDbContext' (parameter 'db'). "
             + "Endpoints never reach the database. "
-            + "Fix: move the data access into the handler of a command and send the command with IMediator. Doc: 'docs/rules/HS003.md'.");
+            + "Fix: move the data access into the handler of a command and send the command with IMediator. Skill: fix-architecture-violation. Doc: 'docs/rules/HS003.md'.");
         diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
     }
 
@@ -204,9 +204,9 @@ public sealed class EndpointDatabaseAccessAnalyzerTests
         diagnostics.Select(diagnostic => diagnostic.GetMessage()).ShouldBe(
         [
             "endpoint 'GET /export' in slice 'Reports/Export' uses 'NpgsqlDataSource' (parameter 'dataSource'). Endpoints never reach the database. "
-                + "Fix: move the data access into the handler of a query and send the query with IMediator. Doc: 'docs/rules/HS003.md'.",
+                + "Fix: move the data access into the handler of a query and send the query with IMediator. Skill: fix-architecture-violation. Doc: 'docs/rules/HS003.md'.",
             "endpoint 'GET /raw' in slice 'Reports/Export' uses 'NpgsqlConnection' (object creation). Endpoints never reach the database. "
-                + "Fix: move the data access into the handler of a query and send the query with IMediator. Doc: 'docs/rules/HS003.md'."
+                + "Fix: move the data access into the handler of a query and send the query with IMediator. Skill: fix-architecture-violation. Doc: 'docs/rules/HS003.md'."
         ]);
     }
 

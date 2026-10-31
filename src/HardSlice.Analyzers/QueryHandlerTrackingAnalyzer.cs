@@ -21,7 +21,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A query handler tracks or writes",
-        messageFormat: "query handler '{0}' {1}. Query handlers read without tracking and never write. Fix: {2}. Doc: 'docs/rules/HS006.md'.",
+        messageFormat: "query handler '{0}' {1}. Query handlers read without tracking and never write. Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

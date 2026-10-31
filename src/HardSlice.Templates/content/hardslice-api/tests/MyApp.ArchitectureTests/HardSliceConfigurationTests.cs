@@ -54,7 +54,7 @@ public sealed class HardSliceConfigurationTests : IDisposable
 
         message.ShouldStartWith("hardslice.json: ");
         message.ShouldContain(reason);
-        message.ShouldContain("Doc: 'docs/rules/HS017.md'.");
+        message.ShouldContain("Skill: fix-architecture-violation. Doc: 'docs/rules/HS017.md'.");
     }
 
     [Theory]
@@ -71,7 +71,7 @@ public sealed class HardSliceConfigurationTests : IDisposable
 
         message.ShouldStartWith("hardslice.json: ");
         message.ShouldContain(reason);
-        message.ShouldContain("Doc: 'docs/rules/HS900.md'.");
+        message.ShouldContain("Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
     }
 
     [Theory]
@@ -88,6 +88,6 @@ public sealed class HardSliceConfigurationTests : IDisposable
         var message = Should.Throw<InvalidOperationException>(() => HardSliceConfiguration.Load(path)).Message;
 
         message.ShouldContain($"'contracts.entity' is {entity}, not \"<metadata name>, <assembly>\"");
-        message.ShouldContain("Doc: 'docs/rules/HS900.md'.");
+        message.ShouldContain("Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
     }
 }
