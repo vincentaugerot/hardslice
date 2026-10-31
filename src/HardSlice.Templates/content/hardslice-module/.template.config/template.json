@@ -249,7 +249,7 @@
       "applyFileRenamesToManualInstructions": true,
       "manualInstructions": [
         {
-          "text": "Register the module in src/MyApp/Program.cs:\n1. Add the using:\nusing MyApp.Features.ModuleName;\n2. Register its services, before 'var app = builder.Build();':\nbuilder.Services.AddModuleNameModule();\n3. Map its endpoints, before 'app.Run();':\napp.MapModuleNameModule();\nIts endpoints answer under /module-route. Then add its aggregates with dotnet new hardslice-aggregate, its slices with dotnet new hardslice-command and hardslice-query, and the module to the map of AGENTS.md."
+          "text": "Register the module in src/MyApp/Program.cs:\n1. Add the using:\nusing MyApp.Features.ModuleName;\n2. Register its services, before 'var app = builder.Build();':\nbuilder.Services.AddModuleNameModule();\n3. Map its endpoints, before 'app.Run();':\napp.MapModuleNameModule();\nIts endpoints answer under /module-route. Then add its aggregates with dotnet new hardslice-aggregate, its slices with dotnet new hardslice-command and hardslice-query, its events and their reactions with dotnet new hardslice-event, and the module to the map of AGENTS.md."
         }
       ],
       "continueOnError": true

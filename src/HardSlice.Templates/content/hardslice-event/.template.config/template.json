@@ -1,0 +1,493 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Vincent Augerot",
+  "classifications": [
+    "Web",
+    "API",
+    "Vertical Slices",
+    "DDD"
+  ],
+  "identity": "HardSlice.Templates.Event",
+  "name": "HardSlice domain event",
+  "description": "A domain event of a module of a hardslice-api solution and, with --reaction, the reaction slice that handles it with its integration tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "shortName": "hardslice-event",
+  "sourceName": "EventName",
+  "preferNameDirectory": false,
+  "preferDefaultName": true,
+  "defaultName": "HardSliceNameMissing",
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "Module": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The module whose aggregate records the event, in PascalCase, such as Rooms: src/<App>/Features/<Module>/<Module>Module.cs must exist.",
+      "replaces": "ModuleName",
+      "fileRename": "ModuleName"
+    },
+    "Reaction": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The reaction slice that handles the event, as <Module>/<Slice> in PascalCase, such as Rooms/NotifyOnRoomRenamed: its module must exist, and may differ from the module of the event. Without it, only the event is created."
+    },
+    "AppName": {
+      "type": "bind",
+      "binding": "msbuild:RootNamespace",
+      "replaces": "MyApp",
+      "fileRename": "MyApp"
+    },
+    "ModuleFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceModuleFiles"
+    },
+    "Unbound": {
+      "type": "generated",
+      "generator": "constant",
+      "parameters": {
+        "value": ""
+      }
+    },
+    "AppNameOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "AppName",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "ReactionOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Reaction",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "ReactionArgument": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Reaction",
+        "fallbackVariableName": "Unbound"
+      },
+      "replaces": "ReactionArgument",
+      "fileRename": "ReactionArgument"
+    },
+    "ReactionModuleName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ReactionOrEmpty",
+        "steps": [
+          {
+            "regex": "^([^/]*)/.*$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "replaces": "ReactionModule",
+      "fileRename": "ReactionModule"
+    },
+    "ReactionSliceName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ReactionOrEmpty",
+        "steps": [
+          {
+            "regex": "^[^/]*/",
+            "replacement": ""
+          }
+        ]
+      },
+      "replaces": "ReactionSlice",
+      "fileRename": "ReactionSlice"
+    },
+    "AppIsKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppNameOrEmpty",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      }
+    },
+    "NameIsGiven": {
+      "type": "computed",
+      "value": "(name != \"HardSliceNameMissing\")"
+    },
+    "NameIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "NameIsPastFact": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "(?:[Ee]d|ED)(?:[Vv]?[0-9]+)?$|(?:^|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z]))(?i:Arisen|Awoken|Begun|Bent|Bitten|Blown|Bought|Bound|Broadcast|Broken|Brought|Built|Burnt|Caught|Chosen|Dealt|Done|Drawn|Driven|Dug|Eaten|Fallen|Felt|Flown|Forbidden|Forgiven|Forgotten|Fought|Found|Frozen|Given|Gone|Got|Gotten|Grown|Held|Hidden|Hung|Kept|Known|Laid|Left|Lent|Lit|Lost|Made|Meant|Met|Mistaken|Overdrawn|Overpaid|Overridden|Overtaken|Paid|Prepaid|Quit|Read|Rebuilt|Redone|Remade|Repaid|Reset|Resent|Resold|Retaken|Rewritten|Ridden|Risen|Rung|Said|Seen|Sent|Set|Shaken|Shot|Shown|Shut|Slept|Sold|Sought|Spent|Split|Spoken|Spread|Spun|Stolen|Stood|Struck|Stuck|Sung|Sunk|Swept|Sworn|Taken|Taught|Thrown|Told|Torn|Undergone|Underpaid|Undertaken|Understood|Undone|Upheld|Withdrawn|Withheld|Woken|Won|Worn|Wound|Written)(?:[Vv]?[0-9]+)?$"
+      }
+    },
+    "ModuleIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Module",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ModuleProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "ModuleExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ModuleProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "HasReaction": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ReactionOrEmpty",
+        "pattern": "."
+      }
+    },
+    "ReactionIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ReactionOrEmpty",
+        "pattern": "^[A-Z][A-Za-z0-9]*/[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ReactionHasSuffix": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ReactionOrEmpty",
+        "pattern": "Handler$"
+      }
+    },
+    "ReactionProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ReactionOrEmpty"
+          }
+        ]
+      }
+    },
+    "ReactionIsEvent": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ReactionProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|[^/]*/\\1$"
+      }
+    },
+    "ReactionModuleProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "ReactionModuleName"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "ReactionModuleExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ReactionModuleProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "ReactionIsAccepted": {
+      "type": "computed",
+      "value": "(!HasReaction || (ReactionIsValid && !ReactionHasSuffix && !ReactionIsEvent && ReactionModuleExists))"
+    },
+    "Accepted": {
+      "type": "computed",
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && ReactionIsAccepted)"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!Accepted)",
+          "exclude": [
+            "**/*"
+          ]
+        },
+        {
+          "condition": "(!HasReaction)",
+          "exclude": [
+            "src/MyApp/**/*",
+            "tests/**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "postActions": [
+    {
+      "id": "refuseUnknownApplication",
+      "condition": "(!AppIsKnown)",
+      "description": "Refuses a solution whose web project it cannot read.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: hardslice-event reads the application from its web project, which it could not evaluate. Run it from the root of the solution with --project src/<App>/<App>.csproj, once the solution is restored (after a first build or check), such as: dotnet new hardslice-event --project src/<App>/<App>.csproj --module <Module> --name <Event>. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingName",
+      "condition": "(!NameIsGiven)",
+      "description": "Refuses an event without name.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name is required: the fact the event records, in PascalCase and in the past tense, such as --name RoomRenamed. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidName",
+      "condition": "(!NameIsPascalCase)",
+      "description": "Refuses a name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'EventName' is not PascalCase: it names the event record and its file, such as --name RoomRenamed. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidModule",
+      "condition": "(!ModuleIsPascalCase)",
+      "description": "Refuses a module name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --module 'ModuleName' is not PascalCase: pass the name of an existing module, such as the folder of src/MyApp/Features/<Module>/. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingModule",
+      "condition": "(!ModuleExists)",
+      "description": "Refuses a module that does not exist.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: module 'ModuleName' does not exist: src/MyApp/Features/ModuleName/ModuleNameModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name ModuleName, then add the event. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidReaction",
+      "condition": "(HasReaction && !ReactionIsValid)",
+      "description": "Refuses a reaction that is not <Module>/<Slice>.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --reaction 'ReactionArgument' is not <Module>/<Slice> in PascalCase: pass the module of the reaction and the slice named after what it does, such as --reaction ModuleName/NotifyOnEventName. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseReactionSuffix",
+      "condition": "(HasReaction && ReactionHasSuffix)",
+      "description": "Refuses a reaction slice with the Handler suffix.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --reaction 'ReactionArgument' ends with Handler: pass the slice alone, named after what it does, the template names its handler <Slice>Handler. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseReactionNamedAfterEvent",
+      "condition": "(HasReaction && ReactionIsEvent)",
+      "description": "Refuses a reaction slice named as its event.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --reaction 'ReactionArgument' is named as the event: its namespace would hide the event EventName. Name the slice after what it does, such as --reaction ReactionModule/NotifyOnEventName. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingReactionModule",
+      "condition": "(HasReaction && !ReactionModuleExists)",
+      "description": "Refuses a reaction in a module that does not exist.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: module 'ReactionModule' of --reaction does not exist: src/MyApp/Features/ReactionModule/ReactionModuleModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name ReactionModule, then add the reaction. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "warnNotPastFact",
+      "condition": "(Accepted && !NameIsPastFact)",
+      "description": "Warns about a name that HS019 does not read as a past fact.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "text": "warning: EventName is not named as a past fact: HS019 suggests the past tense, such as RoomRenamed rather than RenameRoom or RoomRenaming. The event was created: if it records a fact, rename it with its file and its uses before you raise it."
+        }
+      ],
+      "continueOnError": true
+    },
+    {
+      "id": "raiseEvent",
+      "condition": "(Accepted)",
+      "description": "The event to raise, and the lines to add to the module of its reaction.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "condition": "(!HasReaction)",
+          "text": "Raise EventName from the aggregate of module ModuleName that records the fact:\n1. Replace the Id of src/MyApp.Domain/ModuleName/Events/EventName.cs with the values of the fact, such as the identifier of the aggregate.\n2. In the method of the aggregate where the fact happens, add the event to its private list of events:\n_domainEvents.Add(new EventName(...));\nThe pipeline publishes it, inside the transaction of the command, to every IDomainEventHandler<EventName> that a module registers. To generate a reaction slice with its test, run the template with --reaction <Module>/<Slice>, and --force while the event is unchanged."
+        },
+        {
+          "condition": "(HasReaction)",
+          "text": "Register the reaction in src/MyApp/Features/ReactionModule/ReactionModuleModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Domain.ModuleName.Events;\nusing MyApp.Features.ReactionModule.ReactionSlice;\nusing MyApp.Shared.Messaging;\n2. In AddReactionModuleModule, register the handler by its contract:\n            .AddScoped<IDomainEventHandler<EventName>, ReactionSliceHandler>()\nThen raise EventName from the aggregate of module ModuleName that records the fact: replace the Id of src/MyApp.Domain/ModuleName/Events/EventName.cs with the values of the fact, and add the event to the private list of events of the aggregate, in the method where the fact happens. The pipeline publishes it to ReactionSliceHandler inside the transaction of the command. Complete the reaction and its test: each TODO(hardslice): marker fails the check until it is replaced."
+        }
+      ],
+      "continueOnError": true
+    }
+  ]
+}

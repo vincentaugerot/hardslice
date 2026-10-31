@@ -63,6 +63,7 @@ public sealed class TemplatePackageTests
             PackedFiles(archive, "/hardslice-query/").ShouldBe(QueryTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-module/").ShouldBe(ModuleTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-aggregate/").ShouldBe(AggregateTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-event/").ShouldBe(EventTemplateFiles.Order(StringComparer.Ordinal));
         }
         finally
         {
@@ -298,6 +299,83 @@ public sealed class TemplatePackageTests
             .ShouldContain("dotnet ef migrations add AddAggregateTable --project src/MyApp --output-dir Shared/Persistence/Migrations");
     }
 
+    // hardslice-event generates the event and, with --reaction, the reaction slice and its integration tests, at the paths of HS004 and HS018.
+    [Fact]
+    public void Event_item_template_generates_the_event_and_with_a_reaction_its_slice_and_its_integration_tests_only()
+    {
+        var root = EventTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(EventTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-event");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        config.GetProperty("sourceName").GetString().ShouldBe("EventName");
+        var symbols = config.GetProperty("symbols");
+        var application = symbols.GetProperty("AppName");
+        application.GetProperty("type").GetString().ShouldBe("bind");
+        application.GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        application.GetProperty("replaces").GetString().ShouldBe("MyApp");
+        symbols.GetProperty("Module").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+        // The reaction is optional: without it, only the event is created.
+        symbols.GetProperty("Reaction").TryGetProperty("isRequired", out _).ShouldBeFalse();
+        symbols.GetProperty("ReactionModuleName").GetProperty("replaces").GetString().ShouldBe("ReactionModule");
+        symbols.GetProperty("ReactionSliceName").GetProperty("replaces").GetString().ShouldBe("ReactionSlice");
+        var modifiers = config.GetProperty("sources")[0].GetProperty("modifiers");
+        modifiers[1].GetProperty("condition").GetString().ShouldBe("(!HasReaction)");
+        modifiers[1].GetProperty("exclude").EnumerateArray().Select(glob => glob.GetString()).ShouldBe(["src/MyApp/**/*", "tests/**/*"]);
+    }
+
+    // The event is a sealed record (HS009); the reaction holds its handler alone (HS004), internal (HS016), which reaches neither
+    // IMediator nor SaveChanges, and its test calls it through the container that must register it.
+    [Fact]
+    public void Event_item_template_declares_a_record_and_a_reaction_that_stays_in_the_transaction()
+    {
+        var root = EventTemplateRoot(FindRepositoryRoot());
+        var domainEvent = File.ReadAllLines(Path.Combine(root, "src", "MyApp.Domain", "ModuleName", "Events", "EventName.cs"));
+        var reaction = File.ReadAllLines(Path.Combine(root, "src", "MyApp", "Features", "ReactionModule", "ReactionSlice", "ReactionSlice.cs"));
+        var test = File.ReadAllText(
+            Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ReactionModule", "ReactionSlice", "ReactionSliceTests.cs"));
+
+        domainEvent.ShouldContain("namespace MyApp.Domain.ModuleName.Events;");
+        domainEvent.ShouldContain("public sealed record EventName(Guid Id) : IDomainEvent;");
+        reaction.ShouldContain("namespace MyApp.Features.ReactionModule.ReactionSlice;");
+        reaction.ShouldContain("internal sealed class ReactionSliceHandler : IDomainEventHandler<EventName>");
+        reaction.Count(line => Regex.IsMatch(line, @"^(public|internal) ")).ShouldBe(1);
+        reaction.ShouldNotContain(line => line.Contains("Endpoint", StringComparison.Ordinal) || line.Contains("IMediator ", StringComparison.Ordinal));
+        string.Join('\n', reaction).ShouldContain("TODO(hardslice): implement ReactionSliceHandler through AppDbContext");
+        test.ShouldContain("GetServices<IDomainEventHandler<EventName>>().OfType<ReactionSliceHandler>()");
+        test.ShouldContain("Assert.Fail(\"TODO(hardslice): ");
+    }
+
+    // Every refusal fails the generation, after excluding every file, and says that nothing was created. A name that is not a past
+    // fact only warns: HS019 is a suggestion. The last action prints the registration of the reaction, or how to raise the event.
+    [Fact]
+    public void Event_item_template_refuses_with_an_error_that_creates_nothing_and_warns_about_a_name_that_is_not_a_past_fact()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(EventTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Length.ShouldBe(9);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        var warning = postActions.Single(action => action.GetProperty("id").GetString() == "warnNotPastFact");
+        warning.GetProperty("condition").GetString().ShouldBe("(Accepted && !NameIsPastFact)");
+        warning.GetProperty("continueOnError").GetBoolean().ShouldBeTrue();
+        warning.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldStartWith("warning: EventName is not named as a past fact: HS019 ");
+        postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+        postActions.Last().GetProperty("manualInstructions").EnumerateArray()
+            .Select(instruction => instruction.GetProperty("text").GetString()!)
+            .ShouldContain(text => text.Contains("\n            .AddScoped<IDomainEventHandler<EventName>, ReactionSliceHandler>()\n", StringComparison.Ordinal));
+    }
+
     // In the repository, the template holds the token in place of the version, in its reference to the analyzers and in its tool entry only.
     [Fact]
     public void Template_holds_the_version_token_where_it_pins_the_analyzers_and_the_tool()
@@ -498,6 +576,15 @@ public sealed class TemplatePackageTests
         "tests/MyApp.Tests/Domain/ModuleName/AggregateNameTests.cs"
     ];
 
+    private static readonly string[] EventTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp.Domain/ModuleName/Events/EventName.cs",
+        "src/MyApp/Features/ReactionModule/ReactionSlice/ReactionSlice.cs",
+        "tests/MyApp.IntegrationTests/Features/ReactionModule/ReactionSlice/ReactionSliceTests.cs"
+    ];
+
     // The files of the item template under <folder> of the package, relative to that folder.
     private static IEnumerable<string> PackedFiles(ZipArchive archive, string folder) =>
         archive.Entries.Select(entry => entry.FullName.Replace('\\', '/'))
@@ -516,6 +603,9 @@ public sealed class TemplatePackageTests
 
     private static string AggregateTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-aggregate");
+
+    private static string EventTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-event");
 
     private static string TemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");

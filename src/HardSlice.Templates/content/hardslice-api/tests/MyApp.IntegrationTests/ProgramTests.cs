@@ -11,8 +11,8 @@ namespace MyApp.IntegrationTests;
 // where starting the host also validates every service registration.
 public sealed class ProgramTests(PostgresDatabase database)
 {
-    // The contracts by which a module registers the handlers and validators of its slices.
-    private static readonly Type[] RegisteredContracts = [typeof(IRequestHandler<,>), typeof(IValidator<>)];
+    // The contracts by which a module registers the handlers and validators of its slices, reactions included.
+    private static readonly Type[] RegisteredContracts = [typeof(IRequestHandler<,>), typeof(IValidator<>), typeof(IDomainEventHandler<>)];
 
     [Fact]
     public async Task Starts_and_answers_HTTP_requests_on_its_migrated_database()
@@ -28,10 +28,10 @@ public sealed class ProgramTests(PostgresDatabase database)
         (await db.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken)).ShouldBeEmpty();
     }
 
-    // A slice its module forgot to register compiles, but its endpoint fails at the first request: every handler and
-    // validator declared in the application must be resolved from the container, by its contract.
+    // A slice its module forgot to register compiles, but its endpoint fails at the first request, and a forgotten reaction
+    // never runs: every handler and validator declared in the application must be resolved from the container, by its contract.
     [Fact]
-    public async Task Resolves_every_request_handler_and_validator_of_the_application_by_its_contract()
+    public async Task Resolves_every_handler_and_validator_of_the_application_by_its_contract()
     {
         await using var app = new MyAppFactory(database);
         await using var scope = app.Services.CreateAsyncScope();
@@ -48,7 +48,8 @@ public sealed class ProgramTests(PostgresDatabase database)
 
         unregistered.ShouldBeEmpty(
             "These types are not registered: add each to the Add<Module>Module method of its module, by its contract, "
-            + "such as .AddScoped<IRequestHandler<TRequest, TResponse>, THandler>() or .AddScoped<IValidator<TRequest>, TValidator>().");
+            + "such as .AddScoped<IRequestHandler<TRequest, TResponse>, THandler>(), .AddScoped<IValidator<TRequest>, TValidator>() "
+            + "or .AddScoped<IDomainEventHandler<TEvent>, THandler>().");
     }
 
     private static string Describe(Type type) =>

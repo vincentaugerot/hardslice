@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -131,6 +133,35 @@ public sealed class DomainEventNameAnalyzerTests
 
         (await ReportedAsync(CompileEvents([.. participles.Select(participle => $"Booking{participle}")]))).ShouldBeEmpty();
         (await ReportedAsync(CompileEvents("BookingForsaken"))).ShouldBe(["BookingForsaken"]);
+    }
+
+    // dotnet new hardslice-event warns about the names this rule reports, and only about them: the pattern of its warning follows
+    // the rule on the PascalCase names the template accepts, irregular participles in any case, versions and acronyms included.
+    [Fact]
+    public async Task The_warning_of_dotnet_new_hardslice_event_follows_the_rule()
+    {
+        const string Prefix = "- or be one of these irregular past participles, whatever its case: ";
+        var sheet = File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "TemplateDocs", "rules", "HS019.md"));
+        var participles = sheet.Single(line => line.StartsWith(Prefix, StringComparison.Ordinal))[Prefix.Length..].TrimEnd('.').Split(", ");
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "EventTemplate", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+        var pascalCase = new Regex(symbols.GetProperty("NameIsPascalCase").GetProperty("parameters").GetProperty("pattern").GetString()!);
+        var pastFact = new Regex(symbols.GetProperty("NameIsPastFact").GetProperty("parameters").GetProperty("pattern").GetString()!);
+        string[] names =
+        [
+            "RoomRenamed", "RenameRoom", "RoomRenaming", "BookingConfirmedV2", "BookingConfirmed2", "BookingConfirmedv12", "BookingV2",
+            "Booking2", "BookedV", "BookingEd", "BookingED", "BookeD", "BOOKED", "RefundPAID", "ROOMPAID", "HTTPPaid", "HTTPRequestRECEIVED",
+            "Room2Paid", "Thread", "AlreadyRead", "Bookingpaid", "RoomSeed", "MediaEmbed", "Paid", "Ed", "BookingForsaken", "BookingEvent",
+            .. participles.Select(participle => $"Booking{participle}"),
+            .. participles.Select(participle => $"Booking{participle.ToUpperInvariant()}V3"),
+            .. participles.Select(participle => $"Room{participle.ToLowerInvariant()}")
+        ];
+        names.ShouldAllBe(name => pascalCase.IsMatch(name));
+
+        var reported = await ReportedAsync(CompileEvents(names));
+
+        names.Where(name => pastFact.IsMatch(name) == reported.Contains(name))
+            .ShouldBeEmpty("The warning of dotnet new hardslice-event disagrees with HS019 on these names.");
     }
 
     [Fact]
