@@ -11,10 +11,11 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-It also holds the `hardslice-command` item template, run from the root of such a solution once it is restored. It creates a command slice of an existing module, with its validator tests and its integration tests, and prints the lines that register it in its module:
+It also holds two item templates, run from the root of such a solution once it is restored. `hardslice-command` creates a command slice of an existing module, with its validator tests and its integration tests; `hardslice-query` creates a query slice that reads an aggregate of the module without tracking, one DTO by its id or, with `--result many`, a list, with its integration tests. Both print the lines that register the slice in its module:
 
 ```text
 dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
+dotnet new hardslice-query --project src/Rooms/Rooms.csproj --module Bookings --name GetBookingSummary --aggregate Booking
 ```
 
 Every generated solution references [HardSlice.Analyzers](https://www.nuget.org/packages/HardSlice.Analyzers) and pins the [HardSlice.Tool](https://www.nuget.org/packages/HardSlice.Tool) local tool at the same version, holds architecture tests, an `AGENTS.md` for coding agents and the sheet of every rule in `docs/rules/`. The check scripts run `dotnet hardslice check`: the build, then the unit, architecture and integration tests. The integration tests start PostgreSQL with Testcontainers: they need a container runtime.

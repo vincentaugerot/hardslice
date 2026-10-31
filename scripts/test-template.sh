@@ -9,9 +9,11 @@
 # is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
 # It generates command slices with dotnet new hardslice-command through each of its refusals, registers them with the lines it prints, checks that the test of the host names a forgotten registration,
 # that only the TODO(hardslice): test fails, that the none and DTO responses build without HardSlice diagnostic, and that a reference completion passes the check.
+# It generates query slices with dotnet new hardslice-query the same way, both results, single and many, without HardSlice diagnostic, HS006 included,
+# and proves that an unknown aggregate fails the build with a compiler error that names it.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
 # and that seeded violations of HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 still fail them, and HS019 still reaches the compiler log: without the sample, the rules keep their targets.
-# There, a first module written by hand receives the same command slices.
+# There, a first module and its aggregate, written by hand, receive the same command and query slices.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -1272,10 +1274,12 @@ EOF
   rm "$app/src/$app_name.Domain/$module/RoomAvailability.cs"
 }
 
-# Runs dotnet new hardslice-command from the root of the solution under test, from the hive where generate-app.sh installed
-# the templates of the package. Prints its output, standard error included.
-new_command() {
-  (cd "$app" && dotnet new hardslice-command --debug:custom-hive "$work/template-hive" "$@" 2>&1)
+# Runs the item template <template> with dotnet new from the root of the solution under test, from the hive where generate-app.sh
+# installed the templates of the package. Prints its output, standard error included.
+new_item() {
+  local template="$1"
+  shift
+  (cd "$app" && dotnet new "$template" --debug:custom-hive "$work/template-hive" "$@" 2>&1)
 }
 
 # The sources and tests of the solution under test with their content: a refused generation leaves them unchanged.
@@ -1283,29 +1287,30 @@ solution_snapshot() {
   (cd "$app" && find src tests -type f -not -path '*/bin/*' -not -path '*/obj/*' -print0 | LC_ALL=C sort -z | xargs -0 cksum)
 }
 
-# A refused generation exits with a non-zero code, prints <message> and creates or changes nothing.
-expect_command_refused() {
-  local description="$1"
-  local message="$2"
-  shift 2
+# A refused generation of the item template <template> exits with a non-zero code, prints <message> and creates or changes nothing.
+expect_item_refused() {
+  local template="$1"
+  local description="$2"
+  local message="$3"
+  shift 3
   local before
   local output
   local status=0
 
   before="$(solution_snapshot)"
-  output="$(new_command "$@")" || status=$?
+  output="$(new_item "$template" "$@")" || status=$?
   if [[ "$status" == 0 ]]; then
     printf '%s\n' "$output" >&2
-    echo "error: dotnet new hardslice-command accepted $description in $app_name." >&2
+    echo "error: dotnet new $template accepted $description in $app_name." >&2
     exit 1
   fi
   if [[ "$output" != *"$message"* ]]; then
     printf '%s\n' "$output" >&2
-    echo "error: dotnet new hardslice-command refused $description in $app_name without saying: $message" >&2
+    echo "error: dotnet new $template refused $description in $app_name without saying: $message" >&2
     exit 1
   fi
   if [[ "$(solution_snapshot)" != "$before" ]]; then
-    echo "error: dotnet new hardslice-command refused $description in $app_name but changed its files." >&2
+    echo "error: dotnet new $template refused $description in $app_name but changed its files." >&2
     exit 1
   fi
   echo "    $description: exit $status, $message"
@@ -1319,7 +1324,7 @@ generate_command() {
   shift 2
   local generated
 
-  if ! command_output="$(new_command --project "src/$app_name/$app_name.csproj" --module "$module" --name "$name" "$@")"; then
+  if ! command_output="$(new_item hardslice-command --project "src/$app_name/$app_name.csproj" --module "$module" --name "$name" "$@")"; then
     printf '%s\n' "$command_output" >&2
     echo "error: dotnet new hardslice-command failed on the slice $module/$name of $app_name." >&2
     exit 1
@@ -1335,24 +1340,28 @@ generate_command() {
   done
 }
 
-# Adds to the module the lines that dotnet new hardslice-command printed in <output>, as the skill add-slice does: the usings the
+# Adds to the module the lines that dotnet new <template> printed in <output>, as the skill add-slice does: the usings the
 # file does not have yet, the registrations after 'services' (unless <registrations> is 'without-registrations'), and the call
-# of Map before 'return endpoints;'. Fails if the instructions do not name the module file or one of these lines.
-register_command() {
-  local output="$1"
-  local registrations="${2:-with-registrations}"
+# of Map before 'return endpoints;'. Fails if the instructions do not name the module file or one of these lines: two
+# registrations for hardslice-command, the handler and the validator, one for hardslice-query, the handler.
+register_slice() {
+  local template="$1"
+  local output="$2"
+  local registrations="${3:-with-registrations}"
+  local expected_registrations=2
   local module_file
   local using
   local usings=""
   local lines
   local mapping
 
+  [[ "$template" != hardslice-query ]] || expected_registrations=1
   module_file="$(sed -n 's/^Manual instructions: Register the slice in \(src\/.*Module\.cs\):$/\1/p' <<< "$output")"
   lines="$(grep -E '^            \.AddScoped<(IRequestHandler|IValidator)<' <<< "$output" || true)"
   mapping="$(grep -E '^        [A-Za-z0-9]+Endpoint\.Map\(group\);$' <<< "$output" || true)"
-  if [[ -z "$module_file" || ! -f "$app/$module_file" || "$(grep -c . <<< "$lines")" != 2 || -z "$mapping" ]]; then
+  if [[ -z "$module_file" || ! -f "$app/$module_file" || "$(grep -c . <<< "$lines")" != "$expected_registrations" || -z "$mapping" ]]; then
     printf '%s\n' "$output" >&2
-    echo "error: dotnet new hardslice-command did not print the module file, the two registrations and the call of Map of its slice." >&2
+    echo "error: dotnet new $template did not print the module file, the $expected_registrations registrations and the call of Map of its slice." >&2
     exit 1
   fi
   [[ "$registrations" == with-registrations ]] || lines=""
@@ -1420,13 +1429,13 @@ probe_command_template() {
   cp "$module_file" "$work/module.backup"
 
   echo "==> Checking that dotnet new hardslice-command refuses an unreadable application, an invalid name or response, and a missing module in $app_name"
-  expect_command_refused "a run without the web project" "with --project src/<App>/<App>.csproj" --module "$module" --name "$name"
-  expect_command_refused "a run without name" "--name is required" --project "$project" --module "$module"
-  expect_command_refused "a name that is not PascalCase" "--name 'extend-slot' is not PascalCase" --project "$project" --module "$module" --name extend-slot
-  expect_command_refused "a name with the Command suffix" "--name '${name}Command' ends with Command" --project "$project" --module "$module" --name "${name}Command"
-  expect_command_refused "a module that is not PascalCase" "--module 'payments' is not PascalCase" --project "$project" --module payments --name "$name"
-  expect_command_refused "a module that does not exist" "module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --name Payments" --project "$project" --module Payments --name "$name"
-  expect_command_refused "an unknown response" "--response 'dto' is neither id, none nor the PascalCase name of a DTO" --project "$project" --module "$module" --name "$name" --response dto
+  expect_item_refused hardslice-command "a run without the web project" "with --project src/<App>/<App>.csproj" --module "$module" --name "$name"
+  expect_item_refused hardslice-command "a run without name" "--name is required" --project "$project" --module "$module"
+  expect_item_refused hardslice-command "a name that is not PascalCase" "--name 'extend-slot' is not PascalCase" --project "$project" --module "$module" --name extend-slot
+  expect_item_refused hardslice-command "a name with the Command suffix" "--name '${name}Command' ends with Command" --project "$project" --module "$module" --name "${name}Command"
+  expect_item_refused hardslice-command "a module that is not PascalCase" "--module 'payments' is not PascalCase" --project "$project" --module payments --name "$name"
+  expect_item_refused hardslice-command "a module that does not exist" "module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --name Payments" --project "$project" --module Payments --name "$name"
+  expect_item_refused hardslice-command "an unknown response" "--response 'dto' is neither id, none nor the PascalCase name of a DTO" --project "$project" --module "$module" --name "$name" --response dto
 
   echo "==> Generating the command slice $module/$name of $app_name with dotnet new hardslice-command"
   generate_command "$module" "$name"
@@ -1446,11 +1455,11 @@ probe_command_template() {
     exit 1
   fi
   generated_slice="$(cat "$slice")"
-  expect_command_refused "a slice that exists" "--force" --project "$project" --module "$module" --name "$name"
+  expect_item_refused hardslice-command "a slice that exists" "--force" --project "$project" --module "$module" --name "$name"
 
   # The endpoint is mapped, so the build passes: only the test of the host and the generated tests see the forgotten registrations.
   echo "==> Checking that the test of the host names the handler and the validator of $module/$name that ${module}Module does not register"
-  register_command "$command_output" without-registrations
+  register_slice hardslice-command "$command_output" without-registrations
   if test_output="$(
     cd "$app"
     dotnet build "$app_name.slnx" 2>&1 &&
@@ -1473,20 +1482,20 @@ probe_command_template() {
   cp "$work/module.backup" "$module_file"
 
   echo "==> Checking that $app_name builds the registered slice $module/$name without HardSlice diagnostic and fails the check on its TODO(hardslice): test only"
-  register_command "$command_output"
+  register_slice hardslice-command "$command_output"
   expect_check_fails_on_todo_tests_only "the generated slice $module/$name" \
     "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Handles_a_valid_command"
   cp "$module_file" "$work/module-registered.backup"
 
   echo "==> Checking that the none and DTO responses of dotnet new hardslice-command build without HardSlice diagnostic, HS005 included, in $app_name"
   generate_command "$module" "$none_name" --response none
-  register_command "$command_output"
+  register_slice hardslice-command "$command_output"
   if ! grep -Fxq "            .AddScoped<IRequestHandler<${none_name}Command, bool>, ${none_name}Handler>()" "$module_file"; then
     echo "error: dotnet new hardslice-command --response none did not register a handler that returns bool." >&2
     exit 1
   fi
   generate_command "$module" "$dto_name" --response "${dto_name}Result"
-  register_command "$command_output"
+  register_slice hardslice-command "$command_output"
   if ! grep -Fxq "public sealed record ${dto_name}Result(Guid Id);" "$app_src/Features/$module/$dto_name/$dto_name.cs"; then
     echo "error: dotnet new hardslice-command --response ${dto_name}Result did not declare the DTO in the slice." >&2
     exit 1
@@ -1521,6 +1530,183 @@ probe_command_template() {
   bash "$app/scripts/check.sh"
 
   rm -r "$app_src/Features/$module/$name" "$app/tests/$app_name.Tests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$name"
+  mv "$work/module.backup" "$module_file"
+  rm "$work/module-registered.backup"
+}
+
+# Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and leaves the
+# printed instructions in $query_output.
+generate_query() {
+  local module="$1"
+  local name="$2"
+  shift 2
+  local generated
+
+  if ! query_output="$(new_item hardslice-query --project "src/$app_name/$app_name.csproj" --module "$module" --name "$name" "$@")"; then
+    printf '%s\n' "$query_output" >&2
+    echo "error: dotnet new hardslice-query failed on the slice $module/$name of $app_name." >&2
+    exit 1
+  fi
+  for generated in "src/$app_name/Features/$module/$name/$name.cs" \
+    "tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"; do
+    if [[ ! -f "$app/$generated" ]]; then
+      printf '%s\n' "$query_output" >&2
+      echo "error: dotnet new hardslice-query did not create $generated in $app_name." >&2
+      exit 1
+    fi
+  done
+  if [[ -e "$app/tests/$app_name.Tests/Features/$module/$name" ]]; then
+    echo "error: dotnet new hardslice-query created unit tests for the slice $module/$name of $app_name, which has no validator." >&2
+    exit 1
+  fi
+}
+
+# Generates a query slice of module <module>, which must exist, reading <aggregate>, an aggregate of the domain of the module
+# whose identifier is an <aggregate>Id, through every path of dotnet new hardslice-query: refusals, instructions, a forgotten
+# registration, the TODO(hardslice): tests of both results, an unknown aggregate, then the reference completion, in which
+# <create> is the expression that creates an aggregate to store. The module file is restored and the slices removed at the end.
+probe_query_template() {
+  local module="$1"
+  local name="$2"
+  local many_name="$3"
+  local aggregate="$4"
+  local create="$5"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local project="src/$app_name/$app_name.csproj"
+  local slice_name
+  local test_output
+  local build_output
+  local test_file
+
+  cp "$module_file" "$work/module.backup"
+
+  echo "==> Checking that dotnet new hardslice-query refuses an unreadable application, an invalid name, module or aggregate, and a missing module or aggregate in $app_name"
+  expect_item_refused hardslice-query "a run without the web project" "with --project src/<App>/<App>.csproj" --module "$module" --name "$name" --aggregate "$aggregate"
+  expect_item_refused hardslice-query "a run without name" "--name is required" --project "$project" --module "$module" --aggregate "$aggregate"
+  expect_item_refused hardslice-query "a name that is not PascalCase" "--name 'list-slots' is not PascalCase" --project "$project" --module "$module" --name list-slots --aggregate "$aggregate"
+  expect_item_refused hardslice-query "a name with the Query suffix" "--name '${name}Query' ends with Query" --project "$project" --module "$module" --name "${name}Query" --aggregate "$aggregate"
+  expect_item_refused hardslice-query "a module that is not PascalCase" "--module 'payments' is not PascalCase" --project "$project" --module payments --name "$name" --aggregate "$aggregate"
+  expect_item_refused hardslice-query "a module that does not exist" "module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --name Payments" --project "$project" --module Payments --name "$name" --aggregate "$aggregate"
+  expect_item_refused hardslice-query "a run without aggregate" "Missing mandatory option(s) for the template 'HardSlice query slice': '--aggregate'." --project "$project" --module "$module" --name "$name"
+  expect_item_refused hardslice-query "an aggregate that is not PascalCase" "--aggregate 'room-slot' is not PascalCase" --project "$project" --module "$module" --name "$name" --aggregate room-slot
+  # 'list' is not a value: dotnet new would read '--result list' as its list command.
+  expect_item_refused hardslice-query "an unknown result" "'list' is not a valid value for --result" --project "$project" --module "$module" --name "$name" --aggregate "$aggregate" --result=list
+
+  echo "==> Generating the query slice $module/$name of $app_name with dotnet new hardslice-query"
+  generate_query "$module" "$name" --aggregate "$aggregate"
+  for expected in "Register the slice in src/$app_name/Features/$module/${module}Module.cs:" \
+    "using $app_name.Features.$module.$name;" \
+    "            .AddScoped<IRequestHandler<${name}Query, ${name}Dto?>, ${name}Handler>()" \
+    "        ${name}Endpoint.Map(group);"; do
+    if ! grep -Fxq -- "$expected" <<< "${query_output//Manual instructions: /}"; then
+      printf '%s\n' "$query_output" >&2
+      echo "error: dotnet new hardslice-query did not print the line '$expected'." >&2
+      exit 1
+    fi
+  done
+  if grep -q 'MyApp\|ModuleName\|QueryName\|AggregateName\|query-route\|module-route' \
+    "$app_src/Features/$module/$name/$name.cs" "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"; then
+    echo "error: the slice $module/$name generated in $app_name keeps a placeholder of the template." >&2
+    exit 1
+  fi
+  if ! grep -Fq "db.Set<$aggregate>()" "$app_src/Features/$module/$name/$name.cs" ||
+    ! grep -Fxq "            .AsNoTracking()" "$app_src/Features/$module/$name/$name.cs"; then
+    echo "error: the handler of $module/$name does not read $aggregate with AsNoTracking()." >&2
+    exit 1
+  fi
+  expect_item_refused hardslice-query "a slice that exists" "--force" --project "$project" --module "$module" --name "$name" --aggregate "$aggregate"
+
+  # The endpoint is mapped, so the build passes: only the test of the host and the generated tests see the forgotten registration.
+  echo "==> Checking that the test of the host names the handler of $module/$name that ${module}Module does not register"
+  register_slice hardslice-query "$query_output" without-registrations
+  if test_output="$(
+    cd "$app"
+    dotnet build "$app_name.slnx" 2>&1 &&
+      dotnet test --project "tests/$app_name.IntegrationTests/$app_name.IntegrationTests.csproj" --no-build 2>&1
+  )"; then
+    echo "error: the integration tests of $app_name passed with a query slice its module does not register." >&2
+    exit 1
+  fi
+  for expected in "failed $app_name.IntegrationTests.ProgramTests.Resolves_every_request_handler_and_validator_of_the_application_by_its_contract" \
+    "'${name}Handler' as 'IRequestHandler<${name}Query, ${name}Dto>'" \
+    "failed $app_name.IntegrationTests.Features.$module.$name.${name}Tests.Returns_404_for_an_unknown_aggregate"; do
+    if [[ "$test_output" != *"$expected"* ]]; then
+      printf '%s\n' "$test_output" >&2
+      echo "error: the integration tests of $app_name did not report '$expected' for the unregistered slice $module/$name." >&2
+      exit 1
+    fi
+  done
+  echo "    ProgramTests names '${name}Handler'"
+  cp "$work/module.backup" "$module_file"
+
+  # Both results at once: each fails the check on its TODO(hardslice): test only, the 404 of the single result passes.
+  echo "==> Checking that $app_name builds the registered query slices $module/$name and $module/$many_name (--result many) without HardSlice diagnostic, HS006 included, and fails the check on their TODO(hardslice): tests only"
+  register_slice hardslice-query "$query_output"
+  generate_query "$module" "$many_name" --aggregate "$aggregate" --result many
+  if ! grep -Fxq "            .AddScoped<IRequestHandler<${many_name}Query, IReadOnlyList<${many_name}Dto>>, ${many_name}Handler>()" <<< "${query_output//Manual instructions: /}"; then
+    printf '%s\n' "$query_output" >&2
+    echo "error: dotnet new hardslice-query --result many did not register a handler that returns a list." >&2
+    exit 1
+  fi
+  register_slice hardslice-query "$query_output"
+  expect_check_fails_on_todo_tests_only "the generated query slices $module/$name and $module/$many_name" \
+    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$many_name.${many_name}Tests.Lists_a_stored_aggregate_as_its_dto" \
+      "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Reads_a_stored_aggregate_as_its_dto" | LC_ALL=C sort)"
+  cp "$module_file" "$work/module-registered.backup"
+
+  # A registered slice, so that HS015 has nothing to report: the compiler alone names the aggregate it does not find.
+  echo "==> Checking that an unknown aggregate fails the build of $app_name with a compiler error that names it, without HardSlice diagnostic"
+  for result in single many; do
+    slice_name="Read${result^}Unknown${aggregate}"
+    generate_query "$module" "$slice_name" --aggregate "Unknown$aggregate" --result "$result"
+    register_slice hardslice-query "$query_output"
+  done
+  if build_output="$(cd "$app" && dotnet build "$app_name.slnx" 2>&1)"; then
+    echo "error: $app_name builds query slices that read the unknown aggregate Unknown$aggregate." >&2
+    exit 1
+  fi
+  if ! grep -Eq "Features/$module/ReadSingleUnknown$aggregate/ReadSingleUnknown$aggregate\.cs\([0-9]+,[0-9]+\): error CS0246: The type or namespace name 'Unknown$aggregate' could not be found" <<< "$build_output" ||
+    ! grep -Eq "Features/$module/ReadManyUnknown$aggregate/ReadManyUnknown$aggregate\.cs\([0-9]+,[0-9]+\): error CS0246: The type or namespace name 'Unknown$aggregate' could not be found" <<< "$build_output" ||
+    grep -Eq '(error|warning) HS[0-9]{3}' <<< "$build_output"; then
+    printf '%s\n' "$build_output" >&2
+    echo "error: the build of $app_name did not name the unknown aggregate Unknown$aggregate with CS0246 alone." >&2
+    exit 1
+  fi
+  echo "    error CS0246: The type or namespace name 'Unknown$aggregate' could not be found"
+  for result in Single Many; do
+    rm -r "$app_src/Features/$module/Read${result}Unknown$aggregate" "$app/tests/$app_name.IntegrationTests/Features/$module/Read${result}Unknown$aggregate"
+  done
+  cp "$work/module-registered.backup" "$module_file"
+
+  # The reference completion: each test stores an aggregate created by <create> and asserts the identifier it reads. No marker remains.
+  echo "==> Checking that the reference completion of $module/$name and $module/$many_name passes the check of $app_name"
+  for test_file in "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$many_name/${many_name}Tests.cs"; do
+    CREATE="$create" AGGREGATE="$aggregate" awk '
+      /^        Assert\.Fail\("TODO\(hardslice\): / { next }
+      /^        throw new NotImplementedException\($/ { skipping = 1; next }
+      skipping {
+        if ($0 ~ /and return its identifier\."\);$/) {
+          print "        var stored = " ENVIRON["CREATE"] ";"
+          print "        db.Set<" ENVIRON["AGGREGATE"] ">().Add(stored);"
+          print "        await db.SaveChangesAsync(TestContext.Current.CancellationToken);"
+          print "        return stored.Id.Value;"
+          skipping = 0
+        }
+        next
+      }
+      { print }' "$test_file" > "$work/test.cs"
+    mv "$work/test.cs" "$test_file"
+  done
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of $module/$name and $module/$many_name leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+
+  for slice_name in "$name" "$many_name"; do
+    rm -r "$app_src/Features/$module/$slice_name" "$app/tests/$app_name.IntegrationTests/Features/$module/$slice_name"
+  done
   mv "$work/module.backup" "$module_file"
   rm "$work/module-registered.backup"
 }
@@ -1637,6 +1823,8 @@ echo "    $version_mismatch ..."
 mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
 
 probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking
+probe_query_template Bookings GetBookingSummary ListBookingSummaries Booking \
+  "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 
 echo "==> $app_name OK: it restores the HardSlice packages $hardslice_version from the local feed, passes both check scripts and the README path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule, while they pass with the HS019 suggestion in the compiler log"
 
@@ -1892,7 +2080,7 @@ mv "$work/domain-project.backup" "$domain_project"
 rm "$app/src/$app_name.Domain/Hs001Probe.cs"
 
 # Until hardslice-module (PB-038), the first module is written as "Adding a first module" of AGENTS.md describes it, and Program.cs
-# registers and maps it: dotnet new hardslice-command then adds its first command slice.
+# registers and maps it: dotnet new hardslice-command then adds its first command slice, and hardslice-query its first query slices.
 echo "==> Writing the first module Rooms of $app_name, registered and mapped by Program.cs"
 cp "$app_src/Program.cs" "$work/Program.cs.backup"
 mkdir -p "$app_src/Features/Rooms"
@@ -1922,6 +2110,72 @@ if ! awk -v app_name="$app_name" '
 fi
 
 probe_command_template Rooms RenameRoom CloseRoom ResizeRoom
+
+# Until hardslice-aggregate (PB-039), the aggregate that the query slices read is written by hand in the domain of Rooms,
+# mapped by the module and migrated, as "Changing the database" of AGENTS.md describes it.
+echo "==> Writing the aggregate Room of $app_name, its mapping in module Rooms and its migration"
+mkdir -p "$app/src/$app_name.Domain/Rooms"
+cat > "$app/src/$app_name.Domain/Rooms/RoomId.cs" <<EOF
+namespace $app_name.Domain.Rooms;
+
+public readonly record struct RoomId(Guid Value)
+{
+    public static RoomId New() => new(Guid.CreateVersion7());
+}
+EOF
+cat > "$app/src/$app_name.Domain/Rooms/Room.cs" <<EOF
+namespace $app_name.Domain.Rooms;
+
+public sealed class Room : IAggregateRoot
+{
+    private Room(RoomId id, string name)
+    {
+        Id = id;
+        Name = name;
+    }
+
+    // Rehydration only: persistence restores the state of a stored room.
+    private Room()
+    {
+        Name = null!;
+    }
+
+    public RoomId Id { get; }
+
+    public string Name { get; }
+
+    public static Room Open(string name) => new(RoomId.New(), name);
+
+    public IReadOnlyList<IDomainEvent> DequeueDomainEvents() => [];
+}
+EOF
+cat > "$app_src/Features/Rooms/RoomConfiguration.cs" <<EOF
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using $app_name.Domain.Rooms;
+
+namespace $app_name.Features.Rooms;
+
+internal sealed class RoomConfiguration : IEntityTypeConfiguration<Room>
+{
+    public void Configure(EntityTypeBuilder<Room> builder)
+    {
+        builder.ToTable("Rooms");
+        builder.HasKey(room => room.Id);
+        builder.Property(room => room.Id)
+            .HasConversion(id => id.Value, value => new RoomId(value))
+            .ValueGeneratedNever();
+        builder.Property(room => room.Name).HasMaxLength(100);
+    }
+}
+EOF
+(
+  cd "$app"
+  dotnet tool restore > /dev/null
+  dotnet ef migrations add AddRooms --project "src/$app_name" --output-dir Shared/Persistence/Migrations
+)
+probe_query_template Rooms GetRoomSummary ListRoomSummaries Room 'Room.Open("Blue room")'
+rm -r "$app/src/$app_name.Domain/Rooms" "$app_src/Shared/Persistence/Migrations" "$app_src/Features/Rooms/RoomConfiguration.cs"
 
 mv "$work/Program.cs.backup" "$app_src/Program.cs"
 rm -r "$app_src/Features"

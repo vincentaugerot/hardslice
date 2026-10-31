@@ -1824,6 +1824,17 @@ scripts/test-template.sh
 - fichiers de tests aux chemins de HS018, test d'intégration `TODO(hardslice):` ;
 - `AGENTS.md` : le paragraphe sur les requêtes renvoie au template.
 
+**Réalisation (31/10/2026)**
+
+Essais faits avec le SDK 10.0.401 :
+
+- mêmes liaisons et mêmes refus que PB-036 (`--project`, `HardSliceModuleFiles`, post-action sans script, code 105), plus le refus d'un `--aggregate` non PascalCase et du suffixe `Query` ; `--aggregate` absent est refusé par `dotnet new` lui-même (paramètre obligatoire, code 102) ;
+- la liste s'écrit `--result many`, pas `list` : `dotnet new hardslice-query ... --result list` est lu comme la commande `dotnet new list` et échoue sur « Unrecognized command or argument(s): 'hardslice-query' ». `--result` est un choix (`single` par défaut, `many`) que `dotnet new` valide lui-même (code 127) ;
+- le template ne peut pas vérifier l'agrégat : il le cherche dans l'espace de noms `<App>.Domain.<Module>` et suppose la convention de `Booking`, reprise par PB-039 : une propriété `Id` de type `<Aggregate>Id` qui enveloppe un `Guid Value`. Un agrégat inconnu échoue au build sur CS0246, qui le nomme, sans diagnostic HS ;
+- `single` : requête `<Name>Query(Guid Id)`, DTO `<Name>Dto?`, `GET /<module>/<slice>/{id:guid}` qui répond 200 ou 404, forme de `GetBooking` ; `many` : requête sans paramètre, `IReadOnlyList<<Name>Dto>` triée par `Id`, `GET /<module>/<slice>`. Le DTO n'a qu'un champ `Id`, à compléter ; pas de validateur ni de test unitaire : la requête n'a pas de paramètre à valider ;
+- le handler fonctionne tel quel : avec `single`, le test d'un id inconnu passe. Le test qui lit ou liste un agrégat stocké échoue sur `TODO(hardslice):` jusqu'à ce que l'agrégat soit créé par sa fabrique, puis sur un second marqueur jusqu'à ce que les valeurs du DTO soient vérifiées : la préparation dépend de l'agrégat, que le template ne connaît pas ;
+- sans Bookings, `scripts/test-template.sh` écrit l'agrégat `Room`, son mapping et sa migration à la main, en attendant `hardslice-aggregate` (PB-039).
+
 **Dépendances**
 
 Incrément 3.

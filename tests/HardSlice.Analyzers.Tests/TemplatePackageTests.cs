@@ -59,12 +59,8 @@ public sealed class TemplatePackageTests
                 File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")).Replace(VersionToken, version).TrimEnd());
             archive.Entries.Select(entry => entry.FullName).ShouldContain("README.md");
             // The item templates ship in the same package, beside hardslice-api.
-            const string commandTemplate = "/hardslice-command/";
-            archive.Entries.Select(entry => entry.FullName.Replace('\\', '/'))
-                .Where(entry => entry.Contains(commandTemplate, StringComparison.Ordinal))
-                .Select(entry => entry[(entry.IndexOf(commandTemplate, StringComparison.Ordinal) + commandTemplate.Length)..])
-                .Order(StringComparer.Ordinal)
-                .ShouldBe(CommandTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-command/").ShouldBe(CommandTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-query/").ShouldBe(QueryTemplateFiles.Order(StringComparer.Ordinal));
         }
         finally
         {
@@ -101,6 +97,64 @@ public sealed class TemplatePackageTests
     {
         using var template = JsonDocument.Parse(
             File.ReadAllText(Path.Combine(CommandTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Length.ShouldBe(7);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+    }
+
+    // hardslice-query generates the two files of a query slice, at the paths of HS004 and HS018, and nothing else: a query has no validator.
+    [Fact]
+    public void Query_item_template_generates_a_slice_and_its_integration_tests_only()
+    {
+        var root = QueryTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(QueryTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-query");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        config.GetProperty("sourceName").GetString().ShouldBe("QueryName");
+        var symbols = config.GetProperty("symbols");
+        var application = symbols.GetProperty("AppName");
+        application.GetProperty("type").GetString().ShouldBe("bind");
+        application.GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        application.GetProperty("replaces").GetString().ShouldBe("MyApp");
+        symbols.GetProperty("Aggregate").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+        // Never list: dotnet new would read '--result list' as its own list command.
+        symbols.GetProperty("Result").GetProperty("choices").EnumerateArray()
+            .Select(choice => choice.GetProperty("choice").GetString())
+            .ShouldBe(["single", "many"]);
+        symbols.GetProperty("Result").GetProperty("defaultValue").GetString().ShouldBe("single");
+    }
+
+    // Both results read the aggregate without tracking and project it to the DTO of the slice (HS006).
+    [Fact]
+    public void Query_item_template_reads_its_aggregate_without_tracking_in_both_results()
+    {
+        var slice = File.ReadAllText(
+            Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
+
+        Regex.Matches(slice, @"db\.Set<AggregateName>\(\)\s+\.AsNoTracking\(\)").Count.ShouldBe(2);
+        Regex.Matches(slice, @"\.Select\(aggregate => new QueryNameDto\(").Count.ShouldBe(2);
+        slice.ShouldNotContain("AsTracking()");
+        slice.ShouldNotContain("SaveChanges");
+    }
+
+    // Every refusal fails the generation, after excluding every file, and says that nothing was created.
+    [Fact]
+    public void Query_item_template_refuses_with_an_error_that_creates_nothing()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
@@ -283,8 +337,26 @@ public sealed class TemplatePackageTests
         "tests/MyApp.Tests/Features/ModuleName/CommandName/CommandNameValidatorTests.cs"
     ];
 
+    private static readonly string[] QueryTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp/Features/ModuleName/QueryName/QueryName.cs",
+        "tests/MyApp.IntegrationTests/Features/ModuleName/QueryName/QueryNameTests.cs"
+    ];
+
+    // The files of the item template under <folder> of the package, relative to that folder.
+    private static IEnumerable<string> PackedFiles(ZipArchive archive, string folder) =>
+        archive.Entries.Select(entry => entry.FullName.Replace('\\', '/'))
+            .Where(entry => entry.Contains(folder, StringComparison.Ordinal))
+            .Select(entry => entry[(entry.IndexOf(folder, StringComparison.Ordinal) + folder.Length)..])
+            .Order(StringComparer.Ordinal);
+
     private static string CommandTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-command");
+
+    private static string QueryTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-query");
 
     private static string TemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");

@@ -1,0 +1,378 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Vincent Augerot",
+  "classifications": [
+    "Web",
+    "API",
+    "Vertical Slices",
+    "DDD"
+  ],
+  "identity": "HardSlice.Templates.Query",
+  "name": "HardSlice query slice",
+  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "shortName": "hardslice-query",
+  "sourceName": "QueryName",
+  "preferNameDirectory": false,
+  "preferDefaultName": true,
+  "defaultName": "HardSliceNameMissing",
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "Module": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The module of the slice, in PascalCase, such as Bookings: src/<App>/Features/<Module>/<Module>Module.cs must exist.",
+      "replaces": "ModuleName",
+      "fileRename": "ModuleName"
+    },
+    "Aggregate": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The aggregate that the query reads, in PascalCase, such as Booking: a type of namespace <App>.Domain.<Module>, whose Id property is a <Aggregate>Id that wraps a Guid Value.",
+      "replaces": "AggregateName",
+      "fileRename": "AggregateName"
+    },
+    "Result": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "single",
+      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default) or many (the list of the DTOs). Not list: dotnet new would read it as its list command.",
+      "choices": [
+        {
+          "choice": "single",
+          "description": "One DTO read by its id; an unknown id is answered with 404."
+        },
+        {
+          "choice": "many",
+          "description": "The list of the DTOs."
+        }
+      ]
+    },
+    "AppName": {
+      "type": "bind",
+      "binding": "msbuild:RootNamespace",
+      "replaces": "MyApp",
+      "fileRename": "MyApp"
+    },
+    "ModuleFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceModuleFiles"
+    },
+    "Unbound": {
+      "type": "generated",
+      "generator": "constant",
+      "parameters": {
+        "value": ""
+      }
+    },
+    "AppNameOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "AppName",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "ModuleRouteWords": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "Module",
+        "steps": [
+          {
+            "regex": "(?<=[a-z0-9])([A-Z])",
+            "replacement": "-$1"
+          }
+        ]
+      }
+    },
+    "ModuleRoute": {
+      "type": "generated",
+      "generator": "casing",
+      "parameters": {
+        "source": "ModuleRouteWords",
+        "toLower": true
+      },
+      "replaces": "module-route"
+    },
+    "QueryRouteWords": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "name",
+        "steps": [
+          {
+            "regex": "(?<=[a-z0-9])([A-Z])",
+            "replacement": "-$1"
+          }
+        ]
+      }
+    },
+    "QueryRoute": {
+      "type": "generated",
+      "generator": "casing",
+      "parameters": {
+        "source": "QueryRouteWords",
+        "toLower": true
+      },
+      "replaces": "query-route"
+    },
+    "ResultIsSingle": {
+      "type": "computed",
+      "value": "(Result == \"single\")"
+    },
+    "ResultIsMany": {
+      "type": "computed",
+      "value": "(Result == \"many\")"
+    },
+    "AppIsKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppNameOrEmpty",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      }
+    },
+    "NameIsGiven": {
+      "type": "computed",
+      "value": "(name != \"HardSliceNameMissing\")"
+    },
+    "NameIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "NameHasSuffix": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "Query$"
+      }
+    },
+    "ModuleIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Module",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ModuleProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "ModuleExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ModuleProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "AggregateIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Aggregate",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "Accepted": {
+      "type": "computed",
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase)"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!Accepted)",
+          "exclude": [
+            "**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "postActions": [
+    {
+      "id": "refuseUnknownApplication",
+      "condition": "(!AppIsKnown)",
+      "description": "Refuses a solution whose web project it cannot read.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: hardslice-query reads the application from its web project, which it could not evaluate. Run it from the root of the solution with --project src/<App>/<App>.csproj, once the solution is restored (after a first build or check), such as: dotnet new hardslice-query --project src/<App>/<App>.csproj --module <Module> --name <Name> --aggregate <Aggregate>. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingName",
+      "condition": "(!NameIsGiven)",
+      "description": "Refuses a slice without name.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name is required: the use case in PascalCase, without the Query suffix, such as --name ListRoomBookings. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidName",
+      "condition": "(!NameIsPascalCase)",
+      "description": "Refuses a name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'QueryName' is not PascalCase: it names the slice folder, its namespace and its types, such as --name ListRoomBookings. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseQuerySuffix",
+      "condition": "(NameHasSuffix)",
+      "description": "Refuses a name with the Query suffix.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'QueryName' ends with Query: pass the use case alone, the template names the query <Name>Query. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidModule",
+      "condition": "(!ModuleIsPascalCase)",
+      "description": "Refuses a module name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --module 'ModuleName' is not PascalCase: pass the name of an existing module, such as the folder of src/MyApp/Features/<Module>/. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingModule",
+      "condition": "(!ModuleExists)",
+      "description": "Refuses a module that does not exist.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: module 'ModuleName' does not exist: src/MyApp/Features/ModuleName/ModuleNameModule.cs was not found. Create the module first with dotnet new hardslice-module --name ModuleName, then add the slice. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidAggregate",
+      "condition": "(!AggregateIsPascalCase)",
+      "description": "Refuses an aggregate name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --aggregate 'AggregateName' is not PascalCase: pass the aggregate root that the query reads, a type of src/MyApp.Domain/<Module>/, such as --aggregate Booking. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "registerSlice",
+      "condition": "(Accepted)",
+      "description": "Lines to add to the module of the slice.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "condition": "(ResultIsSingle)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, QueryNameDto?>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ResultIsMany)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<QueryNameDto>>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        }
+      ],
+      "continueOnError": true
+    }
+  ]
+}
