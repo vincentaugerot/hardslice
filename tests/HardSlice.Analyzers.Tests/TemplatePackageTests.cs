@@ -458,6 +458,33 @@ public sealed class TemplatePackageTests
             .ShouldBeEmpty("AGENTS.md cites paths that the generated solution does not contain.");
     }
 
+    // PB-048: the pre-commit hook and the CI of the generated solution run the check script without argument, and the CI uses the
+    // actions of the CI of this repository at the same pins, which its generated-workflow job reproduces on the generated solution.
+    [Fact]
+    public void Pre_commit_hook_and_CI_run_the_check_script_without_argument_with_the_pinned_actions_of_the_repository()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var templateRoot = TemplateRoot(repositoryRoot);
+        var preCommit = File.ReadAllText(Path.Combine(templateRoot, ".githooks", "pre-commit"));
+        var workflow = File.ReadAllText(Path.Combine(templateRoot, ".github", "workflows", "hardslice.yml"));
+        var repositoryPins = ActionPins(File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "ci.yml")));
+
+        preCommit.ShouldStartWith("#!/usr/bin/env bash\n");
+        preCommit.ShouldContain("check=\"$(dirname \"${BASH_SOURCE[0]}\")/../scripts/check.sh\"");
+        preCommit.ShouldContain("if ! bash \"$check\"; then");
+        Regex.Matches(workflow, @"^\s+run: (?<command>.+)$", RegexOptions.Multiline).Select(match => match.Groups["command"].Value.TrimEnd())
+            .ShouldBe(["bash scripts/check.sh", "|"]);
+        var templatePins = ActionPins(workflow);
+        templatePins.Length.ShouldBe(Regex.Matches(workflow, "uses:").Count, "Every action of the CI of the template is pinned by its full commit SHA.");
+        templatePins.Select(pin => pin.Action).Distinct().ShouldBe(["actions/checkout", "actions/setup-dotnet"]);
+        templatePins.ShouldAllBe(pin => repositoryPins.Contains(pin), "The CI of the template must use the actions of the CI of the repository at the same pins.");
+    }
+
+    private static (string Action, string Sha, string Version)[] ActionPins(string workflow) =>
+        Regex.Matches(workflow, @"uses: (?<action>[\w-]+/[\w-]+)@(?<sha>[0-9a-f]{40}) # (?<version>v[\d.]+)$", RegexOptions.Multiline)
+            .Select(match => (match.Groups["action"].Value, match.Groups["sha"].Value, match.Groups["version"].Value))
+            .ToArray();
+
     // docs/agents/support.md: Claude Code reads AGENTS.md only through an import once a CLAUDE.md exists, Gemini CLI through
     // @./AGENTS.md, Copilot reads it natively. CLAUDE.md lives in .claude/, which Copilot does not read: at the root, Copilot would
     // expand its import and load AGENTS.md twice. Copilot merges GEMINI.md too: each file names the CLI it is for before anything else.

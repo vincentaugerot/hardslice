@@ -15,6 +15,10 @@ internal static class Cli
           check --build   The incremental build alone, errors only, then the TODO(hardslice): markers:
                           the verification after an edit. Its success does not mean the work is done.
           explain <rule>  Prints the sheet of a HardSlice rule, such as HS016.
+          protected       Reads paths relative to the root of the solution on the standard input, one per line or
+                          separated by NUL characters (git diff --name-only -z), and lists those that agents never edit.
+                          Exits 1 when one is protected, 0 when none is: the CI of the solution runs it on the files
+                          of a pull request, which a maintainer approves with the label hardslice-approved.
           hook <cli> <event>
                           The hooks of an agent: reads the payload of the CLI on the standard input, refuses the edit
                           of a protected file, runs check --build after the edit of a .cs file and check before the
@@ -62,6 +66,11 @@ internal static class Cli
                 return Explain(ruleId, output, error);
             case ["explain", ..]:
                 error.WriteLine($"error: explain takes one rule, such as HS016. Rules with a sheet: {string.Join(", ", RuleSheets.Ids)}.");
+                return UsageError;
+            case ["protected"]:
+                return ProtectedCommand.Run(currentDirectory, input, output, error);
+            case ["protected", ..]:
+                error.WriteLine($"error: protected takes no argument: it reads the paths on its standard input. Unknown arguments: '{string.Join(' ', args[1..])}'.");
                 return UsageError;
             case ["--help" or "-h" or "help"]:
                 output.WriteLine(Usage);

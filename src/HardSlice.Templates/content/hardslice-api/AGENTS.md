@@ -129,6 +129,8 @@ Both scripts restore the local tools, then run `dotnet hardslice check`: it buil
 
 **You are not done until the check script exits 0.** Do not hand back, report success or commit while it fails. If it cannot pass without breaking a rule, stop and explain the conflict instead.
 
+Once a human turns it on in their clone, with `chmod +x .githooks/pre-commit` (macOS, Linux) then `git config core.hooksPath .githooks`, `.githooks/pre-commit` runs `scripts/check.sh` and refuses a commit while it fails: never turn it on yourself, nor skip it with `--no-verify`. CI, `.github/workflows/hardslice.yml`, runs the same check on every push to `main` and every pull request.
+
 ## Agent kit
 
 Codex reads this file only. Each other agent also reads its own file, which holds only what is specific to it:
@@ -165,6 +167,6 @@ Fix the code, never the rule. Never make a HardSlice diagnostic or an architectu
 - an empty validator, an empty test or a placeholder file written only to satisfy HS013, HS014 or HS018;
 - any other workaround listed in the rule sheets of `docs/rules/`, such as reflection, a public handler or moving a slice's type into the module namespace.
 
-The hooks refuse any edit of `.editorconfig`, `Directory.Build.props`, `Directory.Build.targets` and `Directory.Packages.props` in any folder, of `hardslice.json`, `.config/dotnet-tools.json`, `scripts/`, `tests/MyApp.ArchitectureTests/`, `.claude/`, `.codex/` and `.github/hooks/`. If the task needs one, stop and explain the conflict.
+The hooks refuse any edit of `.editorconfig`, `Directory.Build.props`, `Directory.Build.targets` and `Directory.Packages.props` in any folder, of `hardslice.json`, `.config/dotnet-tools.json`, `scripts/`, `tests/MyApp.ArchitectureTests/`, `.claude/`, `.codex/`, `.github/hooks/`, `.githooks/` and `.github/workflows/hardslice.yml`, and CI fails a pull request that changes one without the label `hardslice-approved`, which only a maintainer adds. If the task needs one, stop and explain the conflict.
 
 An exception requires an explicit decision from a maintainer, written next to the suppression as `// hardslice-justification: <reason>` (HS000). Never write one yourself.

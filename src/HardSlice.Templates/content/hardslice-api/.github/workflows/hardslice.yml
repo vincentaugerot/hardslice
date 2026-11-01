@@ -1,0 +1,68 @@
+name: HardSlice
+
+# The check of the solution, scripts/check.sh without argument, on every push to main and every pull request: the verdict that
+# AGENTS.md, the hooks of the agents and the pre-commit hook of .githooks/ give before it. A pull request also fails while it
+# changes a protected file, listed in "Forbidden" of AGENTS.md, unless a maintainer adds the label hardslice-approved to it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # labeled and unlabeled: adding or removing the label runs the workflow again, which reads it.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hardslice-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # Integration tests start PostgreSQL with the Docker of the runner.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Check
+        run: bash scripts/check.sh
+
+  # The files of the pull request are those of its merge commit against its first parent, the head of the base branch.
+  protected-files:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Protected files
+        env:
+          APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'hardslice-approved') }}
+        run: |
+          dotnet tool restore > /dev/null
+          status=0
+          git diff --name-only --no-renames -z HEAD^1 HEAD | dotnet hardslice protected || status=$?
+          if [[ $status -eq 1 && "$APPROVED" == true ]]; then
+            echo "::notice::This pull request changes protected files, approved by a maintainer with the label hardslice-approved."
+          elif [[ $status -eq 1 ]]; then
+            echo "::error::This pull request changes protected files, which hold the rules of HardSlice and their checks: see \"Forbidden\" of AGENTS.md. Fix the code instead, or have a maintainer approve the change with the label hardslice-approved."
+            exit 1
+          elif [[ $status -ne 0 ]]; then
+            exit "$status"
+          fi

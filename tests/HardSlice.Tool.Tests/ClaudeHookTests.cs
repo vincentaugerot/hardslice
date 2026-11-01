@@ -97,6 +97,8 @@ public sealed class ClaudeHookTests : IDisposable
     [InlineData("tests/Demo.ArchitectureTests/SliceTests.cs", "tests/Demo.ArchitectureTests/")]
     [InlineData(".claude/settings.json", ".claude/")]
     [InlineData(".claude/skills/add-slice/SKILL.md", ".claude/")]
+    [InlineData(".githooks/pre-commit", ".githooks/")]
+    [InlineData(".github/workflows/hardslice.yml", ".github/workflows/hardslice.yml")]
     [InlineData("src/../scripts/check.sh", "scripts/")]
     [InlineData("SCRIPTS/check.sh", "scripts/")]
     public void The_edit_of_a_protected_file_is_refused_with_the_reason(string file, string entry)
@@ -133,6 +135,7 @@ public sealed class ClaudeHookTests : IDisposable
     [InlineData("tests/Demo.ArchitectureTestsHelpers/Helper.cs")]
     [InlineData("docs/hardslice.json.md")]
     [InlineData("src/Demo/.config/dotnet-tools.json")]
+    [InlineData(".github/workflows/deploy.yml")]
     [InlineData("/home/dev/Other/scripts/check.sh")]
     public void A_file_that_only_looks_like_a_protected_one_is_not_refused(string file)
     {

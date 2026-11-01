@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# The HardSlice check before each commit: a commit is refused while scripts/check.sh fails. Inactive until a human turns it on
+# in their clone, as AGENTS.md says, from the root of the solution:
+#   chmod +x .githooks/pre-commit        (macOS, Linux: dotnet new does not keep the executable bit)
+#   git config core.hooksPath .githooks
+# It checks the working tree, changes left out of the commit included. git commit --no-verify skips it: the CI of
+# .github/workflows/hardslice.yml runs the same check on every push to main and every pull request.
+set -euo pipefail
+
+check="$(dirname "${BASH_SOURCE[0]}")/../scripts/check.sh"
+echo "HardSlice: running scripts/check.sh before the commit."
+if ! bash "$check"; then
+  echo "HardSlice: the check fails, so the commit is refused. Fix the failure above, then commit again." >&2
+  exit 1
+fi

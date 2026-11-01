@@ -69,3 +69,35 @@ jobs:
 
       - name: Prepare the HS016 agent fix demonstration from a clean checkout
         run: scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
+
+  # Separate job: the CI that a generated solution ships, .github/workflows/hardslice.yml, run on that solution from a fresh runner.
+  # Its actions are those of this workflow at the same pins (TemplatePackageTests): this job sets up the SDK of the generated
+  # global.json as its setup-dotnet step does, then runs the steps of its check job, scripts/check.sh without argument.
+  generated-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+          cache: false
+
+      - name: Generate a solution
+        run: |
+          work="$(mktemp -d)"
+          scripts/generate-app.sh "$work"
+          echo "GENERATED_SOLUTION=$work/Demo" >> "$GITHUB_ENV"
+
+      - name: Validate its workflow
+        run: scripts/generated-workflow.sh lint "$GENERATED_SOLUTION"
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: ${{ env.GENERATED_SOLUTION }}/global.json
+          cache: false
+
+      - name: Run the check job of its workflow
+        run: scripts/generated-workflow.sh run "$GENERATED_SOLUTION" check
