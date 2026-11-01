@@ -23,5 +23,7 @@ internal static class ProtectedFiles
         return file ?? RootFolders(solutionName).FirstOrDefault(folder => relativePath.StartsWith(folder, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string[] RootFolders(string solutionName) => ["scripts/", $"tests/{solutionName}.ArchitectureTests/", ".claude/"];
+    // .claude/, .codex/ and .github/hooks/ hold the hooks of Claude Code, Codex and Copilot CLI, and .claude/ the skills too.
+    private static string[] RootFolders(string solutionName) =>
+        ["scripts/", $"tests/{solutionName}.ArchitectureTests/", ".claude/", ".codex/", ".github/hooks/"];
 }

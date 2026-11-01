@@ -6,13 +6,13 @@ using System.Text.RegularExpressions;
 namespace HardSlice.Tool;
 
 // How many times the end hook of a session has blocked the end of the agent for each failure of the check, since the agent
-// last finished on its own. One small file per session in the state directory, removed once the check passes.
-internal sealed partial class StopRetries(string stateDirectory, string sessionId)
+// last finished on its own. One small file per CLI and session in the state directory, removed once the check passes.
+internal sealed partial class StopRetries(string stateDirectory, string cli, string sessionId)
 {
     // The end hook relaunches the agent at most this many times for the same failure, then lets it hand back.
     public const int Max = 3;
 
-    private string File => Path.Combine(stateDirectory, $"claude-{SafeName().Replace(sessionId, "_")}.json");
+    private string File => Path.Combine(stateDirectory, $"{cli}-{SafeName().Replace(sessionId, "_")}.json");
 
     // The relaunches already made for the failure. A first end of turn, when no end hook is active, starts from none.
     public int Made(string failure, bool stopHookActive)

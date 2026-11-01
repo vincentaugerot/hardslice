@@ -15,11 +15,16 @@ internal static class Cli
           check --build   The incremental build alone, errors only, then the TODO(hardslice): markers:
                           the verification after an edit. Its success does not mean the work is done.
           explain <rule>  Prints the sheet of a HardSlice rule, such as HS016.
-          hook claude <event>
-                          The hooks of Claude Code in .claude/settings.json, for PreToolUse, PostToolUse and Stop:
-                          reads the payload of Claude Code on the standard input, refuses the edit of a protected file,
-                          runs check --build after the edit of a .cs file and check before the agent hands back.
-                          Exits with code 2 to hand the failure to the agent, and with code 0 under Copilot CLI.
+          hook <cli> <event>
+                          The hooks of an agent: reads the payload of the CLI on the standard input, refuses the edit
+                          of a protected file, runs check --build after the edit of a .cs file and check before the
+                          agent hands back, and answers the way the CLI hands it to its agent.
+                          hook claude PreToolUse|PostToolUse|Stop     Claude Code, .claude/settings.json: code 2,
+                                                                      and code 0 at once under Copilot CLI.
+                          hook codex PreToolUse|PostToolUse|Stop      Codex, .codex/hooks.json: code 2.
+                          hook copilot preToolUse|postToolUse|agentStop
+                                                                      Copilot CLI, .github/hooks/hardslice.json:
+                                                                      JSON on the standard output, code 0.
 
         Options:
           --help          Prints this help.
@@ -38,11 +43,12 @@ internal static class Cli
     {
         switch (args)
         {
-            case ["hook", "claude", var eventName] when ClaudeHook.Events.Contains(eventName):
-                return new ClaudeHook(runner, output, error, environment, hookStateDirectory).Run(eventName, input, currentDirectory);
+            case ["hook", var name, var eventName] when HookCli.Find(name) is { } cli && cli.Events.Contains(eventName):
+                return new AgentHook(cli, runner, output, error, environment, hookStateDirectory).Run(eventName, input, currentDirectory);
             case ["hook", ..]:
-                // Never 2, which Claude Code would read as a refusal of the edit or of the end of the turn: it shows another code to the user.
-                error.WriteLine($"error: hook takes a CLI and one of its events: 'hook claude {string.Join("|", ClaudeHook.Events)}'. Unknown arguments: '{string.Join(' ', args[1..])}'.");
+                // Never 2, which Claude Code and Codex would read as a refusal of the edit or of the end of the turn: they show another code to the user.
+                var forms = string.Join(", ", HookCli.All.Select(cli => $"'hook {cli.Name} {string.Join("|", cli.Events)}'"));
+                error.WriteLine($"error: hook takes a CLI and one of its events: {forms}. Unknown arguments: '{string.Join(' ', args[1..])}'.");
                 return CheckCommand.Failure;
             case ["check"]:
                 return new CheckCommand(runner, output, error).Run(currentDirectory, CheckMode.Full);

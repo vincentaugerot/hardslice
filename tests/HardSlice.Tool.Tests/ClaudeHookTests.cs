@@ -287,7 +287,9 @@ public sealed class ClaudeHookTests : IDisposable
     [InlineData("hook", "claude")]
     [InlineData("hook", "claude", "SessionStart")]
     [InlineData("hook", "claude", "stop")]
-    [InlineData("hook", "codex", "Stop")]
+    [InlineData("hook", "gemini", "AfterAgent")]
+    [InlineData("hook", "codex", "agentStop")]
+    [InlineData("hook", "copilot", "Stop")]
     [InlineData("hook", "claude", "Stop", "--build")]
     public void An_unknown_CLI_or_event_exits_1_without_running_anything(params string[] args)
     {
@@ -298,7 +300,9 @@ public sealed class ClaudeHookTests : IDisposable
 
         exitCode.ShouldBe(1);
         runner.Commands.ShouldBeEmpty();
-        error.ToString().ShouldStartWith("error: hook takes a CLI and one of its events: 'hook claude PreToolUse|PostToolUse|Stop'.");
+        error.ToString().ShouldStartWith(
+            "error: hook takes a CLI and one of its events: 'hook claude PreToolUse|PostToolUse|Stop', 'hook codex PreToolUse|PostToolUse|Stop', "
+            + "'hook copilot preToolUse|postToolUse|agentStop'.");
     }
 
     [Fact]
@@ -324,7 +328,7 @@ public sealed class ClaudeHookTests : IDisposable
         using var settings = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repository.Template, ".claude", "settings.json")));
         var hooks = settings.RootElement.GetProperty("hooks");
 
-        hooks.EnumerateObject().Select(hook => hook.Name).ShouldBe(ClaudeHook.Events);
+        hooks.EnumerateObject().Select(hook => hook.Name).ShouldBe(new ClaudeCodeHooks().Events);
         var group = hooks.GetProperty(eventName).EnumerateArray().ShouldHaveSingleItem();
         (group.TryGetProperty("matcher", out var declared) ? declared.GetString() : null).ShouldBe(matcher);
         var hook = group.GetProperty("hooks").EnumerateArray().ShouldHaveSingleItem();

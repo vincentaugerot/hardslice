@@ -18,8 +18,8 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 - the `hardslice-event` item template, which adds a domain event to a module of such a solution and, on request, the reaction slice that handles it, with its integration tests;
 - the `HardSlice.Analyzers` package, which reports HS000, HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
 - architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
-- the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule, `dotnet hardslice hook claude <event>` runs the hooks of Claude Code;
-- `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, the skills `add-module`, `add-aggregate`, `add-slice`, `add-domain-event`, `extract-to-domain` and `fix-architecture-violation`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution, and the hooks of Claude Code in `.claude/settings.json`.
+- the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule, `dotnet hardslice hook <cli> <event>` runs the hooks of Claude Code, Codex and GitHub Copilot CLI;
+- `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, the skills `add-module`, `add-aggregate`, `add-slice`, `add-domain-event`, `extract-to-domain` and `fix-architecture-violation`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution, and the hooks of Claude Code in `.claude/settings.json`, of Codex in `.codex/hooks.json` and of Copilot CLI in `.github/hooks/hardslice.json`.
 
 `scripts/test-template.sh` runs the commands of [Getting started](#getting-started) in CI, from a fresh runner, on every push to `main` and every pull request: in temporary folders, on free ports, with and without the sample.
 
@@ -142,23 +142,31 @@ Each supported agent loads `AGENTS.md` by itself, through its own instruction fi
 | Agent | Reads | Level today |
 |---|---|---|
 | Claude Code | `.claude/CLAUDE.md`, which imports `AGENTS.md` | native: the hooks of `.claude/settings.json` |
-| Codex | `AGENTS.md` | fallback; native adapter planned for v0.3 |
-| GitHub Copilot CLI | `AGENTS.md`, `.github/copilot-instructions.md` and `GEMINI.md` | fallback; native adapter planned for v0.3 |
-| Gemini CLI | `GEMINI.md`, which imports `AGENTS.md` | fallback, also in v0.3 |
+| Codex | `AGENTS.md` | native: the hooks of `.codex/hooks.json`, once approved in `/hooks` |
+| GitHub Copilot CLI | `AGENTS.md`, `.github/copilot-instructions.md` and `GEMINI.md` | native: the hooks of `.github/hooks/hardslice.json` |
+| Gemini CLI | `GEMINI.md`, which imports `AGENTS.md` | fallback |
 
-A native adapter runs the check through the hooks of the agent, after each edit and before it hands back. With the fallback, nothing checks an edit as it is made: the agent follows `AGENTS.md`, which tells it to run the check script before it finishes. `CLAUDE.md` lives in `.claude/` because Copilot reads a `CLAUDE.md` at the root and expands its import, which would load `AGENTS.md` twice. Gemini CLI is not tried: it no longer serves personal Google accounts. [Agent support](docs/agents/support.md) records what each CLI reads, at a dated version.
+A native adapter runs the check through the hooks of the agent, after each edit and before it hands back. With the fallback, nothing checks an edit as it is made: the agent follows `AGENTS.md`, which tells it to run the check script before it finishes. Gemini CLI has hooks too, but no adapter is shipped until one is tried, and no `.gemini/settings.json` either. `CLAUDE.md` lives in `.claude/` because Copilot reads a `CLAUDE.md` at the root and expands its import, which would load `AGENTS.md` twice. Gemini CLI is not tried: it no longer serves personal Google accounts. [Agent support](docs/agents/support.md) records what each CLI reads, at a dated version.
 
-The hooks of Claude Code, in `.claude/settings.json`, run `dotnet hardslice hook claude <event>`, which reads the payload of Claude Code on its standard input, the same command on Linux, macOS and Windows:
+Each hook runs `dotnet hardslice hook <cli> <event>`, which reads the payload of the CLI on its standard input, the same command on Linux, macOS and Windows, and answers the way the CLI hands it to its agent:
 
-| Event | On | Runs | Budget | On failure |
-|---|---|---|---|---|
-| `PreToolUse` | `Edit`, `Write` | the list of protected files | none | the edit is refused with the reason and a pointer to "Forbidden" of `AGENTS.md` |
-| `PostToolUse` | `Edit`, `Write` of a `.cs` file | the check of `scripts/check.sh --build` | 10 s | the errors of the build reach the agent, which fixes them |
-| `Stop` | the end of a turn | the check of `scripts/check.sh` | 60 s | the agent goes on with the failure; after three relaunches for the same failure, it hands back and says that the check fails |
+| Step | Runs | Budget | On failure |
+|---|---|---|---|
+| before an edit | the list of protected files | none | the edit is refused with the reason and a pointer to "Forbidden" of `AGENTS.md` |
+| after the edit of a `.cs` file | the check of `scripts/check.sh --build` | 10 s | the errors of the build reach the agent, which fixes them |
+| the end of a turn | the check of `scripts/check.sh` | 60 s | the agent goes on with the failure; after three relaunches for the same failure, it hands back and says that the check fails |
 
-When the end check passes, Claude Code shows the user `HardSlice: the check passed.`: the agent wrote its last message before the check ran.
+| CLI | Configuration | Before an edit | After an edit | End of a turn | Answer |
+|---|---|---|---|---|---|
+| Claude Code | `.claude/settings.json` | `PreToolUse` on `Edit`, `Write` | `PostToolUse` on `Edit`, `Write` | `Stop` | code 2 and the standard error |
+| Codex | `.codex/hooks.json` | `PreToolUse` on `apply_patch` | `PostToolUse` on `apply_patch`, every file of the patch | `Stop` | code 2 and the standard error |
+| Copilot CLI | `.github/hooks/hardslice.json` | `preToolUse` on `edit`, `create` | `postToolUse` on `edit`, `create` | `agentStop` | JSON with code 0: `permissionDecision`, `additionalContext`, `decision: "block"` |
 
-The protected files are `.editorconfig`, `Directory.Build.props`, `Directory.Build.targets` and `Directory.Packages.props` in any folder, `hardslice.json`, `.config/dotnet-tools.json`, `scripts/`, `tests/<App>.ArchitectureTests/` and `.claude/`. The hooks run in the process of the local tool, restored by the check script or `dotnet tool restore`; until then, Claude Code shows that `dotnet hardslice` is missing and the agent goes on unchecked. Copilot CLI runs these hooks too without handing their failures to the agent: they exit 0 at once there (`COPILOT_CLI`). The hooks only shorten the loop. A file written through the shell escapes the edit hooks, and an agent or a human who turns them off is stopped by the check script and CI.
+When the end check passes, Claude Code and Codex show the user `HardSlice: the check passed.`: the agent wrote its last message before the check ran. Copilot CLI has no message for the user: it finishes without a word.
+
+Codex runs the hooks of a project only once it is trusted and each hook is approved: start `codex` in the solution, open `/hooks`, review the three hooks of `.codex/hooks.json` and trust them. Codex records the approval for this clone in `~/.codex/config.toml`; until then, it skips the hooks without a message, and only the check that `AGENTS.md` asks for applies. The commands never change from one version of HardSlice to the next, so an upgrade keeps the approval. Copilot CLI runs the hooks of a trusted folder only.
+
+The protected files are `.editorconfig`, `Directory.Build.props`, `Directory.Build.targets` and `Directory.Packages.props` in any folder, `hardslice.json`, `.config/dotnet-tools.json`, `scripts/`, `tests/<App>.ArchitectureTests/`, and the hooks and skills in `.claude/`, `.codex/` and `.github/hooks/`. The hooks run in the process of the local tool, restored by the check script or `dotnet tool restore`. Until then, `dotnet hardslice` only prints that the tool must be restored, with code 0, and the agent goes on unchecked. Copilot CLI also runs the hooks of `.claude/settings.json`, without handing their failures to the agent: they exit 0 at once there (`COPILOT_CLI`). The hooks only shorten the loop. A file written through the shell escapes the edit hooks, and an agent or a human who turns them off is stopped by the check script and CI.
 
 Six skills, in the Agent Skills format (`SKILL.md`), are shipped. Four turn a business request into the template that generates its element, the code that completes it and the check:
 
@@ -309,7 +317,7 @@ A dash means the mode turns the rule off: `Minimum` keeps the rules that assume 
 - HS015 checks the endpoints mapped under `Features` only, and accepts the result types of `Microsoft.AspNetCore.Http.HttpResults` only: a custom `IResult` is reported. The module must call the method of the slice that maps the endpoint, not a helper of it.
 - PostgreSQL is the only database. SQL Server and Aspire orchestration are planned for v1.0.
 - Domain events are published to their handlers inside the transaction of the command, before saving: no outbox, no publication after commit, no bus and no asynchronous processing. A handler that sends a request through `IMediator` fails at runtime; an external effect in a handler is not detected.
-- Claude Code is the only agent with hooks: Codex and Copilot CLI are at the fallback level until their adapters, planned for v0.3, and Gemini CLI stays there in v0.3. The end hook of Claude Code runs the full check at the end of every turn, even one that changed nothing. The adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) is planned for v0.5.
+- Gemini CLI has no hooks adapter: it stays at the fallback level in v0.3, without a trial possible on a personal Google account. Codex skips its hooks until a human approves them in `/hooks`. Copilot CLI ends a turn after eight blocks in a row, whatever the hook says, and cuts the errors handed after an edit at 10 KB. The end hook runs the full check at the end of every turn, even one that changed nothing. The adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) is planned for v0.5.
 - `dotnet new hardslice-module`, `hardslice-aggregate`, `hardslice-command`, `hardslice-query` and `hardslice-event` read the application and its modules through `--project` only, once the web project is restored: `dotnet new` evaluates no project from the root of a solution, and cannot read a file before it creates the others. A refusal prints `The template ... was created successfully.` before `Post action failed.` and its error, and exits with code 105: nothing is created. They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module, `hardslice-aggregate` the migration to add, and `hardslice-event` how to raise the event. `hardslice-module` puts a `.gitkeep` in the folders it creates without file, as `dotnet new` creates no empty folder; with `--force`, it overwrites the contract of an existing module, its registrations included. The tests that `hardslice-command` and `hardslice-query` generate call the route of the group in kebab-case: after `--route`, change theirs. `hardslice-query` cannot check the aggregate: the compiler does. Its list result is `--result many`, not `list`, which `dotnet new` would read as its own `list` command. `hardslice-event` always creates its event: a reaction is generated with it, or with `--force` on an event left unchanged, and a reaction to an event already completed is written by hand, in the shape of the generated one.
 - The generated application has a Development configuration only: no production settings, authentication or deployment.
 - CI runs on Linux: `scripts/check.ps1` is verified with PowerShell 7 on Linux, not on Windows.

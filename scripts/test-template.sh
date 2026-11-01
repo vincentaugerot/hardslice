@@ -19,7 +19,8 @@
 # the module of the event and one in a second module, registers them with the lines it prints, checks that the test of the host
 # names a forgotten registration, that only the TODO(hardslice): tests fail without HardSlice diagnostic, and that a reference completion passes the check.
 # With the sample, it runs the hooks of Claude Code with their payloads: a protected file refused, the errors of the build after the edit of a .cs file,
-# the end of a turn blocked by a failing check and let through by a passing one, nothing under Copilot CLI.
+# the end of a turn blocked by a failing check and let through by a passing one, nothing under Copilot CLI; then the same with
+# the hooks of Codex, which read the files of a patch, and of Copilot CLI, which answer in JSON.
 # In both variants, it checks the modes of both scripts: any argument but --build exits with code 2, --build prints the errors of dotnet build alone
 # and runs no test, and both modes fail on TODO(hardslice): markers left in the code and in a test, naming each file and line.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
@@ -1494,13 +1495,19 @@ $test_file:$(grep -c '' "$app/$test_file"): // TODO(hardslice): a marker left in
   echo "    TODO(hardslice): markers fail both modes after their other steps: ${expected_markers//$'\n'/, }"
 }
 
-# Runs one hook of Claude Code in the solution with the payload given on its standard input, as .claude/settings.json declares it.
-# Prints its standard error and sets hook_status; extra arguments are environment assignments.
+# Runs one hook of an agent in the solution with the payload given on its standard input, as the configuration of the CLI declares it.
+# Keeps its standard error in hook_error, its standard output in $work/hook-output, and sets hook_status; extra arguments are environment assignments.
+run_hook() {
+  local cli="$1" event="$2" payload="$3"
+  shift 3
+  hook_status=0
+  hook_error="$(cd "$app" && printf '%s' "$payload" | env "$@" dotnet hardslice hook "$cli" "$event" 2>&1 > "$work/hook-output")" || hook_status=$?
+}
+
 run_claude_hook() {
   local event="$1" payload="$2"
   shift 2
-  hook_status=0
-  hook_error="$(cd "$app" && printf '%s' "$payload" | env "$@" dotnet hardslice hook claude "$event" 2>&1 > "$work/hook-output")" || hook_status=$?
+  run_hook claude "$event" "$payload" "$@"
 }
 
 claude_payload() {
@@ -1586,6 +1593,125 @@ CODE
     exit 1
   fi
   echo "    Stop: HS010 blocks the end of the turn with code 2, a passing check lets the agent finish; under Copilot CLI, every hook exits 0"
+}
+
+codex_payload() {
+  local event="$1" patch="$2" active="${3:-false}"
+  printf '{"session_id":"test-template-codex-%s","cwd":"%s","hook_event_name":"%s","tool_name":"apply_patch","tool_input":{"command":"%s"},"stop_hook_active":%s}' \
+    "$$" "$app" "$event" "$patch" "$active"
+}
+
+copilot_payload() {
+  local tool="$1" file="$2" active="${3:-false}"
+  printf '{"sessionId":"test-template-copilot-%s","cwd":"%s","toolName":"%s","toolArgs":{"path":"%s"},"stopReason":"end_turn","stop_hook_active":%s}' \
+    "$$" "$app" "$tool" "$file" "$active"
+}
+
+# Fails unless <file> of the solution runs dotnet hardslice hook <cli> <event> for each event.
+expect_hook_commands() {
+  local file="$1" field="$2" cli="$3" event
+  shift 3
+  for event in "$@"; do
+    if ! grep -Fq "\"$field\": \"dotnet hardslice hook $cli $event\"" "$app/$file"; then
+      echo "error: $file of $app_name does not run dotnet hardslice hook $cli $event." >&2
+      exit 1
+    fi
+  done
+}
+
+# The hooks of Codex and Copilot CLI (PB-047), with a domain type of module <module> for HS010. Codex reads the files of an
+# apply_patch in its patch and answers with code 2, as Claude Code; Copilot CLI reads JSON on the standard output with code 0:
+# a denial before an edit, additionalContext after it, a block decision at the end of the turn, and nothing on a passing check.
+probe_codex_and_copilot_hooks() {
+  local module="$1" domain_file
+  expect_hook_commands .codex/hooks.json command codex PreToolUse PostToolUse Stop
+  expect_hook_commands .github/hooks/hardslice.json bash copilot preToolUse postToolUse agentStop
+  expect_hook_commands .github/hooks/hardslice.json powershell copilot preToolUse postToolUse agentStop
+
+  run_hook codex PreToolUse "$(codex_payload PreToolUse "*** Begin Patch\\n*** Update File: $app/src/$app_name/Program.cs\\n@@\\n*** Update File: $app/scripts/check.sh\\n@@\\n*** End Patch")"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: 'scripts/check.sh' is protected (scripts/)"*"\"Forbidden\" of AGENTS.md"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PreToolUse hook of Codex did not refuse a patch of scripts/check.sh with code 2 (code $hook_status)." >&2
+    exit 1
+  fi
+  run_hook copilot preToolUse "$(copilot_payload edit "$app/.github/hooks/hardslice.json")"
+  if [[ "$hook_status" != 0 || -n "$hook_error" ]] ||
+    ! grep -Fq '"permissionDecision":"deny","permissionDecisionReason":"HardSlice: \u0027.github/hooks/hardslice.json\u0027 is protected (.github/hooks/)' "$work/hook-output"; then
+    printf '%s\n' "$hook_error" >&2
+    cat "$work/hook-output" >&2
+    echo "error: the preToolUse hook of Copilot CLI did not deny the edit of .github/hooks/hardslice.json in JSON with code 0 (code $hook_status)." >&2
+    exit 1
+  fi
+  run_hook copilot preToolUse "$(copilot_payload edit "$app/src/$app_name/Program.cs")"
+  if [[ "$hook_status" != 0 || -n "$hook_error" || -s "$work/hook-output" ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the preToolUse hook of Copilot CLI answered on the edit of src/$app_name/Program.cs (code $hook_status)." >&2
+    exit 1
+  fi
+  echo "    before an edit: Codex refuses a patch of scripts/check.sh with code 2, Copilot CLI denies .github/hooks/hardslice.json in JSON"
+
+  domain_file="src/$app_name.Domain/$module/RoomOpening.cs"
+  mkdir -p "$app/src/$app_name.Domain/$module"
+  cat > "$app/$domain_file" <<CODE
+namespace $app_name.Domain.$module;
+
+public static class RoomOpening
+{
+    public static bool IsOpenToday() => DateTime.Today.DayOfWeek != DayOfWeek.Sunday;
+}
+CODE
+  run_hook codex PostToolUse "$(codex_payload PostToolUse "*** Begin Patch\\n*** Add File: $app/$domain_file\\n+code\\n*** End Patch")"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the build fails after your edit of '$domain_file'."* ||
+    "$hook_error" != *"error HS010: 'RoomOpening.IsOpenToday'"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PostToolUse hook of Codex did not hand the HS010 error of the build to the agent with code 2 (code $hook_status)." >&2
+    exit 1
+  fi
+  run_hook copilot postToolUse "$(copilot_payload create "$app/$domain_file")" COPILOT_CLI=1
+  if [[ "$hook_status" != 0 || -n "$hook_error" ]] || ! grep -Fq '"additionalContext":"HardSlice: the build fails after your edit of' "$work/hook-output" ||
+    ! grep -Fq 'error HS010: \u0027RoomOpening.IsOpenToday\u0027' "$work/hook-output"; then
+    printf '%s\n' "$hook_error" >&2
+    cat "$work/hook-output" >&2
+    echo "error: the postToolUse hook of Copilot CLI did not hand the HS010 error of the build to the agent as additionalContext (code $hook_status)." >&2
+    exit 1
+  fi
+  run_hook copilot postToolUse "$(copilot_payload view "$app/$domain_file")"
+  if [[ "$hook_status" != 0 || -n "$hook_error" || -s "$work/hook-output" ]]; then
+    echo "error: the postToolUse hook of Copilot CLI answered after a read (code $hook_status)." >&2
+    exit 1
+  fi
+  echo "    after an edit: HS010 handed to Codex with code 2 and to Copilot CLI as additionalContext, nothing after a read"
+
+  run_hook codex Stop "$(codex_payload Stop "" false)"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the check fails, so the work is not done."*"(relaunch 1 of 3 for this failure)"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the Stop hook of Codex did not block the end of the turn on HS010 with code 2 (code $hook_status)." >&2
+    exit 1
+  fi
+  run_hook copilot agentStop "$(copilot_payload "" "" false)" COPILOT_CLI=1
+  if [[ "$hook_status" != 0 || -n "$hook_error" ]] ||
+    ! grep -Fq '{"decision":"block","reason":"HardSlice: the check fails, so the work is not done.' "$work/hook-output"; then
+    printf '%s\n' "$hook_error" >&2
+    cat "$work/hook-output" >&2
+    echo "error: the agentStop hook of Copilot CLI did not block the end of the turn on HS010 in JSON with code 0 (code $hook_status)." >&2
+    exit 1
+  fi
+  rm "$app/$domain_file"
+  rmdir "$app/src/$app_name.Domain/$module" 2> /dev/null || true
+
+  run_hook codex Stop "$(codex_payload Stop "" true)"
+  if [[ "$hook_status" != 0 || -n "$hook_error" || "$(cat "$work/hook-output")" != '{"systemMessage":"HardSlice: the check passed."}' ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the Stop hook of Codex blocked the end of the turn on a passing check, or did not answer in JSON (code $hook_status)." >&2
+    exit 1
+  fi
+  run_hook copilot agentStop "$(copilot_payload "" "" true)" COPILOT_CLI=1
+  if [[ "$hook_status" != 0 || -n "$hook_error" || -s "$work/hook-output" ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the agentStop hook of Copilot CLI blocked the end of the turn on a passing check (code $hook_status)." >&2
+    exit 1
+  fi
+  echo "    end of a turn: HS010 blocks Codex with code 2 and Copilot CLI with a block decision; a passing check lets both finish"
 }
 
 # Seeds a domain type of module <module> that blocks on a task: the analyzer of the domain reports HS011 in its own compilation.
@@ -2633,6 +2759,9 @@ probe_check_modes Bookings "src/$app_name/Features/Bookings/ConfirmBooking/Confi
 
 echo "==> Checking the hooks of Claude Code: protected files, the build after an edit and the check before handing back"
 probe_claude_hooks Bookings
+
+echo "==> Checking the hooks of Codex and Copilot CLI: protected files, the build after an edit and the check before handing back"
+probe_codex_and_copilot_hooks Bookings
 
 echo "==> Checking that HS000 fails both check scripts on suppressions without justification, in a slice, the domain and a test project"
 probe_suppression_justification Bookings

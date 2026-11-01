@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "matcher": "edit|create",
+        "bash": "dotnet hardslice hook copilot preToolUse",
+        "powershell": "dotnet hardslice hook copilot preToolUse",
+        "timeoutSec": 30
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "matcher": "edit|create",
+        "bash": "dotnet hardslice hook copilot postToolUse",
+        "powershell": "dotnet hardslice hook copilot postToolUse",
+        "timeoutSec": 120
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": "dotnet hardslice hook copilot agentStop",
+        "powershell": "dotnet hardslice hook copilot agentStop",
+        "timeoutSec": 600
+      }
+    ]
+  }
+}

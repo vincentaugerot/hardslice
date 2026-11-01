@@ -2241,6 +2241,18 @@ Pour chacun des trois CLI, la solution générée contient l'adaptateur natif re
 - tableau des capacités par CLI dans `docs/agents/support.md` et `README.md`, tenu à jour par ce ticket ;
 - un CLI sans mécanisme retenu n'a pas de configuration morte dans le template.
 
+**Réalisation (01/11/2026)**
+
+- `dotnet hardslice hook <cli> <événement>` généralise le hook de PB-046 : une même boucle (refus avant l'édition, `check --build` après celle d'un `.cs`, `check` avant de rendre la main, trois relances au plus pour le même échec, comptées par CLI et par session), et pour chaque CLI ses événements, l'endroit de sa charge utile qui nomme les fichiers et sa façon de répondre ;
+- Codex, `.codex/hooks.json` : `PreToolUse` et `PostToolUse` sur `Edit|Write`, qui couvre `apply_patch`, `Stop` ; fichiers lus sur les lignes `*** Add File:`, `*** Update File:`, `*** Delete File:` et `*** Move to:` du patch, un patch refusé dès qu'un de ses fichiers est protégé, un build quand il touche un `.cs` ; code `2` et sortie d'erreur, et JSON (`systemMessage`) avec le code `0` quand la vérification de fin passe, comme Codex l'exige ; commandes stables d'une version à l'autre, approbation par `/hooks` décrite dans `README.md` et `AGENTS.md` ;
+- Copilot CLI, `.github/hooks/hardslice.json` : `preToolUse` et `postToolUse` avec le matcher `edit|create`, `agentStop`, commandes `bash` et `powershell` identiques, délais de 30, 120 et 600 s ; réponses en JSON avec le code `0` : `permissionDecision: "deny"`, `additionalContext` coupé à 9 000 caractères (Copilot le borne à 10 Kio), `decision: "block"` ; rien quand la vérification de fin passe, Copilot n'ayant pas de message à l'utilisateur ;
+- Gemini CLI : fallback, aucun `.gemini/settings.json` ; `hook gemini` n'existe pas ;
+- `.codex/` et `.github/hooks/` rejoignent les fichiers protégés, pour les trois adaptateurs ; « Forbidden » d'`AGENTS.md` les nomme ;
+- `AGENTS.md`, `.github/copilot-instructions.md`, `README.md` (tableau des CLI et de leurs hooks), le README de l'outil et la [prise en charge des agents](agents/support.md) (tableau des capacités) décrivent l'adaptateur de chaque CLI ;
+- tests : `CodexHookTests` et `CopilotHookTests` sur les fixtures de PB-034 (patch d'un `.cs`, de plusieurs fichiers, d'un fichier protégé par chaque en-tête, ajout d'un fichier non `.cs`, autre outil de Copilot, erreurs trop longues, fin en échec puis plafond, relances propres à chaque CLI, `COPILOT_CLI` sans effet sur ces hooks, configuration du template) ; `scripts/test-template.sh` lance les hooks de Codex et de Copilot sur la solution générée ;
+- essais manuels avec Copilot CLI 1.0.105 et Codex 0.165.0 sur la solution générée : HS010 renvoyé et corrigé après édition, édition de `scripts/check.sh` refusée, fin bloquée par un échec puis corrigée ([E22] à [E26] de la [prise en charge des agents](agents/support.md)) ;
+- limites : sans `dotnet tool restore`, `dotnet hardslice` sort avec le code `0` et les hooks ne font rien ; une écriture par le shell échappe aux hooks d'édition ; Copilot termine un tour après huit blocages consécutifs ; un outil d'édition de Copilot autre qu'`edit` et `create` n'est pas couvert.
+
 **Dépendances**
 
 PB-034, PB-042, PB-045.

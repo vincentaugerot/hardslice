@@ -1,0 +1,146 @@
+using System.Text.Json;
+
+namespace HardSlice.Tool;
+
+// The hooks of the coding agents, one command per CLI and event: dotnet hardslice hook <cli> <event>, which reads the payload of
+// the CLI on its standard input (docs/agents/support.md). Each CLI hands the answer to its agent its own way (HookCli): before an
+// edit, the hook refuses a protected file; after the edit of a .cs file, the agent reads the errors of the build; before the agent
+// hands back, the full check runs and its failure keeps the agent working.
+internal sealed class AgentHook(HookCli cli, ICommandRunner runner, TextWriter output, TextWriter error, Func<string, string?> environment, string stateDirectory)
+{
+    public int Run(string eventName, TextReader input, string currentDirectory)
+    {
+        var payload = input.ReadToEnd();
+        if (cli.IsInactive(environment))
+            return 0;
+
+        JsonElement root;
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            root = document.RootElement.Clone();
+        }
+        catch (JsonException exception)
+        {
+            // Never 2, the code that Claude Code and Codex read as a refusal: a broken payload never blocks their agent.
+            error.WriteLine($"error: dotnet hardslice hook {cli.Name} {eventName} reads the JSON payload of {cli.DisplayName} on its standard input: {exception.Message}");
+            return CheckCommand.Failure;
+        }
+
+        var baseDirectory = HookCli.Text(root, "cwd") ?? currentDirectory;
+        return cli.Step(eventName) switch
+        {
+            HookStep.BeforeEdit => BeforeEdit(root, currentDirectory, baseDirectory),
+            HookStep.AfterEdit => AfterEdit(root, currentDirectory, baseDirectory),
+            _ => BeforeHandingBack(root, currentDirectory),
+        };
+    }
+
+    // An edit of a protected file is refused before it happens, with the reason.
+    private int BeforeEdit(JsonElement payload, string currentDirectory, string baseDirectory)
+    {
+        if (EditedFiles(payload, currentDirectory, baseDirectory) is not var (solution, paths))
+            return 0;
+
+        foreach (var path in paths)
+        {
+            if (ProtectedFiles.Match(path, solution.Name) is not { } entry)
+                continue;
+
+            return cli.Refuse(
+                $"HardSlice: '{path}' is protected ({entry}): agents never edit it, since it holds the rules, their checks or the hooks that verify your work. "
+                + "See the section \"Forbidden\" of AGENTS.md: fix the code, never the rule. "
+                + "If the task cannot be done without this change, stop and explain the conflict to the user.",
+                output, error);
+        }
+
+        return 0;
+    }
+
+    // After the edit of a .cs file, the errors of the incremental build of scripts/check.sh --build reach the agent.
+    private int AfterEdit(JsonElement payload, string currentDirectory, string baseDirectory)
+    {
+        if (EditedFiles(payload, currentDirectory, baseDirectory) is not var (_, paths))
+            return 0;
+
+        var sources = paths.Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (sources.Length == 0)
+            return 0;
+
+        var (exitCode, failure) = Check(currentDirectory, CheckMode.Build);
+        if (exitCode == 0)
+            return 0;
+
+        var edited = string.Join(", ", sources.Select(path => $"'{path}'"));
+        return cli.ReportAfterEdit(
+            $"HardSlice: the build fails after your edit of {edited}. Fix these errors before going on; for a HardSlice rule, use the skill after Skill: and the sheet after Doc:."
+            + Environment.NewLine + failure,
+            output, error);
+    }
+
+    // Before the agent hands back, the full check of scripts/check.sh runs, and its failure keeps the agent working: at most
+    // StopRetries.Max relaunches for the same failure, after which the agent tells the user that the check fails.
+    private int BeforeHandingBack(JsonElement payload, string currentDirectory)
+    {
+        var retries = new StopRetries(stateDirectory, cli.Name, cli.SessionId(payload) ?? "unknown");
+        var (exitCode, failure) = Check(currentDirectory, CheckMode.Full);
+        if (exitCode == 0)
+        {
+            // The agent wrote its last message before this check: only the user can learn that it passed.
+            retries.Clear();
+            return cli.LetFinish("HardSlice: the check passed.", output);
+        }
+
+        var stopHookActive = payload.TryGetProperty("stop_hook_active", out var active) && active.ValueKind == JsonValueKind.True;
+        var made = retries.Made(failure, stopHookActive);
+        if (made >= StopRetries.Max)
+        {
+            retries.Clear();
+            return cli.LetFinish(
+                $"HardSlice: the check still fails after {StopRetries.Max} relaunches for the same failure, so the work is not done. Run scripts/check.sh to see it.",
+                output);
+        }
+
+        retries.Record(failure);
+        var reason = new StringWriter();
+        reason.WriteLine(
+            $"HardSlice: the check fails, so the work is not done. Fix the failure below, then finish again: this hook runs the check again "
+            + $"(relaunch {made + 1} of {StopRetries.Max} for this failure).");
+        if (made + 1 == StopRetries.Max)
+        {
+            reason.WriteLine(
+                "This is the last relaunch for this failure. If you cannot fix it without breaking a rule, stop trying: "
+                + "finish by telling the user that the check fails, with the failure below.");
+        }
+
+        reason.Write(failure);
+        return cli.KeepWorking(reason.ToString(), output, error);
+    }
+
+    // The solution and the paths of the edited files relative to its root, or null when no edited file is in a generated solution.
+    private (Solution Solution, string[] Paths)? EditedFiles(JsonElement payload, string currentDirectory, string baseDirectory)
+    {
+        var files = cli.EditedFiles(payload);
+        if (files.Count == 0)
+            return null;
+
+        var solution = Solution.Find(currentDirectory, TextWriter.Null);
+        if (solution is null)
+            return null;
+
+        var paths = files
+            .Select(file => SolutionPath.Relative(solution.Root, file, baseDirectory))
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return paths.Length == 0 ? null : (solution, paths);
+    }
+
+    // Runs the check in the given mode with every line it and its commands print kept for the agent.
+    private (int ExitCode, string Output) Check(string currentDirectory, CheckMode mode)
+    {
+        var captured = new StringWriter();
+        var exitCode = new CheckCommand(runner.WithOutput(captured), captured, captured).Run(currentDirectory, mode);
+        return (exitCode, captured.ToString());
+    }
+}
