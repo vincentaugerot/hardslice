@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template into an isolated hive
-# and generates the <app-name> solution, Demo by default, in <work-dir>/<app-name>. Shared by test-template.sh, demo-agent-fix.sh and measure-analyzers.sh so all exercise the same generated solution.
+# and generates the <app-name> solution, Demo by default, in <work-dir>/<app-name>, with the options of the template that follow it,
+# such as --no-sample. Shared by test-template.sh, demo-agent-fix.sh, demo-add-feature.sh and measure-analyzers.sh so all exercise
+# the same generated solution.
 # Follows steps 1 and 2 of "Getting started" in README.md, with the same commands and nuget.config, isolated in <work-dir>:
 # the feed, the template hive and the NuGet package folder.
 set -euo pipefail
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "usage: $0 <work-dir> [app-name]" >&2
+if [[ $# -lt 1 ]]; then
+  echo "usage: $0 <work-dir> [app-name [template-option...]]" >&2
   exit 2
 fi
 
@@ -15,6 +17,7 @@ work="$(cd "$1" && pwd)"
 feed="$work/feed"
 hive="$work/template-hive"
 app_name="${2:-Demo}"
+template_options=("${@:3}")
 template_hive_args=(--debug:custom-hive "$hive")
 
 # The single version of the HardSlice packages, which the pack of the template writes where it pins the analyzers and the tool.
@@ -61,4 +64,4 @@ echo "==> Installing the template into an isolated hive"
 dotnet new install "$feed/HardSlice.Templates.$version.nupkg" "${template_hive_args[@]}"
 
 echo "==> Generating $app_name"
-dotnet new hardslice-api --name "$app_name" --output "$work/$app_name" "${template_hive_args[@]}"
+dotnet new hardslice-api --name "$app_name" --output "$work/$app_name" "${template_options[@]}" "${template_hive_args[@]}"

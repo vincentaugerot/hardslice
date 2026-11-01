@@ -1,0 +1,47 @@
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Shop.Domain.Catalog;
+using Shop.Features.Catalog.GetProduct;
+
+namespace Shop.IntegrationTests.Features.Catalog.GetProduct;
+
+public sealed class GetProductTests(PostgresDatabase database)
+{
+    private const string Route = "/catalog/get-product";
+
+    [Fact]
+    public async Task Reads_a_stored_aggregate_as_its_dto()
+    {
+        var (id, name, price) = await StoreProduct();
+        await using var app = new ShopFactory(database);
+
+        var response = await app.CreateClient().GetAsync($"{Route}/{id}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<GetProductDto>(TestContext.Current.CancellationToken);
+        dto.ShouldNotBeNull();
+        dto.Id.ShouldBe(id);
+        dto.Name.ShouldBe(name);
+        dto.Price.ShouldBe(price);
+    }
+
+    [Fact]
+    public async Task Returns_404_for_an_unknown_aggregate()
+    {
+        await using var app = new ShopFactory(database);
+
+        var response = await app.CreateClient().GetAsync($"{Route}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private async Task<(Guid Id, string Name, decimal Price)> StoreProduct()
+    {
+        await using var db = database.CreateDbContext();
+        var product = Product.Register("Coffee Mug", 12.50m);
+        db.Set<Product>().Add(product);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return (product.Id.Value, product.Name, product.Price);
+    }
+}
