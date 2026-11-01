@@ -12,6 +12,7 @@ dotnet hardslice explain HS016
 
 - `check` builds the solution, then runs its unit, architecture and integration tests, then fails while a `TODO(hardslice):` marker is left in `src/` or `tests/`, listing each file and line. It exits with the code of the first step that fails. It stops before the build when `Directory.Packages.props` references another version of `HardSlice.Analyzers` than its own, and has no option to skip a step: it is the only verdict on the work.
 - `check --build` is the verification after an edit, for the hooks of the agents: the incremental build with `--no-restore`, after a restore only when a project needs one, printing the errors alone as the compiler wrote them, then the `TODO(hardslice):` markers. It runs no test and says that only `check` decides. Any other argument exits with code 2.
+- `hook claude <event>` runs the hooks of Claude Code that `.claude/settings.json` of the solution declares, for `PreToolUse`, `PostToolUse` and `Stop`, from the payload of Claude Code on the standard input: it refuses the edit of a protected file, runs `check --build` after the edit of a `.cs` file and `check` before the agent hands back, at most three relaunches for the same failure. It exits with code 2 to hand the failure to the agent, with code 0 under Copilot CLI (`COPILOT_CLI`), and with code 1 for an unknown CLI or event or a payload that is not JSON.
 - `explain <rule>` prints the sheet of a rule. An unknown rule exits with code 2 and lists the rules that have a sheet.
 - `--version` prints the version of the tool.
 

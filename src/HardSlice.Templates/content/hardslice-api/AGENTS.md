@@ -139,7 +139,7 @@ Codex reads this file only. Each other agent also reads its own file, which hold
 
 Skills, in `.claude/skills/` and their copies in `.agents/skills/`, which every agent reads: `add-module`, `add-aggregate`, `add-slice` and `add-domain-event` generate their element with its template; `extract-to-domain` moves a business rule from the slices into its aggregate; `fix-architecture-violation` fixes a HardSlice failure from the sheet of its rule. Each runs the check.
 
-Hooks: none yet. No agent has its edits checked as it makes them: run the check script before you finish.
+Hooks: Claude Code runs those of `.claude/settings.json`, which refuse the edit of a protected file (see [Forbidden](#forbidden)), build after each edit of a `.cs` file (budget 10 seconds) and run the check before it hands back (budget 60 seconds). The other agents have none yet. Hooks only shorten the loop: the check script decides, so run it before you finish.
 
 ## Fixing a HardSlice failure
 
@@ -164,5 +164,7 @@ Fix the code, never the rule. Never make a HardSlice diagnostic or an architectu
 - changing `HardSliceGetTestInputs` in `Directory.Build.targets` to hide tests behind different compilation symbols or source paths;
 - an empty validator, an empty test or a placeholder file written only to satisfy HS013, HS014 or HS018;
 - any other workaround listed in the rule sheets of `docs/rules/`, such as reflection, a public handler or moving a slice's type into the module namespace.
+
+The hook of Claude Code refuses any edit of `.editorconfig`, `Directory.Build.props`, `Directory.Build.targets` and `Directory.Packages.props` in any folder, of `hardslice.json`, `.config/dotnet-tools.json`, `scripts/`, `tests/MyApp.ArchitectureTests/` and `.claude/`. If the task needs one, stop and explain the conflict.
 
 An exception requires an explicit decision from a maintainer, written next to the suppression as `// hardslice-justification: <reason>` (HS000). Never write one yourself.

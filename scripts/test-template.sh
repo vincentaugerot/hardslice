@@ -18,6 +18,8 @@
 # It generates domain events with dotnet new hardslice-event through each of its refusals and its HS019 warning, with a reaction in
 # the module of the event and one in a second module, registers them with the lines it prints, checks that the test of the host
 # names a forgotten registration, that only the TODO(hardslice): tests fail without HardSlice diagnostic, and that a reference completion passes the check.
+# With the sample, it runs the hooks of Claude Code with their payloads: a protected file refused, the errors of the build after the edit of a .cs file,
+# the end of a turn blocked by a failing check and let through by a passing one, nothing under Copilot CLI.
 # In both variants, it checks the modes of both scripts: any argument but --build exits with code 2, --build prints the errors of dotnet build alone
 # and runs no test, and both modes fail on TODO(hardslice): markers left in the code and in a test, naming each file and line.
 # Finally generates the template with --no-sample, proves the result holds no trace of the Bookings sample, passes both scripts and the README path,
@@ -1492,6 +1494,100 @@ $test_file:$(grep -c '' "$app/$test_file"): // TODO(hardslice): a marker left in
   echo "    TODO(hardslice): markers fail both modes after their other steps: ${expected_markers//$'\n'/, }"
 }
 
+# Runs one hook of Claude Code in the solution with the payload given on its standard input, as .claude/settings.json declares it.
+# Prints its standard error and sets hook_status; extra arguments are environment assignments.
+run_claude_hook() {
+  local event="$1" payload="$2"
+  shift 2
+  hook_status=0
+  hook_error="$(cd "$app" && printf '%s' "$payload" | env "$@" dotnet hardslice hook claude "$event" 2>&1 > "$work/hook-output")" || hook_status=$?
+}
+
+claude_payload() {
+  local event="$1" file="$2" active="${3:-false}"
+  printf '{"session_id":"test-template-%s","cwd":"%s","hook_event_name":"%s","tool_name":"Edit","tool_input":{"file_path":"%s"},"stop_hook_active":%s}' \
+    "$$" "$app" "$event" "$file" "$active"
+}
+
+# The hooks of Claude Code (PB-046), with a domain type of module <module> for HS010: .claude/settings.json runs
+# dotnet hardslice hook claude <event> for each event; the edit of a protected file is refused with code 2, the edit of a .cs file
+# that breaks the build hands its errors to the agent with code 2, any other file builds nothing, the end of a turn passes on a
+# passing check and is blocked on a failing one, and every hook exits 0 at once under Copilot CLI.
+probe_claude_hooks() {
+  local module="$1" event
+  for event in PreToolUse PostToolUse Stop; do
+    if ! grep -Fq "\"command\": \"dotnet hardslice hook claude $event\"" "$app/.claude/settings.json"; then
+      echo "error: .claude/settings.json of $app_name does not run dotnet hardslice hook claude $event." >&2
+      exit 1
+    fi
+  done
+
+  run_claude_hook PreToolUse "$(claude_payload PreToolUse "$app/scripts/check.sh")"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: 'scripts/check.sh' is protected (scripts/)"*"\"Forbidden\" of AGENTS.md"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PreToolUse hook did not refuse the edit of scripts/check.sh with code 2 (code $hook_status)." >&2
+    exit 1
+  fi
+  run_claude_hook PreToolUse "$(claude_payload PreToolUse "$app/src/$app_name/Program.cs")"
+  if [[ "$hook_status" != 0 || -n "$hook_error" ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PreToolUse hook refused the edit of src/$app_name/Program.cs (code $hook_status)." >&2
+    exit 1
+  fi
+  echo "    PreToolUse: scripts/check.sh refused with code 2, src/$app_name/Program.cs allowed"
+
+  mkdir -p "$app/src/$app_name.Domain/$module"
+  cat > "$app/src/$app_name.Domain/$module/RoomOpening.cs" <<CODE
+namespace $app_name.Domain.$module;
+
+public static class RoomOpening
+{
+    public static bool IsOpenToday() => DateTime.Today.DayOfWeek != DayOfWeek.Sunday;
+}
+CODE
+  run_claude_hook PostToolUse "$(claude_payload PostToolUse "$app/src/$app_name.Domain/$module/RoomOpening.cs")"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the build fails after your edit of 'src/$app_name.Domain/$module/RoomOpening.cs'."* ||
+    "$hook_error" != *"error HS010: 'RoomOpening.IsOpenToday' in domain project '$app_name.Domain' reads 'DateTime.Today'."* ]] ||
+    grep -Eq 'Running (unit|architecture|integration) tests' <<< "$hook_error"; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PostToolUse hook did not hand the HS010 error of the build to the agent with code 2 (code $hook_status)." >&2
+    exit 1
+  fi
+  run_claude_hook PostToolUse "$(claude_payload PostToolUse "$app/README.md")"
+  if [[ "$hook_status" != 0 || -n "$hook_error" ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PostToolUse hook failed after the edit of a file other than .cs (code $hook_status)." >&2
+    exit 1
+  fi
+  echo "    PostToolUse: HS010 handed to the agent with code 2, nothing built for a file other than .cs"
+
+  run_claude_hook Stop "$(claude_payload Stop "" false)"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the check fails, so the work is not done."*"(relaunch 1 of 3 for this failure)"* ||
+    "$hook_error" != *"error HS010: 'RoomOpening.IsOpenToday'"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the Stop hook did not block the end of the turn on HS010 with code 2 (code $hook_status)." >&2
+    exit 1
+  fi
+  for event in PreToolUse PostToolUse Stop; do
+    run_claude_hook "$event" "$(claude_payload "$event" "$app/src/$app_name.Domain/$module/RoomOpening.cs")" COPILOT_CLI=1
+    if [[ "$hook_status" != 0 || -n "$hook_error" || -s "$work/hook-output" ]]; then
+      printf '%s\n' "$hook_error" >&2
+      echo "error: the $event hook did something under Copilot CLI (code $hook_status)." >&2
+      exit 1
+    fi
+  done
+  rm "$app/src/$app_name.Domain/$module/RoomOpening.cs"
+  rmdir "$app/src/$app_name.Domain/$module" 2> /dev/null || true
+
+  run_claude_hook Stop "$(claude_payload Stop "" true)"
+  if [[ "$hook_status" != 0 || -n "$hook_error" || "$(cat "$work/hook-output")" != '{"systemMessage":"HardSlice: the check passed."}' ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the Stop hook blocked the end of the turn on a passing check, or did not tell the user that it passed (code $hook_status)." >&2
+    exit 1
+  fi
+  echo "    Stop: HS010 blocks the end of the turn with code 2, a passing check lets the agent finish; under Copilot CLI, every hook exits 0"
+}
+
 # Seeds a domain type of module <module> that blocks on a task: the analyzer of the domain reports HS011 in its own compilation.
 probe_blocking_call() {
   local module="$1"
@@ -2534,6 +2630,9 @@ probe_blocking_call Bookings
 
 echo "==> Checking the modes of both check scripts: arguments, --build and the TODO(hardslice): markers"
 probe_check_modes Bookings "src/$app_name/Features/Bookings/ConfirmBooking/ConfirmBooking.cs" "tests/$app_name.IntegrationTests/Features/Bookings/ConfirmBooking/ConfirmBookingTests.cs"
+
+echo "==> Checking the hooks of Claude Code: protected files, the build after an edit and the check before handing back"
+probe_claude_hooks Bookings
 
 echo "==> Checking that HS000 fails both check scripts on suppressions without justification, in a slice, the domain and a test project"
 probe_suppression_justification Bookings

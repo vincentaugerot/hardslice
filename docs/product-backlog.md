@@ -2199,6 +2199,19 @@ Dans une solution générée, après chaque édition d'un `.cs` par Claude Code,
 
 Les hooks accélèrent et ne sont pas le garde-fou : un agent ou un humain qui les désactive est arrêté par la vérification complète et la CI.
 
+**Réalisation (31/10/2026)**
+
+- `dotnet hardslice hook claude <événement>` (`PreToolUse`, `PostToolUse`, `Stop`) lit la charge utile sur l'entrée standard et lance la vérification dans le processus de l'outil local, sa sortie et celle du compilateur recueillies pour l'agent ; une CLI ou un événement inconnu, ou une charge utile qui n'est pas du JSON, sort avec le code `1`, jamais `2`, que Claude Code lirait comme un refus ;
+- `.claude/settings.json` du template : `PreToolUse` et `PostToolUse` sur `Edit|Write` (délais de 30 et 120 s), `Stop` (600 s), la même commande sous Linux, macOS et Windows ;
+- `PreToolUse` : chemins lus avec `/` ou `\`, `.` et `..` résolus, sans casse ; refus avec le code `2` de `.editorconfig`, `Directory.Build.props`, `Directory.Build.targets` et `Directory.Packages.props` dans tout dossier (une copie dans un sous-dossier prime sur celle de la racine), de `hardslice.json`, `.config/dotnet-tools.json`, `scripts/`, `tests/<App>.ArchitectureTests/` et `.claude/` ; la raison renvoie à « Forbidden » d'`AGENTS.md`, qui nomme ces fichiers ;
+- `PostToolUse` : rien pour un fichier qui n'est pas un `.cs` ou hors de la solution ; sinon `check --build`, et en échec ses erreurs sur la sortie d'erreur avec le code `2` ;
+- `Stop` : `check` complet (PB-045 l'a retenu) ; en échec, code `2` avec l'échec et le numéro de la relance. Un fichier par session dans le dossier temporaire compte les relances par empreinte de l'échec (lignes d'erreur et d'échec, sans leurs nombres) depuis la dernière fin sans hook actif ; la troisième relance dit à l'agent de finir en disant que la vérification échoue s'il ne peut pas la corriger, la suivante le laisse finir et le dit à l'utilisateur (`systemMessage`). Une vérification réussie l'annonce à l'utilisateur, l'agent ayant écrit son dernier message avant elle ;
+- `COPILOT_CLI` défini : code `0` sans rien lancer ;
+- `AGENTS.md`, `.claude/CLAUDE.md`, `.github/copilot-instructions.md`, `README.md` et `docs/agents/support.md` : hooks actifs, budgets et fichiers protégés ;
+- tests : `ClaudeHookTests` sur les fixtures de PB-034 (`.cs` fautif, fichier non `.cs`, fichiers protégés et faux amis, chemins Windows, fin en échec puis plafond, autre échec, nouveau tour, mode compatible de Copilot, configuration du template) ; `scripts/test-template.sh` lance les trois hooks sur la solution générée ;
+- essais manuels avec Claude Code 2.1.316 sur la solution générée : HS010 renvoyé et corrigé après édition, édition de `scripts/check.sh` refusée, fin bloquée par un test en échec puis corrigée ([E19] à [E21] de la [prise en charge des agents](agents/support.md)) ;
+- limites : une écriture par le shell échappe aux hooks d'édition ; le hook de fin lance la vérification complète à chaque fin de tour, même sans modification ; sans `dotnet tool restore`, la commande est introuvable et l'agent continue sans vérification.
+
 **Dépendances**
 
 PB-045.
