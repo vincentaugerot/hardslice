@@ -8,7 +8,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 
 ## Status
 
-**0.2.0-preview.1, local preview.** The packages are not published on NuGet.org yet: you build them from this repository, at the version of its `Directory.Build.props`, the only one the three packages share. This preview ships:
+**0.2.0-preview.1, preview on NuGet.org.** The three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, share one version, the one of `Directory.Build.props`, and are published together by the [release workflow](docs/releasing.md). This preview ships:
 
 - the `hardslice-api` solution template: an ASP.NET Core API in vertical slices around a rich domain, with a `Bookings` sample module, or empty with `--no-sample`;
 - the `hardslice-module` item template, which adds a module to such a solution, with the folders of its domain and of its tests;
@@ -21,7 +21,7 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 - the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule, `dotnet hardslice hook <cli> <event>` runs the hooks of Claude Code, Codex and GitHub Copilot CLI, `dotnet hardslice protected` lists the protected files among the paths it reads;
 - `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, the skills `add-module`, `add-aggregate`, `add-slice`, `add-domain-event`, `extract-to-domain` and `fix-architecture-violation`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution, the hooks of Claude Code in `.claude/settings.json`, of Codex in `.codex/hooks.json` and of Copilot CLI in `.github/hooks/hardslice.json`, the git pre-commit hook in `.githooks/pre-commit` and the GitHub Actions workflow `.github/workflows/hardslice.yml`.
 
-`scripts/test-template.sh` runs the commands of [Getting started](#getting-started) in CI, from a fresh runner, on every push to `main` and every pull request: in temporary folders, on free ports, with and without the sample.
+`scripts/test-template.sh` runs the commands of [Getting started](#getting-started) in CI, from a fresh runner, on every push to `main` and every pull request, on the packages built from the commit (see [Working on HardSlice](#working-on-hardslice)): in temporary folders, on free ports, with and without the sample. Each release runs steps 1 to 3 from NuGet.org on a fresh runner, once the packages are published.
 
 ## Prerequisites
 
@@ -32,43 +32,17 @@ HardSlice adds nothing to the runtime of your application: its analyzer runs at 
 
 ## Getting started
 
-### 1. Build and install the local packages
-
-From a clone of this repository:
+### 1. Install the template
 
 ```text
-dotnet pack src/HardSlice.Analyzers/HardSlice.Analyzers.csproj --configuration Release --output artifacts/packages
-dotnet pack src/HardSlice.Tool/HardSlice.Tool.csproj --configuration Release --output artifacts/packages
-dotnet pack src/HardSlice.Templates/HardSlice.Templates.csproj --configuration Release --output artifacts/packages
-dotnet new install artifacts/packages/HardSlice.Templates.0.2.0-preview.1.nupkg
+dotnet new install HardSlice.Templates@0.2.0-preview.1
 ```
 
-`artifacts/packages` then holds `HardSlice.Analyzers`, `HardSlice.Tool` and `HardSlice.Templates` in `0.2.0-preview.1`. The template pins the first two at that version: `HardSlice.Analyzers` in `Directory.Packages.props`, `HardSlice.Tool` in `.config/dotnet-tools.json`. The generated solutions restore them from that folder. Create a folder for them, outside this repository, with this `nuget.config`, replacing the `value` of `hardslice-local` with the absolute path of `artifacts/packages`:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="hardslice-local" value="/path/to/hardslice/artifacts/packages" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-  <packageSourceMapping>
-    <packageSource key="hardslice-local">
-      <package pattern="HardSlice.*" />
-    </packageSource>
-    <packageSource key="nuget.org">
-      <package pattern="*" />
-    </packageSource>
-  </packageSourceMapping>
-</configuration>
-```
-
-The mapping makes NuGet take `HardSlice.*` packages from your local folder only, never from nuget.org.
+This installs the `hardslice-api` solution template and the five item templates from NuGet.org. They pin `HardSlice.Analyzers` and `HardSlice.Tool` at the same version, in `Directory.Packages.props` and `.config/dotnet-tools.json`: the generated solutions restore both from NuGet.org, with their other packages.
 
 ### 2. Generate an application
 
-In that folder:
+In the folder of your choice:
 
 ```text
 dotnet new hardslice-api --name Rooms
@@ -306,7 +280,7 @@ A dash means the mode turns the rule off: `Minimum` keeps the rules that assume 
 
 ## Known limitations
 
-- The packages are built locally with the fixed version 0.2.0-preview.1: a rebuild does not change it. After pulling a new version of this repository, repack the three packages, reinstall the template with `dotnet new install artifacts/packages/HardSlice.Templates.0.2.0-preview.1.nupkg --force`, and clear the packages NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the old builds of `HardSlice.Analyzers` and `HardSlice.Tool` 0.2.0-preview.1. A solution generated before keeps the template it was generated from.
+- A solution generated before keeps the template it was generated from, and the versions of `HardSlice.Analyzers` and `HardSlice.Tool` it pins.
 - `HardSlice.Analyzers` is supported only in a solution generated by `hardslice-api`, whose `docs/rules/` holds the sheets its diagnostics point to.
 - Only HS000, HS003 to HS011, HS015, HS016 and HS900 to HS902 are reported at build time and in the IDE, and HS019 as a suggestion, which the build output does not show: the IDE and the compiler log (`ErrorLog`) do. The other rules are architecture tests: they fail `dotnet test` and the check scripts, not `dotnet build`. HS900, and HS015 for an endpoint its module never maps, are reported at the end of the analysis of a project: the IDE shows them with full solution analysis only.
 - HS000 checks the suppressions written in source only: `<NoWarn>`, `<WarningsNotAsErrors>` and the severities of `.editorconfig` and `.globalconfig` are not detected, since the analysis modes turn rules off through a global config themselves; review and the CI of the solution protect these files. It checks the form and the length of a justification, never whether the reason is true.
@@ -344,12 +318,15 @@ scripts/measure-analyzers.sh
 
 - `dotnet test` runs the analyzer tests and the tests of the template content, integration tests included: it needs a container runtime.
 - `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic, its sheet and a skill that the solution ships. In both, it also generates a module with `hardslice-module`, registers it in `Program.cs` with the lines it prints and checks that the empty module passes the check, and, with the sample, that HS012 sees it reach into a slice of `Bookings`. It generates an aggregate with `hardslice-aggregate` through each of its refusals, checks that it builds without HardSlice diagnostic, that the check fails on its `TODO(hardslice):` test, then on the missing migration, and passes once the migration is added. It generates command slices with `hardslice-command` and query slices with `hardslice-query`, through each of their refusals, registers them with the lines they print, and checks that only the `TODO(hardslice):` tests fail until a reference completion makes the check pass, and that a query on an unknown aggregate fails the build with a compiler error alone. It generates events with `hardslice-event` the same way, with a reaction in the module of the event and one in a second module, and checks that the test of the host names a reaction left unregistered. With the sample, in a temporary git repository, it turns the pre-commit hook on as `AGENTS.md` says and checks that a commit that breaks HS010 is refused and a compliant one accepted, then that the job `protected-files` of the generated workflow fails on a change of `scripts/check.sh` until the label `hardslice-approved` is set; in both, actionlint validates that workflow. In both, it checks the modes of both scripts: any argument but `--build` exits with code 2, `--build` prints the errors of `dotnet build` alone and runs no test, and both modes fail on `TODO(hardslice):` markers left in a handler and a test, naming each file and line. It needs PowerShell 7, git and a Docker-compatible container runtime.
+- `scripts/verify-published.sh <version> <dir> [--source <folder>]` installs `HardSlice.Templates` at that version from NuGet.org, or from a folder of packages, in a home of its own, generates a solution with and without the sample, runs `dotnet tool restore` then `dotnet hardslice check` in each, and checks that the template, the analyzers and the tool come from that source. It needs a Docker-compatible container runtime.
 - `scripts/generated-workflow.sh lint|run` validates the workflow of a generated solution with actionlint, or runs the run steps of one of its jobs, in containers pinned by digest.
 - `scripts/demo-agent-fix.sh` prepares the [agent fix demonstrations](demos/agent-fix/README.md), one per blocking rule: `prepare <rule>` gives an agent a generated solution that fails with exactly the diagnostic of that rule, `verify <rule>` accepts its fix only if the trusted check passes without any protected file, suppression or weakened test, and `verify-reference` proves both on every rule, with a reference correction and the known workarounds. It needs git and a Docker-compatible container runtime.
 - `scripts/demo-add-feature.sh` runs the [add-feature demonstration](demos/add-feature/README.md): `prepare` gives an agent a solution generated with `--no-sample` and the templates installed, `verify <dir> <trace>` accepts its work only if each element is at the path of its template, no `TODO(hardslice):` marker is left, the trusted check passes without any protected file changed, and its trace (Claude Code, Codex or Copilot CLI, read by `scripts/agent-trace.py`) runs each `dotnet new hardslice-*` command; `verify-recorded` verifies the recorded runs again from their changes and traces. It needs git, Python 3 and a Docker-compatible container runtime.
 - `scripts/measure-analyzers.sh` measures the build time of a large generated application with and without the HardSlice analyzers, then `scripts/check.sh --build` on it and the full `scripts/check.sh` on an application with Bookings alone, checks the thresholds and the budgets of the hooks, and records the measurement in [the performance report](docs/performance/analyzers.md), in French. It needs a Docker-compatible container runtime.
 
 CI runs four jobs on every push to `main` and every pull request, each on a fresh runner from a fresh checkout, without cache: build and tests, template, demonstration (`verify-reference` on every rule), and generated workflow, which generates a solution, validates its `.github/workflows/hardslice.yml` with actionlint and runs its check job on it with `scripts/generated-workflow.sh`. A fifth one, performance, measures the analyzers and the verifications of the hooks on every push to `main` and on the pull requests that change the analyzers, the template, the tool or the measurement.
+
+A tag `v<version>`, the version of `Directory.Build.props`, runs the release workflow: the tests and the template scenario from the tag, the pack of the three packages and `scripts/verify-published.sh` on them, the push to NuGet.org after the approval of the maintainer, then `scripts/verify-published.sh` from NuGet.org on a fresh runner. [docs/releasing.md](docs/releasing.md) describes its setup and what to do when a job fails.
 
 | Path | Contains |
 |---|---|
@@ -366,7 +343,41 @@ CI runs four jobs on every push to `main` and every pull request, each on a fres
 | `scripts/` | Template, demonstration and performance scenarios. |
 | `demos/agent-fix/` | One agent fix demonstration per blocking rule: fixture, exact diagnostic, prompt, reference correction, known workarounds, and agent traces for a sample. |
 | `demos/add-feature/` | The add-feature demonstration: the business request, and the recorded runs of each agent with their changes, their trace and their account. |
-| `docs/` | Specification, plan, backlog and performance report, in French. |
+| `docs/` | Specification, plan, backlog, performance report and release procedure, in French. |
+
+### Try a local build of the packages
+
+From a clone of this repository:
+
+```text
+dotnet pack src/HardSlice.Analyzers/HardSlice.Analyzers.csproj --configuration Release --output artifacts/packages
+dotnet pack src/HardSlice.Tool/HardSlice.Tool.csproj --configuration Release --output artifacts/packages
+dotnet pack src/HardSlice.Templates/HardSlice.Templates.csproj --configuration Release --output artifacts/packages
+dotnet new install artifacts/packages/HardSlice.Templates.0.2.0-preview.1.nupkg --force
+```
+
+`artifacts/packages` then holds `HardSlice.Analyzers`, `HardSlice.Tool` and `HardSlice.Templates` in `0.2.0-preview.1`, the version of `Directory.Build.props`, which a rebuild does not change. The generated solutions must restore the first two from that folder, not from NuGet.org. Create a folder for them, outside this repository, with this `nuget.config`, replacing the `value` of `hardslice-local` with the absolute path of `artifacts/packages`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="hardslice-local" value="/path/to/hardslice/artifacts/packages" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+  <packageSourceMapping>
+    <packageSource key="hardslice-local">
+      <package pattern="HardSlice.*" />
+    </packageSource>
+    <packageSource key="nuget.org">
+      <package pattern="*" />
+    </packageSource>
+  </packageSourceMapping>
+</configuration>
+```
+
+The mapping makes NuGet take `HardSlice.*` packages from your local folder only, never from NuGet.org. Then follow [Getting started](#getting-started) from step 2 in that folder. After a rebuild, repack the three packages, reinstall the template as above, and clear the packages NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the previous builds of `HardSlice.Analyzers` and `HardSlice.Tool` at the same version. `dotnet new install HardSlice.Templates@0.2.0-preview.1 --force` puts the published template back.
 
 ## License
 

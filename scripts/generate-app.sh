@@ -3,7 +3,7 @@
 # and generates the <app-name> solution, Demo by default, in <work-dir>/<app-name>, with the options of the template that follow it,
 # such as --no-sample. Shared by test-template.sh, demo-agent-fix.sh, demo-add-feature.sh and measure-analyzers.sh so all exercise
 # the same generated solution.
-# Follows steps 1 and 2 of "Getting started" in README.md, with the same commands and nuget.config, isolated in <work-dir>:
+# Follows "Try a local build of the packages" and step 2 of "Getting started" in README.md, with the same commands and nuget.config, isolated in <work-dir>:
 # the feed, the template hive and the NuGet package folder.
 set -euo pipefail
 
