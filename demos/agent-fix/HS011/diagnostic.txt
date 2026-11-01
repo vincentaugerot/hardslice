@@ -1,0 +1,1 @@
+HS011: 'ConfirmBookingHandler.LoadOverlappingBookings' blocks on 'Task<TResult>.Result'. Code never blocks on asynchronous work. Fix: make the caller async and await the task. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.

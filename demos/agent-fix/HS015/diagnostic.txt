@@ -1,0 +1,1 @@
+HS015: endpoint 'GET /{id:guid}' in slice 'Bookings/GetBooking' returns 'IResult'. A slice endpoint returns TypedResults, so its responses are part of its signature. Fix: build every response with TypedResults instead of Results, and declare them all as the return type of the endpoint, such as 'Task<Results<Ok<T>, NotFound>>'. Skill: add-slice. Doc: 'docs/rules/HS015.md'.

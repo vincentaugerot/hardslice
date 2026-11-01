@@ -1,0 +1,1 @@
+HS005: handler 'CancelBookingHandler' of command 'CancelBookingCommand' returns the entity 'Booking'. Command handlers return an identifier, a DTO of values or nothing. Fix: return 'BookingId', or a DTO built from the entity's values. Skill: fix-architecture-violation. Doc: 'docs/rules/HS005.md'.

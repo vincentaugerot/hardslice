@@ -1,0 +1,1 @@
+HS007: entity 'Booking' exposes 'Status' with a public setter. The state of an entity changes only through its methods, which protect its invariants. Fix: make the setter private and change the state in a domain method, such as 'Booking.Cancel()'. Skill: extract-to-domain. Doc: 'docs/rules/HS007.md'.

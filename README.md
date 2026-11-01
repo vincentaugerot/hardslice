@@ -335,17 +335,17 @@ dotnet restore
 dotnet build --no-restore
 dotnet test --no-build
 scripts/test-template.sh
-scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
+scripts/demo-agent-fix.sh verify-reference "$(mktemp -d)"
 scripts/measure-analyzers.sh
 ```
 
 - `dotnet test` runs the analyzer tests and the tests of the template content, integration tests included: it needs a container runtime.
 - `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic, its sheet and a skill that the solution ships. In both, it also generates a module with `hardslice-module`, registers it in `Program.cs` with the lines it prints and checks that the empty module passes the check, and, with the sample, that HS012 sees it reach into a slice of `Bookings`. It generates an aggregate with `hardslice-aggregate` through each of its refusals, checks that it builds without HardSlice diagnostic, that the check fails on its `TODO(hardslice):` test, then on the missing migration, and passes once the migration is added. It generates command slices with `hardslice-command` and query slices with `hardslice-query`, through each of their refusals, registers them with the lines they print, and checks that only the `TODO(hardslice):` tests fail until a reference completion makes the check pass, and that a query on an unknown aggregate fails the build with a compiler error alone. It generates events with `hardslice-event` the same way, with a reaction in the module of the event and one in a second module, and checks that the test of the host names a reaction left unregistered. With the sample, in a temporary git repository, it turns the pre-commit hook on as `AGENTS.md` says and checks that a commit that breaks HS010 is refused and a compliant one accepted, then that the job `protected-files` of the generated workflow fails on a change of `scripts/check.sh` until the label `hardslice-approved` is set; in both, actionlint validates that workflow. In both, it checks the modes of both scripts: any argument but `--build` exits with code 2, `--build` prints the errors of `dotnet build` alone and runs no test, and both modes fail on `TODO(hardslice):` markers left in a handler and a test, naming each file and line. It needs PowerShell 7, git and a Docker-compatible container runtime.
 - `scripts/generated-workflow.sh lint|run` validates the workflow of a generated solution with actionlint, or runs the run steps of one of its jobs, in containers pinned by digest.
-- `scripts/demo-hs016-agent-fix.sh` prepares the [HS016 agent fix demonstration](demos/hs016-agent-fix/README.md).
+- `scripts/demo-agent-fix.sh` prepares the [agent fix demonstrations](demos/agent-fix/README.md), one per blocking rule: `prepare <rule>` gives an agent a generated solution that fails with exactly the diagnostic of that rule, `verify <rule>` accepts its fix only if the trusted check passes without any protected file, suppression or weakened test, and `verify-reference` proves both on every rule, with a reference correction and the known workarounds. It needs git and a Docker-compatible container runtime.
 - `scripts/measure-analyzers.sh` measures the build time of a large generated application with and without the HardSlice analyzers, then `scripts/check.sh --build` on it and the full `scripts/check.sh` on an application with Bookings alone, checks the thresholds and the budgets of the hooks, and records the measurement in [the performance report](docs/performance/analyzers.md), in French. It needs a Docker-compatible container runtime.
 
-CI runs four jobs on every push to `main` and every pull request, each on a fresh runner from a fresh checkout, without cache: build and tests, template, demonstration, and generated workflow, which generates a solution, validates its `.github/workflows/hardslice.yml` with actionlint and runs its check job on it with `scripts/generated-workflow.sh`. A fifth one, performance, measures the analyzers and the verifications of the hooks on every push to `main` and on the pull requests that change the analyzers, the template, the tool or the measurement.
+CI runs four jobs on every push to `main` and every pull request, each on a fresh runner from a fresh checkout, without cache: build and tests, template, demonstration (`verify-reference` on every rule), and generated workflow, which generates a solution, validates its `.github/workflows/hardslice.yml` with actionlint and runs its check job on it with `scripts/generated-workflow.sh`. A fifth one, performance, measures the analyzers and the verifications of the hooks on every push to `main` and on the pull requests that change the analyzers, the template, the tool or the measurement.
 
 | Path | Contains |
 |---|---|
@@ -360,7 +360,7 @@ CI runs four jobs on every push to `main` and every pull request, each on a fres
 | `tests/HardSlice.Analyzers.Tests/` | Analyzer tests, and tests that compile the template content as is. |
 | `tests/HardSlice.Tool.Tests/` | Tests of `check`, its `--build` mode and its `TODO(hardslice):` markers, of `explain`, of the hooks, of `protected`, and of the versions and sheets the tool shares with the template. |
 | `scripts/` | Template, demonstration and performance scenarios. |
-| `demos/hs016-agent-fix/` | An agent fixing a deliberate HS016 violation. |
+| `demos/agent-fix/` | One agent fix demonstration per blocking rule: fixture, exact diagnostic, prompt, reference correction, known workarounds, and agent traces for a sample. |
 | `docs/` | Specification, plan, backlog and performance report, in French. |
 
 ## License

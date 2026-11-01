@@ -1,0 +1,1 @@
+HS003: endpoint 'GET /{id:guid}' in slice 'Bookings/GetBooking' uses 'AppDbContext' (parameter 'db'). Endpoints never reach the database. Fix: move the data access into the handler of a query and send the query with IMediator. Skill: fix-architecture-violation. Doc: 'docs/rules/HS003.md'.

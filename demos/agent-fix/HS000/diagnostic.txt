@@ -1,0 +1,1 @@
+HS000: '[SuppressMessage("HardSlice.Architecture", "HS006")]' in 'GetBooking.cs' has no justification. A HardSlice rule is suppressed only with a reason a reviewer can read. Fix: remove the suppression and fix the code; if a maintainer approved it, add '// hardslice-justification: <reason>' on the line above. Skill: fix-architecture-violation. Doc: 'docs/rules/HS000.md'.

@@ -1,0 +1,1 @@
+HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'BookingSchedule' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.

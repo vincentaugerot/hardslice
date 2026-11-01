@@ -54,7 +54,8 @@ jobs:
       - name: Test template from a clean checkout
         run: scripts/test-template.sh
 
-  # Separate job for the same reason: the PB-008 fixture must keep producing its HS016 on the current template.
+  # Separate job for the same reason: each fixture of demos/agent-fix/ must keep producing exactly its diagnostic on the current
+  # template, verify must keep rejecting each known workaround, and the reference correction of each rule must pass it.
   demo:
     runs-on: ubuntu-latest
     steps:
@@ -67,8 +68,8 @@ jobs:
           global-json-file: global.json
           cache: false
 
-      - name: Prepare the HS016 agent fix demonstration from a clean checkout
-        run: scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
+      - name: Prepare every agent fix demonstration, then verify its reference correction and known workarounds
+        run: scripts/demo-agent-fix.sh verify-reference "$(mktemp -d)"
 
   # Separate job: the CI that a generated solution ships, .github/workflows/hardslice.yml, run on that solution from a fresh runner.
   # Its actions are those of this workflow at the same pins (TemplatePackageTests): this job sets up the SDK of the generated

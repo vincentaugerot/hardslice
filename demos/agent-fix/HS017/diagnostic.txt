@@ -1,0 +1,1 @@
+HS017: 'AppDbContext' in 'Shared/Persistence' uses 'BookingConfiguration' in module 'Bookings'. Shared is cross-cutting and never depends on Features. Fix: move the code that needs 'BookingConfiguration' into module 'Bookings', or declare in Shared an abstraction that the module implements and registers. Skill: fix-architecture-violation. Doc: 'docs/rules/HS017.md'.

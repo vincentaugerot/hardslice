@@ -192,7 +192,7 @@ Statut : terminé le 30/10/2026. PB-009 à PB-017 sont validés et poussés ; la
 Ces critères s'ajoutent à l'acceptation propre de chaque ticket :
 
 - tout ticket qui modifie le template met à jour `scripts/test-template.sh` pour couvrir sa capacité dans la solution générée depuis le paquet local, et l'exécute : tester les sources de `content/hardslice-api` depuis la solution du dépôt ne suffit pas ;
-- à partir de PB-009, la CI exécute `scripts/demo-hs016-agent-fix.sh prepare` ; tout ticket qui modifie la structure du template ou des slices adapte la fixture PB-008 dans le même changement et garde ce job vert ;
+- à partir de PB-009, la CI exécute `scripts/demo-hs016-agent-fix.sh prepare` ; tout ticket qui modifie la structure du template ou des slices adapte la fixture PB-008 dans le même changement et garde ce job vert. Depuis PB-049, ce job exécute `scripts/demo-agent-fix.sh verify-reference` sur les fixtures de toutes les règles bloquantes, dans `demos/agent-fix/` ;
 - `BookingsReferenceTests` reste vert : la référence Bookings compile avec ses dépendances réelles et ne produit aucun HS016 ;
 - `AGENTS.md` et les fiches de règles sont mis à jour dans le ticket qui change la carte, la consigne ou l'exemple qu'ils décrivent ;
 - aucun assembly HardSlice n'est chargé au runtime de l'application générée ;
@@ -2320,6 +2320,15 @@ scripts/test-template.sh
 - `verify` : vérification complète verte, aucun fichier protégé modifié, aucun motif de contournement (expressions de la démonstration PB-008 étendues à HS000) ;
 - job CI `demo` : `prepare` puis correction de référence et `verify` pour chaque règle ;
 - traces d'agent réelles consignées pour un échantillon, au moins une règle du domaine, une de la messagerie, une d'architecture et HS000, avec Claude Code et hooks actifs.
+
+**Réalisation (01/11/2026)**
+
+- `demos/agent-fix/<règle>/` pour les 21 règles bloquantes : `fixture/` posée sur `Demo` (template `hardslice-api` avec l'exemple), `diagnostic.txt` (chaque diagnostic imprimé par la vérification, de `HSxxx:` à `Doc: '...'.`, sans fichier ni position), `prompt.md` (la demande de développement, jamais la règle ni la correction), `reference/` et `reference.remove`, et pour HS004, HS008, HS013, HS014, HS016 et HS018 un contournement propre dans `workarounds/`. La démonstration PB-008 devient `demos/agent-fix/HS016`, `scripts/demo-hs016-agent-fix.sh` est retiré ;
+- `scripts/demo-agent-fix.sh` : `prepare <règle> <dossier>` génère `Demo`, prouve sa vérification complète verte, pose la fixture, la commite pour le diff local de l'agent et échoue sauf si `scripts/check.sh` échoue avec exactement les diagnostics de `diagnostic.txt`, sans erreur de compilation d'un autre code ; `prepare-all` et `verify-reference` génèrent une seule fois pour toutes les règles ;
+- `verify <règle> <dossier>` n'exécute rien du dossier de l'agent : il régénère une copie de confiance, reprouve les diagnostics de la fixture, valide le candidat puis copie les seuls changements acceptés dans un arbre propre et y lance le `scripts/check.sh` de confiance. Validation : chemins limités aux `.cs` et `.csproj` de `src/`, `tests/Demo.Tests/` et `tests/Demo.IntegrationTests/`, aucun fichier protégé selon `dotnet hardslice protected` de confiance, un projet seulement ramené à son contenu généré, attributs de test, déclarations et assertions des tests de la fixture conservés (au même chemin ou sous le même nom dans le même projet de tests), et dans les fichiers changés ni directive de préprocesseur, ni suppression, ni `hardslice-justification`, ni réflexion, ni `dynamic`, ni test sauté ou toujours vrai, ni validateur sans règle, ni fichier de tests sans assertion ;
+- `verify-reference` : pour chaque règle, cinq contournements génériques (suppression justifiée, sévérité dans `.editorconfig`, `<NoWarn>`, dossier ajouté à `hardslice.json`, tests d'architecture supprimés) et les contournements propres doivent échouer à la validation, la correction de référence doit passer `verify`. Le job CI `demo` exécute `verify-reference` sur toutes les règles ;
+- traces Claude Code 2.1.316 (`claude-sonnet-5-5`, réglages du projet, hooks actifs) pour HS000, HS005 (messagerie), HS008 (domaine) et HS012 (architecture), dans `demos/agent-fix/<règle>/trace.md` et `docs/agents/support.md` [E27] à [E30] : les quatre corrections passent `verify`, aucun agent n'a tenté de contournement ni chargé la skill nommée par le diagnostic ;
+- limites : les contournements sont reconnus par motifs ; un test vide ou une règle recopiée écrits autrement se jugent à la lecture du diff, comme dans les traces.
 
 **Dépendances**
 

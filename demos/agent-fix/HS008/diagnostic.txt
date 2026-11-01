@@ -1,0 +1,1 @@
+HS008: entity 'WaitlistEntry' of aggregate 'Waitlist' references aggregate 'Booking' through property 'Booking'. An aggregate references another aggregate only by its identifier. Fix: replace the property with 'BookingId' and load 'Booking' in the handler that needs it. Skill: add-aggregate. Doc: 'docs/rules/HS008.md'.

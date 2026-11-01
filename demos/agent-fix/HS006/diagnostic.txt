@@ -1,0 +1,1 @@
+HS006: query handler 'GetRoomBookingsHandler' reads 'Booking' from 'Set<Booking>()' without a local guarantee that it is not tracked. Query handlers read without tracking and never write. Fix: add AsNoTracking() where the query starts, and project to a DTO. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.

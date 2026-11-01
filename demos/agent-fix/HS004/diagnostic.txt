@@ -1,0 +1,1 @@
+HS004: slice 'Bookings/GetBooking' declares a second request, 'GetRoomBookingsQuery', besides 'GetBookingQuery'. A slice holds one request named after it, its handler and its endpoint. Fix: move 'GetRoomBookingsQuery' into its own slice 'Features/Bookings/GetRoomBookings/' with its handler and its endpoint. Skill: add-slice. Doc: 'docs/rules/HS004.md'.

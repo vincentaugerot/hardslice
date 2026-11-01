@@ -1,0 +1,1 @@
+HS012: 'RoomsModule' in module 'Rooms' uses 'BookingDto' from slice 'Bookings/GetBooking' of module 'Bookings'. A module uses another module only through its public contract. Fix: use a type declared directly in namespace 'Demo.Features.Bookings', react to a domain event, or move the shared rule into the domain. Skill: add-domain-event. Doc: 'docs/rules/HS012.md'.

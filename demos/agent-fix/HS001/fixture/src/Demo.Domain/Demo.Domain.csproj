@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The domain depends on nothing: no ASP.NET Core, EF Core, DI or HardSlice at runtime. -->
+
+  <!-- BookingDurationPolicy reads its maximum from the configuration of the application. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

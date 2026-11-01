@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The domain depends on nothing: no ASP.NET Core, EF Core, DI or HardSlice at runtime. -->
+
+</Project>

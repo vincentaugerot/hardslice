@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template into an isolated hive
-# and generates the <app-name> solution, Demo by default, in <work-dir>/<app-name>. Shared by test-template.sh, demo-hs016-agent-fix.sh and measure-analyzers.sh so all exercise the same generated solution.
+# and generates the <app-name> solution, Demo by default, in <work-dir>/<app-name>. Shared by test-template.sh, demo-agent-fix.sh and measure-analyzers.sh so all exercise the same generated solution.
 # Follows steps 1 and 2 of "Getting started" in README.md, with the same commands and nuget.config, isolated in <work-dir>:
 # the feed, the template hive and the NuGet package folder.
 set -euo pipefail

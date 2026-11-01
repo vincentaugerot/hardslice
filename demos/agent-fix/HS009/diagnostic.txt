@@ -1,0 +1,1 @@
+HS009: domain event 'BookingCancelled' is a class. Domain events are records. Fix: declare it as 'public sealed record BookingCancelled(...) : IDomainEvent'. Skill: add-domain-event. Doc: 'docs/rules/HS009.md'.

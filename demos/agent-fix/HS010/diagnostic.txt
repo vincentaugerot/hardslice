@@ -1,0 +1,1 @@
+HS010: 'Booking.Cancel' in domain project 'Demo.Domain' reads 'DateTimeOffset.UtcNow'. The domain and the slices never read the system clock. Fix: take the instant as a parameter; the handler reads it from an injected TimeProvider with GetUtcNow(). Skill: fix-architecture-violation. Doc: 'docs/rules/HS010.md'.
