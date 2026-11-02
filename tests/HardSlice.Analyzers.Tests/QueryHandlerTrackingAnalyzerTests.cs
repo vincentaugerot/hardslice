@@ -349,6 +349,58 @@ public sealed class QueryHandlerTrackingAnalyzerTests
             """);
     }
 
+    [Theory]
+    [InlineData("Queryable.Select(selector: (Booking b) => b.Describe(), source: db.Bookings)")]
+    [InlineData("Queryable.Select(selector: (Booking b, int i) => b.Describe(), source: db.Bookings)")]
+    [InlineData("Queryable.SelectMany(resultSelector: (Booking b, BookingLine line) => b.Describe(), collectionSelector: (Booking b) => b.Lines, source: db.Bookings)")]
+    [InlineData("Queryable.SelectMany(resultSelector: (Booking b, BookingLine line) => b.Describe(), source: db.Bookings, collectionSelector: (Booking b, int i) => b.Lines)")]
+    public async Task Recognizes_projections_with_reordered_named_arguments(string query)
+    {
+        var untracked = query.Replace("db.Bookings", "db.Bookings.AsNoTracking()", StringComparison.Ordinal);
+        var values = query.Replace("b.Describe()", "b.RoomId", StringComparison.Ordinal);
+        await VerifyAsync(
+            $$"""
+            namespace MyApp.Features.Bookings.ListBookings;
+
+            internal sealed class ListBookingsHandler(AppDbContext db) : IRequestHandler<ListBookingsQuery, IReadOnlyList<BookingDto>>
+            {
+                public Task<IReadOnlyList<BookingDto>> Handle(ListBookingsQuery query, CancellationToken cancellationToken)
+                {
+                    _ = {{query}}.[|ToList|]();
+                    _ = {{untracked}}.ToList();
+                    _ = {{values}}.ToList();
+                    return Task.FromResult<IReadOnlyList<BookingDto>>([]);
+                }
+            }
+            """);
+    }
+
+    [Fact]
+    public Task Terminates_on_expanding_generic_projections_without_losing_entities() =>
+        IsolatedAnalyzerTest.RunAsync(typeof(QueryHandlerTrackingAnalyzerTests), nameof(Terminates_on_expanding_generic_projections_without_losing_entities), async () =>
+        {
+            await VerifyAsync(
+                """
+                namespace MyApp.Features.Bookings.ListBookings;
+
+                public sealed class Node<T>
+                {
+                    public Node<List<T>>? Next { get; init; }
+                    public T Value { get; init; } = default!;
+                }
+                internal sealed class ListBookingsHandler(AppDbContext db) : IRequestHandler<ListBookingsQuery, IReadOnlyList<BookingDto>>
+                {
+                    public Task<IReadOnlyList<BookingDto>> Handle(ListBookingsQuery query, CancellationToken cancellationToken)
+                    {
+                        _ = db.Bookings.Select(b => new Node<Guid> { Value = b.RoomId }).ToList();
+                        _ = db.Bookings.Select(b => new Node<Booking> { Value = b }).[|ToList|]();
+                        _ = db.Bookings.AsNoTracking().Select(b => new Node<Booking> { Value = b }).ToList();
+                        return Task.FromResult<IReadOnlyList<BookingDto>>([]);
+                    }
+                }
+                """);
+        });
+
     // A form the rule cannot analyze is neither reported nor declared compliant.
     [Fact]
     public async Task Does_not_analyze_queries_it_cannot_follow()

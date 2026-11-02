@@ -151,8 +151,8 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
             }
 
             // The elements EF Core materializes, then what the last projection passes into the result.
-            var entity = containment.Find(query.ElementType)?.Entity
-                ?? (query.LastProjection is { } projection ? ProjectedEntity(projection) : null);
+            var entity = containment.Find(query.ElementType, context.CancellationToken)?.Entity
+                ?? (query.LastProjection is { } projection ? ProjectedEntity(projection, context.CancellationToken) : null);
             if (entity is null)
                 return;
 
@@ -178,11 +178,11 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
 
         // 'Select(b => Describe(b))' and 'Select(b => new BookingDto(b))' materialize the entity to evaluate the method or
         // the constructor on the client, even when the result holds no entity.
-        private ITypeSymbol? ProjectedEntity(IAnonymousFunctionOperation projection)
+        private ITypeSymbol? ProjectedEntity(IAnonymousFunctionOperation projection, CancellationToken cancellationToken)
         {
             foreach (var operation in projection.Body.Descendants())
             {
-                if (operation.Type is null || containment.Find(operation.Type) is not { } path || !PassesIntoResult(operation, projection))
+                if (operation.Type is null || containment.Find(operation.Type, cancellationToken) is not { } path || !PassesIntoResult(operation, projection))
                     continue;
 
                 return path.Entity;
@@ -251,7 +251,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                         || entityFramework.IsSqlRoot(invocation.TargetMethod):
                         var set = invocation.TargetMethod;
                         var root = set.Name == "Set" ? $"Set<{set.TypeArguments[0].ToDisplayString(DisplayFormat)}>()" : $"{set.Name}(...)";
-                        return entityFramework.QueryElement(invocation.Type) is { } setElement && containment.IsEntity(setElement)
+                        return entityFramework.QueryElement(invocation.Type) is { } setElement && containment.IsEntity(setElement, cancellationToken)
                             ? Create(root, operators, elementType, guaranteed: [], projection: null)
                             : null;
 
@@ -261,7 +261,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                         continue;
 
                     case IPropertyReferenceOperation property when entityFramework.IsSet(property.Type):
-                        return entityFramework.QueryElement(property.Type) is { } propertyElement && containment.IsEntity(propertyElement)
+                        return entityFramework.QueryElement(property.Type) is { } propertyElement && containment.IsEntity(propertyElement, cancellationToken)
                             ? Create(property.Property.ToDisplayString(DisplayFormat), operators, elementType, guaranteed: [], projection: null)
                             : null;
 
@@ -293,7 +293,13 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
         // The selector of 'Select' or the result selector of 'SelectMany'.
         private static IAnonymousFunctionOperation? Projection(IInvocationOperation invocation)
         {
-            if (invocation.TargetMethod.Name is not ("Select" or "SelectMany") || invocation.Arguments.LastOrDefault()?.Value is not { } selector)
+            if (invocation.TargetMethod.Name is not ("Select" or "SelectMany"))
+                return null;
+
+            // Arguments follow evaluation order, not parameter order: Select(selector: ..., source: ...) is valid.
+            // SelectMany without a resultSelector projects through its collectionSelector.
+            var parameter = invocation.TargetMethod.Parameters.Last();
+            if (invocation.Arguments.FirstOrDefault(argument => SymbolEqualityComparer.Default.Equals(argument.Parameter, parameter))?.Value is not { } selector)
                 return null;
 
             while (true)

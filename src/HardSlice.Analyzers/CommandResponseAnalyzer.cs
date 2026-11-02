@@ -64,7 +64,7 @@ public sealed class CommandResponseAnalyzer : DiagnosticAnalyzer
         {
             if (implementation.TypeArguments.Length != 2
                 || !IsCommand(implementation.TypeArguments[0], model, command)
-                || containment.Find(implementation.TypeArguments[1]) is not { } path)
+                || containment.Find(implementation.TypeArguments[1], context.CancellationToken) is not { } path)
             {
                 continue;
             }

@@ -322,6 +322,49 @@ public sealed class CommandResponseAnalyzerTests
         Subjects(diagnostics).ShouldBe(["handler 'CycleHandler' of command 'CycleCommand' returns 'LeftDto', whose property 'Right.Leaf.Booking' holds the entity 'Booking'"]);
     }
 
+    [Fact]
+    public Task Terminates_on_expanding_generic_DTOs_without_losing_entities() =>
+        IsolatedAnalyzerTest.RunAsync(typeof(CommandResponseAnalyzerTests), nameof(Terminates_on_expanding_generic_DTOs_without_losing_entities), async () =>
+        {
+            await VerifyAsync(
+                """
+                using MyApp.Domain.Bookings;
+                using MyApp.Shared.Messaging;
+
+                namespace MyApp.Features.Bookings.Tree;
+
+                public sealed class Node<T>
+                {
+                    public Node<List<T>>? Next { get; init; }
+                    public T Value { get; init; } = default!;
+                }
+                public sealed class EntityNode<T>
+                {
+                    public EntityNode<List<T>>? Next { get; init; }
+                    public Booking Booking { get; init; } = null!;
+                }
+                public sealed class Left<T> { public Right<List<T>>? Next { get; init; } }
+                public sealed class Right<T>
+                {
+                    public Left<T[]>? Next { get; init; }
+                    public BookingLine Line { get; init; } = null!;
+                }
+                public sealed class Switch<T> { public Switch<Booking>? Next { get; init; } }
+
+                public sealed record ValuesCommand : ICommand<Node<int>>;
+                public sealed record EntityCommand : ICommand<EntityNode<int>>;
+                public sealed record MutualCommand : ICommand<Left<int>>;
+                public sealed record SwitchCommand : ICommand<Switch<int>>;
+                public sealed record SiblingsCommand : ICommand<(Node<int>, Node<Booking>)>;
+
+                internal sealed class ValuesHandler : IRequestHandler<ValuesCommand, Node<int>> { public Task<Node<int>> Handle(ValuesCommand c, CancellationToken t) => throw new NotImplementedException(); }
+                internal sealed class [|EntityHandler|] : IRequestHandler<EntityCommand, EntityNode<int>> { public Task<EntityNode<int>> Handle(EntityCommand c, CancellationToken t) => throw new NotImplementedException(); }
+                internal sealed class [|MutualHandler|] : IRequestHandler<MutualCommand, Left<int>> { public Task<Left<int>> Handle(MutualCommand c, CancellationToken t) => throw new NotImplementedException(); }
+                internal sealed class [|SwitchHandler|] : IRequestHandler<SwitchCommand, Switch<int>> { public Task<Switch<int>> Handle(SwitchCommand c, CancellationToken t) => throw new NotImplementedException(); }
+                internal sealed class [|SiblingsHandler|] : IRequestHandler<SiblingsCommand, (Node<int>, Node<Booking>)> { public Task<(Node<int>, Node<Booking>)> Handle(SiblingsCommand c, CancellationToken t) => throw new NotImplementedException(); }
+                """);
+        });
+
     // A handler inherits its contract from a base class; a generic handler is analyzable when its type parameters are
     // constrained to an entity or a command.
     [Fact]

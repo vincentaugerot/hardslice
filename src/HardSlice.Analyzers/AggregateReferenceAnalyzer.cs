@@ -12,7 +12,7 @@ namespace HardSlice.Analyzers;
 // that reach it, the roots whose members lead to its type directly or through other child entities; any other root is reported
 // when its members are all visible, that is when it is declared in this compilation. A child that no root of the compilation
 // reaches, or a root of another assembly, is ambiguous and stays silent. The members inherited from a base class are reported
-// on the entity, unless that base is itself an entity of the compilation, which reports them. Generated code is analyzed.
+// on the entity, unless a base entity of the compilation already reports the same member and root. Generated code is analyzed.
 // Not applied to test projects.
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class AggregateReferenceAnalyzer : DiagnosticAnalyzer
@@ -68,19 +68,52 @@ public sealed class AggregateReferenceAnalyzer : DiagnosticAnalyzer
         if (!isRoot && owners.IsEmpty)
             return;
 
+        // A base declaration is analyzed with its own open parameters and possible owners. It cannot stand in for a
+        // derived root when a substitution reveals another aggregate, or when its own child-to-owner reference is allowed.
+        var reportedByBases = new List<(ISymbol Member, INamedTypeSymbol Root)>();
+        for (var baseType = entity.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            if (!model.IsEntity(baseType) || !SymbolEqualityComparer.Default.Equals(baseType.ContainingAssembly, context.Compilation.Assembly))
+                continue;
+
+            var definition = baseType.OriginalDefinition;
+            var baseIsRoot = model.IsAggregateRoot(definition);
+            var baseOwners = baseIsRoot ? ImmutableArray<INamedTypeSymbol>.Empty : ownership.Value.Of(definition);
+            foreach (var reference in References(definition, baseIsRoot, baseOwners, model, context.Compilation, context.CancellationToken))
+                reportedByBases.Add((reference.Member.OriginalDefinition, reference.Root.OriginalDefinition));
+        }
+
+        foreach (var reference in References(entity, isRoot, owners, model, context.Compilation, context.CancellationToken))
+        {
+            if (reportedByBases.Any(reported =>
+                SymbolEqualityComparer.Default.Equals(reported.Member, reference.Member.OriginalDefinition)
+                && SymbolEqualityComparer.Default.Equals(reported.Root, reference.Root.OriginalDefinition)))
+            {
+                continue;
+            }
+
+            Report(context, entity, owners, reference.DeclaringType, reference.Member, reference.MemberType, reference.Root);
+        }
+    }
+
+    private static IEnumerable<(INamedTypeSymbol DeclaringType, ISymbol Member, ITypeSymbol MemberType, INamedTypeSymbol Root)> References(
+        INamedTypeSymbol entity,
+        bool isRoot,
+        ImmutableArray<INamedTypeSymbol> owners,
+        DomainModel model,
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        if (!isRoot && owners.IsEmpty)
+            yield break;
+
         var overridden = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
         for (var type = entity; type is not null; type = type.BaseType)
         {
-            // A base entity of this compilation reports its own members and those it inherits.
-            if (!ReferenceEquals(type, entity)
-                && model.IsEntity(type)
-                && SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, context.Compilation.Assembly))
-            {
-                break;
-            }
-
             foreach (var member in type.GetMembers())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (member is IPropertySymbol property)
                 {
                     // An override of the same type is reported where the property is declared; a covariant one replaces it.
@@ -99,9 +132,9 @@ public sealed class AggregateReferenceAnalyzer : DiagnosticAnalyzer
 
                 var root = ContainedTypes(memberType).FirstOrDefault(candidate =>
                     model.IsAggregateRoot(candidate)
-                    && (isRoot || IsForeignRoot(candidate, owners, context.Compilation)));
+                    && (isRoot || IsForeignRoot(candidate, owners, compilation)));
                 if (root is not null)
-                    Report(context, entity, owners, type, member, memberType, root);
+                    yield return (type, member, memberType, root);
             }
         }
     }

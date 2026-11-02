@@ -403,6 +403,70 @@ public sealed class AggregateReferenceAnalyzerTests
         Subjects(diagnostics).ShouldBe(["aggregate 'Reservation' references aggregate 'Room' through property 'Room'"]);
     }
 
+    [Theory]
+    [InlineData("IEntity")]
+    [InlineData("IAggregateRoot")]
+    public async Task Reports_root_references_revealed_by_a_constructed_entity_base(string contract)
+    {
+        await VerifyAsync(
+            $$"""
+            using MyApp.Domain.Rooms;
+            namespace MyApp.Domain.Bookings;
+
+            public abstract class EntityLink<T> : {{contract}}
+            {
+                public T Related { get; protected set; } = default!;
+            }
+            public sealed class [|Booking|] : EntityLink<Room>, IAggregateRoot;
+            """);
+    }
+
+    [Fact]
+    public async Task Reports_root_references_inherited_from_child_entities_without_owners()
+    {
+        await VerifyAsync(
+            """
+            using MyApp.Domain.Rooms;
+            namespace MyApp.Domain.Bookings;
+
+            public abstract class EntityLink : IEntity { public virtual Room? Related { get; protected set; } }
+            public sealed class [|Booking|] : EntityLink, IAggregateRoot
+            {
+                public override Room? Related { get; protected set; }
+            }
+            public abstract class GenericLink<T> : IEntity { public T Related { get; protected set; } = default!; }
+            public abstract class ClosedLink : GenericLink<Room>;
+            public sealed class [|Hold|] : ClosedLink, IAggregateRoot;
+            """);
+    }
+
+    [Fact]
+    public async Task Reports_a_root_inheriting_a_back_reference_allowed_on_its_child_base()
+    {
+        await VerifyAsync(
+            """
+            namespace MyApp.Domain.Bookings;
+
+            public class Parent : IAggregateRoot { public EntityLink? Child { get; private set; } }
+            public abstract class EntityLink : IEntity { public Parent? Owner { get; protected set; } }
+            public sealed class [|Booking|] : EntityLink, IAggregateRoot;
+            """);
+    }
+
+    [Fact]
+    public async Task Does_not_repeat_a_violation_already_reported_by_a_generic_base()
+    {
+        await VerifyAsync(
+            """
+            using MyApp.Domain.Rooms;
+            namespace MyApp.Domain.Bookings;
+
+            public abstract class Root<T> : IAggregateRoot { public Room? [|Related|] { get; protected set; } }
+            public class Intermediate<T> : Root<List<T>>;
+            public sealed class Booking : Intermediate<Guid>;
+            """);
+    }
+
     // The roots of another assembly are recognized by their contract in metadata: a root never references them.
     [Theory]
     [InlineData(false)]

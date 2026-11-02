@@ -108,9 +108,9 @@ Mesure du 31/10/2026 sur la machine locale (4 cœurs, voir la dernière mesure c
 
 <!-- measure-analyzers:latest:begin -->
 
-### Mesure du 2026-10-31
+### Mesure du 2026-11-02
 
-- Commit : `5eb9efc, avec des modifications non commitées`
+- Commit : `61c727e, avec des modifications non commitées`
 - Règles HardSlice : HS000, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS015, HS016, HS019, HS900, HS901, HS902
 - SDK effectif : 10.0.401
 - Runner : machine locale, Linux 6.8.0-147-generic
@@ -123,105 +123,105 @@ Durées en secondes, une chauffe puis 5 builds mesurés par variante, en alterna
 
 | Scénario | Analyseurs | Minimum | Médiane | Maximum | Dispersion |
 |---|---|---:|---:|---:|---:|
-| A | avec | 4.00 | 4.20 | 4.58 | 13.8 % |
-| A | sans | 3.81 | 4.02 | 4.19 | 9.5 % |
-| B | avec | 4.81 | 5.15 | 6.19 | 26.8 % |
-| B | sans | 4.78 | 4.99 | 6.36 | 31.6 % |
-| C | avec | 5.62 | 5.80 | 6.69 | 18.4 % |
-| C | sans | 5.21 | 5.47 | 6.30 | 19.8 % |
+| A | avec | 3.41 | 3.82 | 4.07 | 17.3 % |
+| A | sans | 3.24 | 3.43 | 5.05 | 52.9 % |
+| B | avec | 3.81 | 4.17 | 4.80 | 23.8 % |
+| B | sans | 3.57 | 3.78 | 4.16 | 15.6 % |
+| C | avec | 4.52 | 4.77 | 4.94 | 8.8 % |
+| C | sans | 4.03 | 4.15 | 4.67 | 15.4 % |
 
 Seuils, sur la médiane :
 
 | Scénario | Mesure | Valeur | Seuil | Résultat |
 |---|---|---:|---:|---|
-| A | Durée totale avec analyseurs | 4.20 s | ≤ 10.00 s | respecté |
-| A | Surcoût des analyseurs | 0.18 s | ≤ 1.00 s | respecté |
-| B | Durée totale avec analyseurs | 5.15 s | ≤ 20.00 s | respecté |
-| B | Surcoût des analyseurs | 0.16 s | ≤ 2.00 s | respecté |
-| C | Surcoût des analyseurs | 5.9 % | ≤ 15 % | respecté |
+| A | Durée totale avec analyseurs | 3.82 s | ≤ 10.00 s | respecté |
+| A | Surcoût des analyseurs | 0.39 s | ≤ 1.00 s | respecté |
+| B | Durée totale avec analyseurs | 4.17 s | ≤ 20.00 s | respecté |
+| B | Surcoût des analyseurs | 0.39 s | ≤ 2.00 s | respecté |
+| C | Surcoût des analyseurs | 14.8 % | ≤ 15 % | respecté |
 
 Vérifications des hooks des agents, une exécution de chauffe puis 5 exécutions mesurées, en secondes. D sur la fixture avec analyseurs ; E sur PerfApp généré avec Bookings seul (80 fichiers C# sous `src/` et `tests/`), conteneur PostgreSQL compris :
 
 | Scénario | Hook | Commande | Minimum | Médiane | Maximum | Dispersion | Budget | Résultat |
 |---|---|---|---:|---:|---:|---:|---:|---|
-| D | après édition | `scripts/check.sh --build` | 4.79 | 4.86 | 5.11 | 6.6 % | ≤ 10.00 s | respecté |
-| E | avant de rendre la main | `scripts/check.sh` | 18.12 | 18.61 | 19.81 | 9.1 % | ≤ 60.00 s | respecté |
+| D | après édition | `scripts/check.sh --build` | 3.90 | 4.19 | 5.49 | 37.9 % | ≤ 10.00 s | respecté |
+| E | avant de rendre la main | `scripts/check.sh` | 18.92 | 22.79 | 27.91 | 39.5 % | ≤ 60.00 s | respecté |
 
 `-p:ReportAnalyzer=true`, build complet avec analyseurs : temps cumulé de chaque analyseur HardSlice, puis de tous les analyseurs du projet.
 Ces temps se chevauchent (exécution concurrente) : ils expliquent un surcoût, seuls les seuils sur la durée totale font foi.
 
 | Projet | Analyseur HardSlice | Temps | Tous les analyseurs |
 |---|---|---:|---:|
-| PerfApp.Domain | SliceReferenceAnalyzer (HS016) | 0.001 s | 0.015 s |
-| PerfApp.Domain | AggregateReferenceAnalyzer (HS008) | <0.001 s | 0.015 s |
-| PerfApp.Domain | SliceStructureAnalyzer (HS004) | <0.001 s | 0.015 s |
-| PerfApp.Domain | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.015 s |
-| PerfApp.Domain | SuppressionJustificationAnalyzer (HS000) | <0.001 s | 0.015 s |
-| PerfApp.Domain | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.015 s |
-| PerfApp.Domain | EntityStateAnalyzer (HS007) | <0.001 s | 0.015 s |
-| PerfApp.Domain | SystemClockAnalyzer (HS010) | <0.001 s | 0.015 s |
-| PerfApp.Domain | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.015 s |
-| PerfApp.Domain | CommandResponseAnalyzer (HS005) | <0.001 s | 0.015 s |
-| PerfApp.Domain | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.015 s |
-| PerfApp.Domain | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.015 s |
-| PerfApp.Domain | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.015 s |
-| PerfApp.Domain | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.015 s |
-| PerfApp | SliceReferenceAnalyzer (HS016) | 1.128 s | 1.624 s |
-| PerfApp | SliceStructureAnalyzer (HS004) | 0.105 s | 1.624 s |
-| PerfApp | SystemClockAnalyzer (HS010) | 0.042 s | 1.624 s |
-| PerfApp | ClassificationAnalyzer (HS900, HS901, HS902) | 0.014 s | 1.624 s |
-| PerfApp | AggregateReferenceAnalyzer (HS008) | 0.011 s | 1.624 s |
-| PerfApp | SliceEndpointAnalyzer (HS015) | 0.008 s | 1.624 s |
-| PerfApp | EndpointDatabaseAccessAnalyzer (HS003) | 0.008 s | 1.624 s |
-| PerfApp | QueryHandlerTrackingAnalyzer (HS006) | 0.006 s | 1.624 s |
-| PerfApp | CommandResponseAnalyzer (HS005) | 0.002 s | 1.624 s |
-| PerfApp | AsyncUsageAnalyzer (HS011) | 0.002 s | 1.624 s |
-| PerfApp | SuppressionJustificationAnalyzer (HS000) | 0.001 s | 1.624 s |
-| PerfApp | EntityStateAnalyzer (HS007) | <0.001 s | 1.624 s |
-| PerfApp | DomainEventRecordAnalyzer (HS009) | <0.001 s | 1.624 s |
-| PerfApp | DomainEventNameAnalyzer (HS019) | <0.001 s | 1.624 s |
-| PerfApp.ArchitectureTests | SuppressionJustificationAnalyzer (HS000) | 0.005 s | 0.136 s |
-| PerfApp.ArchitectureTests | SliceReferenceAnalyzer (HS016) | 0.002 s | 0.136 s |
-| PerfApp.ArchitectureTests | AggregateReferenceAnalyzer (HS008) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | EntityStateAnalyzer (HS007) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.136 s |
-| PerfApp.ArchitectureTests | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.136 s |
-| PerfApp.IntegrationTests | SliceReferenceAnalyzer (HS016) | 0.058 s | 0.157 s |
-| PerfApp.IntegrationTests | SuppressionJustificationAnalyzer (HS000) | 0.004 s | 0.157 s |
-| PerfApp.IntegrationTests | AggregateReferenceAnalyzer (HS008) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | EntityStateAnalyzer (HS007) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.157 s |
-| PerfApp.IntegrationTests | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.157 s |
-| PerfApp.Tests | SliceReferenceAnalyzer (HS016) | 0.012 s | 0.079 s |
-| PerfApp.Tests | SuppressionJustificationAnalyzer (HS000) | 0.002 s | 0.079 s |
-| PerfApp.Tests | AggregateReferenceAnalyzer (HS008) | <0.001 s | 0.079 s |
-| PerfApp.Tests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.079 s |
-| PerfApp.Tests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.079 s |
-| PerfApp.Tests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.079 s |
-| PerfApp.Tests | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.079 s |
-| PerfApp.Tests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.079 s |
-| PerfApp.Tests | EntityStateAnalyzer (HS007) | <0.001 s | 0.079 s |
-| PerfApp.Tests | SystemClockAnalyzer (HS010) | <0.001 s | 0.079 s |
-| PerfApp.Tests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.079 s |
-| PerfApp.Tests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.079 s |
-| PerfApp.Tests | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.079 s |
-| PerfApp.Tests | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.079 s |
+| PerfApp.Domain | SliceReferenceAnalyzer (HS016) | 0.004 s | 0.054 s |
+| PerfApp.Domain | EntityStateAnalyzer (HS007) | 0.004 s | 0.054 s |
+| PerfApp.Domain | AggregateReferenceAnalyzer (HS008) | 0.001 s | 0.054 s |
+| PerfApp.Domain | SliceStructureAnalyzer (HS004) | <0.001 s | 0.054 s |
+| PerfApp.Domain | SuppressionJustificationAnalyzer (HS000) | <0.001 s | 0.054 s |
+| PerfApp.Domain | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.054 s |
+| PerfApp.Domain | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.054 s |
+| PerfApp.Domain | SystemClockAnalyzer (HS010) | <0.001 s | 0.054 s |
+| PerfApp.Domain | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.054 s |
+| PerfApp.Domain | CommandResponseAnalyzer (HS005) | <0.001 s | 0.054 s |
+| PerfApp.Domain | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.054 s |
+| PerfApp.Domain | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.054 s |
+| PerfApp.Domain | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.054 s |
+| PerfApp.Domain | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.054 s |
+| PerfApp | SliceReferenceAnalyzer (HS016) | 0.948 s | 1.657 s |
+| PerfApp | SliceStructureAnalyzer (HS004) | 0.095 s | 1.657 s |
+| PerfApp | SliceEndpointAnalyzer (HS015) | 0.009 s | 1.657 s |
+| PerfApp | ClassificationAnalyzer (HS900, HS901, HS902) | 0.009 s | 1.657 s |
+| PerfApp | EndpointDatabaseAccessAnalyzer (HS003) | 0.008 s | 1.657 s |
+| PerfApp | QueryHandlerTrackingAnalyzer (HS006) | 0.006 s | 1.657 s |
+| PerfApp | CommandResponseAnalyzer (HS005) | 0.002 s | 1.657 s |
+| PerfApp | AsyncUsageAnalyzer (HS011) | 0.002 s | 1.657 s |
+| PerfApp | AggregateReferenceAnalyzer (HS008) | 0.002 s | 1.657 s |
+| PerfApp | SuppressionJustificationAnalyzer (HS000) | <0.001 s | 1.657 s |
+| PerfApp | DomainEventRecordAnalyzer (HS009) | <0.001 s | 1.657 s |
+| PerfApp | EntityStateAnalyzer (HS007) | <0.001 s | 1.657 s |
+| PerfApp | SystemClockAnalyzer (HS010) | <0.001 s | 1.657 s |
+| PerfApp | DomainEventNameAnalyzer (HS019) | <0.001 s | 1.657 s |
+| PerfApp.ArchitectureTests | SliceReferenceAnalyzer (HS016) | 0.006 s | 0.162 s |
+| PerfApp.ArchitectureTests | SuppressionJustificationAnalyzer (HS000) | 0.005 s | 0.162 s |
+| PerfApp.ArchitectureTests | AggregateReferenceAnalyzer (HS008) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | EntityStateAnalyzer (HS007) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.162 s |
+| PerfApp.ArchitectureTests | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.162 s |
+| PerfApp.IntegrationTests | SliceReferenceAnalyzer (HS016) | 0.068 s | 0.235 s |
+| PerfApp.IntegrationTests | SuppressionJustificationAnalyzer (HS000) | 0.002 s | 0.235 s |
+| PerfApp.IntegrationTests | AggregateReferenceAnalyzer (HS008) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | EntityStateAnalyzer (HS007) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | SystemClockAnalyzer (HS010) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.235 s |
+| PerfApp.IntegrationTests | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.235 s |
+| PerfApp.Tests | SliceReferenceAnalyzer (HS016) | 0.006 s | 0.110 s |
+| PerfApp.Tests | SuppressionJustificationAnalyzer (HS000) | 0.001 s | 0.110 s |
+| PerfApp.Tests | AggregateReferenceAnalyzer (HS008) | <0.001 s | 0.110 s |
+| PerfApp.Tests | AsyncUsageAnalyzer (HS011) | <0.001 s | 0.110 s |
+| PerfApp.Tests | ClassificationAnalyzer (HS900, HS901, HS902) | <0.001 s | 0.110 s |
+| PerfApp.Tests | SliceStructureAnalyzer (HS004) | <0.001 s | 0.110 s |
+| PerfApp.Tests | CommandResponseAnalyzer (HS005) | <0.001 s | 0.110 s |
+| PerfApp.Tests | EntityStateAnalyzer (HS007) | <0.001 s | 0.110 s |
+| PerfApp.Tests | SystemClockAnalyzer (HS010) | <0.001 s | 0.110 s |
+| PerfApp.Tests | SliceEndpointAnalyzer (HS015) | <0.001 s | 0.110 s |
+| PerfApp.Tests | DomainEventRecordAnalyzer (HS009) | <0.001 s | 0.110 s |
+| PerfApp.Tests | EndpointDatabaseAccessAnalyzer (HS003) | <0.001 s | 0.110 s |
+| PerfApp.Tests | QueryHandlerTrackingAnalyzer (HS006) | <0.001 s | 0.110 s |
+| PerfApp.Tests | DomainEventNameAnalyzer (HS019) | <0.001 s | 0.110 s |
 
 <!-- measure-analyzers:latest:end -->
 
@@ -244,4 +244,5 @@ Médianes en secondes, avec / sans analyseurs pour A, B et C ; avec analyseurs p
 | 2026-10-30 | `bb57729` | HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS015, HS016, HS019, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.05 / 2.84 | 3.76 / 3.40 | 4.13 / 3.77 | – | – | pass |
 | 2026-10-31 | `b7141a1` | HS000, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS015, HS016, HS019, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.21 / 2.85 | 4.10 / 3.86 | 4.58 / 4.13 | – | – | pass |
 | 2026-10-31 | `5eb9efc` | HS000, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS015, HS016, HS019, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 4.20 / 4.02 | 5.15 / 4.99 | 5.80 / 5.47 | 4.86 | 18.61 | pass |
+| 2026-11-02 | `61c727e` | HS000, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS015, HS016, HS019, HS900, HS901, HS902 | machine locale, Linux 6.8.0-147-generic | 3.82 / 3.43 | 4.17 / 3.78 | 4.77 / 4.15 | 4.19 | 22.79 | pass |
 <!-- measure-analyzers:history -->

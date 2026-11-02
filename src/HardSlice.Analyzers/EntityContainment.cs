@@ -33,75 +33,101 @@ internal sealed class EntityContainment
     public static EntityContainment? Create(Compilation compilation, DomainModel model) =>
         model.Contract(ContractKeys.Entity) is { } entity ? new EntityContainment(model, entity, compilation) : null;
 
-    // The first entity reached from the type, or null when none is. The walk visits each type once, which also stops cycles.
-    public EntityPath? Find(ITypeSymbol type) => Find(type, ImmutableArray<ISymbol>.Empty, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default));
-
-    private EntityPath? Find(ITypeSymbol type, ImmutableArray<ISymbol> members, HashSet<ITypeSymbol> visited)
+    // All constructed arguments are examined, but the members of a DTO definition are expanded only once. Every entity
+    // introduced by a substitution is already reachable through those arguments: expanding Node<List<T>> again cannot
+    // add one. This bounds even expanding cycles such as Node<T>.Next : Node<List<T>>, without a depth limit on DTO chains.
+    // The explicit stack keeps a long, finite chain off the call stack. Push in reverse to retain the diagnostic's path.
+    public EntityPath? Find(ITypeSymbol type, CancellationToken cancellationToken)
     {
-        switch (type)
+        var visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        var expandedDtos = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var pending = new Stack<(ITypeSymbol Type, ImmutableArray<ISymbol> Members)>();
+        pending.Push((type, ImmutableArray<ISymbol>.Empty));
+        while (pending.Count > 0)
         {
-            case ITypeParameterSymbol parameter:
-                // An unconstrained type parameter cannot be analyzed; one constrained to an entity is one.
-                return parameter.ConstraintTypes.Any(IsEntity) ? new EntityPath(parameter, members) : null;
+            cancellationToken.ThrowIfCancellationRequested();
+            var (currentType, path) = pending.Pop();
+            if (!visited.Add(currentType))
+                continue;
 
-            case IArrayTypeSymbol array:
-                return Find(array.ElementType, members, visited);
-
-            case INamedTypeSymbol { TypeKind: not TypeKind.Error } named:
-                if (IsEntityOrContract(named))
-                    return new EntityPath(named, members);
-
-                if (!visited.Add(named))
-                    return null;
-
-                for (var current = named; current is not null; current = current.ContainingType)
-                {
-                    foreach (var argument in current.TypeArguments)
-                    {
-                        if (Find(argument, members, visited) is { } found)
-                            return found;
-                    }
-                }
-
-                return IsDto(named) ? FindInDto(named, members, visited) : null;
-
-            default:
-                return null;
-        }
-    }
-
-    // 'BookingList : List<BookingLine>' holds its elements; 'ConfirmationDto' holds its property 'Booking'.
-    private EntityPath? FindInDto(INamedTypeSymbol dto, ImmutableArray<ISymbol> members, HashSet<ITypeSymbol> visited)
-    {
-        if (dto.BaseType is { } baseType && Find(baseType, members, visited) is { } inBase)
-            return inBase;
-
-        foreach (var @interface in dto.Interfaces)
-        {
-            if (Find(@interface, members, visited) is { } inInterface)
-                return inInterface;
-        }
-
-        foreach (var member in dto.GetMembers())
-        {
-            var memberType = member switch
+            switch (currentType)
             {
-                IPropertySymbol { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public } property => property.Type,
-                IFieldSymbol { IsStatic: false, IsImplicitlyDeclared: false, DeclaredAccessibility: Accessibility.Public } field => field.Type,
-                _ => null
-            };
-            if (memberType is not null && Find(memberType, members.Add(member), visited) is { } inMember)
-                return inMember;
+                case ITypeParameterSymbol parameter:
+                    if (IsEntity(parameter, cancellationToken))
+                        return new EntityPath(parameter, path);
+                    break;
+
+                case IArrayTypeSymbol array:
+                    pending.Push((array.ElementType, path));
+                    break;
+
+                case INamedTypeSymbol { TypeKind: not TypeKind.Error } named:
+                    if (IsEntityOrContract(named))
+                        return new EntityPath(named, path);
+
+                    if (IsDto(named) && expandedDtos.Add(named.OriginalDefinition))
+                    {
+                        var members = named.GetMembers();
+                        for (var i = members.Length - 1; i >= 0; i--)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var member = members[i];
+                            var memberType = member switch
+                            {
+                                IPropertySymbol { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public } property => property.Type,
+                                IFieldSymbol { IsStatic: false, IsImplicitlyDeclared: false, DeclaredAccessibility: Accessibility.Public } field => field.Type,
+                                _ => null
+                            };
+                            if (memberType is not null)
+                                pending.Push((memberType, path.Add(member)));
+                        }
+
+                        for (var i = named.Interfaces.Length - 1; i >= 0; i--)
+                            pending.Push((named.Interfaces[i], path));
+                        if (named.BaseType is { } baseType)
+                            pending.Push((baseType, path));
+                    }
+
+                    var arguments = new List<ITypeSymbol>();
+                    for (var current = named; current is not null; current = current.ContainingType)
+                        arguments.AddRange(current.TypeArguments);
+                    for (var i = arguments.Count - 1; i >= 0; i--)
+                        pending.Push((arguments[i], path));
+                    break;
+            }
         }
 
         return null;
     }
 
     // An entity, the entity or aggregate root contract, or a type parameter constrained to one of them: 'TEntity : IEntity'.
-    public bool IsEntity(ITypeSymbol type) =>
-        type is ITypeParameterSymbol parameter
-            ? parameter.ConstraintTypes.Any(IsEntity)
-            : IsEntityOrContract(type);
+    public bool IsEntity(ITypeSymbol type, CancellationToken cancellationToken)
+    {
+        if (type is not ITypeParameterSymbol)
+            return IsEntityOrContract(type);
+
+        var pending = new Stack<ITypeSymbol>();
+        var visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        pending.Push(type);
+        while (pending.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var current = pending.Pop();
+            if (!visited.Add(current))
+                continue;
+            if (current is ITypeParameterSymbol parameter)
+            {
+                foreach (var constraint in parameter.ConstraintTypes)
+                    pending.Push(constraint);
+            }
+            else if (IsEntityOrContract(current))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private bool IsEntityOrContract(ITypeSymbol type) =>
         _model.IsEntity(type)
