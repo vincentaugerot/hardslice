@@ -13,8 +13,8 @@
     <Authors>Vincent Augerot</Authors>
     <Copyright>Copyright (c) 2026 Vincent Augerot</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/toregua/hardslice</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/toregua/hardslice.git</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/vincentaugerot/hardslice</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vincentaugerot/hardslice.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <!-- Each package ships the README.md of its project, written for its page on NuGet.org: absolute links only. -->
     <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -1,6 +1,6 @@
 # HardSlice.Templates
 
-`dotnet new` templates for [HardSlice](https://github.com/toregua/hardslice): vertical slices with a rich domain, kept clean by the build.
+`dotnet new` templates for [HardSlice](https://github.com/vincentaugerot/hardslice): vertical slices with a rich domain, kept clean by the build.
 
 This is a preview. It holds the `hardslice-api` solution template: an ASP.NET Core API in vertical slices around a rich domain, persisted in PostgreSQL with EF Core, with a `Bookings` sample module, or empty with `--no-sample`.
 
@@ -25,6 +25,6 @@ Every generated solution references [HardSlice.Analyzers](https://www.nuget.org/
 
 ## Documentation
 
-- [Getting started](https://github.com/toregua/hardslice/blob/main/README.md#getting-started)
-- [Rules](https://github.com/toregua/hardslice/blob/main/README.md#rules)
-- [License (MIT)](https://github.com/toregua/hardslice/blob/main/LICENSE)
+- [Getting started](https://github.com/vincentaugerot/hardslice/blob/main/README.md#getting-started)
+- [Rules](https://github.com/vincentaugerot/hardslice/blob/main/README.md#rules)
+- [License (MIT)](https://github.com/vincentaugerot/hardslice/blob/main/LICENSE)

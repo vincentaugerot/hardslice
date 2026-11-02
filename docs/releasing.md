@@ -16,9 +16,9 @@ Une version poussée sur NuGet.org ne peut jamais être remplacée, seulement ma
 
 ## Prérequis, une seule fois
 
-1. **Dépôt public.** Les fiches NuGet.org renvoient au code, aux fiches de règles et à la documentation du dépôt `toregua/hardslice`.
+1. **Dépôt public.** Les fiches NuGet.org renvoient au code, aux fiches de règles et à la documentation du dépôt `vincentaugerot/hardslice`.
 2. **Compte NuGet.org** du mainteneur. Les identifiants `HardSlice.Analyzers`, `HardSlice.Templates` et `HardSlice.Tool` sont libres ; demander la réservation du préfixe `HardSlice.` (sans elle, `dotnet new` affiche `Reserved: ✘`).
-3. **Publication de confiance** sur NuGet.org, menu du compte, « Trusted Publishing » : une politique pour le propriétaire `toregua`, le dépôt `hardslice`, le fichier de workflow `release.yml` et l'environnement `nuget`.
+3. **Publication de confiance** sur NuGet.org, menu du compte, « Trusted Publishing » : une politique pour le propriétaire `vincentaugerot`, le dépôt `hardslice`, le fichier de workflow `release.yml` et l'environnement `nuget`.
 4. **Environnement GitHub `nuget`** (Settings, Environments) :
    - relecteur requis : le mainteneur, avec « Prevent self-review » désactivé, puisqu'il pose lui-même l'étiquette ;
    - branches et étiquettes de déploiement : étiquettes `v*` seulement ;
