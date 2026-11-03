@@ -249,7 +249,7 @@ public sealed class CheckCommandTests
         runner.Commands.ShouldNotContain(IntegrationTests);
         error.ShouldBe(
             "error: integration tests need a Docker-compatible container runtime reachable by the 'docker' CLI (Docker Desktop, Docker Engine, Podman, Colima...). "
-            + "Start one, check that 'docker info' succeeds, then run this script again." + Environment.NewLine);
+            + "Start one, check that 'docker info' succeeds, then run the check again." + Environment.NewLine);
     }
 
     [Fact]

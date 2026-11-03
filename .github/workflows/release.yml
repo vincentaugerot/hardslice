@@ -57,7 +57,7 @@ jobs:
       - name: Test
         run: dotnet test --no-build
 
-  # The scenario of the CI template job, from the tag: it packs the three packages and runs README.md on them, with and without Bookings.
+  # The scenario of the CI template job, from the tag: it packs the three packages and runs docs/getting-started.md on them, with and without Bookings.
   template:
     runs-on: ubuntu-latest
     steps:
@@ -145,7 +145,7 @@ jobs:
               --source https://api.nuget.org/v3/index.json --skip-duplicate
           done
 
-  # A fresh runner, which has never seen the packages: it installs the template from NuGet.org as README.md says, generates a
+  # A fresh runner, which has never seen the packages: it installs the template from NuGet.org as docs/getting-started.md says, generates a
   # solution with and without Bookings and runs dotnet tool restore, then dotnet hardslice check in each. Only the script comes from the tag.
   verify:
     needs: [build, publish]

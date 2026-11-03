@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verifies published HardSlice packages the way a user meets them: installs HardSlice.Templates@<version> from a NuGet source,
-# NuGet.org by default, as step 1 of "Getting started" in README.md says, generates a solution with the Bookings sample and one
+# NuGet.org by default, as step 1 of docs/getting-started.md says, generates a solution with the Bookings sample and one
 # without, then in each restores the local tools and runs dotnet hardslice check, integration tests included.
 # Run by the verify job of .github/workflows/release.yml on a fresh runner, once the three packages are pushed. With --source
 # <folder>, it verifies the packages of a local folder the same way, before a release.

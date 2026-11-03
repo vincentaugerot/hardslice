@@ -1,4 +1,6 @@
-# HardSlice — backlog produit
+> **Document de conception, en français.** Document de travail du projet, public pour rendre la méthode transparente : chaque ticket, ses arbitrages datés et son acceptation. La documentation d'utilisation est en anglais, dans le [README](../../README.md) et [docs/](../README.md).
+
+# HardSlice : backlog produit
 
 Statut : backlog actif, 03/11/2026.
 
@@ -18,7 +20,7 @@ Ce document décrit les incréments qui construisent HardSlice. Aucun autre docu
 - HardSlice n'ajoute aucune dépendance au runtime de l'application générée.
 - Les identifiants actifs sont `HardSlice`, `HSxxx` et `dotnet hardslice`.
 
-## 2. Incrément terminé — première boucle verticale, pré-v0.1
+## 2. Incrément 1 terminé : première boucle verticale, pré-v0.1
 
 Statut : terminé le 29/10/2026. PB-001 à PB-008 sont validés et poussés ; la CI est verte. Cette section est conservée comme historique.
 
@@ -28,7 +30,7 @@ Statut : terminé le 29/10/2026. PB-001 à PB-008 sont validés et poussés ; la
 
 Le travail commence par PB-001. PB-002 ne débute qu'une fois les commandes d'acceptation de PB-001 vertes ; les tickets suivants sont abordés dans l'ordre, sauf dépendance technique explicitement constatée.
 
-### PB-001 — Créer la solution HardSlice compilable
+### PB-001 : Créer la solution HardSlice compilable
 
 **Livrables**
 
@@ -48,14 +50,14 @@ dotnet test --no-build
 
 Les trois commandes réussissent depuis un checkout propre.
 
-### PB-002 — Créer l'application Bookings minimale
+### PB-002 : Créer l'application Bookings minimale
 
 **Livrables**
 
 - projet Domain séparé, sans dépendance runtime vers ASP.NET Core, EF Core ou HardSlice ; `HardSlice.Analyzers` peut y être consommé uniquement comme asset d'analyse au build ;
 - application ASP.NET Core organisée en vertical slices ;
 - au moins deux slices du module Bookings ;
-- agrégat `Booking` avec un invariant minimal réel — par exemple une période dont la fin doit être postérieure au début ; l'invariant complet de chevauchement arrive en v0.1 ;
+- agrégat `Booking` avec un invariant minimal réel, par exemple une période dont la fin doit être postérieure au début ; l'invariant complet de chevauchement arrive en v0.1 ;
 - tests unitaires et projet de tests d'architecture ;
 - aucun package HardSlice chargé au runtime.
 
@@ -63,7 +65,7 @@ Les trois commandes réussissent depuis un checkout propre.
 
 `dotnet build` et `dotnet test` réussissent. Les tests vérifient au minimum l'invariant du domaine et l'indépendance du projet Domain.
 
-### PB-003 — Implémenter HS016
+### PB-003 : Implémenter HS016
 
 **Livrables**
 
@@ -79,7 +81,7 @@ Les trois commandes réussissent depuis un checkout propre.
 
 Une référence d'un type de `Bookings/CancelBooking` vers un type de `Bookings/ConfirmBooking` produit HS016. Les références autorisées vers le domaine ou le contrat public du module restent valides.
 
-### PB-004 — Rendre le diagnostic HS016 réparable
+### PB-004 : Rendre le diagnostic HS016 réparable
 
 **Livrables**
 
@@ -99,7 +101,7 @@ HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBoo
 
 Dans le premier incrément, le chemin documentaire local est garanti par le template `hardslice-api`. L'installation directe du seul paquet `HardSlice.Analyzers`, hors d'une solution générée, n'est pas encore un parcours supporté ; elle recevra une référence documentaire publique stable avec le kit d'adoption.
 
-### PB-005 — Packager le template local
+### PB-005 : Packager le template local
 
 **Livrables**
 
@@ -118,7 +120,7 @@ scripts/test-template.sh
 
 La solution générée compile et ses tests passent sans modification manuelle. Le script vérifie également que le chemin `Doc:` annoncé par HS016 existe depuis la racine de la solution générée.
 
-### PB-006 — Ajouter la vérification et le guidage agent
+### PB-006 : Ajouter la vérification et le guidage agent
 
 **Livrables**
 
@@ -129,9 +131,9 @@ La solution générée compile et ses tests passent sans modification manuelle. 
 
 **Acceptation**
 
-Les deux scripts appliquent le même contrat logique — restore si nécessaire, build, tests unitaires et tests d'architecture — et retournent un code non nul en cas d'échec.
+Les deux scripts appliquent le même contrat logique (restore si nécessaire, build, tests unitaires et tests d'architecture) et retournent un code non nul en cas d'échec.
 
-### PB-007 — Vérifier l'installation depuis un checkout propre
+### PB-007 : Vérifier l'installation depuis un checkout propre
 
 **Livrables**
 
@@ -143,7 +145,7 @@ Les deux scripts appliquent le même contrat logique — restore si nécessaire,
 
 Le job de CI exécute `scripts/test-template.sh` depuis un checkout propre et réussit sans état implicite de la machine du développeur.
 
-### PB-008 — Démontrer la correction par un agent
+### PB-008 : Démontrer la correction par un agent
 
 **Livrables**
 
@@ -169,7 +171,7 @@ Cette démonstration n'est pas un benchmark statistique et ne prétend pas prouv
 
 L'incrément est terminé lorsque PB-001 à PB-008 sont satisfaits depuis un checkout propre. Aucune porte documentaire supplémentaire ne s'applique.
 
-## 3. Incrément terminé : Fondation v0.1
+## 3. Incrément 2 terminé : Fondation v0.1
 
 Statut : terminé le 30/10/2026. PB-009 à PB-017 sont validés et poussés ; la CI est verte. Cette section est conservée comme historique.
 
@@ -216,13 +218,13 @@ Les tickets sont numérotés dans un ordre d'exécution possible. Le graphe rée
 
 PB-010, PB-011 et PB-012 modifient tous `Booking` ou `ConfirmBooking` : ce sont des points de fusion, pas des dépendances. Le ticket intégré en second se rebase sur le premier.
 
-### PB-009 — Persister les réservations dans PostgreSQL
+### PB-009 : Persister les réservations dans PostgreSQL
 
 **Résultat visible**
 
 L'application générée confirme et annule réellement des réservations dans PostgreSQL, avec le comportement HTTP existant : `POST /bookings`, `POST /bookings/{id}/cancel`. Ses tests d'intégration Testcontainers passent dans la solution générée depuis le paquet local.
 
-**Décision — emplacement de la persistance (résolution de la question n° 7 de la spécification)**
+**Décision : emplacement de la persistance (résolution de la question n° 7 de la spécification)**
 
 - `Shared/Persistence/` contient l'infrastructure transverse : `AppDbContext`, son enregistrement, la configuration de la connexion et les migrations. `AppDbContext` ne déclare aucun type de module : il applique les configurations découvertes dans l'assembly, et les slices accèdent aux agrégats par `Set<T>()`.
 - La configuration EF Core d'un agrégat vit au niveau du module qui l'utilise (`Features/<Module>/<Aggregate>Configuration.cs`, `internal`), hors de toute slice. Ajouter un module ne modifie donc pas `Shared`.
@@ -276,7 +278,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - migration automatique au démarrage, données d'exemple, multi-tenant ;
 - test d'architecture HS017 lui-même (PB-014).
 
-### PB-010 — Interdire le chevauchement de deux réservations d'une même salle
+### PB-010 : Interdire le chevauchement de deux réservations d'une même salle
 
 **Résultat visible**
 
@@ -319,7 +321,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - agrégat `Room`, modification ou déplacement d'une réservation ;
 - verrouillage optimiste général.
 
-### PB-011 — Lever `BookingConfirmed` à la confirmation
+### PB-011 : Lever `BookingConfirmed` à la confirmation
 
 **Résultat visible**
 
@@ -359,7 +361,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - outbox, bus de messages, événement d'annulation ;
 - analyseur HS009 (v0.2).
 
-### PB-012 — Faire passer les commandes par un médiateur maison avec validation
+### PB-012 : Faire passer les commandes par un médiateur maison avec validation
 
 **Résultat visible**
 
@@ -408,7 +410,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - templates `hardslice-command` et `hardslice-query` (v0.3) ;
 - requête `GetBooking` (PB-013).
 
-### PB-013 — Lire une réservation par une projection
+### PB-013 : Lire une réservation par une projection
 
 **Résultat visible**
 
@@ -450,7 +452,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - cache ;
 - analyseur HS006 (v0.2).
 
-### PB-014 — Bloquer les violations de frontières par des tests d'architecture
+### PB-014 : Bloquer les violations de frontières par des tests d'architecture
 
 **Résultat visible**
 
@@ -513,7 +515,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - clés de `hardslice.json` pour les modules, les chemins ou les couches, et configurabilité générale (v0.5) ;
 - HS000 (v0.3).
 
-### PB-015 — Bloquer les slices sans validateur ni tests
+### PB-015 : Bloquer les slices sans validateur ni tests
 
 **Résultat visible**
 
@@ -563,7 +565,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - analyseurs HS004 et HS015 (v0.2) ;
 - exécution des seuls tests de la slice touchée par les hooks (v0.3).
 
-### PB-016 — Générer une application vide avec `--no-sample`
+### PB-016 : Générer une application vide avec `--no-sample`
 
 **Résultat visible**
 
@@ -611,7 +613,7 @@ scripts/demo-hs016-agent-fix.sh prepare "$(mktemp -d)"
 - template `hardslice-module` et génération d'un premier module (v0.3) ;
 - options `--aspire` et SQL Server (incrément 8).
 
-### PB-017 — Documenter le template v0.1 et le valider depuis un checkout propre
+### PB-017 : Documenter le template v0.1 et le valider depuis un checkout propre
 
 **Résultat visible**
 
@@ -673,11 +675,9 @@ L'incrément est terminé lorsque PB-009 à PB-017 sont satisfaits depuis un che
 
 Aucune porte documentaire supplémentaire ne s'applique.
 
-## 4. Incrément terminé : Analyseurs v0.2
+## 4. Incrément 3 terminé : Analyseurs v0.2
 
 Statut : PB-018 à PB-032 terminés le 02/11/2026. PB-033 n'est pas publié seul : sa publication est reprise par PB-051, qui publie une seule préversion, `0.3.0-preview.1`.
-
-Statut : actif depuis le 30/10/2026, l'incrément 2 étant terminé. Le travail commence par PB-018 ; les tickets peuvent être menés un par un dans l'ordre des numéros, qui respecte le graphe des dépendances.
 
 ### Résultat attendu
 
@@ -751,7 +751,7 @@ Identifiés dès le démarrage de l'incrément. Le développement et la validati
 - compte NuGet.org du mainteneur, disponibilité vérifiée des identifiants `HardSlice.Analyzers`, `HardSlice.Templates` et `HardSlice.Tool`, réservation du préfixe `HardSlice.` demandée ;
 - publication de confiance NuGet.org (OIDC GitHub) configurée pour le dépôt, ou à défaut clé d'API limitée au push de `HardSlice.*`, stockée dans un environnement GitHub protégé `nuget` avec approbation du mainteneur ;
 - dépôt GitHub public avant toute publication sur NuGet.org : les liens des paquets vers le code, les fiches et la documentation doivent être utilisables. Ce prérequis ne bloque ni la construction ni la validation des paquets sur la source locale (PB-032) ;
-- version `0.2.0-preview.1`.
+- version `0.2.0-preview.1`, remplacée le 03/11/2026 par `0.3.0-preview.1`, la seule préversion publiée (PB-051).
 
 ### Graphe des dépendances
 
@@ -1595,6 +1595,8 @@ scripts/test-template.sh
 
 ### PB-033 : Publier la préversion `0.2.0-preview.1`
 
+Statut : livré sauf la publication. Le workflow `.github/workflows/release.yml`, `scripts/verify-published.sh` et le README sont livrés ; la publication est reportée dans PB-051 par décision du mainteneur du 03/11/2026, et `0.2.0-preview.1` n'est jamais publiée.
+
 **Résultat observable**
 
 Un utilisateur installe `HardSlice.Templates::0.2.0-preview.1` depuis NuGet.org, génère une application et passe `dotnet hardslice check`.
@@ -1622,9 +1624,9 @@ L'incrément est terminé lorsque PB-018 à PB-033 sont satisfaits et que les jo
 - la matrice des niveaux d'analyse est vérifiée et un réglage de `.editorconfig` l'emporte sur elle ;
 - `dotnet hardslice check` porte la vérification, `check.sh` et `check.ps1` le lancent, et `dotnet build` seul produit toujours les diagnostics ;
 - les seuils de PB-019 sont respectés ;
-- les paquets `0.2.0-preview.1` sont publiés et la solution générée depuis NuGet.org passe `dotnet hardslice check`.
+- les paquets `0.2.0-preview.1` sont publiés et la solution générée depuis NuGet.org passe `dotnet hardslice check` (reporté : voir le statut de PB-033).
 
-## 5. Incrément terminé : Boucle agent v0.3
+## 5. Incrément 4 terminé : Boucle agent v0.3
 
 Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-059) terminée.
 
@@ -1677,7 +1679,7 @@ Décisions du mainteneur du 31/10/2026, reportées dans la [spécification](spec
 | PB-048 (pre-commit et CI générée) | PB-045 | PB-042 à PB-047 |
 | PB-049 (boucles E2E par règle) | PB-041, PB-044, PB-046 | PB-047, PB-048 |
 | PB-050 (scénario agent complet) | PB-043, PB-044, PB-046 | PB-049 |
-| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, PB-033 | aucun |
+| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-059 (section 6) | aucun |
 
 ```text
 PB-034 état des CLI ────────────┬─ PB-042 instructions ──────────────┐
@@ -1821,7 +1823,7 @@ scripts/test-template.sh
 **Périmètre**
 
 - `content/hardslice-query/`, mêmes conventions de paramètres, de nom d'application et d'erreurs que PB-036 ;
-- `--result` : `single` (réponse `null` répondue par 404, forme de `GetBooking`) ou `list` ;
+- `--result` : `single` (réponse `null` répondue par 404, forme de `GetBooking`) ou `many` (une liste ; `list` serait lu par `dotnet new` comme sa commande `list`, voir la réalisation) ;
 - handler : `Set<T>().AsNoTracking()` puis `Select` vers le DTO, sur l'agrégat passé par `--aggregate` (requis) ;
 - fichiers de tests aux chemins de HS018, test d'intégration `TODO(hardslice):` ;
 - `AGENTS.md` : le paragraphe sur les requêtes renvoie au template.
@@ -2027,12 +2029,12 @@ scripts/test-template.sh
 
 Une solution générée contient les quatre fichiers d'instructions. `CLAUDE.md` importe `AGENTS.md` (`@AGENTS.md`) ; `GEMINI.md` et `.github/copilot-instructions.md` y renvoient selon le mécanisme retenu par PB-034, sans dupliquer ses règles.
 
-Réalisé : `CLAUDE.md` est livré dans `.claude/CLAUDE.md` avec `@../AGENTS.md`. L'essai demandé ci-dessous a montré qu'un `CLAUDE.md` à la racine, lu par Copilot, lui faisait charger `AGENTS.md` deux fois ([prise en charge des agents](agents/support.md), E12 à E14).
+Réalisé : `CLAUDE.md` est livré dans `.claude/CLAUDE.md` avec `@../AGENTS.md`. L'essai demandé ci-dessous a montré qu'un `CLAUDE.md` à la racine, lu par Copilot, lui faisait charger `AGENTS.md` deux fois ([prise en charge des agents](../agents/support.md), E12 à E14).
 
 **Périmètre**
 
 - chaque fichier ne contient que ce qui est propre à son CLI : lien ou import d'`AGENTS.md`, hooks actifs ou fallback « run the check script before you finish », emplacement des skills ;
-- mécanismes retenus par PB-034 ([prise en charge des agents](agents/support.md)) : `GEMINI.md` importe `@./AGENTS.md` ; `.github/copilot-instructions.md` ne réimporte pas `AGENTS.md`, que Copilot lit déjà ; Copilot lit aussi `CLAUDE.md` et `GEMINI.md`, qui commencent donc par la CLI qu'ils visent ; essai à consigner dans `docs/agents/support.md` : Copilot ne charge pas `AGENTS.md` une seconde fois par l'import de `CLAUDE.md` ;
+- mécanismes retenus par PB-034 ([prise en charge des agents](../agents/support.md)) : `GEMINI.md` importe `@./AGENTS.md` ; `.github/copilot-instructions.md` ne réimporte pas `AGENTS.md`, que Copilot lit déjà ; Copilot lit aussi `CLAUDE.md` et `GEMINI.md`, qui commencent donc par la CLI qu'ils visent ; essai à consigner dans `docs/agents/support.md` : Copilot ne charge pas `AGENTS.md` une seconde fois par l'import de `CLAUDE.md` ;
 - test : aucun fichier ne recopie une règle d'or d'`AGENTS.md` ; chaque lien résout vers un fichier livré ;
 - `AGENTS.md` : section « Agent kit » courte qui liste les quatre fichiers, les skills et les hooks ;
 - `README.md` : agents pris en charge et leur niveau (adaptateur natif ou fallback).
@@ -2074,7 +2076,7 @@ Une solution générée contient quatre skills au format Agent Skills qui ajoute
 - copie au pack : un élément `None` du projet de templates écrit `.claude/skills/**` dans `content/hardslice-api/.agents/skills/` du paquet. Le dossier `.agents/` n'existe pas dans les sources ;
 - `AGENTS.md` : « Adding a first module » et « Adding a slice » renvoient aux skills et gardent les commandes des templates et ce que contient une slice ; « Agent kit » liste les skills. 139 lignes avec l'exemple, 146 avec `--no-sample` ; `.claude/CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md` nomment les skills de leur dossier ;
 - tests (`TemplatePackageTests`) : en-tête valide et nom du dossier, quatre skills et pas de `.agents/` dans les sources ; chaque `dotnet new` cité nomme un template du paquet, des options qu'il déclare et une valeur parmi ses choix, y compris les options citées dans le texte ; chaque chemin cité existe dans le template hors exemple ; liens résolus ; « Never » complet ; dans le paquet, la copie de `.agents/skills/` est identique à la source. `scripts/test-template.sh` vérifie dans les deux variantes générées les deux dossiers, leur égalité, le nom et les chemins cités ;
-- exécutions manuelles avec Claude Code 2.1.316 (`claude-sonnet-5-5`) sur une solution `--no-sample`, une demande métier qui ne nomme pas la skill : [prise en charge des agents](agents/support.md), E15 à E18. Chaque fois la skill attendue est chargée, l'élément est généré par son template, la vérification relancée hors de l'agent passe, aucun fichier protégé n'est modifié et aucun marqueur ne reste.
+- exécutions manuelles avec Claude Code 2.1.316 (`claude-sonnet-5-5`) sur une solution `--no-sample`, une demande métier qui ne nomme pas la skill : [prise en charge des agents](../agents/support.md), E15 à E18. Chaque fois la skill attendue est chargée, l'élément est généré par son template, la vérification relancée hors de l'agent passe, aucun fichier protégé n'est modifié et aucun marqueur ne reste.
 
 **Dépendances**
 
@@ -2211,7 +2213,7 @@ Les hooks accélèrent et ne sont pas le garde-fou : un agent ou un humain qui l
 - `COPILOT_CLI` défini : code `0` sans rien lancer ;
 - `AGENTS.md`, `.claude/CLAUDE.md`, `.github/copilot-instructions.md`, `README.md` et `docs/agents/support.md` : hooks actifs, budgets et fichiers protégés ;
 - tests : `ClaudeHookTests` sur les fixtures de PB-034 (`.cs` fautif, fichier non `.cs`, fichiers protégés et faux amis, chemins Windows, fin en échec puis plafond, autre échec, nouveau tour, mode compatible de Copilot, configuration du template) ; `scripts/test-template.sh` lance les trois hooks sur la solution générée ;
-- essais manuels avec Claude Code 2.1.316 sur la solution générée : HS010 renvoyé et corrigé après édition, édition de `scripts/check.sh` refusée, fin bloquée par un test en échec puis corrigée ([E19] à [E21] de la [prise en charge des agents](agents/support.md)) ;
+- essais manuels avec Claude Code 2.1.316 sur la solution générée : HS010 renvoyé et corrigé après édition, édition de `scripts/check.sh` refusée, fin bloquée par un test en échec puis corrigée ([E19] à [E21] de la [prise en charge des agents](../agents/support.md)) ;
 - limites : une écriture par le shell échappe aux hooks d'édition ; le hook de fin lance la vérification complète à chaque fin de tour, même sans modification ; sans `dotnet tool restore`, la commande est introuvable et l'agent continue sans vérification.
 
 **Dépendances**
@@ -2238,7 +2240,7 @@ Pour chacun des trois CLI, la solution générée contient l'adaptateur natif re
 **Périmètre**
 
 - configuration native à l'emplacement exigé par le CLI, versionnée dans le template ; traduction de sa charge utile par `dotnet hardslice hook <cli> <événement>` ;
-- retenus par PB-034 ([prise en charge des agents](agents/support.md)) : Codex, `.codex/hooks.json` (`PostToolUse` sur `apply_patch` et `Stop`, code `2`), avec l'approbation par `/hooks` décrite dans `README.md` et `AGENTS.md` et une commande stable d'une version à l'autre ; Copilot CLI, `.github/hooks/hardslice.json` (`postToolUse` sur `edit` et `create` par `additionalContext`, `agentStop` par `decision: "block"`) ; Gemini CLI, fallback, faute d'essai possible sans clé API ;
+- retenus par PB-034 ([prise en charge des agents](../agents/support.md)) : Codex, `.codex/hooks.json` (`PostToolUse` sur `apply_patch` et `Stop`, code `2`), avec l'approbation par `/hooks` décrite dans `README.md` et `AGENTS.md` et une commande stable d'une version à l'autre ; Copilot CLI, `.github/hooks/hardslice.json` (`postToolUse` sur `edit` et `create` par `additionalContext`, `agentStop` par `decision: "block"`) ; Gemini CLI, fallback, faute d'essai possible sans clé API ;
 - protection des fichiers protégés là où le CLI la permet ;
 - tableau des capacités par CLI dans `docs/agents/support.md` et `README.md`, tenu à jour par ce ticket ;
 - un CLI sans mécanisme retenu n'a pas de configuration morte dans le template.
@@ -2250,9 +2252,9 @@ Pour chacun des trois CLI, la solution générée contient l'adaptateur natif re
 - Copilot CLI, `.github/hooks/hardslice.json` : `preToolUse` et `postToolUse` avec le matcher `edit|create`, `agentStop`, commandes `bash` et `powershell` identiques, délais de 30, 120 et 600 s ; réponses en JSON avec le code `0` : `permissionDecision: "deny"`, `additionalContext` coupé à 9 000 caractères (Copilot le borne à 10 Kio), `decision: "block"` ; rien quand la vérification de fin passe, Copilot n'ayant pas de message à l'utilisateur ;
 - Gemini CLI : fallback, aucun `.gemini/settings.json` ; `hook gemini` n'existe pas ;
 - `.codex/` et `.github/hooks/` rejoignent les fichiers protégés, pour les trois adaptateurs ; « Forbidden » d'`AGENTS.md` les nomme ;
-- `AGENTS.md`, `.github/copilot-instructions.md`, `README.md` (tableau des CLI et de leurs hooks), le README de l'outil et la [prise en charge des agents](agents/support.md) (tableau des capacités) décrivent l'adaptateur de chaque CLI ;
+- `AGENTS.md`, `.github/copilot-instructions.md`, `README.md` (tableau des CLI et de leurs hooks), le README de l'outil et la [prise en charge des agents](../agents/support.md) (tableau des capacités) décrivent l'adaptateur de chaque CLI ;
 - tests : `CodexHookTests` et `CopilotHookTests` sur les fixtures de PB-034 (patch d'un `.cs`, de plusieurs fichiers, d'un fichier protégé par chaque en-tête, ajout d'un fichier non `.cs`, autre outil de Copilot, erreurs trop longues, fin en échec puis plafond, relances propres à chaque CLI, `COPILOT_CLI` sans effet sur ces hooks, configuration du template) ; `scripts/test-template.sh` lance les hooks de Codex et de Copilot sur la solution générée ;
-- essais manuels avec Copilot CLI 1.0.105 et Codex 0.165.0 sur la solution générée : HS010 renvoyé et corrigé après édition, édition de `scripts/check.sh` refusée, fin bloquée par un échec puis corrigée ([E22] à [E26] de la [prise en charge des agents](agents/support.md)) ;
+- essais manuels avec Copilot CLI 1.0.105 et Codex 0.165.0 sur la solution générée : HS010 renvoyé et corrigé après édition, édition de `scripts/check.sh` refusée, fin bloquée par un échec puis corrigée ([E22] à [E26] de la [prise en charge des agents](../agents/support.md)) ;
 - limites : sans `dotnet tool restore`, `dotnet hardslice` sort avec le code `0` et les hooks ne font rien ; une écriture par le shell échappe aux hooks d'édition ; Copilot termine un tour après huit blocages consécutifs ; un outil d'édition de Copilot autre qu'`edit` et `create` n'est pas couvert.
 
 **Dépendances**
@@ -2753,23 +2755,23 @@ L'incrément est terminé lorsque PB-052 à PB-059 sont satisfaits et que les jo
 
 | Incrément | Résultat produit | Contenu principal | Acceptation globale |
 |---|---|---|---|
-| **3 — Analyseurs v0.2** | Les dérives principales sont détectées par des diagnostics réparables | Détaillé en section 4 (PB-018 à PB-033) : classification par contrats, HS003 à HS011, HS015 et HS019, diagnostics de configuration HS900 à HS902, niveaux d'analyse, `check`, `explain`, performance, préversion NuGet | Définition de fini de la section 4 |
-| **4 — Boucle agent v0.3** | Un agent génère puis corrige par les chemins officiels | Détaillé en section 5 (PB-034 à PB-051) : templates d'éléments, six skills, fichiers de guidage des quatre agents, hooks après édition et de fin de tâche, HS000, scripts uniques pour hooks, pre-commit et CI, boucles E2E, préversion NuGet | Une slice est générée, complétée et vérifiée sans recréer manuellement sa structure ; les quatre agents ciblés disposent d'un adaptateur natif ou du fallback documenté |
-| **5 — Benchmark v0.4** | L'effet des garde-fous est mesuré et publié | Configurations A/B/C, tâches Bookings, runner, répétitions, coûts et qualité | Protocole, prompts, versions, résultats bruts et analyse sont publiables et reproductibles |
-| **6 — Adoption v0.5** | Une équipe ajoute HardSlice sans corriger toute sa dette | `init`, `map`, conventions, baseline, cliquet, `report`, `verify`, mode couches applicable | Les violations existantes sont baselinées, une nouvelle violation est bloquée et une correction réduit la baseline |
-| **7 — Comparaison v0.6** | Les architectures couches et slices sont comparées | Applications équivalentes, mêmes tâches, agents, modèles et budgets | Les conclusions distinguent l'effet de l'architecture de celui des garde-fous |
-| **8 — Distribution v1.0** | HardSlice devient un produit open source installable et maintenable | Paquets stables, documentation, site, CI de publication, compatibilité, sécurité et contribution, options de template `--aspire` et SQL Server | Un utilisateur externe réussit les parcours greenfield et adoption depuis la documentation publique |
+| **3, Analyseurs v0.2** (terminé, sauf la publication) | Les dérives principales sont détectées par des diagnostics réparables | Détaillé en section 4 (PB-018 à PB-033) : classification par contrats, HS003 à HS011, HS015 et HS019, diagnostics de configuration HS900 à HS902, niveaux d'analyse, `check`, `explain`, performance, préversion NuGet | Définition de fini de la section 4 |
+| **4, Boucle agent v0.3** (terminé, sauf la publication) | Un agent génère puis corrige par les chemins officiels | Détaillé en section 5 (PB-034 à PB-051) : templates d'éléments, six skills, fichiers de guidage des quatre agents, hooks après édition et de fin de tâche, HS000, scripts uniques pour hooks, pre-commit et CI, boucles E2E, préversion NuGet | Une slice est générée, complétée et vérifiée sans recréer manuellement sa structure ; les quatre agents ciblés disposent d'un adaptateur natif ou du fallback documenté |
+| **5, Benchmark v0.4** | L'effet des garde-fous est mesuré et publié | Configurations A/B/C, tâches Bookings, runner, répétitions, coûts et qualité | Protocole, prompts, versions, résultats bruts et analyse sont publiables et reproductibles |
+| **6, Adoption v0.5** | Une équipe ajoute HardSlice sans corriger toute sa dette | `init`, `map`, conventions, baseline, cliquet, `report`, `verify`, mode couches applicable | Les violations existantes sont baselinées, une nouvelle violation est bloquée et une correction réduit la baseline |
+| **7, Comparaison v0.6** | Les architectures couches et slices sont comparées | Applications équivalentes, mêmes tâches, agents, modèles et budgets | Les conclusions distinguent l'effet de l'architecture de celui des garde-fous |
+| **8, Distribution v1.0** | HardSlice devient un produit open source installable et maintenable | Paquets stables, documentation, site, CI de publication, compatibilité, sécurité et contribution, options de template `--aspire` et SQL Server | Un utilisateur externe réussit les parcours greenfield et adoption depuis la documentation publique |
 
 ## 8. Différé, mais non abandonné
 
 | Élément | Incrément prévu |
 |---|---:|
-| Catalogue initial complet | 3 |
-| Templates d'éléments, six skills et hooks | 4 |
-| Claude Code, Codex, GitHub Copilot et Gemini CLI | 4, avec adaptateur natif si disponible et fallback `AGENTS.md` + vérification sinon |
+| Catalogue initial complet | 3, livré |
+| Templates d'éléments, six skills et hooks | 4, livré |
+| Claude Code, Codex, GitHub Copilot et Gemini CLI | 4, livré : adaptateur natif pour Claude Code, Codex et Copilot CLI, fallback `AGENTS.md` et vérification pour Gemini CLI |
 | Benchmark statistique A/B/C | 5 |
 | `init`, `map`, baseline, cliquet, `report` et `verify` | 6 |
-| Mode couches complet | 6–7 |
+| Mode couches complet | 6 et 7 |
 | Benchmark couches contre slices | 7 |
 | Paquets stables et site public | 8 |
 | SQL Server en option et orchestration Aspire (`--aspire`) | 8 |

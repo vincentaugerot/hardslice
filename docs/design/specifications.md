@@ -1,8 +1,10 @@
+> **Document de conception, en français.** Ce dossier rassemble les documents de travail du projet : cette spécification, le [plan de livraison](plan.md) et le [backlog](product-backlog.md). Ils sont publics pour rendre la méthode transparente, mais ne sont pas une documentation d'utilisation : celle-ci est en anglais, dans le [README](../../README.md) et [docs/](../README.md).
+
 > **Statut : contrat produit approuvé.** Ce document définit le produit HardSlice et son périmètre. Le [plan de livraison](plan.md) en organise le séquençage et le [backlog produit](product-backlog.md) décrit le travail actif. Aucun de ces documents ne peut supprimer ou rendre conditionnel un livrable ci-dessous sans décision explicite du mainteneur.
 
 # HardSlice : spécifications du kit d'architecture .NET pour agents IA
 
-Statut : spécification produit v2.3, 31 octobre 2026. Le contenu fonctionnel provient de la v2 du 27 octobre 2026, complétée par les décisions de la v2.2 sur les analyseurs v0.2 et de la v2.3 sur la boucle agent v0.3.
+Statut : spécification produit v2.4, 3 novembre 2026. Le contenu fonctionnel provient de la v2 du 27 octobre 2026, complétée par les décisions de la v2.2 sur les analyseurs v0.2, de la v2.3 sur la boucle agent v0.3 et de la v2.4 sur la préparation de la première publication.
 
 Historique :
 - v1 : architecture en couches.
@@ -10,6 +12,7 @@ Historique :
 - v2.1 : « Keel » devient **HardSlice** ; les identifiants `KEELxxx` deviennent `HSxxx` et la CLI canonique devient `dotnet hardslice`.
 - v2.2 (préparation de v0.2) : classification des types par les contrats applicatifs `IEntity` et `IAggregateRoot` ; HS010 et HS011 deviennent des analyseurs HardSlice au lieu de `BannedApiAnalyzers` ; HS009 est séparée en contrôle structurel (HS009) et convention de nommage non bloquante (HS019) ; diagnostics de configuration HS900 à HS902 ; niveaux d'analyse ; `check` et `explain` livrés dès v0.2.
 - v2.3 (préparation de v0.3) : les templates d'éléments génèrent sans modifier les fichiers existants et leurs tests échouent tant que l'élément n'est pas complété ; les événements de domaine sont publiés dans la transaction de la commande ; le hook de fin lance la vérification complète si elle tient dans son budget ; HS000 porte sur les suppressions écrites dans le code source.
+- v2.4 (préparation de la publication) : la première préversion publiée sur NuGet.org est `0.3.0-preview.1`, qui couvre v0.2 et v0.3 ; `hardslice.json` porte une version de format ; `.agents/` est protégé ; la structure générée et les exemples suivent le template livré.
 
 ## 1. En une phrase
 
@@ -20,8 +23,7 @@ Slogan : « des vertical slices, maintenues propres par le build ».
 ## 2. Pourquoi
 
 - **Le problème** : un agent lit `AGENTS.md`, puis l'oublie ou le contourne dès que la tâche est longue. Les consignes en prose sont des conseils, pas des garde-fous.
-- **Pour Vincent** : crédibilité technique à Ottawa (DDD, CQRS, microservices, IA en production chez Edenred, SideHub). Matière à articles, à talks (meetup .NET Ottawa, ConFoo Montréal) et à conseil.
-- **Monétisation** : indirecte (ateliers, accompagnement d'équipes, entretiens). Piste plus tard : un support entreprise pour l'adoption sur des solutions existantes.
+- **La réponse** : des règles que le build applique, avec des messages écrits pour qu'un agent se corrige seul, et des chemins officiels (templates, skills, hooks) qui rendent la bonne structure moins chère que le contournement.
 
 ## 3. Ce qui existe déjà (vérifié le 27 octobre 2026, à approfondir)
 
@@ -91,7 +93,7 @@ Sans garde-fous, les agents dégradent une architecture en slices plus vite qu'u
 | Templates d'éléments | `dotnet new hardslice-command`, `hardslice-query` (une slice complète chacun, endpoint et test compris), `hardslice-module`, `hardslice-aggregate`, `hardslice-event` | Générer le code répétitif de façon déterministe. Les skills les appellent au lieu d'écrire le code à la main. Un template crée les fichiers de son élément et affiche les enregistrements à ajouter ; le code généré compile, mais ses tests et la vérification échouent tant que l'élément n'est pas complété (marqueur `TODO(hardslice):`) |
 | Analyseurs Roslyn | Paquet NuGet `HardSlice.Analyzers` dès le premier incrément | Règles appliquées à la compilation, dans l'IDE et en CI, sans copie susceptible de dériver |
 | Tests d'architecture | Projet `tests/MyApp.ArchitectureTests` | Règles de dépendances entre projets, modules et slices |
-| Kit agents | `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `GEMINI.md`, skills, hooks | Guider les agents et boucler sur les erreurs |
+| Kit agents | `AGENTS.md`, `.claude/CLAUDE.md`, `.github/copilot-instructions.md`, `GEMINI.md`, skills, hooks de Claude Code, Codex et Copilot CLI, pre-commit et CI générée | Guider les agents et boucler sur les erreurs |
 | Script de vérification | `scripts/check.sh` et `scripts/check.ps1` | Point unique appelé par les hooks, le pre-commit git et la CI |
 | Outil `dotnet hardslice` | Outil local `HardSlice.Tool`, restauré avec `dotnet tool restore` et épinglé à la version des analyseurs : `check` et `explain` dès v0.2, puis `init`, `map`, `baseline`, `report` et `verify` | Vérifier, expliquer une règle, puis ajouter HardSlice à une solution existante, en couches ou en slices |
 | Benchmark | Dossier `bench/` et page de résultats | Mesurer l'effet, nourrir les articles |
@@ -102,15 +104,18 @@ Sans garde-fous, les agents dégradent une architecture en slices plus vite qu'u
 ### Structure
 
 ```
-MyApp.sln
+MyApp.slnx
+global.json                  # SDK épinglé
 Directory.Build.props        # net10.0, Nullable, TreatWarningsAsErrors, HardSliceAnalysisMode
 Directory.Packages.props     # versions centralisées, HardSlice.Analyzers
 .editorconfig                # réglages individuels des règles HS
 hardslice.json               # version du format, style (slices), contrats de classification, dossiers de Shared
 .config/dotnet-tools.json    # dotnet-ef (version d'EF Core), HardSlice.Tool (version des analyseurs)
-AGENTS.md  CLAUDE.md  GEMINI.md  .github/copilot-instructions.md
-.claude/settings.json        # hooks
-.claude/skills/              # skills
+AGENTS.md  GEMINI.md  .github/copilot-instructions.md
+.claude/CLAUDE.md            # importe ../AGENTS.md
+.claude/settings.json  .codex/hooks.json  .github/hooks/hardslice.json   # hooks des agents
+.claude/skills/  .agents/skills/                                          # skills, la seconde copiée de la première au pack
+.githooks/pre-commit  .github/workflows/hardslice.yml                     # vérification avant commit et en CI
 scripts/check.sh  scripts/check.ps1
 src/
   MyApp.Domain/              # aucune dépendance, partagé par les slices
@@ -135,7 +140,7 @@ src/
     Program.cs
 tests/
   MyApp.Tests/               # unitaires, même chemin que la slice
-    Features/Bookings/ConfirmBooking/ConfirmBookingTests.cs
+    Features/Bookings/ConfirmBooking/ConfirmBookingValidatorTests.cs
   MyApp.IntegrationTests/    # Testcontainers PostgreSQL, même chemin que la slice
   MyApp.ArchitectureTests/
 docs/rules/
@@ -150,14 +155,14 @@ Un module complet, que l'agent recopie : un agrégat `Booking` avec un invariant
 ```csharp
 namespace MyApp.Features.Bookings.ConfirmBooking;
 
-public sealed record ConfirmBookingCommand(Guid RoomId, DateTimeOffset Start, DateTimeOffset End) : IRequest<BookingId>;
+public sealed record ConfirmBookingCommand(Guid RoomId, DateTimeOffset Start, DateTimeOffset End) : ICommand<Guid>;
 
 internal sealed class ConfirmBookingValidator : AbstractValidator<ConfirmBookingCommand> { /* ... */ }
 
-internal sealed class ConfirmBookingHandler(AppDbContext db, TimeProvider clock)
-    : IRequestHandler<ConfirmBookingCommand, BookingId>
+internal sealed class ConfirmBookingHandler(AppDbContext db)
+    : IRequestHandler<ConfirmBookingCommand, Guid>
 {
-    public async Task<BookingId> Handle(ConfirmBookingCommand command, CancellationToken ct)
+    public async Task<Guid> Handle(ConfirmBookingCommand command, CancellationToken ct)
     {
         // charge l'agrégat, appelle une méthode du domaine, sauvegarde
     }
@@ -177,11 +182,11 @@ Tout est `internal` sauf la commande : une autre slice ne peut pas appeler ce ha
 
 | Besoin | Choix | Pourquoi |
 |---|---|---|
-| Médiateur | Code maison d'environ 100 lignes (comme dans SideHub : `IRequest`, `IRequestHandler`, `IPipelineBehavior`, `IMediator`) | MediatR est sous licence commerciale depuis 2025 |
+| Médiateur | Petit médiateur maison (`ICommand<T>`, `IQuery<T>`, `IRequestHandler`, `IPipelineBehavior`, `IMediator`) | MediatR est sous licence commerciale depuis 2025 |
 | Mapping | Manuel (méthodes `ToDto`, projections) | AutoMapper est passé sous licence commerciale |
 | Validation | FluentValidation | Licence Apache 2.0 |
 | Assertions | Shouldly | FluentAssertions 8 est sous licence commerciale |
-| Tests | xUnit v3, NSubstitute, Testcontainers | Standards libres |
+| Tests | xUnit v3, Testcontainers | Standards libres |
 | Persistance | EF Core et Npgsql, `AsNoTracking` et projections pour les requêtes | Une seule techno de données à apprendre |
 | Règles d'architecture | ArchUnitNET (tranché par PB-014, cf. section 13) | |
 | Tests présents au chemin des slices (HS014, HS018) | `Microsoft.CodeAnalysis.CSharp`, arbre syntaxique des sources de tests (PB-015) | Licence MIT ; ne dépend pas d'assemblies de tests construits ou périmés |
@@ -211,7 +216,7 @@ Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modif
 | HS011 | Pas de `.Result`, `.Wait()`, `GetAwaiter().GetResult()` sur une tâche, ni `async void` (méthodes et lambdas converties en délégués `void`) | Analyseur | Les deux |
 | HS012 | Un module n'utilise pas les types d'un autre module : il passe par un événement de domaine ou le contrat public du module (`XxxModule`) | Test d'architecture | Les deux |
 | HS013 | Toute commande qui a des paramètres a un validateur | Test d'architecture | Les deux |
-| HS014 | Tout handler de commande a des tests | Test d'architecture | Les deux |
+| HS014 | Tout handler de commande et tout gestionnaire d'événement de domaine a des tests au chemin de sa slice | Test d'architecture | Les deux |
 | HS015 | L'endpoint d'une slice est dans la slice, s'enregistre dans le `MapGroup` du module et renvoie des `TypedResults` | Analyseur | Slices |
 | **HS016** | **Une slice n'utilise aucun type d'une autre slice** (ni son handler, ni sa commande, ni son DTO). Pour partager : le domaine, un événement ou le contrat du module. Les handlers, validateurs et endpoints sont `internal` | Test d'architecture et analyseur | Slices |
 | **HS017** | **`Shared` reste transverse** : il ne dépend jamais de `Features` ni d'un module, et ne contient que les dossiers autorisés dans `hardslice.json` (par défaut `Messaging`, `Persistence`, `Behaviors`) | Test d'architecture | Slices |
@@ -259,14 +264,14 @@ Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en 
 ### Trois couches
 
 1. **Guider** :
-   - `AGENTS.md` est la source unique, courte (moins de 150 lignes) : carte du projet (modules et slices), 7 règles d'or, comment ajouter une slice, comment vérifier, ce qui est interdit.
+   - `AGENTS.md` est la source unique, courte (moins de 150 lignes) : carte du projet (modules et slices), 11 règles d'or, comment ajouter une slice, comment vérifier, ce qui est interdit.
    - Règle d'or n°1 : « pour un cas d'usage, lis sa slice et l'agrégat qu'elle utilise, rien d'autre ».
-   - `CLAUDE.md` importe `AGENTS.md` (`@AGENTS.md`). `GEMINI.md` et `copilot-instructions.md` y renvoient aussi.
+   - `.claude/CLAUDE.md` importe `AGENTS.md` (`@../AGENTS.md`) ; il vit dans `.claude/` parce que Copilot CLI lit un `CLAUDE.md` racine et développerait l'import une seconde fois. `GEMINI.md` importe aussi `AGENTS.md`, que Codex et Copilot CLI lisent nativement.
 2. **Contraindre** : les analyseurs et les tests d'architecture font échouer `dotnet build` et `dotnet test`, pour tous les agents.
 3. **Boucler** (Claude Code d'abord) :
    - Après chaque édition d'un `.cs` (`PostToolUse`), un build incrémental. Les erreurs HS reviennent à l'agent (code de sortie 2). Budget : moins de 10 secondes.
-   - Avant que l'agent rende la main (`Stop`), `scripts/check.sh` lance le build complet, les tests d'architecture et les tests de la slice touchée. En cas d'échec, l'agent continue de corriger. Budget : moins de 60 secondes. Si la vérification complète dépasse ce budget, le hook lance une vérification réduite aux slices touchées ; seule la vérification complète fait foi (décision du 31/10/2026, selon la mesure de PB-045). Mesure de PB-045 : la vérification complète tient le budget, le hook de fin lance `scripts/check.sh` tel quel et le mode réduit n'est pas livré ; le hook après édition lance `scripts/check.sh --build` ([coût mesuré](performance/analyzers.md)). Réalisé par PB-046 dans `.claude/settings.json` : `dotnet hardslice hook claude <événement>` refuse aussi l'édition des fichiers protégés (`PreToolUse`), et le hook de fin relance l'agent au plus trois fois pour le même échec et huit fois par session (PB-055). Un hook qui plante ne laisse jamais passer l'agent : l'édition est refusée, ou l'échec rendu à l'agent comme une vérification en échec. `check` sort avec `0` (vérification réussie), `1` (une étape a échoué, sa sortie affichée telle quelle) ou `2` (mauvais usage seulement). Fichiers protégés (PB-053), dans l'outil (`ProtectedFiles`) et dans la seule liste écrite pour les agents, « Forbidden » de `AGENTS.md`, à laquelle les skills renvoient : `.editorconfig`, `.globalconfig`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Build.rsp` et `Directory.Packages.props` dans tout dossier ; `hardslice.json`, `.config/dotnet-tools.json`, `.github/workflows/hardslice.yml`, `Directory.Solution.props`, `Directory.Solution.targets` et `nuget.config` à la racine ; les dossiers `scripts/`, `tests/<App>.ArchitectureTests/`, `.claude/`, `.agents/`, `.codex/`, `.github/hooks/` et `.githooks/`.
-   - Les autres CLI : hooks équivalents quand ils existent, sinon `AGENTS.md` leur demande de lancer `scripts/check.sh` avant de finir. Codex (`.codex/hooks.json`) et Copilot CLI (`.github/hooks/`) ont un adaptateur natif ; Gemini CLI garde le fallback en v0.3 ([prise en charge des agents](agents/support.md), PB-034).
+   - Avant que l'agent rende la main (`Stop`), la vérification complète tourne : build, tests unitaires, d'architecture et d'intégration, marqueurs `TODO(hardslice):`. En cas d'échec, l'agent continue de corriger. Budget : moins de 60 secondes. Si la vérification complète dépasse ce budget, le hook lance une vérification réduite aux slices touchées ; seule la vérification complète fait foi (décision du 31/10/2026, selon la mesure de PB-045). Mesure de PB-045 : la vérification complète tient le budget, le hook de fin lance la vérification de `dotnet hardslice check` dans le processus de l'outil local, sans mode réduit ; le hook après édition lance celle de `dotnet hardslice check --build` ([coût mesuré](../performance/analyzers.md)). Réalisé par PB-046 dans `.claude/settings.json` : `dotnet hardslice hook claude <événement>` refuse aussi l'édition des fichiers protégés (`PreToolUse`), et le hook de fin relance l'agent au plus trois fois pour le même échec et huit fois par session (PB-055). Un hook qui plante ne laisse jamais passer l'agent : l'édition est refusée, ou l'échec rendu à l'agent comme une vérification en échec. `check` sort avec `0` (vérification réussie), `1` (une étape a échoué, sa sortie affichée telle quelle) ou `2` (mauvais usage seulement). Fichiers protégés (PB-053), dans l'outil (`ProtectedFiles`) et dans la seule liste écrite pour les agents, « Forbidden » de `AGENTS.md`, à laquelle les skills renvoient : `.editorconfig`, `.globalconfig`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Build.rsp` et `Directory.Packages.props` dans tout dossier ; `hardslice.json`, `.config/dotnet-tools.json`, `.github/workflows/hardslice.yml`, `Directory.Solution.props`, `Directory.Solution.targets` et `nuget.config` à la racine ; les dossiers `scripts/`, `tests/<App>.ArchitectureTests/`, `.claude/`, `.agents/`, `.codex/`, `.github/hooks/` et `.githooks/`.
+   - Les autres CLI : hooks équivalents quand ils existent, sinon `AGENTS.md` leur demande de lancer `scripts/check.sh` avant de finir. Codex (`.codex/hooks.json`) et Copilot CLI (`.github/hooks/`) ont un adaptateur natif ; Gemini CLI garde le fallback en v0.3 ([prise en charge des agents](../agents/support.md), PB-034).
 
 ### Skills
 
@@ -281,7 +286,7 @@ Critères : dire ce qui est fautif (le symbole exact et sa slice), la règle en 
 
 Règles et skill nommée par leur message : `add-slice` (HS004, HS013, HS014, HS015, HS018), `extract-to-domain` (HS007, HS016), `add-aggregate` (HS008, HS902), `add-domain-event` (HS009, HS012, HS019), `fix-architecture-violation` (HS000, HS001, HS003, HS005, HS006, HS010, HS011, HS017, HS900, HS901).
 
-Les skills sont au format Agent Skills (`SKILL.md`), lu par les quatre CLI : la source est `.claude/skills/`, et une copie produite au pack dans `.agents/skills/` sert Codex et Gemini CLI ([prise en charge des agents](agents/support.md)).
+Les skills sont au format Agent Skills (`SKILL.md`), lu par les quatre CLI : la source est `.claude/skills/`, et une copie produite au pack dans `.agents/skills/` sert Codex et Gemini CLI ([prise en charge des agents](../agents/support.md)).
 
 ### Garde-fous pour les agents
 
@@ -326,7 +331,7 @@ Objectif : des chiffres mesurés, publiés avec les données brutes. Deux questi
   - **fichiers lus et tokens d'entrée** (pour vérifier l'hypothèse du contexte plus rapide).
   - duplication de logique métier entre slices.
   - coût, durée, nombre d'itérations, interventions humaines.
-- **Exécution** : des workflows SideHub lancent les runs et collectent les résultats (le benchmark sert aussi de démonstration de SideHub).
+- **Exécution** : un orchestrateur, à choisir, lance les runs isolés et collecte les résultats.
 - **Transparence** : publier le protocole, les prompts, les résultats bruts et les cas où HardSlice, ou les slices, coûtent plus de tokens ou de temps.
 
 ## 12. Plan
@@ -336,24 +341,24 @@ Cette table décrit le périmètre produit promis. Le séquençage d'exécution 
 | Version | Contenu | Résultat publiable |
 |---|---|---|
 | v0.1 | Template de solution en slices, module Bookings, tests d'architecture HS001, 012 à 014 et 016 à 018, `AGENTS.md`, `scripts/check.sh` | Repo public |
-| v0.2 | Analyseurs HS003 à 011, 015 et 019, classification par contrats et diagnostics de configuration HS900 à 902, niveaux d'analyse, `dotnet hardslice check` et `explain`, messages pour agents, fiches de règles, préversion NuGet | Post « des erreurs de compilation écrites pour les agents » |
-| v0.3 | Templates d'éléments, skills, hooks Claude Code, HS000 | Démo vidéo courte |
-| v0.4 | Benchmark, question 1 (A/B/C) | Article principal et post LinkedIn chiffré |
+| v0.2 | Analyseurs HS003 à 011, 015 et 019, classification par contrats et diagnostics de configuration HS900 à 902, niveaux d'analyse, `dotnet hardslice check` et `explain`, messages pour agents, fiches de règles | Post « des erreurs de compilation écrites pour les agents » |
+| v0.3 | Templates d'éléments, skills, hooks de Claude Code, Codex et Copilot CLI, HS000 ; première préversion NuGet, `0.3.0-preview.1`, qui couvre aussi v0.2 | Démo vidéo courte |
+| v0.4 | Benchmark, question 1 (A/B/C) | Article principal chiffré |
 | v0.5 | `dotnet hardslice init`, `map`, `baseline`, cliquet et `report`, règles en mode couches (HS002) | Post « adopter sur un projet existant » |
 | v0.6 | Benchmark, question 2 (couches contre slices) | Article « couches ou vertical slices pour les agents » |
-| v1.0 | Paquets NuGet (templates, analyseurs, outil), site de documentation, CI GitHub Actions et Azure Pipelines | Annonce, talk |
+| v1.0 | Paquets NuGet stables (templates, analyseurs, outil), site de documentation, CI GitHub Actions et Azure Pipelines | Annonce, talk |
 
 ## 13. Questions ouvertes
 
 1. ~~ArchUnitNET ou NetArchTest (maintenance, expressivité, vitesse) ?~~ **Résolu : ArchUnitNET, maintenu, expose la cible de chaque dépendance et permet de nommer le type fautif (évaluation dans PB-014).**
 2. ~~Analyseurs dans la solution puis paquet NuGet ?~~ **Résolu : paquet `HardSlice.Analyzers` dès le premier incrément.**
-3. ~~Quels hooks existent aujourd'hui pour Codex, Copilot CLI et Gemini CLI ?~~ **Résolu : les trois ont un hook après outil et un hook de fin de tour qui renvoient une erreur à l'agent et le font continuer. Ceux de Codex et de Copilot CLI sont essayés et retenus ; ceux de Gemini CLI, non essayés faute de compte servi, laissent le fallback en v0.3 ([prise en charge des agents](agents/support.md), PB-034).**
-4. ~~Quels CLI lisent les skills au format `SKILL.md` ?~~ **Résolu : les quatre. Claude Code lit `.claude/skills/`, Codex `.agents/skills/`, Gemini CLI `.agents/skills/` et `.gemini/skills/`, Copilot CLI les trois ([prise en charge des agents](agents/support.md), PB-034).**
+3. ~~Quels hooks existent aujourd'hui pour Codex, Copilot CLI et Gemini CLI ?~~ **Résolu : les trois ont un hook après outil et un hook de fin de tour qui renvoient une erreur à l'agent et le font continuer. Ceux de Codex et de Copilot CLI sont essayés et retenus ; ceux de Gemini CLI, non essayés faute de compte servi, laissent le fallback en v0.3 ([prise en charge des agents](../agents/support.md), PB-034).**
+4. ~~Quels CLI lisent les skills au format `SKILL.md` ?~~ **Résolu : les quatre. Claude Code lit `.claude/skills/`, Codex `.agents/skills/`, Gemini CLI `.agents/skills/` et `.gemini/skills/`, Copilot CLI les trois ([prise en charge des agents](../agents/support.md), PB-034).**
 5. Seuil de découpage d'une slice en plusieurs fichiers : 200 lignes, ou au nombre de types ?
 6. Les modules restent-ils des dossiers d'un même projet, ou deviennent-ils des projets séparés quand la solution grossit ?
 7. ~~Où vit la persistance d'un module ?~~ **Résolu : `Shared/Persistence` contient `AppDbContext`, la connexion et les migrations ; chaque configuration EF Core d'agrégat vit à la racine de son module, hors de toute slice.**
-8. ~~Temps réel du build incrémental après chaque édition sur une grosse solution : tenir les 10 secondes ?~~ **Résolu pour la fixture de performance (Bookings et 20 modules de 10 slices) : `scripts/check.sh --build` tient les 10 secondes, et `scripts/check.sh` complet les 60 secondes du hook de fin sur une application générée avec Bookings ; le job `performance` les mesure à chaque exécution ([coût mesuré](performance/analyzers.md), PB-045). Une solution bien plus grosse reste à mesurer.**
-9. ~~Nom définitif ?~~ **Résolu : HardSlice.** La disponibilité exacte des identifiants NuGet et du domaine reste à vérifier avant publication.
+8. ~~Temps réel du build incrémental après chaque édition sur une grosse solution : tenir les 10 secondes ?~~ **Résolu pour la fixture de performance (Bookings et 20 modules de 10 slices) : `scripts/check.sh --build` tient les 10 secondes, et `scripts/check.sh` complet les 60 secondes du hook de fin sur une application générée avec Bookings ; le job `performance` les mesure à chaque exécution ([coût mesuré](../performance/analyzers.md), PB-045). Une solution bien plus grosse reste à mesurer.**
+9. ~~Nom définitif ?~~ **Résolu : HardSlice.** Les identifiants `HardSlice.Analyzers`, `HardSlice.Templates` et `HardSlice.Tool` sont libres sur NuGet.org (vérifié le 03/11/2026).
 10. Licence du projet : MIT.
 
 ## 14. Indicateurs de réussite
@@ -362,9 +367,3 @@ Cette table décrit le périmètre produit promis. Le séquençage d'exécution 
 - Article couches contre slices publié, avec des chiffres sur les fichiers lus et les tokens.
 - Étoiles GitHub et téléchargements NuGet.
 - Une équipe externe qui adopte `dotnet hardslice init` sur une solution existante.
-- Un talk accepté (meetup .NET Ottawa, ConFoo Montréal).
-- Des demandes d'atelier ou de conseil.
-
-## Projet lié
-
-Ghostline Ottawa (page « Ghostline Ottawa : spécifications »), qui peut être construit avec HardSlice pour en être la première vraie démonstration.

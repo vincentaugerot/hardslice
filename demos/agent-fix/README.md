@@ -1,6 +1,6 @@
 # Agent fix demonstrations
 
-PB-049 demonstration: for each blocking rule, an agent receives a development prompt on a generated solution that fails with that rule, reads the diagnostic, fixes the code and brings `scripts/check.sh` back to green, without bypassing any rule, configuration or test. It generalizes the HS016 demonstration of PB-008 to HS000, HS001, HS003 to HS018 and HS900 to HS902.
+For each blocking rule, an agent receives a development prompt on a generated solution that fails with that rule, reads the diagnostic, fixes the code and brings `scripts/check.sh` back to green, without bypassing any rule, configuration or test. It generalizes the first demonstration, on HS016 alone, to HS000, HS001, HS003 to HS018 and HS900 to HS902. Its tickets are PB-049 and PB-008 of the [backlog](../../docs/design/product-backlog.md), in French.
 
 ```text
 violation of the rule

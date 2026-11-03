@@ -1,6 +1,25 @@
 # Prise en charge des agents : instructions, hooks et skills
 
-Ce document établit, pour Claude Code, Codex, GitHub Copilot CLI et Gemini CLI, ce que chaque CLI lit réellement à sa version du moment : fichier d'instructions, `AGENTS.md`, hooks après édition et de fin de tâche, skills (PB-034). Il décide le contenu de PB-042 (fichiers d'instructions), PB-043 (skills) et PB-047 (adaptateurs), et précise PB-046 (hooks Claude Code). Il tranche les questions 3 et 4 de la [spécification](../specifications.md) (section 13).
+## Summary in English
+
+This report records what Claude Code, Codex, GitHub Copilot CLI and Gemini CLI really read, at the versions tried on 31 October and 1 November 2026, on Linux, in a generated solution: instruction files, `AGENTS.md`, hooks after an edit and at the end of a turn, and skills. Every finding cites an official source (`[S..]`) and a dated trial (`[E..]`); a mechanism that is only documented is never used for an adapter. The detail is in French below.
+
+| | Claude Code 2.1.316 | Codex 0.165.0 | Copilot CLI 1.0.105 | Gemini CLI 0.64.0 |
+|---|---|---|---|---|
+| Instructions | `.claude/CLAUDE.md`, which imports `AGENTS.md` | `AGENTS.md` | `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md` | `GEMINI.md`, which imports `AGENTS.md` (not tried) |
+| Skills | `.claude/skills/` | `.agents/skills/` | both | `.agents/skills/` (not tried) |
+| Hooks shipped | `.claude/settings.json`, tried | `.codex/hooks.json`, tried, once approved in `/hooks` | `.github/hooks/hardslice.json`, tried | none: fallback |
+| Error back to the agent | exit code 2 | exit code 2 | JSON with exit code 0 | n/a |
+
+Verdicts:
+
+- Claude Code, Codex and Copilot CLI get a native adapter: a protected file is refused before the edit, the build errors after an edit reach the agent, and a failing check at the end of a turn makes it go on.
+- Gemini CLI stays at the fallback: since June 2026 it no longer serves personal Google accounts, so no trial with a model was possible. `GEMINI.md` imports `AGENTS.md`, which asks the agent to run the check before it finishes.
+- Codex ignores the hooks of a project, without a message, until each one is approved in `/hooks`.
+- Copilot CLI also runs the hooks of `.claude/settings.json` without handing their errors to its agent: the Claude Code hooks exit at once under Copilot.
+- In every CLI, a file written through the shell escapes the edit hooks: the end hook, the full check and CI remain the net.
+
+Ce document établit, pour Claude Code, Codex, GitHub Copilot CLI et Gemini CLI, ce que chaque CLI lit réellement à sa version du moment : fichier d'instructions, `AGENTS.md`, hooks après édition et de fin de tâche, skills (PB-034). Il décide le contenu de PB-042 (fichiers d'instructions), PB-043 (skills) et PB-047 (adaptateurs), et précise PB-046 (hooks Claude Code). Il tranche les questions 3 et 4 de la [spécification](../design/specifications.md) (section 13).
 
 Chaque constat renvoie à une source officielle (`[S..]`, liste en fin de document) et à un essai daté (`[E..]`, journal plus bas). Un mécanisme seulement documenté est marqué « documenté, non essayé » et n'est pas retenu pour un adaptateur.
 

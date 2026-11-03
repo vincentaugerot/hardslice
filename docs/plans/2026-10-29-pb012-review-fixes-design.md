@@ -1,9 +1,0 @@
-# PB-012 review fixes
-
-The review reproduced two defects in the new infrastructure: a failed command leaves tracked EF mutations that another command can save in the same scope, and a widened response type can poison the mediator's static dispatcher cache. The user requested both corrections on 29 October 2026.
-
-Keep command ownership of transactions. On failure after starting a transaction, clear the change tracker and rethrow; disposing the transaction still rolls back database writes. Later commands reload entities from the database, including entities whose early save was rolled back. This also removes unsaved additions and modifications. Disposing the scoped DbContext would make the mediator unusable for subsequent commands, while detaching only Added entries would leave modified or stale entities behind.
-
-Make IRequest, ICommand and IQuery invariant in their response type: handlers and behaviors are resolved using that exact contract. Key cached dispatchers by both concrete request type and response type so explicitly implemented multiple response contracts cannot collide either. Supporting covariant responses would require extra handler and pipeline adaptation beyond this small mediator's scope; changing only the cache key would leave widened requests without a matching handler.
-
-First add regression tests and observe their failures. Cover response widening, two explicitly declared response contracts in both orders and across scopes, and consecutive commands after failures before and after SaveChanges. Check both added entities and modifications to existing entities, including reloading in the same scope. Then apply the fixes and run the repository tests, the template check scripts, generated-template verification and HS016 demo preparation. Keep existing PB-012 work intact.

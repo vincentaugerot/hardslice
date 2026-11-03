@@ -38,7 +38,7 @@ jobs:
         run: dotnet test --no-build
 
   # Separate job: a fresh runner and checkout, without the build job's outputs or any NuGet cache,
-  # so the template scenario cannot depend on state left by a previous build. It also runs the getting started path of README.md.
+  # so the template scenario cannot depend on state left by a previous build. It also runs the path of docs/getting-started.md.
   template:
     runs-on: ubuntu-latest
     steps:

@@ -1,6 +1,6 @@
 # Add-feature demonstration
 
-PB-050 demonstration: from a solution generated with `dotnet new hardslice-api --no-sample`, an agent receives one business request, a module with its aggregates, a command, a query and a domain event with its reaction, and delivers it through the skills and the item templates of the solution, without recreating their structure by hand.
+From a solution generated with `dotnet new hardslice-api --no-sample`, an agent receives one business request, a module with its aggregates, a command, a query and a domain event with its reaction, and delivers it through the skills and the item templates of the solution, without recreating their structure by hand. Its ticket is PB-050 of the [backlog](../../docs/design/product-backlog.md), in French.
 
 ```text
 business request, which names neither a skill nor a template

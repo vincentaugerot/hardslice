@@ -1,56 +1,62 @@
-# Publier une préversion sur NuGet.org
+# Publishing a preview on NuGet.org
 
-Les trois paquets, `HardSlice.Analyzers`, `HardSlice.Tool` et `HardSlice.Templates`, sont publiés ensemble, à la version unique de `Directory.Build.props`, par le workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml). Il se déclenche sur une étiquette `v<version>` et refuse toute étiquette qui ne nomme pas cette version.
+The three packages, `HardSlice.Analyzers`, `HardSlice.Tool` and `HardSlice.Templates`, are published together, at the single version of `Directory.Build.props`, by the workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml). A tag `v<version>` triggers it, and it refuses any tag that does not name that version.
 
-## Ce que fait le workflow
+## What the workflow does
 
-| Job | Rôle |
+| Job | Role |
 |---|---|
-| `build` | Vérifie que l'étiquette nomme la version, puis restaure, construit et teste la solution depuis l'étiquette, tests d'intégration compris. |
-| `template` | Rejoue `scripts/test-template.sh` depuis l'étiquette : paquets locaux, solutions avec et sans Bookings, sondes de toutes les règles. |
-| `pack` | Après `build` et `template` : packe les trois paquets, vérifie qu'il y en a exactement trois à la bonne version, rejoue sur eux le parcours d'un utilisateur (`scripts/verify-published.sh --source artifacts/packages`), puis les dépose comme artefact `packages`. |
-| `publish` | Seul job qui détient un identifiant et modifie NuGet.org. Il tourne dans l'environnement protégé `nuget`, donc après l'approbation du mainteneur, échange le jeton OIDC du workflow contre une clé d'API NuGet.org valable une heure (publication de confiance), puis pousse `HardSlice.Analyzers`, `HardSlice.Tool` et enfin `HardSlice.Templates`, qui épingle les deux autres. |
-| `verify` | Runner neuf, qui n'a jamais vu les paquets : attend que NuGet.org les serve (90 min au plus), puis `dotnet new install HardSlice.Templates@<version>`, génération avec et sans Bookings, `dotnet tool restore` et `dotnet hardslice check` dans chacune. Il vérifie que le template, l'analyseur et l'outil viennent de NuGet.org. Seuls `scripts/verify-published.sh` et `global.json` sont lus dans le dépôt. |
+| `build` | Checks that the tag names the version, then restores, builds and tests the solution from the tag, integration tests included. |
+| `template` | Runs `scripts/test-template.sh` again from the tag: local packages, solutions with and without Bookings, probes of every rule. |
+| `pack` | After `build` and `template`: packs the three packages, checks that there are exactly three at the right version, runs the path of a user on them (`scripts/verify-published.sh --source artifacts/packages`), then uploads them as the `packages` artifact. |
+| `publish` | The only job that holds a credential and changes NuGet.org. It runs in the protected environment `nuget`, so after the approval of the maintainer, trades the OIDC token of the workflow for a NuGet.org API key valid for one hour (trusted publishing), then pushes `HardSlice.Analyzers`, `HardSlice.Tool` and last `HardSlice.Templates`, which pins the other two. |
+| `verify` | A fresh runner, which has never seen the packages: waits until NuGet.org serves them (90 minutes at most), then `dotnet new install HardSlice.Templates@<version>`, generation with and without Bookings, `dotnet tool restore` and `dotnet hardslice check` in each. It checks that the template, the analyzers and the tool come from NuGet.org. Only `scripts/verify-published.sh` and `global.json` are read from the repository. |
 
-Une version poussée sur NuGet.org ne peut jamais être remplacée, seulement masquée (« unlist »). Tout ce qui peut échouer passe donc avant `publish`.
+A version pushed to NuGet.org can never be replaced, only unlisted. Everything that can fail therefore runs before `publish`.
 
-## Prérequis, une seule fois
+## Prerequisites, once
 
-1. **Dépôt public.** Les fiches NuGet.org renvoient au code, aux fiches de règles et à la documentation du dépôt `vincentaugerot/hardslice`.
-2. **Compte NuGet.org** du mainteneur. Les identifiants `HardSlice.Analyzers`, `HardSlice.Templates` et `HardSlice.Tool` sont libres ; demander la réservation du préfixe `HardSlice.` (sans elle, `dotnet new` affiche `Reserved: ✘`).
-3. **Publication de confiance** sur NuGet.org, menu du compte, « Trusted Publishing » : une politique pour le propriétaire `vincentaugerot`, le dépôt `hardslice`, le fichier de workflow `release.yml` et l'environnement `nuget`.
-4. **Environnement GitHub `nuget`** (Settings, Environments) :
-   - relecteur requis : le mainteneur, avec « Prevent self-review » désactivé, puisqu'il pose lui-même l'étiquette ;
-   - branches et étiquettes de déploiement : étiquettes `v*` seulement ;
-   - secret `NUGET_USER` : le nom du profil NuGet.org (pas l'adresse e-mail), lu par `NuGet/login`.
+1. **Public repository.** The NuGet.org pages link to the code, the rule sheets and the documentation of the repository `vincentaugerot/hardslice`.
+2. **NuGet.org account** of the maintainer. The identifiers `HardSlice.Analyzers`, `HardSlice.Templates` and `HardSlice.Tool` are free; request the reservation of the prefix `HardSlice.` (without it, `dotnet new` shows `Reserved: ✘`).
+3. **Trusted publishing** on NuGet.org, account menu, "Trusted Publishing": a policy for the owner `vincentaugerot`, the repository `hardslice`, the workflow file `release.yml` and the environment `nuget`.
+4. **GitHub environment `nuget`** (Settings, Environments):
+   - required reviewer: the maintainer, with "Prevent self-review" turned off, since the maintainer pushes the tag;
+   - deployment branches and tags: tags `v*` only;
+   - secret `NUGET_USER`: the name of the NuGet.org profile (not the email address), read by `NuGet/login`.
+5. **Private vulnerability reporting** turned on (Settings, Security), which [SECURITY.md](../SECURITY.md) points to.
 
-Aucune clé d'API n'est stockée. À défaut de publication de confiance, une clé limitée au push de `HardSlice.*` dans un secret de l'environnement `nuget` remplacerait l'étape `NuGet/login`.
+No API key is stored. Without trusted publishing, a key limited to pushing `HardSlice.*`, in a secret of the environment `nuget`, would replace the `NuGet/login` step.
 
-## Publier
+## Publish
 
-1. Vérifier que la CI est verte sur le commit à publier et que `Directory.Build.props` porte la version voulue.
-2. Vérifier les paquets localement, sur le parcours d'un utilisateur :
+1. Check that CI is green on the commit to publish and that `Directory.Build.props` holds the intended version. The commands below read it:
+
+   ```text
+   VERSION=$(dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:Version)
+   ```
+
+2. Check the packages locally, on the path of a user:
 
    ```text
    for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o artifacts/packages; done
-   scripts/verify-published.sh 0.2.0-preview.1 "$(mktemp -d)" --source artifacts/packages
+   scripts/verify-published.sh "$VERSION" "$(mktemp -d)" --source artifacts/packages
    ```
 
-3. Poser et pousser l'étiquette :
+3. Create and push the tag:
 
    ```text
-   git tag -a v0.2.0-preview.1 -m "HardSlice 0.2.0-preview.1"
-   git push origin v0.2.0-preview.1
+   git tag -a "v$VERSION" -m "HardSlice $VERSION"
+   git push origin "v$VERSION"
    ```
 
-4. Approuver le déploiement dans l'environnement `nuget` quand `build`, `template` et `pack` sont verts.
-5. Attendre `verify` : il prouve qu'un utilisateur installe le template depuis NuGet.org et passe `dotnet hardslice check`.
+4. Approve the deployment in the environment `nuget` once `build`, `template` and `pack` are green.
+5. Wait for `verify`: it proves that a user installs the template from NuGet.org and passes `dotnet hardslice check`.
 
-## En cas d'échec
+## When a job fails
 
-- **Avant `publish`** : rien n'est publié. Corriger sur `main`, supprimer l'étiquette (`git push origin :refs/tags/v<version>`, `git tag -d v<version>`) et la reposer sur le commit corrigé.
-- **Pendant `publish`** : relancer le job. `--skip-duplicate` saute les versions déjà poussées et pousse les autres.
-- **`verify` en attente trop longue** : NuGet.org valide et indexe chaque paquet, ce qui prend d'ordinaire quelques minutes et parfois davantage. Relancer le job seul ; le script reprend l'attente.
-- **`verify` en échec après publication** : les paquets sont publiés et ne peuvent pas être remplacés. Les masquer sur NuGet.org, corriger, et publier la préversion suivante (`0.2.0-preview.2`) avec une nouvelle étiquette.
+- **Before `publish`**: nothing is published. Fix it on `main`, delete the tag (`git push origin :refs/tags/v<version>`, `git tag -d v<version>`) and create it again on the fixed commit.
+- **During `publish`**: rerun the job. `--skip-duplicate` skips the versions already pushed and pushes the others.
+- **`verify` waiting too long**: NuGet.org validates and indexes each package, which usually takes a few minutes and sometimes more. Rerun the job alone; the script resumes the wait.
+- **`verify` failing after publication**: the packages are published and cannot be replaced. Unlist them on NuGet.org, fix the problem, and publish the next preview (`-preview.2` after `-preview.1`) with a new tag.
 
-Pour contrôler une version déjà publiée depuis n'importe quelle machine : `scripts/verify-published.sh <version> "$(mktemp -d)"`.
+To check a version already published, from any machine with bash 4 or later: `scripts/verify-published.sh <version> "$(mktemp -d)"`.

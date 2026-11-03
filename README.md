@@ -2,123 +2,52 @@
 
 Vertical slices, kept clean by the build.
 
-HardSlice is a .NET kit that makes AI coding agents (and humans) respect a vertical slice architecture with a rich domain. The rules are not advice in a prompt: a violation fails `dotnet build` or `dotnet test`, with a one-line diagnostic that names the offending symbol, the expected fix, the skill that fixes it and a rule sheet. An agent reads it and repairs the architecture instead of working around it.
+[![CI](https://github.com/vincentaugerot/hardslice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vincentaugerot/hardslice/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-HardSlice adds nothing to the runtime of your application: its analyzer runs at build time only, and its architecture tests live in your test projects.
+HardSlice is a .NET kit that makes AI coding agents (and humans) respect a vertical slice architecture with a rich domain. The rules are not advice in a prompt: a violation fails `dotnet build` or `dotnet test`, with a one-line diagnostic that names the offending symbol, the expected fix, the skill that fixes it and a rule sheet. An agent reads it and repairs the architecture instead of working around it:
+
+```text
+HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingHandler' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.
+```
+
+HardSlice adds nothing to the runtime of your application: its analyzers run at build time only, and its architecture tests live in your test projects.
 
 ## Status
 
-**0.2.0-preview.1, preview on NuGet.org.** The three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, share one version, the one of `Directory.Build.props`, and are published together by the [release workflow](docs/releasing.md). This preview ships:
-
-- the `hardslice-api` solution template: an ASP.NET Core API in vertical slices around a rich domain, with a `Bookings` sample module, or empty with `--no-sample`;
-- the `hardslice-module` item template, which adds a module to such a solution, with the folders of its domain and of its tests;
-- the `hardslice-aggregate` item template, which adds an aggregate to a module of such a solution, with its identifier, its mapping and its unit tests;
-- the `hardslice-command` item template, which adds a command slice to a module of such a solution, its tests included;
-- the `hardslice-query` item template, which adds a query slice that reads an aggregate of the module, its integration tests included;
-- the `hardslice-event` item template, which adds a domain event to a module of such a solution and, on request, the reaction slice that handles it, with its integration tests;
-- the `HardSlice.Analyzers` package, which reports HS000, HS003 to HS011, HS015 and HS016 at build time, suggests HS019 in the `All` analysis mode, and reports HS900 to HS902 when the contracts that classify domain and messaging types are unusable, ambiguous or missing on a mapped entity;
-- architecture tests for HS001, HS012 to HS014 and HS016 to HS018 in every generated solution;
-- the `HardSlice.Tool` local tool, pinned by every generated solution to the version of `HardSlice.Analyzers`: `dotnet hardslice check` runs the whole verification, `dotnet hardslice explain <rule>` prints the sheet of a rule, `dotnet hardslice hook <cli> <event>` runs the hooks of Claude Code, Codex and GitHub Copilot CLI, `dotnet hardslice protected` lists the protected files among the paths it reads;
-- `AGENTS.md`, the instruction files of Claude Code, Gemini CLI and GitHub Copilot, the skills `add-module`, `add-aggregate`, `add-slice`, `add-domain-event`, `extract-to-domain` and `fix-architecture-violation`, `scripts/check.sh` and `scripts/check.ps1` in every generated solution, the hooks of Claude Code in `.claude/settings.json`, of Codex in `.codex/hooks.json` and of Copilot CLI in `.github/hooks/hardslice.json`, the git pre-commit hook in `.githooks/pre-commit` and the GitHub Actions workflow `.github/workflows/hardslice.yml`.
-
-`scripts/test-template.sh` runs the commands of [Getting started](#getting-started) in CI, from a fresh runner, on every push to `main` and every pull request, on the packages built from the commit (see [Working on HardSlice](#working-on-hardslice)): in temporary folders, on free ports, with and without the sample. Each release runs steps 1 to 3 from NuGet.org on a fresh runner, once the packages are published.
-
-## Prerequisites
-
-- .NET SDK 10.0.100 or a later 10.0 feature band (pinned by `global.json`).
-- A Docker-compatible container runtime (Docker Desktop, Docker Engine, Podman, Colima...): the integration tests and the local database run in containers.
-- Bash for `scripts/check.sh` (Git Bash on Windows), or PowerShell 7 for `scripts/check.ps1`.
-- `curl` to try the API.
+**Preview.** The first preview, `0.3.0-preview.1`, is being prepared for NuGet.org; until it is published, [try a local build of the packages](CONTRIBUTING.md#try-a-local-build-of-the-packages). The three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, share one version. A preview may change its rules, its template and its commands from one preview to the next; a generated solution keeps the template and the versions it was generated with. The [changelog](CHANGELOG.md) says what each version brings.
 
 ## Getting started
 
-### 1. Install the template
+You need the .NET 10 SDK, a Docker-compatible container runtime for the integration tests, and Bash or PowerShell 7.
 
 ```text
-dotnet new install HardSlice.Templates@0.2.0-preview.1
-```
-
-This installs the `hardslice-api` solution template and the five item templates from NuGet.org. They pin `HardSlice.Analyzers` and `HardSlice.Tool` at the same version, in `Directory.Packages.props` and `.config/dotnet-tools.json`: the generated solutions restore both from NuGet.org, with their other packages.
-
-### 2. Generate an application
-
-In the folder of your choice:
-
-```text
+dotnet new install HardSlice.Templates@0.3.0-preview.1
 dotnet new hardslice-api --name Rooms
-```
-
-The name becomes one safe .NET namespace that names every folder, project, assembly and namespace, `hardslice.json` included: `Acme.Rooms` stays `Acme.Rooms`, `my-app` becomes `my_app` and `1Rooms` becomes `_1Rooms`; only the output folder keeps the name as typed.
-
-`Rooms` holds the `Bookings` sample: a `Booking` aggregate whose bookings of a room never overlap, guaranteed by PostgreSQL, and three slices, `ConfirmBooking`, `CancelBooking` and `GetBooking`, with their unit, integration and architecture tests. Its `AGENTS.md` maps the solution for an agent.
-
-Booking dates accept timezone offsets and are normalized to UTC. Fractions smaller than a microsecond are truncated before validating the period and checking overlaps, matching PostgreSQL precision. A period whose end is no longer after its start returns 400 and is not stored.
-
-To start from the same foundation without the sample:
-
-```text
-dotnet new hardslice-api --name Rooms --no-sample
-```
-
-### 3. Verify it
-
-```text
 cd Rooms
-bash scripts/check.sh     # macOS, Linux, Git Bash
-pwsh scripts/check.ps1    # Windows, PowerShell
+bash scripts/check.sh     # or: pwsh scripts/check.ps1
 ```
 
-Both scripts restore the local tools of `.config/dotnet-tools.json`, then run `dotnet hardslice check`. It builds the solution, then runs the unit tests, the architecture tests and the integration tests, which start PostgreSQL with Testcontainers. Without a reachable container runtime, it stops before the integration tests and says so. Last, it fails while a `TODO(hardslice):` marker that an element template left is still in `src/` or `tests/`, and lists each file and line: replacing a failing generated test with a trivial assertion does not pass it. It exits with `0` when the check passes, `1` when a step fails, its output left as is, and `2` on a wrong argument only: this is the command an agent must bring back to green before it is done. The diagnostics are those of `dotnet build` and `dotnet test`, as they print them.
-
-The tool has the version of the analyzers: `check` fails before building if `Directory.Packages.props` references another version of `HardSlice.Analyzers`. It has no option to skip a step. `bash scripts/check.sh --build` (or `check.ps1 --build`, `dotnet hardslice check --build`) is the verification for a hook after an edit: the incremental build of the solution with `--no-restore`, after a restore only when a project needs one, printing the errors alone as the compiler wrote them, then the `TODO(hardslice):` markers. It runs no test, says so, and never decides that the work is done: only the check without argument does. Any other argument exits with code 2. Both fit the budgets of the hooks, 10 seconds after an edit and 60 seconds before an agent hands back, as [measured](docs/performance/analyzers.md).
-
-To read the sheet of a rule without leaving the terminal:
+The check builds the solution and runs its unit, architecture and integration tests; it exits 0 when everything passes. `Rooms` holds a `Bookings` sample module (`--no-sample` leaves it out). Then ask your agent to read `AGENTS.md` and give it a feature: it generates each element with a template, completes it, and is not done until the check passes. For example, the command slice it would generate to extend a booking:
 
 ```text
-dotnet hardslice explain HS016
+dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
 ```
 
-An unknown rule exits with code 2 and lists the rules that have a sheet.
+[Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does; [Item templates](docs/item-templates.md) covers the five element templates.
 
-The solution also runs the check before each commit and in CI, both with `scripts/check.sh` without argument:
+## What you get
 
-- `.githooks/pre-commit` refuses a commit while the check fails. Nothing turns it on for you: in a clone of the solution, run `git config core.hooksPath .githooks`. `dotnet new` makes the hook executable on macOS and Linux; a clone that lost the bit, such as one of a solution generated on Windows, needs `chmod +x .githooks/pre-commit` first. It checks the working tree, changes left out of the commit included, and `git commit --no-verify` skips it;
-- `.github/workflows/hardslice.yml` runs the check on GitHub Actions on every push to `main` and every pull request, with the SDK of `global.json` and the Docker of the runner, its actions pinned by commit SHA. A pull request also fails while it changes a protected file, the list of the hooks below, unless a maintainer adds the label `hardslice-approved` to it: this protects the rules from every agent and every human, whatever their CLI. The job pipes `git diff --name-only -z` of the merge commit into `dotnet hardslice protected`, which lists the protected paths and exits 1 when there is one.
+| Part | What it does |
+|---|---|
+| `hardslice-api` solution template | An ASP.NET Core API in vertical slices around a separate domain project, with PostgreSQL, EF Core, a small in-house mediator and FluentValidation, its unit, integration and architecture tests, and the `Bookings` sample or none. |
+| Five item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-command`, `hardslice-query` and `hardslice-event` generate an element in its place with its tests, which fail until the element is completed. |
+| `HardSlice.Analyzers` | Roslyn analyzers that report the rules at build time and in the IDE. |
+| Architecture tests | The rules that span projects, modules and test folders, in every generated solution. |
+| `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files. |
+| Agent kit | `AGENTS.md` and the instruction file of each agent, six skills, the hooks of Claude Code, Codex and Copilot CLI, a pre-commit hook and a GitHub Actions workflow. |
 
-### 4. Run the API
-
-Start PostgreSQL with the credentials of `src/Rooms/appsettings.Development.json`, reachable from this machine only, wait until it accepts connections, apply the migrations, then start the API in Development:
-
-```text
-docker run --detach --name rooms-postgres --env POSTGRES_PASSWORD=postgres --publish 127.0.0.1:5432:5432 postgres:18-alpine
-docker exec rooms-postgres sh -c 'for i in $(seq 60); do pg_isready --quiet --host 127.0.0.1 --username postgres && exit 0; sleep 1; done; echo "PostgreSQL not ready after 60 s" >&2; exit 1'
-dotnet tool restore
-dotnet ef database update --project src/Rooms
-dotnet run --project src/Rooms -- --environment Development --urls http://localhost:5080
-```
-
-The application never migrates its database at startup: `dotnet ef database update`, with the `dotnet-ef` version pinned in `.config/dotnet-tools.json`, creates the database and applies the migrations. The wait runs `pg_isready` over TCP inside the container for at most 60 seconds: the image first initializes the database with a server that accepts no TCP connection, then restarts it. If port 5432 is taken, publish another one and set the connection string for both `dotnet ef` and `dotnet run`, for example `ConnectionStrings__Database="Host=localhost;Port=5433;Database=rooms;Username=postgres;Password=postgres"`.
-
-When upgrading an existing Bookings database, `AddBookingPositivePeriodConstraint` rejects legacy rows with `"End" <= "Start"` through `CK_Bookings_Period_Positive`. Inspect those rows with `SELECT "Id", "Start", "End" FROM "Bookings" WHERE "End" <= "Start";`, restore their intended periods explicitly, then retry the migration. It never deletes or changes reservations automatically.
-
-From another terminal, confirm a booking, then read it at the address of the `Location` header:
-
-```text
-curl -i -X POST http://localhost:5080/bookings -H "Content-Type: application/json" -d '{"roomId":"3f2b8c1e-0d4a-4b6e-9a7f-1c2d3e4f5a6b","start":"2026-12-01T09:00:00Z","end":"2026-12-01T10:00:00Z"}'
-curl -i http://localhost:5080/bookings/<id>
-```
-
-The first request answers `201 Created`, the second `200 OK` with the booking. The same booking posted again answers `409 Conflict`: the room is already booked. `POST /bookings/<id>/cancel` cancels it.
-
-With `--no-sample`, the same commands create an empty database and start an API without endpoints yet.
-
-When you are done, stop the API with Ctrl+C and remove the database with `docker rm --force rooms-postgres`.
-
-### 5. Change it
-
-Ask your agent to read `AGENTS.md`: it says where a use case goes, how to add a slice, a module or a migration, and that the work is not done until the check script exits 0. When a rule fails, its diagnostic points to its sheet in `docs/rules/`.
-
-Each supported agent loads `AGENTS.md` by itself, through its own instruction file when it needs one, which holds only what is specific to it:
+## Supported agents
 
 | Agent | Reads | Level today |
 |---|---|---|
@@ -127,106 +56,7 @@ Each supported agent loads `AGENTS.md` by itself, through its own instruction fi
 | GitHub Copilot CLI | `AGENTS.md`, `.github/copilot-instructions.md` and `GEMINI.md` | native: the hooks of `.github/hooks/hardslice.json` |
 | Gemini CLI | `GEMINI.md`, which imports `AGENTS.md` | fallback |
 
-A native adapter runs the check through the hooks of the agent, after each edit and before it hands back. With the fallback, nothing checks an edit as it is made: the agent follows `AGENTS.md`, which tells it to run the check script before it finishes. Gemini CLI has hooks too, but no adapter is shipped until one is tried, and no `.gemini/settings.json` either. `CLAUDE.md` lives in `.claude/` because Copilot reads a `CLAUDE.md` at the root and expands its import, which would load `AGENTS.md` twice. Gemini CLI is not tried: it no longer serves personal Google accounts. [Agent support](docs/agents/support.md) records what each CLI reads, at a dated version.
-
-Each hook runs `dotnet hardslice hook <cli> <event>`, which reads the payload of the CLI on its standard input, the same command on Linux, macOS and Windows, and answers the way the CLI hands it to its agent:
-
-| Step | Runs | Budget | On failure |
-|---|---|---|---|
-| before an edit | the list of protected files | none | the edit is refused with the reason and a pointer to "Forbidden" of `AGENTS.md` |
-| after the edit of a `.cs` file | the check of `scripts/check.sh --build` | 10 s | the errors of the build reach the agent, which fixes them |
-| the end of a turn | the check of `scripts/check.sh` | 60 s | the agent goes on with the failure; after three relaunches for the same failure, or eight in a session, it hands back and says that the check fails |
-
-| CLI | Configuration | Before an edit | After an edit | End of a turn | Answer |
-|---|---|---|---|---|---|
-| Claude Code | `.claude/settings.json` | `PreToolUse` on `Edit`, `Write` | `PostToolUse` on `Edit`, `Write` | `Stop` | code 2 and the standard error |
-| Codex | `.codex/hooks.json` | `PreToolUse` on `apply_patch` | `PostToolUse` on `apply_patch`, every file of the patch | `Stop` | code 2 and the standard error |
-| Copilot CLI | `.github/hooks/hardslice.json` | `preToolUse` on `edit`, `create` | `postToolUse` on `edit`, `create` | `agentStop` | JSON with code 0: `permissionDecision`, `additionalContext`, `decision: "block"` |
-
-When the end check passes, Claude Code and Codex show the user `HardSlice: the check passed.`: the agent wrote its last message before the check ran. Copilot CLI has no message for the user: it finishes without a word.
-
-Codex runs the hooks of a project only once it is trusted and each hook is approved: start `codex` in the solution, open `/hooks`, review the three hooks of `.codex/hooks.json` and trust them. Codex records the approval for this clone in `~/.codex/config.toml`; until then, it skips the hooks without a message, and only the check that `AGENTS.md` asks for applies. The commands never change from one version of HardSlice to the next, so an upgrade keeps the approval. Copilot CLI runs the hooks of a trusted folder only.
-
-The protected files are `.editorconfig`, `.globalconfig`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Build.rsp` and `Directory.Packages.props` in any folder, `hardslice.json`, `.config/dotnet-tools.json`, `Directory.Solution.props`, `Directory.Solution.targets` and `nuget.config` at the root, `scripts/`, `tests/<App>.ArchitectureTests/`, the hooks and skills in `.claude/`, `.agents/`, `.codex/` and `.github/hooks/`, the pre-commit hook in `.githooks/` and the CI in `.github/workflows/hardslice.yml`. "Forbidden" of `AGENTS.md` holds this list for agents, and the skills link to it. The hooks run in the process of the local tool, restored by the check script or `dotnet tool restore`. Until then, `dotnet hardslice` only prints that the tool must be restored, with code 0, and the agent goes on unchecked. Copilot CLI also runs the hooks of `.claude/settings.json`, without handing their failures to the agent: they exit 0 at once there (`COPILOT_CLI`). The hooks only shorten the loop. A file written through the shell escapes the edit hooks, and an agent or a human who turns them off is stopped by the check script and CI, which fails a pull request that changes a protected file without the label `hardslice-approved`.
-
-Six skills, in the Agent Skills format (`SKILL.md`), are shipped. Four turn a business request into the template that generates its element, the code that completes it and the check:
-
-| Skill | Adds | Template |
-|---|---|---|
-| `add-module` | a module, registered in `Program.cs` and the map of `AGENTS.md` | `hardslice-module` |
-| `add-aggregate` | an aggregate with its invariants, their unit tests, its mapping and its migration | `hardslice-aggregate` |
-| `add-slice` | a command or a query, its business rule in the aggregate, its registration and its tests | `hardslice-command`, `hardslice-query` |
-| `add-domain-event` | a domain event raised by its aggregate, and the reaction that handles it with its tests | `hardslice-event` |
-
-Two fix the code that a failure names. `extract-to-domain` moves a business rule that slices share, or that a slice writes into an entity, into its aggregate with its unit tests, and makes each slice call it. `fix-architecture-violation` reads the diagnostic, applies the first fix of the sheet of its rule, runs the check again, and stops to explain the conflict when only a workaround would pass.
-
-Every HardSlice diagnostic and every architecture test failure names its skill between `Fix:` and `Doc:`:
-
-```text
-HS016: 'CancelBookingHandler' in slice 'Bookings/CancelBooking' uses 'ConfirmBookingHandler' from slice 'Bookings/ConfirmBooking'. Slices never reference each other. Fix: move the shared rule into a domain aggregate, raise a domain event, or use the public contract of module 'Bookings'. Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.
-```
-
-| Skill | Named by |
-|---|---|
-| `add-slice` | HS004, HS013, HS014, HS015, HS018 |
-| `extract-to-domain` | HS007, HS016 |
-| `add-aggregate` | HS008, HS902 |
-| `add-domain-event` | HS009, HS012, HS019 |
-| `fix-architecture-violation` | HS000, HS001, HS003, HS005, HS006, HS010, HS011, HS017, HS900, HS901 |
-
-Their source is `.claude/skills/`, which Claude Code and Copilot read; the template package copies them into `.agents/skills/`, which Codex and Gemini CLI read. Copilot reads both and keeps one skill per name. Each skill recalls the forbidden workarounds and never edits a protected file.
-
-[The add-feature demonstration](demos/add-feature/README.md) gives one business request, a module, two aggregates, a command, a query and a domain event with its reaction, to an agent on a solution generated with `--no-sample`. Claude Code (twice), Codex and Copilot CLI each delivered it through the templates, the check green and no protected file changed, as its verifier proves from their recorded traces; Gemini CLI could not run on a personal Google account.
-
-A module is generated from the root of the solution, once it is restored (after a first build or check):
-
-```text
-dotnet new hardslice-module --project src/Rooms/Rooms.csproj --name Payments
-```
-
-It creates `src/Rooms/Features/Payments/PaymentsModule.cs`, the public contract of the module: `AddPaymentsModule`, which registers its slices, and `MapPaymentsModule`, which maps them on the group `/payments`, the name of the module in kebab-case (`--route` sets another one). It also creates the folder of its domain, `src/Rooms.Domain/Payments/`, and its test folders, `tests/Rooms.Tests/Domain/Payments/`, `tests/Rooms.Tests/Features/Payments/` and `tests/Rooms.IntegrationTests/Features/Payments/`, each holding a `.gitkeep`. Then it prints the using and the two lines to add to `Program.cs`. The empty module builds and passes the check: no rule asks a module for a slice or a test. Without `--project`, before the first restore, with a name that is not PascalCase or ends with `Module`, or with a route that is not made of lowercase words, it exits with an error and creates nothing. It refuses to overwrite an existing module without `--force`.
-
-An aggregate of a module is generated the same way:
-
-```text
-dotnet new hardslice-aggregate --project src/Rooms/Rooms.csproj --module Payments --name Invoice
-```
-
-It creates the aggregate root `Invoice` and its identifier `InvoiceId`, a `readonly record struct` that wraps a `Guid Value`, in `src/Rooms.Domain/Payments/`, its EF Core mapping `InvoiceConfiguration` in `src/Rooms/Features/Payments/`, and its unit tests in `tests/Rooms.Tests/Domain/Payments/`. The root is `sealed` and implements `IAggregateRoot`: a private constructor for persistence, a static factory method `Create` to rename after the business fact and give the rules of the aggregate, no public setter, and a private list of events that `DequeueDomainEvents()` returns and empties. The mapping uses the table `Invoices`, the name followed by `s` (`--table` sets another one), converts the identifier and ignores the events. Then it prints the migration to add: there is nothing to register, `AppDbContext` applies the mapping by itself.
-
-The aggregate builds without any HardSlice diagnostic. Its unit test of the state ends with `Assert.Fail("TODO(hardslice): ...")`, and the integration tests fail until the migration is added: `MigrationsTests` finds changes missing from the migrations, and once the solution has a migration, EF Core refuses to migrate the database of the others. Without `--project`, before the first restore, with a name or a module that is not PascalCase, for a module without `Features/<Module>/<Module>Module.cs`, with a table that is not made of letters, digits and underscores, or with a name that the generated code could not use, that of a module or a namespace of the application (`Rooms`, `Domain`) or of a type that its files import (`Task`, `File`), it exits with an error and creates nothing. It refuses to overwrite an existing aggregate without `--force`.
-
-A command slice is generated the same way:
-
-```text
-dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
-```
-
-It creates `src/Rooms/Features/Bookings/ExtendBooking/ExtendBooking.cs`, with the command `ExtendBookingCommand`, its validator, its handler and its endpoint `POST /bookings/extend-booking`, the validator tests in `tests/Rooms.Tests/Features/Bookings/ExtendBooking/` and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/ExtendBooking/`. Then it prints the lines to add to `BookingsModule.cs`: the usings, the registrations of the handler and the validator, and the call of `Map`. It never edits an existing file. `--response` sets what the command returns: `id`, a `Guid`, by default; `none`, a `bool` whose `false` is answered with 404; or the name of a DTO of values, which the slice declares.
-
-`--project` names the web project: the template reads the name of the application, its `RootNamespace`, and its modules from it. Without it, before the first restore, with a name that is not PascalCase or ends with `Command`, for a module without `Features/<Module>/<Module>Module.cs`, or with a `--response` DTO named `Guid` or as a type of the slice, it exits with an error that says what to do and creates nothing. It refuses to overwrite an existing slice without `--force`.
-
-The generated code builds without any HardSlice diagnostic, and the validator tests pass. The handler throws `NotImplementedException` and the integration test ends with `Assert.Fail("TODO(hardslice): ...")`: the check fails until the use case and its assertion are written. A slice its module does not register fails the check too: a test of the host resolves every request handler and validator of the application from the container, and names the ones that are missing.
-
-A query slice is generated the same way, from the aggregate it reads:
-
-```text
-dotnet new hardslice-query --project src/Rooms/Rooms.csproj --module Bookings --name GetBookingSummary --aggregate Booking
-```
-
-It creates `src/Rooms/Features/Bookings/GetBookingSummary/GetBookingSummary.cs`, with the query `GetBookingSummaryQuery`, its DTO `GetBookingSummaryDto`, its handler and its endpoint `GET /bookings/get-booking-summary/{id}`, and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/GetBookingSummary/`, then prints the lines to add to `BookingsModule.cs`. The handler reads `Set<Booking>()` with `AsNoTracking()` and projects it into the DTO with `Select`, so HS006 has nothing to report. By default it reads one DTO by its id, an unknown id being answered with 404; `--result many` reads the list instead. `--aggregate` is required: it names a type of the namespace `Rooms.Domain.Bookings` whose `Id` is an `<Aggregate>Id` that wraps a `Guid Value`, as `Booking` and `BookingId` do. An aggregate that does not exist fails the build with a compiler error that names it.
-
-The handler works as generated: with one DTO by its id, the test of an unknown id passes. The test that reads or lists a stored aggregate fails with `TODO(hardslice):` until it creates the aggregate through its factory method and asserts the values the DTO reads.
-
-A domain event is generated the same way, with the reaction that handles it if you name one:
-
-```text
-dotnet new hardslice-event --project src/Rooms/Rooms.csproj --module Bookings --name BookingExtended --reaction Payments/ChargeOnBookingExtended
-```
-
-It creates the event `BookingExtended`, a `sealed record` that implements `IDomainEvent` with a `Guid Id` to replace by the values of the fact, in `src/Rooms.Domain/Bookings/Events/`. With `--reaction <Module>/<Slice>`, it also creates the reaction slice `src/Rooms/Features/Payments/ChargeOnBookingExtended/`, whose only type is the `internal` handler `ChargeOnBookingExtendedHandler`, an `IDomainEventHandler<BookingExtended>`, and its integration tests in `tests/Rooms.IntegrationTests/Features/Payments/ChargeOnBookingExtended/`, then prints the usings and the registration to add to `PaymentsModule.cs`. The reaction may live in another module than the event: it depends on the domain only. Without `--reaction`, it prints how to raise the event from the aggregate instead. With `--reaction-only` too, it creates the reaction slice alone, for an event that already exists, and leaves the event as it is. It never edits the aggregate: the method where the fact happens adds the event to its list.
-
-The event and its reaction build without any HardSlice diagnostic. The handler throws `NotImplementedException`, and its test, which calls it with an event as the pipeline does, then saves, ends with `Assert.Fail("TODO(hardslice): ...")`: the check fails until the reaction and its assertion are written. A reaction its module does not register fails the check twice: its test, and the test of the host, which also resolves every domain event handler. A name that HS019 does not read as a past fact, such as `ExtendBooking`, is created with a warning. Without `--project`, before the first restore, with a name or a module that is not PascalCase, for a module without `Features/<Module>/<Module>Module.cs`, the module of the event or of the reaction, with a reaction that is not `<Module>/<Slice>` in PascalCase, ends with `Handler` or is named as the event, or with `--reaction-only` without `--reaction`, it exits with an error and creates nothing. It refuses to overwrite an existing event without `--force`.
+A native adapter refuses an edit of the files that set the rules, hands the build errors back to the agent after each edit, and keeps it working while the check fails at the end of its turn. With the fallback, the agent follows `AGENTS.md`, which tells it to run the check before it finishes. Codex skips the hooks of a project until a human approves each one in `/hooks`. [Agent loop](docs/agent-loop.md) details the hooks, the protected files and the skills.
 
 ## Rules
 
@@ -255,132 +85,40 @@ The event and its reaction build without any HardSlice diagnostic. The handler t
 | [HS901](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS901.md) | A type has one role: never both an entity and a domain event, a command and a query, or an entity and a request. | Analyzer at build time |
 | [HS902](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS902.md) | Every domain type EF Core maps as an entity implements `IEntity` or `IAggregateRoot`. | Analyzer at build time |
 
-Each generated solution carries these sheets in `docs/rules/`, at the path its diagnostics announce, and `dotnet hardslice explain` prints them. A sheet says what the rule forbids, how to fix a violation, and which workarounds are forbidden.
+Each generated solution carries these sheets in `docs/rules/`, and `dotnet hardslice explain <rule>` prints them. The MSBuild property `HardSliceAnalysisMode` (`Minimum`, `Recommended` or `All`, the one a generated solution sets) chooses which analyzer rules are on. [Rules](docs/rules.md) has the matrix of the modes and the known limits of each rule.
 
-### Analysis modes
+## Evidence
 
-The MSBuild property `HardSliceAnalysisMode` chooses which analyzer rules are on: `Minimum`, `Recommended` (when it is not set) or `All`. A generated solution sets `All` in its `Directory.Build.props`. A mode turns a rule on or off, never changes its severity, and a `dotnet_diagnostic.<rule>.severity` line of `.editorconfig` takes precedence over it. Any other value fails the build with the list of modes.
+- [Agent fix demonstrations](demos/agent-fix/README.md): for each blocking rule, a solution that breaks it fails with exactly the diagnostic of that rule, the reference fix passes, and every known workaround is rejected; Claude Code fixed four of them, guided by the diagnostic and its rule sheet. CI replays them on every push.
+- [Add-feature demonstration](demos/add-feature/README.md): Claude Code, Codex and Copilot CLI each delivered one business request (a module, two aggregates, a command, a query and a domain event with its reaction) through the templates, the check green and no protected file changed, as a verifier proves from their recorded traces.
+- [Analyzer cost](docs/performance/analyzers.md): on a solution of 21 modules, the analyzers add about 0.2 s to an incremental build after an edit, and the checks of the hooks hold their budgets of 10 s after an edit and 60 s before an agent hands back.
 
-| Rule | `Minimum` | `Recommended` | `All` |
-|---|---|---|---|
-| HS000 | error | error | error |
-| HS003 | error | error | error |
-| HS004 | – | error | error |
-| HS005 | – | error | error |
-| HS006 | – | error | error |
-| HS007 | error | error | error |
-| HS008 | – | error | error |
-| HS009 | – | error | error |
-| HS010 | error | error | error |
-| HS011 | error | error | error |
-| HS015 | – | error | error |
-| HS016 | error | error | error |
-| HS019 | – | – | suggestion |
-| HS900 to HS902 | error | error | error |
-
-A dash means the mode turns the rule off: `Minimum` keeps the rules that assume neither the shape of a slice, the messaging of the template, its aggregates referenced by identifier nor its domain events declared as records, plus HS016. HS019, a heuristic, is a suggestion of the `All` mode only: it never blocks the build, even with `TreatWarningsAsErrors`. HS900 to HS902 are reported only when an active rule depends on the classification of types: in `Minimum`, HS901 never requires the `command` and `query` contracts. HS000 is not configurable: no mode, `.editorconfig` line or `<NoWarn>` turns it off. The architecture tests do not depend on the mode.
+These are demonstrations, not a benchmark: each agent ran once. A benchmark with and without HardSlice is the next milestone.
 
 ## Known limitations
 
-- A solution generated before keeps the template it was generated from, and the versions of `HardSlice.Analyzers` and `HardSlice.Tool` it pins.
-- `HardSlice.Analyzers` is supported only in a solution generated by `hardslice-api`, whose `docs/rules/` holds the sheets its diagnostics point to.
-- Only HS000, HS003 to HS011, HS015, HS016 and HS900 to HS902 are reported at build time and in the IDE, and HS019 as a suggestion, which the build output does not show: the IDE and the compiler log (`ErrorLog`) do. The other rules are architecture tests: they fail `dotnet test` and the check scripts, not `dotnet build`. HS900, and HS015 for an endpoint its module never maps, are reported at the end of the analysis of a project: the IDE shows them with full solution analysis only.
-- HS000 checks the suppressions written in source only: `<NoWarn>`, `<WarningsNotAsErrors>` and the severities of `.editorconfig` and `.globalconfig` are not detected, since the analysis modes turn rules off through a global config themselves; review and the CI of the solution protect these files. It checks the form and the length of a justification, never whether the reason is true.
-- HS016 is analyzed within one assembly: slices and modules are folders of the web project.
-- HS003 reads the body of the endpoint only: the methods it calls are not followed, and a delegate stored in a variable or declared in another assembly is not analyzed.
-- HS004 checks the slices of the project that declares them, by the namespaces `<Assembly>.Features.<Module>.<Slice>` and the folders below the project directory: the name and the number of the files of a slice are free, and generated code is not checked. A reaction slice is recognized by its domain event handler: whether the handler stays inside the transaction, without external effect, is a review matter.
-- HS005 follows the declared types of the response: an entity typed `object` or `dynamic`, held by a non-public member or reached through the members of a library type is not detected, and a generic handler whose response is an unconstrained type parameter is not analyzed.
-- HS006 analyzes the code of the query handler only, without control flow: a query obtained from a field, a parameter or a helper, a local reassigned other than as `query = query.<operators>`, a compiled query and a write made in a helper or through another library are not analyzed. An `AsNoTracking()` added by a conditional reassignment guarantees nothing, and the global `UseQueryTrackingBehavior` is not read.
-- HS007 checks each entity in the project that declares it, by the accessibility of its accessors and fields: a write by reflection, through a public mutable collection the entity exposes, or by a public method that only assigns its parameter is not detected.
-- HS008 checks each entity in the project that declares it, by the declared types of its properties and fields: a root held through `object`, an unclassified interface, a type parameter or the members of another type is not detected. The owners of a child entity are the roots of the same project that reach its type: a child that no root reaches, or a reference from a child to a root of another project, is not reported, and the rule reads types, not instances.
-- HS009 checks that each domain event is a record, in the project that declares it, not that it is immutable: a record with a public setter is accepted.
-- HS019 reads the form of the name only: `RoomSeed` passes although it is no past fact, an irregular past participle missing from the list of the sheet is reported, and no exception can be configured. Abstract events and event interfaces are not checked.
-- HS010 checks the domain project, recognized by its entity contract in `hardslice.json`, and the slices only: the module, `Shared` and `Program.cs` are not checked, and the methods they declare that a slice calls are not followed. `TimeProvider.System` is not reported.
-- HS011 recognizes the blocking members of tasks and their awaiters only: `Thread.Sleep`, `SemaphoreSlim.Wait`, synchronous APIs and the methods the code calls in other assemblies are not followed, and a task never awaited is not reported.
-- HS015 checks the endpoints mapped under `Features` only, and accepts the result types of `Microsoft.AspNetCore.Http.HttpResults` only: a custom `IResult` is reported. The module must call the method of the slice that maps the endpoint, not a helper of it.
-- PostgreSQL is the only database. SQL Server and Aspire orchestration are planned for v1.0.
-- Domain events are published to their handlers inside the transaction of the command, before its commit: no outbox, no publication after commit, no bus and no asynchronous processing. A handler that sends a request through `IMediator` fails at runtime; an external effect in a handler is not detected.
-- Gemini CLI has no hooks adapter: it stays at the fallback level in v0.3, without a trial possible on a personal Google account. Codex skips its hooks until a human approves them in `/hooks`. Copilot CLI ends a turn after eight blocks in a row, whatever the hook says, and cuts the errors handed after an edit at 10 KB. The end hook runs the full check at the end of every turn, even one that changed nothing. The adoption of existing solutions (`dotnet hardslice init`, `map`, `baseline`, `report` and `verify`) is planned for v0.5.
-- `dotnet new hardslice-module`, `hardslice-aggregate`, `hardslice-command`, `hardslice-query` and `hardslice-event` read the application and its modules through `--project` only, once the web project is restored: `dotnet new` evaluates no project from the root of a solution, and cannot read a file before it creates the others. A refusal prints `The template ... was created successfully.` before `Post action failed.` and its error, and exits with code 105: nothing is created. They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module, `hardslice-aggregate` the migration to add, and `hardslice-event` how to raise the event. `hardslice-module` puts a `.gitkeep` in the folders it creates without file, as `dotnet new` creates no empty folder; with `--force`, it overwrites the contract of an existing module, its registrations included. The tests that `hardslice-command` and `hardslice-query` generate call the route of the group in kebab-case: after `--route`, change theirs. `hardslice-query` cannot check the aggregate: the compiler does. Its list result is `--result many`, not `list`, which `dotnet new` would read as its own `list` command. `hardslice-event --reaction-only` cannot check that the event exists: the compiler does, and the test it generates leaves the building of the event to complete.
-- The generated application has a Development configuration only: no production settings, authentication or deployment.
-- CI runs on Linux: `scripts/check.ps1` is verified with PowerShell 7 on Linux, not on Windows.
-- The pre-commit hook checks the working tree, not the commit alone, and is skipped by `git commit --no-verify`. The CI of the solution runs on GitHub Actions only, its push trigger on `main` only; Azure Pipelines is planned for v1.0. A pull request runs its own version of `.github/workflows/hardslice.yml`, and anyone who can label it can set `hardslice-approved`, which then also approves every commit pushed to it afterwards: only the protection of the branch (required checks, code owners), planned for v1.0, makes these checks binding.
+- Only solutions generated by `hardslice-api` are supported; adding HardSlice to an existing solution is planned for v0.5.
+- PostgreSQL is the only database; SQL Server and Aspire are planned for v1.0.
+- Domain events are handled inside the transaction of the command: no outbox, no bus, no external effect in a handler.
+- Gemini CLI stays at the fallback level: it could not be tried, as it no longer serves personal Google accounts.
+- The hooks, the pre-commit hook and the generated CI stop accidental drift; they are not a security boundary until the branch is protected.
 
-## Working on HardSlice
+The limits of each rule, of the item templates and of the agent loop are in [Rules](docs/rules.md), [Item templates](docs/item-templates.md#limitations) and [Agent loop](docs/agent-loop.md#limitations).
 
-```text
-dotnet restore
-dotnet build --no-restore
-dotnet test --no-build
-scripts/test-template.sh
-scripts/demo-agent-fix.sh verify-reference "$(mktemp -d)"
-scripts/demo-add-feature.sh verify-recorded "$(mktemp -d)"
-scripts/measure-analyzers.sh
-```
+## Roadmap
 
-- `dotnet test` runs the analyzer tests and the tests of the template content, integration tests included: it needs a container runtime.
-- `scripts/test-template.sh` packs the three packages, generates an application with and without the sample, runs the getting started path above on them, verifies them with both check scripts, then seeds one violation per rule and expects both scripts to fail with its diagnostic, its sheet and a skill that the solution ships. In both, it also generates a module with `hardslice-module`, registers it in `Program.cs` with the lines it prints and checks that the empty module passes the check, and, with the sample, that HS012 sees it reach into a slice of `Bookings`. It generates an aggregate with `hardslice-aggregate` through each of its refusals, checks that it builds without HardSlice diagnostic, that the check fails on its `TODO(hardslice):` test, then on the missing migration, and passes once the migration is added. It generates command slices with `hardslice-command` and query slices with `hardslice-query`, through each of their refusals, registers them with the lines they print, and checks that only the `TODO(hardslice):` tests fail until a reference completion makes the check pass, and that a query on an unknown aggregate fails the build with a compiler error alone. It generates events with `hardslice-event` the same way, with a reaction in the module of the event and one in a second module, and checks that the test of the host names a reaction left unregistered. With the sample, in a temporary git repository, it turns the pre-commit hook on as `AGENTS.md` says and checks that a commit that breaks HS010 is refused and a compliant one accepted, then that the job `protected-files` of the generated workflow fails when `git diff` fails, on a `.globalconfig` that turns HS016 off and on a change of `scripts/check.sh` until the label `hardslice-approved` is set, and that the hooks of Claude Code, Codex and Copilot CLI refuse to create a `.globalconfig`, a `Directory.Build.rsp` or a skill of `.agents/`; in both, actionlint validates that workflow. In both, it checks the modes of both scripts: any argument but `--build` exits with code 2, `--build` prints the errors of `dotnet build` alone and runs no test, and both modes fail on `TODO(hardslice):` markers left in a handler and a test, naming each file and line. It needs PowerShell 7, git and a Docker-compatible container runtime.
-- `scripts/verify-published.sh <version> <dir> [--source <folder>]` installs `HardSlice.Templates` at that version from NuGet.org, or from a folder of packages, in a home of its own, generates a solution with and without the sample, runs `dotnet tool restore` then `dotnet hardslice check` in each, and checks that the template, the analyzers and the tool come from that source. It needs a Docker-compatible container runtime.
-- `scripts/generated-workflow.sh lint|run` validates the workflow of a generated solution with actionlint, or runs the run steps of one of its jobs, in containers pinned by digest.
-- `scripts/demo-agent-fix.sh` prepares the [agent fix demonstrations](demos/agent-fix/README.md), one per blocking rule: `prepare <rule>` gives an agent a generated solution that fails with exactly the diagnostic of that rule, `verify <rule>` accepts its fix only if the trusted check passes without any protected file, suppression or weakened test, and `verify-reference` proves both on every rule, with a reference correction and the known workarounds. It needs git and a Docker-compatible container runtime.
-- `scripts/demo-add-feature.sh` runs the [add-feature demonstration](demos/add-feature/README.md): `prepare` gives an agent a solution generated with `--no-sample` and the templates installed, `verify <dir> <trace>` accepts its work only if each element is at the path of its template, no `TODO(hardslice):` marker is left, the trusted check passes without any protected file changed, and its trace (Claude Code, Codex or Copilot CLI, read by `scripts/agent-trace.py`) runs each `dotnet new hardslice-*` command; `verify-recorded` verifies the recorded runs again from their changes and traces. It needs git, Python 3 and a Docker-compatible container runtime.
-- `scripts/measure-analyzers.sh` measures the build time of a large generated application with and without the HardSlice analyzers, then `scripts/check.sh --build` on it and the full `scripts/check.sh` on an application with Bookings alone, checks the thresholds and the budgets of the hooks, and records the measurement in [the performance report](docs/performance/analyzers.md), in French. It needs a Docker-compatible container runtime.
-
-CI runs four jobs on every push to `main` and every pull request, each on a fresh runner from a fresh checkout, without cache: build and tests, template, demonstration (`verify-reference` on every rule), and generated workflow, which generates a solution, validates its `.github/workflows/hardslice.yml` with actionlint and runs its check job on it with `scripts/generated-workflow.sh`. A fifth one, performance, measures the analyzers and the verifications of the hooks on every push to `main` and on the pull requests that change the analyzers, the template, the tool or the measurement.
-
-A tag `v<version>`, the version of `Directory.Build.props`, runs the release workflow: the tests and the template scenario from the tag, the pack of the three packages and `scripts/verify-published.sh` on them, the push to NuGet.org after the approval of the maintainer, then `scripts/verify-published.sh` from NuGet.org on a fresh runner. [docs/releasing.md](docs/releasing.md) describes its setup and what to do when a job fails.
-
-| Path | Contains |
+| Version | Brings |
 |---|---|
-| `src/HardSlice.Analyzers/` | The Roslyn analyzer package. |
-| `src/HardSlice.Templates/content/hardslice-api/` | The solution template, `MyApp` being replaced by the name you choose, in its safe namespace form. |
-| `src/HardSlice.Templates/content/hardslice-module/` | The item template of a module, `MyApp` and `ModuleName` being replaced by the application and the module. |
-| `src/HardSlice.Templates/content/hardslice-aggregate/` | The item template of an aggregate, `MyApp`, `ModuleName`, `AggregateName` and `AggregateTable` being replaced by the application, the module, the aggregate and its table. |
-| `src/HardSlice.Templates/content/hardslice-command/` | The item template of a command slice, `MyApp`, `ModuleName` and `CommandName` being replaced by the application, the module and the slice. |
-| `src/HardSlice.Templates/content/hardslice-query/` | The item template of a query slice, `MyApp`, `ModuleName`, `QueryName` and `AggregateName` being replaced by the application, the module, the slice and the aggregate it reads. |
-| `src/HardSlice.Templates/content/hardslice-event/` | The item template of a domain event and its reaction, `MyApp`, `ModuleName`, `EventName`, `ReactionModule` and `ReactionSlice` being replaced by the application, the module and the name of the event, and the module and the slice of the reaction. |
-| `src/HardSlice.Tool/` | The `dotnet hardslice` local tool, which embeds the rule sheets of the template. |
-| `tests/HardSlice.Analyzers.Tests/` | Analyzer tests, and tests that compile the template content as is. |
-| `tests/HardSlice.Tool.Tests/` | Tests of `check`, its `--build` mode and its `TODO(hardslice):` markers, of `explain`, of the hooks, of `protected`, and of the versions and sheets the tool shares with the template. |
-| `scripts/` | Template, demonstration and performance scenarios. |
-| `demos/agent-fix/` | One agent fix demonstration per blocking rule: fixture, exact diagnostic, prompt, reference correction, known workarounds, and agent traces for a sample. |
-| `demos/add-feature/` | The add-feature demonstration: the business request, and the recorded runs of each agent with their changes, their trace and their account. |
-| `docs/` | Specification, plan, backlog, performance report and release procedure, in French. |
+| v0.4 | A public, reproducible benchmark of agents with and without HardSlice. |
+| v0.5 | Adoption of an existing solution, layered or in slices: `init`, `map`, `baseline` with a ratchet, `report`. |
+| v0.6 | A benchmark of layers against vertical slices for agents. |
+| v1.0 | Stable packages, a documentation site, SQL Server and Aspire options, Azure Pipelines. |
 
-### Try a local build of the packages
+The [delivery plan](docs/design/plan.md), in French, details each version.
 
-From a clone of this repository:
+## Contributing, security and license
 
-```text
-dotnet pack src/HardSlice.Analyzers/HardSlice.Analyzers.csproj --configuration Release --output artifacts/packages
-dotnet pack src/HardSlice.Tool/HardSlice.Tool.csproj --configuration Release --output artifacts/packages
-dotnet pack src/HardSlice.Templates/HardSlice.Templates.csproj --configuration Release --output artifacts/packages
-dotnet new install artifacts/packages/HardSlice.Templates.0.2.0-preview.1.nupkg --force
-```
-
-`artifacts/packages` then holds `HardSlice.Analyzers`, `HardSlice.Tool` and `HardSlice.Templates` in `0.2.0-preview.1`, the version of `Directory.Build.props`, which a rebuild does not change. The generated solutions must restore the first two from that folder, not from NuGet.org. Create a folder for them, outside this repository, with this `nuget.config`, replacing the `value` of `hardslice-local` with the absolute path of `artifacts/packages`:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="hardslice-local" value="/path/to/hardslice/artifacts/packages" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-  </packageSources>
-  <packageSourceMapping>
-    <packageSource key="hardslice-local">
-      <package pattern="HardSlice.*" />
-    </packageSource>
-    <packageSource key="nuget.org">
-      <package pattern="*" />
-    </packageSource>
-  </packageSourceMapping>
-</configuration>
-```
-
-The mapping makes NuGet take `HardSlice.*` packages from your local folder only, never from NuGet.org. Then follow [Getting started](#getting-started) from step 2 in that folder. After a rebuild, repack the three packages, reinstall the template as above, and clear the packages NuGet keeps in its global packages folder with `dotnet nuget locals global-packages --clear`: otherwise solutions keep restoring the previous builds of `HardSlice.Analyzers` and `HardSlice.Tool` at the same version. `dotnet new install HardSlice.Templates@0.2.0-preview.1 --force` puts the published template back.
-
-## License
-
-[MIT](LICENSE).
+- [Contributing](CONTRIBUTING.md): build, test, conventions, and how to try a local build of the packages.
+- [Security](SECURITY.md): how to report a way around the protections in private.
+- [Documentation](docs/README.md): every page, in English, and the design documents, in French.
+- License: [MIT](LICENSE).

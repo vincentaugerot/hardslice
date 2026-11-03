@@ -1,6 +1,8 @@
-# HardSlice — plan de livraison
+> **Document de conception, en français.** Document de travail du projet, public pour rendre la méthode transparente. La documentation d'utilisation est en anglais, dans le [README](../../README.md) et [docs/](../README.md).
 
-Statut : roadmap produit active, 30/10/2026.
+# HardSlice : plan de livraison
+
+Statut : roadmap produit active, 03/11/2026.
 
 **Source de vérité produit** : [specifications.md](specifications.md).
 
@@ -38,7 +40,7 @@ Aucun composant HardSlice n'est requis au runtime de l'application générée.
 | Distribution | Paquets NuGet et outil local épinglé ; aucune copie d'analyseurs dans les projets utilisateurs |
 | CLI canonique | `dotnet hardslice <commande>` |
 | Vérification | Build et tests comme autorité locale ; CI protégée comme autorité finale |
-| Langue publique | Code, diagnostics et documentation publique en anglais |
+| Langue publique | Code, diagnostics, contenu des paquets et documentation d'utilisation (README, `docs/`) en anglais ; les documents de conception de `docs/design/` restent en français, signalés comme documents de travail (03/11/2026) |
 | Classification des types | Contrats applicatifs `IEntity`, `IAggregateRoot`, `IDomainEvent` et contrats de messagerie, déclarés dans `hardslice.json` et reconnus par symbole ; aucune heuristique de forme (30/10/2026) |
 | HS010 et HS011 | Analyseurs HardSlice ciblés avec leurs propres identifiants, au lieu de `BannedApiAnalyzers` qui les confondrait sous `RS0030` (30/10/2026) |
 | Vérification outillée | `dotnet hardslice check` dès v0.2 ; `scripts/check.sh` et `check.ps1` le lancent ; `dotnet build` seul produit toujours les diagnostics |
@@ -64,7 +66,7 @@ Un spike est autorisé uniquement lorsqu'une inconnue bloque le code en cours. I
 
 La recherche sur l'adoption est planifiée pour v0.5. Le mainteneur peut la reprendre plus tôt en parallèle avec un protocole actif et validé, mais elle ne bloque pas la première boucle codée.
 
-## 4. Premier jalon — incrément 1, pré-v0.1
+## 4. Premier jalon : incrément 1, pré-v0.1
 
 ### Résultat attendu
 
@@ -99,7 +101,7 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 
 ## 5. Roadmap
 
-### v0.1 — Template utilisable et architecture de référence
+### v0.1 : Template utilisable et architecture de référence
 
 - compléter l'application Bookings avec l'invariant de chevauchement représentatif et son domaine complet ;
 - livrer commandes, requêtes, endpoints et tests ;
@@ -108,30 +110,30 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 
 **Résultat visible** : un utilisateur génère une application cohérente et peut la modifier avec un agent.
 
-### v0.2 — Analyseurs et diagnostics réparables
+### v0.2 : Analyseurs et diagnostics réparables
 
 - classer entités, agrégats, événements, commandes, requêtes et handlers par des contrats applicatifs (`IEntity`, `IAggregateRoot`), y compris depuis un projet référencé, avec les diagnostics de configuration HS900 à HS902 ;
 - livrer progressivement HS003 à HS011, HS015 et HS019 ; HS010 et HS011 sont des analyseurs HardSlice avec leurs propres identifiants, et non des listes `BannedApiAnalyzers` ;
 - fournir les fiches des règles, `dotnet hardslice check` et `explain` dans un outil local épinglé à la version des analyseurs ;
 - ajouter les niveaux d'analyse `Minimum`, `Recommended` et `All`, les tests de faux positifs, les cas inter-assemblies et la mesure de performance sur un build incrémental réel ;
-- publier les premiers paquets NuGet en préversion (`0.2.0-preview.1`).
+- préparer les paquets et le workflow de publication ; `0.2.0-preview.1` n'est jamais publiée : la première préversion publiée est `0.3.0-preview.1`, qui couvre v0.2 et v0.3 (décision du mainteneur du 03/11/2026).
 
 **Résultat visible** : les dérives principales échouent avec des messages que l'agent peut corriger.
 
-### v0.3 — Génération et boucle agent
+### v0.3 : Génération et boucle agent
 
 - livrer les templates `hardslice-command`, `hardslice-query`, `hardslice-module`, `hardslice-aggregate` et `hardslice-event` ;
 - publier les événements de domaine à leurs gestionnaires, prérequis de `hardslice-event` et de la skill `add-domain-event` ;
 - livrer les six skills de la spécification et HS000 ;
 - livrer `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md` ;
-- pour Claude Code, ajouter le build incrémental après édition et le hook de fin de tâche prévus par la spécification ;
+- pour Claude Code, Codex et Copilot CLI, ajouter le build incrémental après édition et le hook de fin de tâche prévus par la spécification ;
 - cibler Claude Code, Codex, GitHub Copilot et Gemini CLI : adaptateur natif lorsqu'il existe, sinon fallback explicite par `AGENTS.md` et le script de vérification ;
 - faire des scripts de vérification le point unique appelé par les hooks, le pre-commit et la CI ;
 - tester la boucle E2E de chaque règle bloquante.
 
 **Résultat visible** : l'agent génère, complète, vérifie et corrige une fonctionnalité par les chemins officiels.
 
-### v0.4 — Benchmark avec et sans HardSlice
+### v0.4 : Benchmark avec et sans HardSlice
 
 - exécuter le protocole A/B/C sur Bookings ;
 - utiliser un runner isolé et des tâches figées ;
@@ -140,7 +142,7 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 
 **Résultat visible** : une mesure publique et reproductible de l'effet de HardSlice.
 
-### v0.5 — Adoption sur une solution existante
+### v0.5 : Adoption sur une solution existante
 
 - livrer `init`, `map`, `baseline`, `report` et `verify` ;
 - rendre les conventions configurables ;
@@ -151,7 +153,7 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 
 **Résultat visible** : une équipe bloque les nouvelles dérives sans corriger immédiatement toute sa dette.
 
-### v0.6 — Benchmark couches contre slices
+### v0.6 : Benchmark couches contre slices
 
 - construire deux applications et ensembles de règles comparables ;
 - exécuter les mêmes tâches avec les mêmes agents, modèles et budgets ;
@@ -160,7 +162,7 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 
 **Résultat visible** : une comparaison publique et chiffrée des deux architectures pour les agents.
 
-### v1.0 — Distribution stable
+### v1.0 : Distribution stable
 
 - publier les packages NuGet stables des templates, analyseurs et outils ;
 - fournir la documentation complète et versionnée ;
@@ -208,4 +210,4 @@ Le protocole détaillé du benchmark, son isolation et ses règles d'intégrité
 
 ## 9. Prochaine action
 
-Les incréments 1 à 4 sont terminés (PB-001 à PB-050), sauf la publication. Exécuter l'incrément actif « Préparation de la publication 0.3.0-preview.1 » (PB-052 à PB-059), décrit dans la section 6 du [backlog](product-backlog.md), issu de la revue complète du dépôt du 03/11/2026. PB-051 publie ensuite une seule préversion, `0.3.0-preview.1`, sur le feu vert du mainteneur.
+Les incréments 1 à 4 sont terminés (PB-001 à PB-050), sauf la publication. L'incrément actif « Préparation de la publication 0.3.0-preview.1 », décrit dans la section 6 du [backlog](product-backlog.md) et issu de la revue complète du dépôt du 03/11/2026, s'achève par PB-059 (paquets prêts à publier). PB-051 publie ensuite une seule préversion, `0.3.0-preview.1`, sur le feu vert du mainteneur. Vient ensuite l'incrément 5, « Benchmark v0.4 », à découper.

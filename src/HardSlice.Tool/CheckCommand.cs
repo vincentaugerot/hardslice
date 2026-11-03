@@ -16,7 +16,7 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
 {
     public const string ContainerRuntimeMissing =
         "error: integration tests need a Docker-compatible container runtime reachable by the 'docker' CLI (Docker Desktop, Docker Engine, Podman, Colima...). "
-        + "Start one, check that 'docker info' succeeds, then run this script again.";
+        + "Start one, check that 'docker info' succeeds, then run the check again.";
 
     public const string BuildModeReduction =
         "==> check --build: incremental build only, errors only, no test. "

@@ -1,5 +1,15 @@
 # Coût des analyseurs HardSlice
 
+## Summary in English
+
+This report measures what the `HardSlice.Analyzers` rules add to a real build, and what the checks run by the hooks of the agents cost, against fixed thresholds and budgets. `scripts/measure-analyzers.sh` writes it: it replaces the latest measurement and adds a line to the history; the rest of the report, in French, is never rewritten. The `performance` job of the CI measures again on every push to `main` and on the pull requests that touch the analyzers, the template, the tool or the measurement.
+
+- **Fixture**: an application generated from the local packages with the Bookings sample, plus 20 synthetic modules of 10 slices each (about 360 C# files under `src/`).
+- **Scenarios**: A, an incremental build after a change inside a slice; B, after a change of the public API of an aggregate, which rebuilds the domain and its dependents; C, a full rebuild. Each is measured with and without the analyzers, five times after a warm-up, alternating. D is the check after an edit (`scripts/check.sh --build`) on the fixture; E the full check before an agent hands back (`scripts/check.sh`, integration tests included) on the application with Bookings alone.
+- **Thresholds**, on the median: A at most 10 s in total and 1 s of overhead; B at most 20 s and 2 s; C at most 15 % of overhead; D within the 10 s budget of the hook after an edit, E within the 60 s budget of the end hook.
+- **Latest verdict** (3 November 2026, 4 cores): every threshold holds. The analyzers add about 0.2 s to A and B, and about 11 % to the full rebuild C; D takes about 5 s and E about 20 s.
+- **Decision**: since the full check fits the 60 s budget, the end hook runs it as is, and no reduced check of the touched slices is shipped.
+
 Ce rapport mesure ce que les analyseurs de `HardSlice.Analyzers` ajoutent à un build réel, et fixe les seuils qu'ils doivent respecter (PB-019). Il mesure aussi les vérifications que lancent les hooks des agents, contre leurs budgets (PB-045). Chaque ticket de règle y enregistre sa mesure.
 
 ```bash
@@ -10,7 +20,7 @@ Le script remplace la dernière mesure ci-dessous et ajoute une ligne à l'histo
 
 ## Fixture
 
-`PerfApp`, générée à chaque mesure depuis les paquets locaux, comme `scripts/test-template.sh` : `scripts/generate-app.sh` empaquette `HardSlice.Analyzers` et `HardSlice.Templates`, installe le template et génère la solution avec son exemple Bookings. `scripts/generate-perf-modules.sh` y ajoute ensuite 20 modules synthétiques, `Module01` à `Module20`, écrits comme Bookings et identiques d'une exécution à l'autre :
+`PerfApp`, générée à chaque mesure depuis les paquets locaux, comme `scripts/test-template.sh` : `scripts/generate-app.sh` empaquette `HardSlice.Analyzers`, `HardSlice.Tool` et `HardSlice.Templates`, installe le template et génère la solution avec son exemple Bookings. `scripts/generate-perf-modules.sh` y ajoute ensuite 20 modules synthétiques, `Module01` à `Module20`, écrits comme Bookings et identiques d'une exécution à l'autre :
 
 - dans le Domain, un agrégat `Item` (`IAggregateRoot`), son identifiant, son statut et un événement `ItemCreated` ;
 - dans l'application, son mapping EF Core au niveau du module, la classe du module (enregistrements et routes) et 10 slices : 5 commandes (`CreateItem`, `RenameItem`, `AdjustQuantity`, `ArchiveItem`, `RestoreItem`), chacune avec son validateur, son handler et son endpoint, et 5 requêtes (`GetItem`, `ListItems`, `CountItems`, `FindItemsByName`, `ListArchivedItems`) ;
