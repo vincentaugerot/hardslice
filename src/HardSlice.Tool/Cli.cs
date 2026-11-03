@@ -11,7 +11,7 @@ internal static class Cli
         Commands:
           check           Builds the solution, then runs its unit, architecture and integration tests,
                           and fails while a TODO(hardslice): marker is left in src/ or tests/.
-                          Exits with the code of the first step that fails. The only verdict on the work.
+                          Stops at the first step that fails, its output left as is. The only verdict on the work.
           check --build   The incremental build alone, errors only, then the TODO(hardslice): markers:
                           the verification after an edit. Its success does not mean the work is done.
           explain <rule>  Prints the sheet of a HardSlice rule, such as HS016.
@@ -34,10 +34,19 @@ internal static class Cli
         Options:
           --help          Prints this help.
           --version       Prints the version of the tool.
+
+        Exit codes of check and check --build: 0 the check passed, 1 a step failed, 2 a wrong command line only.
         """;
 
-    // Where the end hook counts its relaunches for each failure, one file per session.
-    public static string HookStateDirectory { get; } = Path.Combine(Path.GetTempPath(), "hardslice", "hooks");
+    // Where the end hook counts its relaunches for each failure, one file per session, in a folder of the user: a shared folder,
+    // created by the first account of the machine that ran a hook, would refuse the writes of every other account.
+    public static string HookStateDirectory { get; } = UserStateDirectory(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Path.GetTempPath(), Environment.UserName);
+
+    public static string UserStateDirectory(string localApplicationData, string temporary, string userName) =>
+        string.IsNullOrEmpty(localApplicationData)
+            ? Path.Combine(temporary, $"hardslice-{string.Concat(userName.Select(c => char.IsAsciiLetterOrDigit(c) ? c : '_'))}", "hooks")
+            : Path.Combine(localApplicationData, "hardslice", "hooks");
 
     public static int Run(string[] args, string currentDirectory, ICommandRunner runner, TextWriter output, TextWriter error) =>
         Run(args, currentDirectory, runner, output, error, TextReader.Null, _ => null, HookStateDirectory);

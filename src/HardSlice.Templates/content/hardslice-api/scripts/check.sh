@@ -3,10 +3,10 @@
 # A thin launcher, like check.ps1: restores the tools pinned by .config/dotnet-tools.json, then runs 'dotnet hardslice check',
 # which builds the solution (restoring if needed), runs unit and architecture tests, then integration tests,
 # which need a Docker-compatible container runtime, and fails while a TODO(hardslice): marker is left in src/ or tests/.
-# Its exit code is the one of this script.
+# Exit codes, as those of 'dotnet hardslice check': 0 the check passed, 1 a step failed, its output left as is, 2 a wrong argument.
 #   --build  the verification after an edit: the incremental build alone, errors only, then the TODO(hardslice): markers.
 #            Its success does not mean the work is done: only the full check decides.
-# Any other argument exits with code 2.
+# Any other argument exits with code 2, before anything runs.
 set -euo pipefail
 
 if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --build ) ]]; then
@@ -18,7 +18,7 @@ fi
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 if [[ $# -eq 0 ]]; then
-  dotnet tool restore
+  dotnet tool restore || exit 1
   exec dotnet hardslice check
 fi
 

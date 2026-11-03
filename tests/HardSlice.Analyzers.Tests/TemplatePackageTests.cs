@@ -58,6 +58,8 @@ public sealed class TemplatePackageTests
             packedManifest.TrimEnd().ShouldBe(
                 File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")).Replace(VersionToken, version).TrimEnd());
             archive.Entries.Select(entry => entry.FullName).ShouldContain("README.md");
+            // PB-055: the generated solution keeps its build output, test results and IDE files out of git.
+            TemplateEntry(archive, ".gitignore").ShouldBe(File.ReadAllText(Path.Combine(templateRoot, ".gitignore")));
             // The item templates ship in the same package, beside hardslice-api.
             PackedFiles(archive, "/hardslice-command/").ShouldBe(CommandTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-query/").ShouldBe(QueryTemplateFiles.Order(StringComparer.Ordinal));
@@ -79,6 +81,28 @@ public sealed class TemplatePackageTests
             if (Directory.Exists(temporaryDirectory))
                 Directory.Delete(temporaryDirectory, recursive: true);
         }
+    }
+
+    // PB-055: git never tracks the build output, the test results the check writes, nor the files of IDEs.
+    [Fact]
+    public void Generated_solution_ignores_its_build_output_test_results_and_IDE_files()
+    {
+        var gitignore = File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".gitignore"))
+            .Where(line => line.Length > 0 && !line.StartsWith('#'));
+
+        gitignore.ShouldBe(["bin/", "obj/", "TestResults/", ".vs/", ".idea/", "*.user"], ignoreOrder: true);
+    }
+
+    // PB-055: a NuGet security alert published after this version on one of its pinned packages stays a warning: with
+    // TreatWarningsAsErrors, it would break the restore of every solution the template generates.
+    [Fact]
+    public void Generated_solution_keeps_NuGet_security_alerts_as_warnings()
+    {
+        var properties = XDocument.Load(Path.Combine(TemplateRoot(FindRepositoryRoot()), "Directory.Build.props")).Descendants("PropertyGroup").Elements()
+            .ToDictionary(element => element.Name.LocalName, element => element.Value);
+
+        properties["TreatWarningsAsErrors"].ShouldBe("true");
+        properties["WarningsNotAsErrors"].Split(';').ShouldBe(["$(WarningsNotAsErrors)", "NU1901", "NU1902", "NU1903", "NU1904"]);
     }
 
     // hardslice-command generates the three files of a command slice, at the paths of HS004 and HS018, and nothing else.

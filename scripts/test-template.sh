@@ -4,7 +4,7 @@
 # runs the "Run the API" path of README.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS000 (test projects included), HS001, HS003, HS004 (a reaction slice included), HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
-# that a missing or invalid hardslice.json fails them explicitly, with HS900 for its contracts, that the solution compiles with the All analysis mode,
+# that a missing or invalid hardslice.json, or one of a later version, fails them explicitly, with HS900 for its contracts and its version, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
 # It generates a second module Rooms with dotnet new hardslice-module through each of its refusals, routes and printed lines, registers it in Program.cs,
@@ -1482,10 +1482,13 @@ CODE
 $test_file:$(grep -c '' "$app/$test_file"): // TODO(hardslice): a marker left in a test."
   for arguments in "" "--build"; do
     for script in check.sh check.ps1; do
-      # The full check reaches the markers once every other step passed: they are its only failure.
+      # The full check reaches the markers once every other step passed: they are its only failure, with the code 1 (PB-055).
+      status=0
       # shellcheck disable=SC2086 # No argument for the full check.
-      if check_output="$(run_check_mode "$script" $arguments 2>&1)"; then
-        echo "error: scripts/$script $arguments passed despite TODO(hardslice): markers in $code_file and $test_file." >&2
+      check_output="$(run_check_mode "$script" $arguments 2>&1)" || status=$?
+      if [[ "$status" != 1 ]]; then
+        printf '%s\n' "$check_output" >&2
+        echo "error: scripts/$script $arguments exited with code $status instead of 1 despite TODO(hardslice): markers in $code_file and $test_file." >&2
         exit 1
       fi
       if [[ "$check_output" != *"error: 2 TODO(hardslice): markers are left in src/ and tests/: "* ||
@@ -1500,7 +1503,7 @@ $test_file:$(grep -c '' "$app/$test_file"): // TODO(hardslice): a marker left in
   done
   mv "$work/marker-code.backup" "$app/$code_file"
   mv "$work/marker-test.backup" "$app/$test_file"
-  echo "    TODO(hardslice): markers fail both modes after their other steps: ${expected_markers//$'\n'/, }"
+  echo "    TODO(hardslice): markers fail both modes with code 1 after their other steps: ${expected_markers//$'\n'/, }"
 }
 
 # Runs one hook of an agent in the solution with the payload given on its standard input, as the configuration of the CLI declares it.
@@ -1591,8 +1594,23 @@ CODE
       exit 1
     fi
   done
+  # PB-055: once the build passes, the markers left are work to finish, not errors of the edit.
+  cat > "$app/src/$app_name.Domain/$module/RoomOpening.cs" <<CODE
+namespace $app_name.Domain.$module;
+
+// TODO(hardslice): give the opening days of a room.
+public static class RoomOpening;
+CODE
+  run_claude_hook PostToolUse "$(claude_payload PostToolUse "$app/src/$app_name.Domain/$module/RoomOpening.cs")"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the build passes after your edit of 'src/$app_name.Domain/$module/RoomOpening.cs'. 1 TODO(hardslice): marker is left: "* ||
+    "$hook_error" != *"src/$app_name.Domain/$module/RoomOpening.cs:3: // TODO(hardslice): give the opening days of a room."* || "$hook_error" == *"the build fails"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PostToolUse hook did not hand the marker left after a passing build to the agent as work to finish (code $hook_status)." >&2
+    exit 1
+  fi
   rm "$app/src/$app_name.Domain/$module/RoomOpening.cs"
   rmdir "$app/src/$app_name.Domain/$module" 2> /dev/null || true
+  echo "    PostToolUse: a marker left after a passing build reaches the agent as work to finish"
 
   run_claude_hook Stop "$(claude_payload Stop "" true)"
   if [[ "$hook_status" != 0 || -n "$hook_error" || "$(cat "$work/hook-output")" != '{"systemMessage":"HardSlice: the check passed."}' ]]; then
@@ -1784,10 +1802,15 @@ probe_pre_commit_and_ci() {
     fi
   done
 
-  # bin/, obj/ and TestResults/ stay out of the repository, as a .gitignore would keep them: the solution ships none.
+  # PB-055: the .gitignore of the solution keeps bin/, obj/ and TestResults/, written by the checks before, out of the repository.
   app_git init --quiet --initial-branch main
-  printf '%s\n' bin/ obj/ TestResults/ >> "$app/.git/info/exclude"
   app_git add --all
+  if app_git ls-files | grep -Eq '(^|/)(bin|obj|TestResults)/'; then
+    app_git ls-files | grep -E '(^|/)(bin|obj|TestResults)/' | head -5 >&2
+    echo "error: git add --all tracks the build output or the test results of $app_name: its .gitignore does not keep them out." >&2
+    exit 1
+  fi
+  echo "    git: add --all tracks neither bin/, obj/ nor TestResults/"
   app_git commit --quiet --no-verify --message "Generated by hardslice-api"
   baseline="$(app_git rev-parse HEAD)"
   if [[ -n "$(app_git config --get core.hooksPath || true)" ]]; then
@@ -2962,6 +2985,9 @@ expect_failure "HS900: contract 'contracts.command' of hardslice.json, '$app_nam
 sed 's/IRequestHandler`2, /IRequestHandler`2 /' "$work/hardslice.json.backup" > "$app/hardslice.json"
 expect_failure "HS900: 'contracts.requestHandler' in hardslice.json is not '<metadata name>, <assembly>'." "docs/rules/HS900.md" "a malformed handler contract" check.sh check.ps1
 # The analyzers read the contracts only: the architecture tests reject the style.
+# PB-055: a later format of hardslice.json is reported with the update to make, before its keys are read.
+sed 's/"version": 1,/"version": 2, "baseline": {},/' "$work/hardslice.json.backup" > "$app/hardslice.json"
+expect_failure "HS900: hardslice.json declares version 2, which this version of HardSlice.Analyzers does not read: it reads version 1." "docs/rules/HS900.md" "a hardslice.json of a later version" check.sh
 sed 's/"style": "slices"/"style": "layers"/' "$work/hardslice.json.backup" > "$app/hardslice.json"
 expect_failure "hardslice.json: 'style' must be" "docs/rules/HS017.md" "an invalid hardslice.json" check.ps1
 mv "$work/hardslice.json.backup" "$app/hardslice.json"

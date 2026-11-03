@@ -125,7 +125,7 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-Both scripts restore the local tools, then run `dotnet hardslice check`: it builds the solution (restoring if needed), then runs the unit tests, the architecture tests and the integration tests. Integration tests need a Docker-compatible container runtime: without one, the check stops before them and says so. Last, it fails while a `TODO(hardslice):` marker is left in `src/` or `tests/`, and lists each one. It exits with a non-zero code on any failure, the code of the first step that fails.
+Both scripts restore the local tools, then run `dotnet hardslice check`: it builds the solution (restoring if needed), then runs the unit tests, the architecture tests and the integration tests. Integration tests need a Docker-compatible container runtime: without one, the check stops before them and says so. Last, it fails while a `TODO(hardslice):` marker is left in `src/` or `tests/`, and lists each one. It exits with code 1 on any failure, its output left as is, and 2 on a wrong argument.
 
 **You are not done until the check script exits 0.** Do not hand back, report success or commit while it fails. If it cannot pass without breaking a rule, stop and explain the conflict instead.
 
@@ -141,7 +141,7 @@ Codex reads this file only. Each other agent also reads its own file, which hold
 
 Skills, in `.claude/skills/` and their copies in `.agents/skills/`, which every agent reads: `add-module`, `add-aggregate`, `add-slice` and `add-domain-event` generate their element with its template; `extract-to-domain` moves a business rule from the slices into its aggregate; `fix-architecture-violation` fixes a HardSlice failure from the sheet of its rule. Each runs the check.
 
-Hooks: Claude Code (`.claude/settings.json`), Codex (`.codex/hooks.json`) and GitHub Copilot CLI (`.github/hooks/hardslice.json`) run `dotnet hardslice hook`, which refuses the edit of a protected file (see [Forbidden](#forbidden)), builds after each edit of a `.cs` file (budget 10 seconds) and runs the check before the agent hands back (budget 60 seconds), keeping it working while the check fails, three relaunches at most for the same failure. Codex runs them only once a human has approved them in `/hooks`, and skips them silently until then. Gemini CLI has none. Hooks only shorten the loop: the check script decides, so run it before you finish.
+Hooks: Claude Code (`.claude/settings.json`), Codex (`.codex/hooks.json`) and GitHub Copilot CLI (`.github/hooks/hardslice.json`) run `dotnet hardslice hook`, which refuses the edit of a protected file (see [Forbidden](#forbidden)), builds after each edit of a `.cs` file (budget 10 seconds) and runs the check before the agent hands back (budget 60 seconds), keeping it working while the check fails, three relaunches at most for the same failure and eight in a session. Codex runs them only once a human has approved them in `/hooks`, and skips them silently until then. Gemini CLI has none. Hooks only shorten the loop: the check script decides, so run it before you finish.
 
 ## Fixing a HardSlice failure
 

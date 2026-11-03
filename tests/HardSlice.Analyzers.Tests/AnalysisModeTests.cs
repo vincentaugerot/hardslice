@@ -49,6 +49,7 @@ public sealed class AnalysisModeTests
     private const string Configuration =
         """
         {
+          "version": 1,
           "style": "slices",
           "contracts": {
             "entity": "MyApp.Domain.IEntity, MyApp",

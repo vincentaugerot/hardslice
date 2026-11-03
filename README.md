@@ -68,7 +68,7 @@ bash scripts/check.sh     # macOS, Linux, Git Bash
 pwsh scripts/check.ps1    # Windows, PowerShell
 ```
 
-Both scripts restore the local tools of `.config/dotnet-tools.json`, then run `dotnet hardslice check`. It builds the solution, then runs the unit tests, the architecture tests and the integration tests, which start PostgreSQL with Testcontainers. Without a reachable container runtime, it stops before the integration tests and says so. Last, it fails while a `TODO(hardslice):` marker that an element template left is still in `src/` or `tests/`, and lists each file and line: replacing a failing generated test with a trivial assertion does not pass it. It exits with the code of the first step that fails: this is the command an agent must bring back to green before it is done. The diagnostics are those of `dotnet build` and `dotnet test`, as they print them.
+Both scripts restore the local tools of `.config/dotnet-tools.json`, then run `dotnet hardslice check`. It builds the solution, then runs the unit tests, the architecture tests and the integration tests, which start PostgreSQL with Testcontainers. Without a reachable container runtime, it stops before the integration tests and says so. Last, it fails while a `TODO(hardslice):` marker that an element template left is still in `src/` or `tests/`, and lists each file and line: replacing a failing generated test with a trivial assertion does not pass it. It exits with `0` when the check passes, `1` when a step fails, its output left as is, and `2` on a wrong argument only: this is the command an agent must bring back to green before it is done. The diagnostics are those of `dotnet build` and `dotnet test`, as they print them.
 
 The tool has the version of the analyzers: `check` fails before building if `Directory.Packages.props` references another version of `HardSlice.Analyzers`. It has no option to skip a step. `bash scripts/check.sh --build` (or `check.ps1 --build`, `dotnet hardslice check --build`) is the verification for a hook after an edit: the incremental build of the solution with `--no-restore`, after a restore only when a project needs one, printing the errors alone as the compiler wrote them, then the `TODO(hardslice):` markers. It runs no test, says so, and never decides that the work is done: only the check without argument does. Any other argument exits with code 2. Both fit the budgets of the hooks, 10 seconds after an edit and 60 seconds before an agent hands back, as [measured](docs/performance/analyzers.md).
 
@@ -135,7 +135,7 @@ Each hook runs `dotnet hardslice hook <cli> <event>`, which reads the payload of
 |---|---|---|---|
 | before an edit | the list of protected files | none | the edit is refused with the reason and a pointer to "Forbidden" of `AGENTS.md` |
 | after the edit of a `.cs` file | the check of `scripts/check.sh --build` | 10 s | the errors of the build reach the agent, which fixes them |
-| the end of a turn | the check of `scripts/check.sh` | 60 s | the agent goes on with the failure; after three relaunches for the same failure, it hands back and says that the check fails |
+| the end of a turn | the check of `scripts/check.sh` | 60 s | the agent goes on with the failure; after three relaunches for the same failure, or eight in a session, it hands back and says that the check fails |
 
 | CLI | Configuration | Before an edit | After an edit | End of a turn | Answer |
 |---|---|---|---|---|---|
@@ -251,7 +251,7 @@ The event and its reaction build without any HardSlice diagnostic. The handler t
 | [HS017](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS017.md) | `Shared` stays cross-cutting: it never depends on `Features`, and holds only the folders `hardslice.json` allows. | Architecture tests |
 | [HS018](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS018.md) | The tests of a slice are at the same path under `tests/`, and every slice has some. | Architecture tests |
 | [HS019](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS019.md) | A domain event is named as a past fact: the last word of its name ends with `ed` or is an irregular past participle of the sheet's list (`BookingPaid`). A naming convention, never blocking. | Analyzer suggestion in the `All` mode |
-| [HS900](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS900.md) | `hardslice.json` is usable: it declares the contracts `IEntity`, `IAggregateRoot`, `IDomainEvent`, `ICommand<T>`, `IQuery<T>` and `IRequestHandler<,>`, and each one exists in its declaring assembly. | Analyzer at build time |
+| [HS900](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS900.md) | `hardslice.json` is usable: it declares `"version": 1`, the version of its format, and the contracts `IEntity`, `IAggregateRoot`, `IDomainEvent`, `ICommand<T>`, `IQuery<T>` and `IRequestHandler<,>`, and each one exists in its declaring assembly. | Analyzer at build time |
 | [HS901](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS901.md) | A type has one role: never both an entity and a domain event, a command and a query, or an entity and a request. | Analyzer at build time |
 | [HS902](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS902.md) | Every domain type EF Core maps as an entity implements `IEntity` or `IAggregateRoot`. | Analyzer at build time |
 

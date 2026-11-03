@@ -13,6 +13,7 @@ public sealed class SystemClockAnalyzerTests
     private const string Configuration =
         """
         {
+          "version": 1,
           "style": "slices",
           "contracts": {
             "entity": "MyApp.Domain.IEntity, MyApp.Domain",

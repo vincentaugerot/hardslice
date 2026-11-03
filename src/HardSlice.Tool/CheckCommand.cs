@@ -24,9 +24,13 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
 
     public const string ErrorsOnlyLogger = "-logger:Microsoft.Build.Logging.ConsoleLogger,Microsoft.Build;ErrorsOnly;NoSummary;Verbosity=minimal";
 
-    // Exit code when the solution cannot be verified: no solution, another analyzer version, a test project left out of the
-    // .slnx, no container runtime, or a TODO(hardslice): marker left.
+    // The exit code of any failure: a step that fails, whatever its own code, no solution, another analyzer version, a test project
+    // left out of the .slnx, no container runtime, or a TODO(hardslice): marker left. The output of the failing step stays on
+    // screen as it wrote it. 2 is kept for a command line that the tool does not understand (Cli.UsageError), 0 for success.
     public const int Failure = 1;
+
+    // Set when the only failure is the TODO(hardslice): markers left, after every other step passed: their count.
+    public int? MarkersLeft { get; private set; }
 
     public int Run(string currentDirectory, CheckMode mode)
     {
@@ -67,12 +71,12 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
             ?? Passed("==> Build passed. Tests did not run: only the full check decides that the work is done.");
     }
 
-    // Null when the step passes, otherwise its exit code.
+    // Null when the step passes, otherwise Failure: the code of the command, such as 2 for a failed test under
+    // Microsoft.Testing.Platform, never reaches the caller, where 2 means a wrong command line.
     private int? Step(Solution solution, string title, params string[] arguments)
     {
         output.WriteLine($"==> {title}");
-        var exitCode = runner.Run("dotnet", arguments, solution.Root);
-        return exitCode == 0 ? null : exitCode;
+        return runner.Run("dotnet", arguments, solution.Root) == 0 ? null : Failure;
     }
 
     // dotnet test --no-build runs the binaries of the last build of a test project: one left out of the .slnx is no longer
@@ -123,6 +127,7 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
             + "never with an empty test or one that asserts nothing.");
         foreach (var marker in markers)
             error.WriteLine($"{marker.Path}:{marker.Line}: {marker.Text}");
+        MarkersLeft = markers.Count;
         return Failure;
     }
 

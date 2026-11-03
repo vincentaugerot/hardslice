@@ -11,6 +11,7 @@ public sealed class ClassificationAnalyzerTests
     private const string Configuration =
         """
         {
+          "version": 1,
           "style": "slices",
           "contracts": {
             "entity": "MyApp.Domain.IEntity, MyApp.Domain",
@@ -199,7 +200,7 @@ public sealed class ClassificationAnalyzerTests
                 + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
             var position = diagnostic.Location.GetLineSpan();
             position.Path.ShouldBe(ConfigurationPath);
-            position.StartLinePosition.Line.ShouldBe(3);
+            position.StartLinePosition.Line.ShouldBe(4);
         }
     }
 
@@ -497,10 +498,15 @@ public sealed class ClassificationAnalyzerTests
     [InlineData("{ \"style\": \"slices\" } }", "hardslice.json is not valid JSON at line 1, column 23: unexpected '}' after the root value")]
     [InlineData("{ 'style': 'slices' }", "hardslice.json is not valid JSON at line 1, column 3: expected a property name in double quotes")]
     [InlineData("[]", "the root of hardslice.json must be a JSON object")]
-    [InlineData("{ \"styles\": \"slices\" }", "hardslice.json has an unknown key 'styles'")]
-    [InlineData("{ \"contracts\": [] }", "'contracts' in hardslice.json must be a JSON object")]
-    [InlineData("{ \"contracts\": { \"entities\": \"MyApp.Domain.IEntity, MyApp.Domain\" } }", "hardslice.json has an unknown key 'contracts.entities'")]
-    [InlineData("{ \"contracts\": { \"entity\": \"MyApp.Domain.IEntity, MyApp.Domain\", \"entity\": \"MyApp.Domain.IEntity, MyApp.Domain\" } }", "hardslice.json declares 'contracts.entity' twice")]
+    [InlineData("{ \"version\": 1, \"styles\": \"slices\" }", "hardslice.json has an unknown key 'styles'")]
+    [InlineData("{ \"version\": 1, \"contracts\": [] }", "'contracts' in hardslice.json must be a JSON object")]
+    [InlineData("{ \"version\": 1, \"contracts\": { \"entities\": \"MyApp.Domain.IEntity, MyApp.Domain\" } }", "hardslice.json has an unknown key 'contracts.entities'")]
+    [InlineData("{ \"version\": 1, \"contracts\": { \"entity\": \"MyApp.Domain.IEntity, MyApp.Domain\", \"entity\": \"MyApp.Domain.IEntity, MyApp.Domain\" } }", "hardslice.json declares 'contracts.entity' twice")]
+    [InlineData("{ \"version\": 1, \"version\": 1 }", "hardslice.json declares 'version' twice")]
+    [InlineData("{ \"style\": \"slices\" }", "hardslice.json has no 'version'")]
+    [InlineData("{ \"version\": \"1\" }", "'version' in hardslice.json must be a whole number")]
+    [InlineData("{ \"version\": 1.5 }", "'version' in hardslice.json must be a whole number")]
+    [InlineData("{ \"version\": -1 }", "'version' in hardslice.json must be a whole number")]
     public async Task Reports_HS900_when_hardslice_json_is_not_in_the_expected_format(string configuration, string expected)
     {
         var diagnostic = (await AnalyzeAllAsync(CompileDomain(), configuration)).ShouldHaveSingleItem();
@@ -508,6 +514,33 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
         diagnostic.GetMessage().ShouldStartWith(expected + ". ");
         diagnostic.Location.GetLineSpan().Path.ShouldBe(ConfigurationPath);
+    }
+
+    // A version these analyzers do not read is reported before its keys, which a later format may extend, with the update to make.
+    [Theory]
+    [InlineData("2")]
+    [InlineData("0")]
+    public async Task Reports_HS900_asking_for_an_update_when_hardslice_json_has_another_version(string version)
+    {
+        var configuration = Configuration.Replace("\"version\": 1,", $"\"version\": {version},").Replace("\"style\"", "\"baseline\": {}, \"style\"");
+
+        var diagnostic = (await AnalyzeAllAsync(CompileDomain(), configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
+        diagnostic.GetMessage().ShouldStartWith(
+            $"hardslice.json declares version {version}, which this version of HardSlice.Analyzers does not read: it reads version 1. ");
+        diagnostic.GetMessage().ShouldContain(
+            "Fix: update HardSlice.Analyzers, and the hardslice.tool local tool with it, to the version that wrote hardslice.json.");
+        diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(1);
+    }
+
+    // Editors read '$schema' to complete the file: it is never a misspelled key.
+    [Fact]
+    public async Task Accepts_a_schema_in_hardslice_json()
+    {
+        var configuration = Configuration.Replace("\"version\": 1,", "\"$schema\": \"https://example.invalid/hardslice.schema.json\", \"version\": 1,");
+
+        (await AnalyzeAllAsync(CompileDomain(), configuration)).ShouldBeEmpty();
     }
 
     [Theory]
@@ -528,7 +561,7 @@ public sealed class ClassificationAnalyzerTests
             + "The contracts of hardslice.json classify the types checked by HS005, HS006, HS007, HS008, HS010, HS901 and HS902. "
             + "Fix: restore hardslice.json from version control; it expects the metadata name of the contract type then its declaring assembly, "
             + "such as \"MyApp.Domain.IEntity, MyApp.Domain\". Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
-        diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(3);
+        diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(4);
     }
 
     // The reader stops at 64 levels, before its recursion can exhaust the stack of the compiler.

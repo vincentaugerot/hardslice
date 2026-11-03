@@ -3,10 +3,10 @@
 # A thin launcher, like check.sh: restores the tools pinned by .config/dotnet-tools.json, then runs 'dotnet hardslice check',
 # which builds the solution (restoring if needed), runs unit and architecture tests, then integration tests,
 # which need a Docker-compatible container runtime, and fails while a TODO(hardslice): marker is left in src/ or tests/.
-# Its exit code is the one of this script.
+# Exit codes, as those of 'dotnet hardslice check': 0 the check passed, 1 a step failed, its output left as is, 2 a wrong argument.
 #   --build  the verification after an edit: the incremental build alone, errors only, then the TODO(hardslice): markers.
 #            Its success does not mean the work is done: only the full check decides.
-# Any other argument exits with code 2. No param block: PowerShell would bind or refuse arguments itself.
+# Any other argument exits with code 2, before anything runs. No param block: PowerShell would bind or refuse arguments itself.
 $ErrorActionPreference = 'Stop'
 
 if ($args.Count -gt 1 -or ($args.Count -eq 1 -and $args[0] -cne '--build')) {
@@ -21,7 +21,7 @@ try {
     if (-not $build) {
         & dotnet tool restore
         if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
+            exit 1
         }
         & dotnet hardslice check
         exit $LASTEXITCODE

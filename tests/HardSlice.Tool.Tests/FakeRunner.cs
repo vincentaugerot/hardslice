@@ -6,6 +6,7 @@ internal sealed class FakeRunner : ICommandRunner
 {
     private readonly Dictionary<string, int> _exitCodes = [];
     private readonly Dictionary<string, string> _outputs = [];
+    private readonly List<string> _throwing = [];
     private TextWriter? _writer;
 
     public List<string> Commands { get; } = [];
@@ -17,6 +18,13 @@ internal sealed class FakeRunner : ICommandRunner
         _exitCodes[command] = exitCode;
         if (output is not null)
             _outputs[command] = output;
+        return this;
+    }
+
+    // The commands that start with the given text throw, as a bug of the tool would.
+    public FakeRunner Throwing(string command)
+    {
+        _throwing.Add(command);
         return this;
     }
 
@@ -38,6 +46,8 @@ internal sealed class FakeRunner : ICommandRunner
         var command = string.Join(' ', [fileName, .. arguments]);
         Commands.Add(command);
         WorkingDirectories.Add(workingDirectory);
+        if (_throwing.Any(prefix => command.StartsWith(prefix, StringComparison.Ordinal)))
+            throw new InvalidOperationException($"simulated failure of '{command}'");
         var output = _outputs.FirstOrDefault(output => command.StartsWith(output.Key, StringComparison.Ordinal)).Value;
         if (output is not null)
             _writer?.WriteLine(output);

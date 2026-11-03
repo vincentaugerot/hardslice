@@ -1,0 +1,7 @@
+# Build output, test results and the files of IDEs: never committed.
+bin/
+obj/
+TestResults/
+.vs/
+.idea/
+*.user

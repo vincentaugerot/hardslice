@@ -14,6 +14,7 @@ public sealed class DomainEventNameAnalyzerTests
     private const string Configuration =
         """
         {
+          "version": 1,
           "style": "slices",
           "contracts": {
             "entity": "MyApp.Domain.IEntity, MyApp.Domain",

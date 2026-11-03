@@ -35,16 +35,15 @@ public sealed class HardSliceConfigurationTests : IDisposable
             .Message.ShouldStartWith("hardslice.json: no file at");
 
     [Theory]
-    [InlineData("""{ "style": "slices", """, "not valid JSON")]
-    [InlineData("""[]""", "the root must be a JSON object")]
-    [InlineData("""{ "shared": { "allowedFolders": ["Messaging"] } }""", "'style' must be \"slices\"")]
-    [InlineData("""{ "style": "layers", "shared": { "allowedFolders": ["Messaging"] } }""", "'style' must be \"slices\"")]
-    [InlineData("""{ "style": "slices", #, "modules": [] }""", "unknown key 'modules'")]
-    [InlineData("""{ "style": "slices", # }""", "'shared' is missing")]
-    [InlineData("""{ "style": "slices", #, "shared": { "allowedFolders": [] } }""", "must be a non-empty array")]
-    [InlineData("""{ "style": "slices", #, "shared": { "allowedFolders": ["Messaging/Bus"] } }""", "not a single folder name")]
-    [InlineData("""{ "style": "slices", #, "shared": { "allowedFolders": ["Messaging", "Messaging"] } }""", "twice")]
-    [InlineData("""{ "style": "slices", #, "shared": { "allowedFolder": ["Messaging"] } }""", "unknown key 'allowedFolder'")]
+    [InlineData("""{ "version": 1, "style": "slices", """, "not valid JSON")]
+    [InlineData("""{ "version": 1, "shared": { "allowedFolders": ["Messaging"] } }""", "'style' must be \"slices\"")]
+    [InlineData("""{ "version": 1, "style": "layers", "shared": { "allowedFolders": ["Messaging"] } }""", "'style' must be \"slices\"")]
+    [InlineData("""{ "version": 1, "style": "slices", #, "modules": [] }""", "unknown key 'modules'")]
+    [InlineData("""{ "version": 1, "style": "slices", # }""", "'shared' is missing")]
+    [InlineData("""{ "version": 1, "style": "slices", #, "shared": { "allowedFolders": [] } }""", "must be a non-empty array")]
+    [InlineData("""{ "version": 1, "style": "slices", #, "shared": { "allowedFolders": ["Messaging/Bus"] } }""", "not a single folder name")]
+    [InlineData("""{ "version": 1, "style": "slices", #, "shared": { "allowedFolders": ["Messaging", "Messaging"] } }""", "twice")]
+    [InlineData("""{ "version": 1, "style": "slices", #, "shared": { "allowedFolder": ["Messaging"] } }""", "unknown key 'allowedFolder'")]
     public void An_invalid_file_fails_explicitly(string content, string reason)
     {
         var path = Path.Combine(_directory, "hardslice.json");
@@ -58,10 +57,10 @@ public sealed class HardSliceConfigurationTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{ "style": "slices", "shared": { "allowedFolders": ["Messaging"] } }""", "'contracts' is missing")]
-    [InlineData("""{ "style": "slices", "contracts": [], "shared": { "allowedFolders": ["Messaging"] } }""", "'contracts' must be a JSON object")]
-    [InlineData("""{ "style": "slices", "contracts": { "entities": "MyApp.Domain.IEntity, MyApp.Domain" }, "shared": { "allowedFolders": ["Messaging"] } }""", "unknown key 'entities' in 'contracts'")]
-    [InlineData("""{ "style": "slices", "contracts": { "entity": "MyApp.Domain.IEntity, MyApp.Domain" }, "shared": { "allowedFolders": ["Messaging"] } }""", "'contracts.aggregateRoot' is missing")]
+    [InlineData("""{ "version": 1, "style": "slices", "shared": { "allowedFolders": ["Messaging"] } }""", "'contracts' is missing")]
+    [InlineData("""{ "version": 1, "style": "slices", "contracts": [], "shared": { "allowedFolders": ["Messaging"] } }""", "'contracts' must be a JSON object")]
+    [InlineData("""{ "version": 1, "style": "slices", "contracts": { "entities": "MyApp.Domain.IEntity, MyApp.Domain" }, "shared": { "allowedFolders": ["Messaging"] } }""", "unknown key 'entities' in 'contracts'")]
+    [InlineData("""{ "version": 1, "style": "slices", "contracts": { "entity": "MyApp.Domain.IEntity, MyApp.Domain" }, "shared": { "allowedFolders": ["Messaging"] } }""", "'contracts.aggregateRoot' is missing")]
     public void An_invalid_contracts_section_fails_explicitly(string content, string reason)
     {
         var path = Path.Combine(_directory, "hardslice.json");
@@ -75,6 +74,33 @@ public sealed class HardSliceConfigurationTests : IDisposable
     }
 
     [Theory]
+    [InlineData("""[]""", "the root must be a JSON object", "Skill: fix-architecture-violation. Doc: 'docs/rules/HS017.md'.")]
+    [InlineData("""{ "style": "slices", #, "shared": { "allowedFolders": ["Messaging"] } }""", "'version' is missing", "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.")]
+    [InlineData("""{ "version": "1", "style": "slices", #, "shared": { "allowedFolders": ["Messaging"] } }""", "'version' is \"1\", not a whole number", "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.")]
+    [InlineData("""{ "version": 1.0, "style": "slices", #, "shared": { "allowedFolders": ["Messaging"] } }""", "'version' is 1.0, not a whole number", "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.")]
+    [InlineData("""{ "version": 2, "baseline": {}, "style": "slices", #, "shared": { "allowedFolders": ["Messaging"] } }""", "version 2 is not read by these architecture tests, which read version 1. Fix: update HardSlice.Analyzers", "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.")]
+    public void A_file_without_the_version_these_tests_read_fails_explicitly(string content, string reason, string footer)
+    {
+        var path = Path.Combine(_directory, "hardslice.json");
+        File.WriteAllText(path, content.Replace("#", Contracts));
+
+        var message = Should.Throw<InvalidOperationException>(() => HardSliceConfiguration.Load(path)).Message;
+
+        message.ShouldStartWith("hardslice.json: ");
+        message.ShouldContain(reason);
+        message.ShouldContain(footer);
+    }
+
+    [Fact]
+    public void A_schema_for_editors_is_accepted()
+    {
+        var path = Path.Combine(_directory, "hardslice.json");
+        File.WriteAllText(path, $$"""{ "$schema": "https://example.invalid/hardslice.schema.json", "version": 1, "style": "slices", {{Contracts}}, "shared": { "allowedFolders": ["Messaging"] } }""");
+
+        HardSliceConfiguration.Load(path).Style.ShouldBe("slices");
+    }
+
+    [Theory]
     [InlineData("\"MyApp.Domain.IEntity\"")]
     [InlineData("\"IEntity, \"")]
     [InlineData("\"MyApp.Domain.IEntity,MyApp.Domain\"")]
@@ -83,7 +109,7 @@ public sealed class HardSliceConfigurationTests : IDisposable
     public void A_malformed_contract_fails_explicitly(string entity)
     {
         var path = Path.Combine(_directory, "hardslice.json");
-        File.WriteAllText(path, $$"""{ "style": "slices", {{Contracts.Replace("\"MyApp.Domain.IEntity, MyApp.Domain\"", entity)}}, "shared": { "allowedFolders": ["Messaging"] } }""");
+        File.WriteAllText(path, $$"""{ "version": 1, "style": "slices", {{Contracts.Replace("\"MyApp.Domain.IEntity, MyApp.Domain\"", entity)}}, "shared": { "allowedFolders": ["Messaging"] } }""");
 
         var message = Should.Throw<InvalidOperationException>(() => HardSliceConfiguration.Load(path)).Message;
 

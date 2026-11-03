@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- NuGet security alerts on a pinned package (NuGetAudit, NU1901 to NU1904) stay warnings, shown at each restore: an advisory
+         published after this template would otherwise break the restore of every solution it generates. Not a HardSlice rule. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
     <!-- Every HardSlice rule is on. Lowering the mode is a bypass: see AGENTS.md. -->
     <HardSliceAnalysisMode>All</HardSliceAnalysisMode>
   </PropertyGroup>

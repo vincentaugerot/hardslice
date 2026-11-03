@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -6,13 +7,19 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace HardSlice.Analyzers.Configuration;
 
-// The contracts section of hardslice.json, added to every compilation by build/HardSlice.Analyzers.targets.
-// The analyzers read 'contracts' only: the architecture tests validate 'style' and 'shared'.
+// hardslice.json, added to every compilation by build/HardSlice.Analyzers.targets. The analyzers check its version and its root
+// keys, and read 'contracts'; the architecture tests validate 'style' and 'shared'.
+// The format is versioned: 'version' is required, and a version these analyzers do not know is reported before anything else,
+// since a later format may add keys. '$schema' is accepted for editors. Any other unknown key is rejected: a misspelled key would
+// otherwise turn a rule off without notice.
 internal sealed class HardSliceConfiguration
 {
     public const string FileName = "hardslice.json";
 
-    private static readonly string[] RootKeys = ["style", "contracts", "shared"];
+    // The only version of the format these analyzers read.
+    public const int Version = 1;
+
+    private static readonly string[] RootKeys = ["$schema", "version", "style", "contracts", "shared"];
 
     // '<metadata name>, <assembly>', such as 'MyApp.Shared.Messaging.ICommand`1, MyApp'.
     private static readonly Regex ContractValue = new(
@@ -84,7 +91,10 @@ internal sealed class HardSliceConfiguration
         }
 
         if (root is not JsonObject rootObject)
-            return Failed(Format("the root of {0} must be a JSON object", root.Span, "{ \"style\": \"slices\", \"contracts\": { ... }, \"shared\": { ... } }"));
+            return Failed(Format("the root of {0} must be a JSON object", root.Span, "{ \"version\": 1, \"style\": \"slices\", \"contracts\": { ... }, \"shared\": { ... } }"));
+
+        if (VersionProblem(rootObject) is { } versionProblem)
+            return Failed(versionProblem);
 
         if (UnknownOrRepeatedKey(rootObject, "", RootKeys) is { } rootProblem)
             return Failed(rootProblem);
@@ -112,6 +122,34 @@ internal sealed class HardSliceConfiguration
         return new HardSliceConfiguration(null, entries.ToImmutable());
 
         Location At(TextSpan span) => Location.Create(path, span, text.Lines.GetLinePositionSpan(span));
+
+        // Checked before the keys: a file of a later version may hold keys that this version does not know.
+        ConfigurationProblem? VersionProblem(JsonObject node)
+        {
+            var versions = node.Properties.Where(property => property.Name == "version").ToArray();
+            if (versions.Length == 0)
+            {
+                return new ConfigurationProblem(
+                    $"{FileName} has no 'version'",
+                    $"restore {FileName} from version control; it starts with \"version\": {Version}, the version of its format",
+                    At(new TextSpan(node.Span.Start, 1)));
+            }
+
+            var value = versions[0].Value;
+            var literal = text.ToString(value.Span);
+            if (value is not JsonLiteral || !int.TryParse(literal, NumberStyles.None, CultureInfo.InvariantCulture, out var version))
+                return Format("'version' in {0} must be a whole number", value.Span, $"\"version\": {Version}");
+
+            if (version != Version)
+            {
+                return new ConfigurationProblem(
+                    $"{FileName} declares version {literal}, which this version of HardSlice.Analyzers does not read: it reads version {Version}",
+                    $"update HardSlice.Analyzers, and the hardslice.tool local tool with it, to the version that wrote {FileName}",
+                    At(value.Span));
+            }
+
+            return null;
+        }
 
         ConfigurationProblem Format(string description, TextSpan span, string expected) =>
             new(string.Format(description, FileName), $"restore {FileName} from version control; it expects {expected}", At(span));

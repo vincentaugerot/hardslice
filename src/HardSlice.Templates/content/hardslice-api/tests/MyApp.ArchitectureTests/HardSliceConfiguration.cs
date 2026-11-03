@@ -3,8 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace MyApp.ArchitectureTests;
 
-// hardslice.json at the solution root: the architecture style, the contracts that classify types (read by the analyzers, HS900)
-// and the folders Shared may contain (HS017).
+// hardslice.json at the solution root: the version of its format, the architecture style, the contracts that classify types
+// (read by the analyzers, HS900) and the folders Shared may contain (HS017). '$schema' is accepted for editors.
 // A missing or invalid file fails the architecture tests instead of silently falling back to defaults.
 internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDictionary<string, string> Contracts, IReadOnlyList<string> SharedFolders)
 {
@@ -15,6 +15,9 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
     // The skill and the sheet that end each message: HS017 for the file and its Shared folders, HS900 for its contracts.
     private const string SharedRule = "Skill: fix-architecture-violation. Doc: 'docs/rules/HS017.md'.";
     private const string ContractsRule = "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.";
+
+    // The only version of the format these tests read, as the analyzers of the same version.
+    public const int Version = 1;
 
     private static readonly string[] ContractKeys = ["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler", "domainEventHandler"];
 
@@ -41,7 +44,11 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
         using (document)
         {
             var root = document.RootElement;
-            ExpectObject(root, "the root", "style", "contracts", "shared");
+            if (root.ValueKind != JsonValueKind.Object)
+                throw Invalid("the root must be a JSON object.");
+            // Checked before the keys: a file of a later version may hold keys that this version does not know.
+            ReadVersion(root);
+            ExpectObject(root, "the root", "$schema", "version", "style", "contracts", "shared");
 
             if (!root.TryGetProperty("style", out var style) || style.ValueKind != JsonValueKind.String || style.GetString() != "slices")
                 throw Invalid("'style' must be \"slices\", the only architecture style these tests check.");
@@ -66,6 +73,21 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
             }
 
             return new HardSliceConfiguration(style.GetString()!, contracts, names);
+        }
+    }
+
+    private static void ReadVersion(JsonElement root)
+    {
+        if (!root.TryGetProperty("version", out var version))
+            throw Invalid($"'version' is missing: the file starts with \"version\": {Version}, the version of its format.", ContractsRule);
+        if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number < 0 || version.GetRawText().Contains('.'))
+            throw Invalid($"'version' is {version.GetRawText()}, not a whole number such as {Version}.", ContractsRule);
+        if (number != Version)
+        {
+            throw new InvalidOperationException(
+                $"{FileName}: version {number} is not read by these architecture tests, which read version {Version}. "
+                + $"Fix: update HardSlice.Analyzers and the hardslice.tool local tool to the version that wrote {FileName}, then these tests with the template of that version; "
+                + $"changing it requires a maintainer decision. {ContractsRule}");
         }
     }
 

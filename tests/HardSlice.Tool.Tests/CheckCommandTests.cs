@@ -1,7 +1,7 @@
 namespace HardSlice.Tool.Tests;
 
-// check keeps the contract of the former check scripts: same steps, same order, same messages, exit code of the first failure,
-// then fails on the TODO(hardslice): markers left. check --build is the incremental build alone, then the same markers.
+// check keeps the contract of the former check scripts: same steps, same order, same messages, stops at the first failure with
+// the code 1, then fails on the TODO(hardslice): markers left. check --build is the incremental build alone, then the same markers.
 public sealed class CheckCommandTests
 {
     private const string Build = "dotnet build Demo.slnx";
@@ -216,19 +216,22 @@ public sealed class CheckCommandTests
         runner.WorkingDirectories.ShouldAllBe(directory => directory == solution.Root);
     }
 
+    // The contract of the exit codes: 0 the check passed, 1 a step failed, whatever the code of the step, and 2 a wrong command
+    // line only. Microsoft.Testing.Platform exits 2 when a test fails: that code never reaches the caller.
     [Theory]
     [InlineData(Build, 1, 1)]
     [InlineData(UnitTests, 2, 2)]
     [InlineData(ArchitectureTests, 8, 3)]
     [InlineData(IntegrationTests, 5, 5)]
-    public void Check_stops_at_the_first_failing_step_with_its_exit_code(string failingStep, int stepExitCode, int commandsRun)
+    [InlineData(IntegrationTests, 2, 5)]
+    public void Check_stops_at_the_first_failing_step_with_exit_code_1(string failingStep, int stepExitCode, int commandsRun)
     {
         using var solution = new TemporarySolution();
         var runner = new FakeRunner().Failing(failingStep, stepExitCode);
 
         var (exitCode, output, _) = Check(runner, solution.Root);
 
-        exitCode.ShouldBe(stepExitCode);
+        exitCode.ShouldBe(CheckCommand.Failure);
         runner.Commands.Count.ShouldBe(commandsRun);
         runner.Commands[^1].ShouldBe(failingStep);
         output.ShouldNotContain("Check passed");

@@ -358,13 +358,133 @@ public sealed class ClaudeHookTests : IDisposable
         named.Order(StringComparer.Ordinal).ShouldBe(ProtectedFiles.Entries("MyApp").Order(StringComparer.Ordinal));
     }
 
-    private (int ExitCode, string Output, string Error) Hook(string eventName, string payload, FakeRunner runner, bool copilot = false)
+    // PB-055: a hook that fails never lets the agent through. Before an edit, the edit is refused with the error.
+    [Fact]
+    public void A_hook_that_fails_before_an_edit_refuses_it_with_the_error()
+    {
+        // A NUL character in the current directory makes the search of the solution throw, as any bug of the hook would.
+        var (exitCode, _, error) = Hook("PreToolUse", Payload("claude/PreToolUse.Edit.json"), new FakeRunner(), currentDirectory: "bad\0directory");
+
+        exitCode.ShouldBe(2);
+        error.ShouldStartWith("HardSlice: dotnet hardslice hook claude PreToolUse failed: ArgumentException: ");
+        error.ShouldContain("The edit is refused, since the hook could not check that it touches no protected file.");
+        error.ShouldContain("stop and tell the user that the HardSlice hook fails");
+    }
+
+    [Fact]
+    public void A_hook_that_fails_after_an_edit_hands_the_agent_a_failed_verification()
+    {
+        var runner = new FakeRunner().Throwing(IncrementalBuild);
+
+        var (exitCode, output, error) = Hook("PostToolUse", Payload("claude/PostToolUse.Edit.json"), runner);
+
+        exitCode.ShouldBe(2);
+        output.ShouldBeEmpty();
+        error.ShouldStartWith("HardSlice: the verification after your edit could not run, so treat it as failed: "
+            + "dotnet hardslice hook claude PostToolUse failed: InvalidOperationException: simulated failure of 'dotnet build Demo.slnx --no-restore");
+    }
+
+    // Before handing back, it keeps the agent working with the error once; when its own block relaunched the agent, it lets it
+    // finish and tells the user, since a hook that fails each time would otherwise never let the agent go.
+    [Fact]
+    public void A_hook_that_fails_before_handing_back_keeps_the_agent_working_then_tells_the_user()
+    {
+        var runner = new FakeRunner().Throwing(FullBuild);
+
+        var first = Hook("Stop", Payload("claude/Stop.json"), runner);
+        var relaunched = Hook("Stop", Payload("claude/Stop.active.json"), runner);
+
+        first.ExitCode.ShouldBe(2);
+        first.Error.ShouldStartWith("HardSlice: the check before handing back could not run, so the work is not verified: "
+            + "dotnet hardslice hook claude Stop failed: InvalidOperationException: simulated failure of 'dotnet build Demo.slnx'.");
+        relaunched.ExitCode.ShouldBe(0);
+        relaunched.Error.ShouldBeEmpty();
+        JsonNode.Parse(relaunched.Output)!["systemMessage"]!.GetValue<string>()
+            .ShouldStartWith("HardSlice: the check before handing back could not run, so the work is not verified: ");
+    }
+
+    // The relaunches of the end hook are counted in a folder that another account of the machine may own: a count that cannot be
+    // written still blocks the agent, with the failure and the reason.
+    [Fact]
+    public void Before_handing_back_a_failing_check_blocks_the_agent_when_its_relaunches_cannot_be_counted()
+    {
+        var blocked = Path.Combine(_state, "owned-by-another-account");
+        File.WriteAllText(blocked, "");
+        var runner = new FakeRunner().Failing(FullBuild, 1, Hs010);
+
+        var (exitCode, _, error) = Hook("Stop", Payload("claude/Stop.json"), runner, stateDirectory: blocked);
+        var relaunched = Hook("Stop", Payload("claude/Stop.active.json"), runner, stateDirectory: blocked);
+
+        exitCode.ShouldBe(2);
+        error.ShouldStartWith("HardSlice: the check fails, so the work is not done. Fix the failure below, then finish again. "
+            + $"The hook cannot count its relaunches in '{blocked}' (IOException: ");
+        error.ShouldContain(Hs010);
+        relaunched.ExitCode.ShouldBe(0);
+        JsonNode.Parse(relaunched.Output)!["systemMessage"]!.GetValue<string>()
+            .ShouldStartWith($"HardSlice: the check fails, so the work is not done, and the hook cannot count its relaunches in '{blocked}'");
+    }
+
+    // After the edit, a build that passes is not a build that fails: the markers of a generated element are work to finish.
+    [Fact]
+    public void After_an_edit_that_builds_the_markers_left_reach_the_agent_as_work_to_finish()
+    {
+        _solution.Write("src/Demo/Features/Rooms/BookRoom/BookRoomHandler.cs", "// TODO(hardslice): implement BookRoomHandler.\n");
+        _solution.Write("tests/Demo.Tests/Features/Rooms/BookRoom/BookRoomTests.cs", "// TODO(hardslice): assert the booking.\n");
+        var runner = new FakeRunner();
+
+        var (exitCode, _, error) = Hook("PostToolUse", Payload("claude/PostToolUse.Edit.json"), runner);
+
+        exitCode.ShouldBe(2);
+        error.ShouldStartWith("HardSlice: the build passes after your edit of 'src/Demo.Domain/Bookings/");
+        error.ShouldContain("2 TODO(hardslice): markers are left: finish each one, with the logic or the real assertion it asks for, before handing back.");
+        error.ShouldContain("src/Demo/Features/Rooms/BookRoom/BookRoomHandler.cs:1: // TODO(hardslice): implement BookRoomHandler.");
+        error.ShouldNotContain("the build fails");
+    }
+
+    // A failure that names a new identifier at each check, such as a test container or an object created by the test, is the
+    // same failure: its relaunches are counted.
+    [Fact]
+    public void Before_handing_back_a_failure_with_a_new_GUID_at_each_check_counts_its_relaunches()
+    {
+        var runner = new FakeRunner();
+        string Failure() =>
+            $"failed Demo.IntegrationTests.ConfirmBookingTests.Confirms (12ms): booking {Guid.NewGuid()} not found in container testcontainers-{Guid.NewGuid():N}";
+
+        Hook("Stop", Payload("claude/Stop.json"), runner.Failing(FullBuild, 1, Failure()));
+        var second = Hook("Stop", Payload("claude/Stop.active.json"), runner.Failing(FullBuild, 1, Failure()));
+        var third = Hook("Stop", Payload("claude/Stop.active.json"), runner.Failing(FullBuild, 1, Failure()));
+
+        second.Error.ShouldContain("(relaunch 2 of 3 for this failure)");
+        third.Error.ShouldContain("(relaunch 3 of 3 for this failure)");
+    }
+
+    // Different failures in a row still stop at StopRetries.SessionMax relaunches in the session.
+    [Fact]
+    public void Before_handing_back_the_relaunches_of_a_session_are_capped_whatever_the_failures()
+    {
+        var runner = new FakeRunner();
+        var names = new[] { "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india" };
+        var results = names
+            .Select((name, index) => Hook(
+                "Stop", Payload(index == 0 ? "claude/Stop.json" : "claude/Stop.active.json"),
+                runner.Failing(FullBuild, 1, $"src/Demo/Program.cs(1,1): error CS0103: The name '{name}' does not exist in the current context")))
+            .ToArray();
+
+        results[..StopRetries.SessionMax].ShouldAllBe(result => result.ExitCode == 2);
+        results[StopRetries.SessionMax - 1].Error.ShouldContain("This is the last relaunch of this session.");
+        results[StopRetries.SessionMax].ExitCode.ShouldBe(0);
+        JsonNode.Parse(results[StopRetries.SessionMax].Output)!["systemMessage"]!.GetValue<string>()
+            .ShouldStartWith($"HardSlice: the check still fails after {StopRetries.SessionMax} relaunches in this session, so the work is not done.");
+    }
+
+    private (int ExitCode, string Output, string Error) Hook(
+        string eventName, string payload, FakeRunner runner, bool copilot = false, string? currentDirectory = null, string? stateDirectory = null)
     {
         var output = new StringWriter();
         var error = new StringWriter();
         var exitCode = Cli.Run(
-            ["hook", "claude", eventName], _solution.Root, runner, output, error, new StringReader(payload),
-            name => copilot && name == "COPILOT_CLI" ? "1" : null, _state);
+            ["hook", "claude", eventName], currentDirectory ?? _solution.Root, runner, output, error, new StringReader(payload),
+            name => copilot && name == "COPILOT_CLI" ? "1" : null, stateDirectory ?? _state);
         return (exitCode, output.ToString(), error.ToString());
     }
 
