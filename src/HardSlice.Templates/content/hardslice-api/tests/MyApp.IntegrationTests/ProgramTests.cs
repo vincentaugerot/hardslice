@@ -17,7 +17,7 @@ public sealed class ProgramTests(PostgresDatabase database)
     [Fact]
     public async Task Starts_and_answers_HTTP_requests_on_its_migrated_database()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().GetAsync($"/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
@@ -33,7 +33,7 @@ public sealed class ProgramTests(PostgresDatabase database)
     [Fact]
     public async Task Resolves_every_handler_and_validator_of_the_application_by_its_contract()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         await using var scope = app.Services.CreateAsyncScope();
 
         var unregistered = typeof(Program).Assembly.GetTypes()

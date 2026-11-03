@@ -16,7 +16,7 @@ public sealed class GetBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Reads_a_confirmed_booking_at_the_location_returned_by_its_creation()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var command = new ConfirmBookingCommand(Guid.NewGuid(), Start, Start.AddHours(1));
         var created = await client.PostAsJsonAsync("/bookings", command, TestContext.Current.CancellationToken);
@@ -34,7 +34,7 @@ public sealed class GetBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Reads_a_cancelled_booking_with_the_Cancelled_status()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var created = await client.PostAsJsonAsync(
             "/bookings", new ConfirmBookingCommand(Guid.NewGuid(), Start, Start.AddHours(1)), TestContext.Current.CancellationToken);
@@ -50,7 +50,7 @@ public sealed class GetBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Returns_404_for_an_unknown_booking()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().GetAsync($"/bookings/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
@@ -68,7 +68,7 @@ public sealed class GetBookingTests(PostgresDatabase database)
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 

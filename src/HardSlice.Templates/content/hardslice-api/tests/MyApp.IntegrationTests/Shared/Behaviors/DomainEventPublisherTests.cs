@@ -113,7 +113,7 @@ public sealed class DomainEventPublisherTests(PostgresDatabase database)
     }
 
     private WebApplicationFactory<Program> App(Action<IServiceCollection> handlers) =>
-        new MyAppFactory(database).WithWebHostBuilder(builder => builder.ConfigureTestServices(handlers));
+        new AppFactory(database).WithWebHostBuilder(builder => builder.ConfigureTestServices(handlers));
 
     private static async Task SendAsync(WebApplicationFactory<Program> app, ConfirmBookingCommand command)
     {

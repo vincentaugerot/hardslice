@@ -103,6 +103,33 @@ public sealed class TemplatePackageTests
         application.GetProperty("replaces").GetString().ShouldBe("MyApp");
     }
 
+    // dotnet new gives sourceName one form in paths and another in contents: my-app made src/my-app/ referenced as my_app.
+    // hardslice-api derives a single safe namespace from the name instead, for both, and no type is named after the application.
+    [Fact]
+    public void Api_template_names_folders_projects_and_namespaces_with_one_safe_form_of_the_name()
+    {
+        var root = FindRepositoryRoot();
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(TemplateRoot(root), ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        config.TryGetProperty("sourceName", out _).ShouldBeFalse();
+        var application = config.GetProperty("symbols").GetProperty("AppName");
+        application.GetProperty("type").GetString().ShouldBe("derived");
+        application.GetProperty("valueSource").GetString().ShouldBe("name");
+        var form = application.GetProperty("valueTransform").GetString()!;
+        config.GetProperty("forms").GetProperty(form).GetProperty("identifier").GetString().ShouldBe("safe_namespace");
+        application.GetProperty("replaces").GetString().ShouldBe("MyApp");
+        application.GetProperty("fileRename").GetString().ShouldBe("MyApp");
+
+        var typesNamedAfterTheApplication =
+            from file in Directory.EnumerateFiles(Path.Combine(root, "src", "HardSlice.Templates", "content"), "*", SearchOption.AllDirectories)
+            let relative = Path.GetRelativePath(root, file).Replace('\\', '/')
+            where !relative.Split('/').Any(segment => segment is "bin" or "obj" or "TestResults")
+            where Regex.IsMatch(relative, "MyApp[A-Za-z0-9_]") || Regex.IsMatch(File.ReadAllText(file), "MyApp[A-Za-z0-9_]")
+            select relative;
+        typesNamedAfterTheApplication.ShouldBeEmpty();
+    }
+
     // Every refusal fails the generation, after excluding every file, and says that nothing was created.
     [Fact]
     public void Command_item_template_refuses_with_an_error_that_creates_nothing()

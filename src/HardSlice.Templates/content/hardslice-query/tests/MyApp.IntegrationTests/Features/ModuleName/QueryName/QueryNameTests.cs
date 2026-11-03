@@ -14,7 +14,7 @@ public sealed class QueryNameTests(PostgresDatabase database)
     public async Task Reads_a_stored_aggregate_as_its_dto()
     {
         var id = await StoreAggregateName();
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().GetAsync($"{Route}/{id}", TestContext.Current.CancellationToken);
 
@@ -28,7 +28,7 @@ public sealed class QueryNameTests(PostgresDatabase database)
     [Fact]
     public async Task Returns_404_for_an_unknown_aggregate()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().GetAsync($"{Route}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
@@ -39,7 +39,7 @@ public sealed class QueryNameTests(PostgresDatabase database)
     public async Task Lists_a_stored_aggregate_as_its_dto()
     {
         var id = await StoreAggregateName();
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().GetAsync(Route, TestContext.Current.CancellationToken);
 

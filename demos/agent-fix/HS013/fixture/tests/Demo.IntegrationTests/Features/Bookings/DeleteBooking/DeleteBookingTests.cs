@@ -14,7 +14,7 @@ public sealed class DeleteBookingTests(PostgresDatabase database)
     public async Task Deletes_a_cancelled_booking()
     {
         var booking = await StoreAsync(cancelled: true);
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().DeleteAsync($"/bookings/{booking.Id}", TestContext.Current.CancellationToken);
 
@@ -26,7 +26,7 @@ public sealed class DeleteBookingTests(PostgresDatabase database)
     public async Task Rejects_a_confirmed_booking_and_keeps_it()
     {
         var booking = await StoreAsync(cancelled: false);
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().DeleteAsync($"/bookings/{booking.Id}", TestContext.Current.CancellationToken);
 
@@ -37,7 +37,7 @@ public sealed class DeleteBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Returns_404_for_an_unknown_booking()
     {
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().DeleteAsync($"/bookings/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 

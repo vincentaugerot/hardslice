@@ -12,7 +12,7 @@ public sealed class CommandNameTests(PostgresDatabase database)
     [Fact]
     public async Task Handles_a_valid_command()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var command = new CommandNameCommand(Guid.NewGuid());
 
         var response = await app.CreateClient().PostAsJsonAsync(Route, command, TestContext.Current.CancellationToken);
@@ -31,7 +31,7 @@ public sealed class CommandNameTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_an_invalid_command_with_a_validation_problem_before_its_handler()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().PostAsJsonAsync(Route, new CommandNameCommand(Guid.Empty), TestContext.Current.CancellationToken);
 

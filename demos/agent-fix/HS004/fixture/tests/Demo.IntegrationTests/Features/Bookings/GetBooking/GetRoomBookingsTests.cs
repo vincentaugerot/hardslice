@@ -18,7 +18,7 @@ public sealed class GetRoomBookingsTests(PostgresDatabase database)
         var later = Booking.Confirm(roomId, new BookingPeriod(Start.AddHours(2), Start.AddHours(3)), []);
         var earlier = Booking.Confirm(roomId, new BookingPeriod(Start, Start.AddHours(1)), []);
         await StoreAsync(later, earlier, Booking.Confirm(Guid.NewGuid(), new BookingPeriod(Start, Start.AddHours(1)), []));
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
         await using var scope = app.Services.CreateAsyncScope();
 
         var bookings = await scope.ServiceProvider.GetRequiredService<IMediator>()
@@ -34,7 +34,7 @@ public sealed class GetRoomBookingsTests(PostgresDatabase database)
     {
         var roomId = Guid.NewGuid();
         await StoreAsync(Booking.Confirm(roomId, new BookingPeriod(Start, Start.AddHours(1)), []));
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
@@ -48,7 +48,7 @@ public sealed class GetRoomBookingsTests(PostgresDatabase database)
     [Fact]
     public async Task Answers_an_empty_list_over_http_for_a_room_without_bookings()
     {
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
 
         var bookings = await app.CreateClient().GetFromJsonAsync<RoomBookingDto[]>($"/bookings/rooms/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 

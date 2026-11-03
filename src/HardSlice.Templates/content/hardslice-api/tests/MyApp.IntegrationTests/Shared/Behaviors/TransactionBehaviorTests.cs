@@ -87,7 +87,7 @@ public sealed class TransactionBehaviorTests(PostgresDatabase database)
 
     private async Task RunInScopeAsync(Func<IMediator, AppDbContext, Task> action)
     {
-        await using var factory = new MyAppFactory(database);
+        await using var factory = new AppFactory(database);
         await using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services
             .AddScoped<IRequestHandler<AddBooking, bool>, AddBookingHandler>()
             .AddScoped<IRequestHandler<SaveBookingThenFail, bool>, SaveBookingThenFailHandler>()

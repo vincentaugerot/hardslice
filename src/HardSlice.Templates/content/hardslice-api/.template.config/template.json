@@ -6,13 +6,40 @@
   "name": "HardSlice API",
   "description": "ASP.NET Core API in vertical slices with a rich domain, enforced at build time by HardSlice.Analyzers.",
   "shortName": "hardslice-api",
-  "sourceName": "MyApp",
   "preferNameDirectory": true,
   "tags": {
     "language": "C#",
     "type": "solution"
   },
+  "forms": {
+    "safe_namespace": { "identifier": "safe_namespace" },
+    "lower_safe_namespace": { "identifier": "lower_safe_namespace" },
+    "without_leading_underscores": {
+      "identifier": "replace",
+      "pattern": "^_+",
+      "replacement": ""
+    },
+    "lower_without_leading_underscores": {
+      "identifier": "chain",
+      "steps": ["lower_safe_namespace", "without_leading_underscores"]
+    }
+  },
   "symbols": {
+    "AppName": {
+      "type": "derived",
+      "valueSource": "name",
+      "valueTransform": "safe_namespace",
+      "replaces": "MyApp",
+      "fileRename": "MyApp",
+      "description": "The name of the application in its single form, a safe namespace: my-app becomes my_app, 1Rooms becomes _1Rooms, Acme.Rooms stays Acme.Rooms. It names every folder, project, assembly and namespace."
+    },
+    "AppNameLower": {
+      "type": "derived",
+      "valueSource": "name",
+      "valueTransform": "lower_without_leading_underscores",
+      "replaces": "myapp",
+      "description": "The same name in lower case, without the leading underscores that a container name refuses: the local database and its container."
+    },
     "NoSample": {
       "type": "parameter",
       "datatype": "bool",

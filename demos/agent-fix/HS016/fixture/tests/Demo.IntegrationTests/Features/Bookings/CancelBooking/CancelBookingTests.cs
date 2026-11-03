@@ -48,7 +48,7 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     // Through the application's pipeline, as its endpoint sends it, at the time the clock gives.
     private async Task<TResponse> SendAsync<TResponse>(ICommand<TResponse> command, TimeProvider clock)
     {
-        await using var factory = new DemoFactory(database);
+        await using var factory = new AppFactory(database);
         await using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton(clock)));
         await using var scope = app.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<IMediator>().Send(command, TestContext.Current.CancellationToken);

@@ -839,4 +839,28 @@ public sealed class SliceReferenceAnalyzerTests
                 MyApp.Shared.Features.Bookings.ConfirmBooking.ConfirmBookingPolicy policy);
         }
         """);
+
+    // dotnet new hardslice-api turns the name of the application into one safe namespace that names the assembly and prefixes
+    // every namespace: Acme.Rooms, my-app as my_app, 1Rooms as _1Rooms. Slices are found below each of them.
+    [Theory]
+    [InlineData("Acme.Rooms")]
+    [InlineData("my_app")]
+    [InlineData("_1Rooms")]
+    public Task Identifies_slices_below_the_features_namespace_of_any_application_name(string application) => VerifyAsync(
+        new SliceReferenceAnalyzer(),
+        SliceReferenceAnalyzer.DiagnosticId,
+        application,
+        configuration: null,
+        [],
+        OutputKind.DynamicallyLinkedLibrary,
+        $$"""
+        namespace {{application}}.Features.Bookings.ConfirmBooking;
+
+        public sealed class ConfirmBookingHandler;
+        """,
+        $$"""
+        namespace {{application}}.Features.Bookings.CancelBooking;
+
+        internal sealed class CancelBookingHandler({{application}}.Features.Bookings.ConfirmBooking.[|ConfirmBookingHandler|] handler);
+        """);
 }

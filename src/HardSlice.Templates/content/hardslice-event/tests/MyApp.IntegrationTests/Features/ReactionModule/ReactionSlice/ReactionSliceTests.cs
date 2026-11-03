@@ -14,7 +14,7 @@ public sealed class ReactionSliceTests(PostgresDatabase database)
     [Fact]
     public async Task Reacts_to_EventName()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         await using var scope = app.Services.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetServices<IDomainEventHandler<EventName>>().OfType<ReactionSliceHandler>().SingleOrDefault();
         handler.ShouldNotBeNull("ReactionModuleModule does not register ReactionSliceHandler as IDomainEventHandler<EventName>.");

@@ -48,6 +48,8 @@ In the folder of your choice:
 dotnet new hardslice-api --name Rooms
 ```
 
+The name becomes one safe .NET namespace that names every folder, project, assembly and namespace, `hardslice.json` included: `Acme.Rooms` stays `Acme.Rooms`, `my-app` becomes `my_app` and `1Rooms` becomes `_1Rooms`; only the output folder keeps the name as typed.
+
 `Rooms` holds the `Bookings` sample: a `Booking` aggregate whose bookings of a room never overlap, guaranteed by PostgreSQL, and three slices, `ConfirmBooking`, `CancelBooking` and `GetBooking`, with their unit, integration and architecture tests. Its `AGENTS.md` maps the solution for an agent.
 
 Booking dates accept timezone offsets and are normalized to UTC. Fractions smaller than a microsecond are truncated before validating the period and checking overlaps, matching PostgreSQL precision. A period whose end is no longer after its start returns 400 and is not stored.
@@ -331,7 +333,7 @@ A tag `v<version>`, the version of `Directory.Build.props`, runs the release wor
 | Path | Contains |
 |---|---|
 | `src/HardSlice.Analyzers/` | The Roslyn analyzer package. |
-| `src/HardSlice.Templates/content/hardslice-api/` | The solution template, `MyApp` being replaced by the name you choose. |
+| `src/HardSlice.Templates/content/hardslice-api/` | The solution template, `MyApp` being replaced by the name you choose, in its safe namespace form. |
 | `src/HardSlice.Templates/content/hardslice-module/` | The item template of a module, `MyApp` and `ModuleName` being replaced by the application and the module. |
 | `src/HardSlice.Templates/content/hardslice-aggregate/` | The item template of an aggregate, `MyApp`, `ModuleName`, `AggregateName` and `AggregateTable` being replaced by the application, the module, the aggregate and its table. |
 | `src/HardSlice.Templates/content/hardslice-command/` | The item template of a command slice, `MyApp`, `ModuleName` and `CommandName` being replaced by the application, the module and the slice. |

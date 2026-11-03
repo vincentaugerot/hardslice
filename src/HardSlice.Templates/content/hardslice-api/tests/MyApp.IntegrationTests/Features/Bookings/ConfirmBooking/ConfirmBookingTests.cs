@@ -16,7 +16,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Stores_a_confirmed_booking_in_PostgreSQL()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var command = new ConfirmBookingCommand(Guid.NewGuid(), Start, Start.AddHours(1));
 
         var response = await app.CreateClient().PostAsJsonAsync("/bookings", command, TestContext.Current.CancellationToken);
@@ -35,7 +35,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [InlineData(-7)]
     public async Task Stores_offset_dates_in_UTC_and_rejects_the_equivalent_UTC_booking(int offsetHours)
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var roomId = Guid.NewGuid();
         var offset = TimeSpan.FromHours(offsetHours);
@@ -55,7 +55,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_sub_microsecond_periods_without_storing_or_blocking_the_room()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var roomId = Guid.NewGuid();
 
@@ -72,7 +72,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Reads_and_cancels_a_period_at_its_persisted_precision()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var roomId = Guid.NewGuid();
         var start = Start.AddTicks(1);
@@ -94,7 +94,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_a_period_that_does_not_end_after_its_start()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var command = new ConfirmBookingCommand(Guid.NewGuid(), Start, Start);
 
         var response = await app.CreateClient().PostAsJsonAsync("/bookings", command, TestContext.Current.CancellationToken);
@@ -106,7 +106,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_a_command_without_room_with_a_validation_problem_before_its_handler()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         // Valid for the domain: only validation keeps this booking of an empty room from being stored.
         var response = await ConfirmAsync(app.CreateClient(), Guid.Empty, Start, Start.AddHours(1));
@@ -118,7 +118,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Names_every_missing_field_of_a_command()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().PostAsJsonAsync("/bookings", new { }, TestContext.Current.CancellationToken);
 
@@ -128,7 +128,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_a_period_overlapping_a_confirmed_booking_of_the_room_with_409()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var roomId = Guid.NewGuid();
         (await ConfirmAsync(client, roomId, Start, Start.AddHours(1))).EnsureSuccessStatusCode();
@@ -142,7 +142,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Accepts_a_period_adjacent_to_a_confirmed_booking_of_the_room()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var roomId = Guid.NewGuid();
         (await ConfirmAsync(client, roomId, Start, Start.AddHours(1))).EnsureSuccessStatusCode();
@@ -155,7 +155,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Accepts_the_same_period_in_another_room()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         (await ConfirmAsync(client, Guid.NewGuid(), Start, Start.AddHours(1))).EnsureSuccessStatusCode();
 
@@ -167,7 +167,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Accepts_a_period_freed_by_a_cancellation()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var roomId = Guid.NewGuid();
         var confirmed = await ConfirmAsync(client, roomId, Start, Start.AddHours(1));
@@ -181,7 +181,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Confirms_exactly_one_of_simultaneous_bookings_of_the_same_period()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var roomId = Guid.NewGuid();
 
@@ -197,7 +197,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_an_overlap_detected_only_by_the_database_with_the_same_409()
     {
-        await using var app = new MyAppFactory(database);
+        await using var app = new AppFactory(database);
         var roomId = Guid.NewGuid();
         var period = new BookingPeriod(Start, Start.AddHours(1));
         await using var concurrent = database.CreateDbContext();

@@ -14,8 +14,8 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Cancels_a_booking_confirmed_by_another_instance_of_the_application()
     {
-        await using var confirmingApp = new DemoFactory(database);
-        await using var cancellingApp = new DemoFactory(database);
+        await using var confirmingApp = new AppFactory(database);
+        await using var cancellingApp = new AppFactory(database);
         var id = await ConfirmAsync(confirmingApp.CreateClient());
 
         var response = await cancellingApp.CreateClient().PostAsync($"/bookings/{id}/cancel", null, TestContext.Current.CancellationToken);
@@ -27,7 +27,7 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Accepts_a_second_cancellation_and_keeps_the_booking_cancelled()
     {
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
         var client = app.CreateClient();
         var id = await ConfirmAsync(client);
         (await client.PostAsync($"/bookings/{id}/cancel", null, TestContext.Current.CancellationToken)).EnsureSuccessStatusCode();
@@ -41,7 +41,7 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Returns_404_for_an_unknown_booking()
     {
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().PostAsync($"/bookings/{Guid.NewGuid()}/cancel", null, TestContext.Current.CancellationToken);
 
@@ -51,7 +51,7 @@ public sealed class CancelBookingTests(PostgresDatabase database)
     [Fact]
     public async Task Rejects_an_empty_booking_id_with_a_validation_problem()
     {
-        await using var app = new DemoFactory(database);
+        await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().PostAsync($"/bookings/{Guid.Empty}/cancel", null, TestContext.Current.CancellationToken);
 
