@@ -5,7 +5,7 @@
     <PackageType>Template</PackageType>
     <PackageId>HardSlice.Templates</PackageId>
     <Description>dotnet new templates for HardSlice: vertical slices with a rich domain, enforced by the build.</Description>
-    <PackageTags>dotnet-new;templates;architecture;vertical-slices;ddd;cqrs</PackageTags>
+    <PackageTags>dotnet-new;templates;architecture;vertical-slice-architecture;ddd;cqrs;aspnetcore;minimal-api;efcore;ai;coding-agents;claude-code;codex;github-copilot</PackageTags>
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <ContentTargetFolders>content</ContentTargetFolders>

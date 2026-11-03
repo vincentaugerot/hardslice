@@ -7,8 +7,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-hardslice</ToolCommandName>
     <PackageId>HardSlice.Tool</PackageId>
-    <Description>The dotnet hardslice command: verifies a HardSlice solution and explains its rules.</Description>
-    <PackageTags>dotnet-tool;architecture;vertical-slices;ddd;cqrs</PackageTags>
+    <Description>The dotnet hardslice command: verifies a HardSlice solution, explains its rules and runs the hooks of its coding agents.</Description>
+    <PackageTags>dotnet-tool;architecture;vertical-slice-architecture;ai;coding-agents;claude-code;codex;github-copilot</PackageTags>
   </PropertyGroup>
 
   <PropertyGroup>

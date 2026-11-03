@@ -9,7 +9,7 @@
   <!-- Distributable HardSlice packages share the same version and metadata.
        The single source of the version: HardSlice.Templates writes it at pack time where the template pins the analyzers and the tool. -->
   <PropertyGroup>
-    <Version>0.2.0-preview.1</Version>
+    <Version>0.3.0-preview.1</Version>
     <Authors>Vincent Augerot</Authors>
     <Copyright>Copyright (c) 2026 Vincent Augerot</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -18,8 +18,16 @@
     <RepositoryType>git</RepositoryType>
     <!-- Each package ships the README.md of its project, written for its page on NuGet.org: absolute links only. -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReleaseNotes>https://github.com/vincentaugerot/hardslice/blob/v$(Version)/CHANGELOG.md</PackageReleaseNotes>
     <EnablePackageValidation>true</EnablePackageValidation>
     <!-- A warning of NuGet or of the package validation fails the pack, like a compiler warning fails the build. -->
     <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
+    <!-- On GitHub Actions, the release workflow among them: deterministic paths in the PDBs and the source link of the commit. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
 </Project>

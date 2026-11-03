@@ -11,7 +11,7 @@
     <DevelopmentDependency>true</DevelopmentDependency>
     <PackageId>HardSlice.Analyzers</PackageId>
     <Description>Roslyn analyzers that keep a HardSlice solution in vertical slices around a rich domain: a violation fails the build with a diagnostic that names the fix and the rule sheet.</Description>
-    <PackageTags>roslyn;analyzers;architecture;vertical-slices;ddd;cqrs</PackageTags>
+    <PackageTags>roslyn;analyzers;architecture;vertical-slice-architecture;ddd;cqrs;ai;coding-agents</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

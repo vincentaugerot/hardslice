@@ -2723,6 +2723,8 @@ git grep -nP '\x{2014}' -- . ':!demos'   # aucune ligne (tiret cadratin)
 
 ### PB-059 : Préparer les paquets 0.3.0-preview.1
 
+Statut : terminé le 03/11/2026. Écart : l'en-tête de `AnalyzerReleases.Shipped.md` est `## Release 0.3.0`, car le suivi des versions de Roslyn n'accepte qu'une `System.Version` (RS2007 sur `0.3.0-preview.1`) ; les règles de toutes les préversions de 0.3.0 vont sous cet en-tête. NuGet.org ajoute sa signature de dépôt à chaque paquet : la publication et `verify` comparent donc le contenu des paquets, signature exclue (`scripts/nupkg.py digest`), et non les octets.
+
 **Résultat observable**
 
 `Directory.Build.props` porte `0.3.0-preview.1`, les trois paquets ont un README exact, une icône et des liens qui ne dérivent pas, la publication refuse de mélanger deux commits, et le parcours complet de `scripts/test-template.sh` et de `scripts/verify-published.sh` passe sur les paquets locaux. Il ne reste qu'à poser l'étiquette (PB-051).

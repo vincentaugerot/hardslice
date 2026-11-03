@@ -190,6 +190,11 @@ public sealed class AnalyzerPackageTests
         using var nuspec = nuspecEntry.Open();
         var document = XDocument.Load(nuspec);
         document.Descendants().Where(element => element.Name.LocalName == "dependency").ShouldBeEmpty();
+
+        // PB-059: the page of the package on NuGet.org shows its README and its icon.
+        entries.ShouldContain("README.md");
+        entries.ShouldContain("icon.png");
+        document.Descendants().Single(element => element.Name.LocalName == "icon").Value.ShouldBe("icon.png");
     }
 
     // The analysis mode files among the EditorConfigFiles that 'dotnet msbuild -getItem' prints as JSON.

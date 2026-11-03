@@ -19,6 +19,8 @@ dotnet hardslice explain HS016
 
 ## Documentation
 
-- [Getting started](https://github.com/vincentaugerot/hardslice/blob/main/README.md#getting-started)
-- [Rules](https://github.com/vincentaugerot/hardslice/blob/main/README.md#rules)
+- [Getting started](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/getting-started.md)
+- [Agent loop: hooks and protected files](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/agent-loop.md)
+- [Rules](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/rules.md)
+- [Changelog](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/CHANGELOG.md)
 - [License (MIT)](https://github.com/vincentaugerot/hardslice/blob/main/LICENSE)

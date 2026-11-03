@@ -1,0 +1,108 @@
+# Sourced: the steps that follow an item template, as the skills of a generated solution take them: the lines that dotnet new
+# hardslice-module and hardslice-command print, added to Program.cs and to the module, then the reference completion of a command
+# slice. Used by scripts/test-template.sh, and by scripts/verify-published.sh on the packages of a release.
+# They act on the solution <app>, named <app_name>, whose web project is <app_src>, and write their temporary files in <work>.
+
+# Adds to the module the lines that dotnet new <template> printed in <output>, as the skills add-slice and add-domain-event do:
+# the usings the file does not have yet, the registrations after 'services' (unless <registrations> is 'without-registrations'),
+# and the call of Map before 'return endpoints;'. Fails if the instructions do not name the module file or one of these lines:
+# two registrations for hardslice-command, the handler and the validator, one for hardslice-query, the handler, and one for
+# hardslice-event, the handler of its reaction, which has no endpoint to map.
+register_slice() {
+  local template="$1"
+  local output="$2"
+  local registrations="${3:-with-registrations}"
+  local expected_registrations=2
+  local module_file
+  local using
+  local usings=""
+  local lines
+  local mapping
+
+  [[ "$template" == hardslice-command ]] || expected_registrations=1
+  module_file="$(sed -n 's/^Manual instructions: Register the \(slice\|reaction\) in \(src\/.*Module\.cs\):$/\2/p' <<< "$output")"
+  lines="$(grep -E '^            \.AddScoped<(IRequestHandler|IValidator|IDomainEventHandler)<' <<< "$output" || true)"
+  mapping="$(grep -E '^        [A-Za-z0-9]+Endpoint\.Map\(group\);$' <<< "$output" || true)"
+  if [[ -z "$module_file" || ! -f "$app/$module_file" || "$(grep -c . <<< "$lines")" != "$expected_registrations" ||
+    ( "$template" == hardslice-event && -n "$mapping" ) || ( "$template" != hardslice-event && -z "$mapping" ) ]]; then
+    printf '%s\n' "$output" >&2
+    echo "error: dotnet new $template did not print the module file, the $expected_registrations registrations and, for a request slice, the call of Map of its slice." >&2
+    exit 1
+  fi
+  [[ "$registrations" == with-registrations ]] || lines=""
+  while read -r using; do
+    grep -Fxq "$using" "$app/$module_file" || usings+="$using"$'\n'
+  done < <(grep -E '^using [A-Za-z0-9_.]+;$' <<< "$output")
+  if ! { printf '%s' "$usings"; REGISTRATIONS="$lines" MAPPING="$mapping" awk '
+      /^        services;?$/ && !registered {
+        count = split(ENVIRON["REGISTRATIONS"], added, "\n")
+        closed = $0 ~ /;$/
+        chain = (closed && count == 0) ? $0 : "        services"
+        print chain
+        for (i = 1; i <= count; i++) print added[i] ((closed && i == count) ? ";" : "")
+        registered = 1
+        next
+      }
+      /^        return endpoints;$/ && !mapped && ENVIRON["MAPPING"] != "" { print ENVIRON["MAPPING"]; mapped = 1 }
+      { print }
+      END { if (!registered || (!mapped && ENVIRON["MAPPING"] != "")) exit 1 }' "$app/$module_file"; } > "$work/module.cs"; then
+    echo "error: $module_file has no 'services' chain or 'return endpoints;' line to register the slice in." >&2
+    exit 1
+  fi
+  mv "$work/module.cs" "$app/$module_file"
+}
+
+
+# Adds to Program.cs the lines that dotnet new hardslice-module printed in <output>, as the skill add-module does: the using at
+# the top, the registration before 'var app = builder.Build();' and the mapping before 'app.Run();'. Fails if the instructions
+# do not name Program.cs or one of these three lines.
+register_module() {
+  local output="$1"
+  local program
+  local using
+  local registration
+  local mapping
+
+  program="$(sed -n 's/^Manual instructions: Register the module in \(src\/.*Program\.cs\):$/\1/p' <<< "$output")"
+  using="$(grep -E '^using [A-Za-z0-9_.]+;$' <<< "$output" || true)"
+  registration="$(grep -E '^builder\.Services\.Add[A-Za-z0-9]+Module\(\);$' <<< "$output" || true)"
+  mapping="$(grep -E '^app\.Map[A-Za-z0-9]+Module\(\);$' <<< "$output" || true)"
+  if [[ -z "$program" || ! -f "$app/$program" || "$(grep -c . <<< "$using")" != 1 || "$(grep -c . <<< "$registration")" != 1 ||
+    "$(grep -c . <<< "$mapping")" != 1 ]]; then
+    printf '%s\n' "$output" >&2
+    echo "error: dotnet new hardslice-module did not print Program.cs, the using, the registration and the mapping of its module." >&2
+    exit 1
+  fi
+  if ! USING="$using" REGISTRATION="$registration" MAPPING="$mapping" awk '
+      NR == 1 { print ENVIRON["USING"] }
+      /^var app = builder\.Build\(\);$/ && !registered { print ENVIRON["REGISTRATION"]; print ""; registered = 1 }
+      /^app\.Run\(\);$/ && !mapped { print ENVIRON["MAPPING"]; print ""; mapped = 1 }
+      { print }
+      END { if (!registered || !mapped) exit 1 }' "$app/$program" > "$work/Program.cs"; then
+    echo "error: $program has no 'var app = builder.Build();' or 'app.Run();' line to register the module in." >&2
+    exit 1
+  fi
+  mv "$work/Program.cs" "$app/$program"
+}
+
+
+# The reference completion of the command slice <module>/<name> generated by dotnet new hardslice-command with its default
+# response: the handler returns the identifier of the command, the test asserts it. No marker remains.
+complete_command() {
+  local module="$1"
+  local name="$2"
+  local slice="$app_src/Features/$module/$name/$name.cs"
+  local integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
+
+  sed '/throw new NotImplementedException(/,/Never call SaveChangesAsync\.");/c\
+        Task.FromResult(command.Id);' "$slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$slice"
+  sed 's/^        Assert\.Fail("TODO(hardslice): .*/        (await response.Content.ReadFromJsonAsync<Guid>(TestContext.Current.CancellationToken)).ShouldBe(command.Id);/' \
+    "$integration_test" > "$work/test.cs"
+  mv "$work/test.cs" "$integration_test"
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of $module/$name leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+}
+

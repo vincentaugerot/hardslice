@@ -110,6 +110,7 @@ jobs:
           if-no-files-found: error
 
   # The only job with a credential, and the only one that changes NuGet.org: a package version pushed there can be unlisted, never replaced.
+  # It reads only scripts/publish-packages.sh and scripts/nupkg.py from the tag, and pushes the packages of this run, no other.
   publish:
     needs: [build, pack]
     runs-on: ubuntu-latest
@@ -119,6 +120,14 @@ jobs:
     env:
       VERSION: ${{ needs.build.outputs.version }}
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/publish-packages.sh
+            scripts/nupkg.py
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
@@ -135,18 +144,17 @@ jobs:
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      # The template last: it pins the two others, which must be there when it appears. A rerun skips the versions already pushed.
+      # Only while the tag still names the commit of this run, and only the packages NuGet.org does not serve yet: a version it
+      # already serves must have the content of this run's package, or nothing is pushed. The template last: it pins the two others.
       - name: Push the packages
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        run: |
-          for package in HardSlice.Analyzers HardSlice.Tool HardSlice.Templates; do
-            dotnet nuget push "packages/$package.$VERSION.nupkg" --api-key "$NUGET_API_KEY" \
-              --source https://api.nuget.org/v3/index.json --skip-duplicate
-          done
+        run: scripts/publish-packages.sh "$VERSION" packages --commit "$GITHUB_SHA" --remote "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
 
-  # A fresh runner, which has never seen the packages: it installs the template from NuGet.org as docs/getting-started.md says, generates a
-  # solution with and without Bookings and runs dotnet tool restore, then dotnet hardslice check in each. Only the script comes from the tag.
+  # A fresh runner, which has never seen the packages: it checks that NuGet.org serves the packages of the artifact of this run, then
+  # installs the template from NuGet.org as docs/getting-started.md says, generates a solution with and without Bookings, runs
+  # dotnet tool restore and dotnet hardslice check in each, adds a module and a command slice with the item templates and checks
+  # again. Only the scripts come from the tag.
   verify:
     needs: [build, publish]
     runs-on: ubuntu-latest
@@ -159,13 +167,20 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             scripts/verify-published.sh
+            scripts/item-completion.sh
+            scripts/nupkg.py
             global.json
           sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: packages
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
           cache: false
 
-      - name: Install HardSlice.Templates from NuGet.org and check a generated solution with and without Bookings
-        run: scripts/verify-published.sh "$VERSION" "$(mktemp -d)" --wait-minutes 90
+      - name: Check that NuGet.org serves the packages of this run, then install HardSlice.Templates from it and check generated solutions
+        run: scripts/verify-published.sh "$VERSION" "$(mktemp -d)" --expect packages --wait-minutes 90

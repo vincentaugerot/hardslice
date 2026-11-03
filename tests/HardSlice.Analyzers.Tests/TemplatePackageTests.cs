@@ -58,6 +58,8 @@ public sealed class TemplatePackageTests
             packedManifest.TrimEnd().ShouldBe(
                 File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")).Replace(VersionToken, version).TrimEnd());
             archive.Entries.Select(entry => entry.FullName).ShouldContain("README.md");
+            // PB-059: the page of the package on NuGet.org shows its icon.
+            archive.Entries.Select(entry => entry.FullName).ShouldContain("icon.png");
             // PB-055: the generated solution keeps its build output, test results and IDE files out of git.
             TemplateEntry(archive, ".gitignore").ShouldBe(File.ReadAllText(Path.Combine(templateRoot, ".gitignore")));
             // The item templates ship in the same package, beside hardslice-api.
