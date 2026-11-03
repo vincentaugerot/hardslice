@@ -126,6 +126,17 @@ FILES
   fi
 }
 
+# PB-056: the package keeps no executable bit, so the template makes the pre-commit hook and the check script executable itself.
+check_executable_scripts() {
+  local root="$1" name="$2" script
+  for script in .githooks/pre-commit scripts/check.sh; do
+    if [[ ! -x "$root/$script" ]]; then
+      echo "error: dotnet new did not make $script of $name executable." >&2
+      exit 1
+    fi
+  done
+}
+
 # One container for both variants, started as README.md documents it, except for its name and a free host port instead of 5432.
 # Each variant migrates the database named by its own connection string.
 start_documented_postgres() {
@@ -239,7 +250,7 @@ run_documented_path() {
 }
 
 # The check scripts are run from another directory: they must locate the solution themselves.
-# dotnet new does not preserve the executable bit, hence the documented 'bash scripts/check.sh' form.
+# The documented 'bash scripts/check.sh' form works without the executable bit, which a clone may lose.
 echo "==> Verifying the generated solution with scripts/check.sh"
 bash "$app/scripts/check.sh"
 
@@ -320,6 +331,7 @@ fi
 
 echo "==> Checking the instruction file of each agent and the skills in $app_name"
 check_agent_instructions "$app" "$app_name"
+check_executable_scripts "$app" "$app_name"
 
 echo "==> Validating the CI workflow of $app_name with actionlint"
 "$repo_root/scripts/generated-workflow.sh" lint "$app"
@@ -2247,6 +2259,11 @@ probe_command_template() {
   expect_item_refused hardslice-command "a module that is not PascalCase" "--module 'payments' is not PascalCase" --project "$project" --module payments --name "$name"
   expect_item_refused hardslice-command "a module that does not exist" "module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/$app_name/$app_name.csproj --name Payments" --project "$project" --module Payments --name "$name"
   expect_item_refused hardslice-command "an unknown response" "--response 'dto' is neither id, none nor the PascalCase name of a DTO" --project "$project" --module "$module" --name "$name" --response dto
+  # PB-056: a DTO named as a type that the slice already uses would not compile (Id, the command) or would hide another (Guid, None).
+  local hidden_response
+  for hidden_response in Guid "${name}Command" "$name"; do
+    expect_item_refused hardslice-command "the response $hidden_response" "--response '$hidden_response' would name the DTO as a type that the slice already uses" --project "$project" --module "$module" --name "$name" --response "$hidden_response"
+  done
 
   echo "==> Generating the command slice $module/$name of $app_name with dotnet new hardslice-command"
   generate_command "$module" "$name"
@@ -2573,6 +2590,10 @@ probe_aggregate_template() {
   expect_item_refused hardslice-aggregate "a module that is not PascalCase" "--module 'payments' is not PascalCase" --project "$project" --module payments --name "$name"
   expect_item_refused hardslice-aggregate "a module that does not exist" "module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/$app_name/$app_name.csproj --name Payments, then add the aggregate" --project "$project" --module Payments --name "$name"
   expect_item_refused hardslice-aggregate "a table that is not an identifier" "--table 'room-slots' is not a table name of letters, digits and underscores" --project "$project" --module "$module" --name "$name" --table room-slots
+  # PB-056: names that the generated mapping and tests could not use, CS0118 for a namespace and CS0104 for an imported type.
+  expect_item_refused hardslice-aggregate "an aggregate named as its module" "--name '$module' is already the name of a module or of a namespace of the application" --project "$project" --module "$module" --name "$module"
+  expect_item_refused hardslice-aggregate "an aggregate named as a namespace of the application" "--name 'Domain' is already the name of a module or of a namespace of the application" --project "$project" --module "$module" --name Domain
+  expect_item_refused hardslice-aggregate "an aggregate named as a type of the implicit usings" "--name 'Task' is already the name of a type that the files of the application or of its tests import" --project "$project" --module "$module" --name Task
 
   [[ ! -d "$migrations" ]] || cp -r "$migrations" "$work/migrations.backup"
 
@@ -2591,6 +2612,11 @@ probe_aggregate_template() {
   while read -r generated; do
     if grep -q 'MyApp\|ModuleName\|AggregateName\|AggregateTable' "$app/$generated"; then
       echo "error: $generated, generated in $app_name, keeps a placeholder of the template." >&2
+      exit 1
+    fi
+    # PB-056: the template cites no type of the Bookings sample, which --no-sample leaves out.
+    if [[ "$module$name" != *Booking* ]] && grep -qi 'booking' "$app/$generated"; then
+      echo "error: $generated, generated in $app_name, mentions the Bookings sample." >&2
       exit 1
     fi
   done < <(aggregate_files "$module" "$name")
@@ -2746,9 +2772,12 @@ complete_reaction() {
       { print }' "$slice"
   } > "$work/slice.cs"
   mv "$work/slice.cs" "$slice"
+  # A reaction generated with --reaction-only builds its event in a helper: the reference completion builds it with a new Guid.
   {
     printf 'using Microsoft.EntityFrameworkCore;\nusing %s.Domain.%s;\n' "$app_name" "$aggregate_module"
     AGGREGATE="$aggregate" awk '
+      /^    private static [A-Za-z0-9]+ Build[A-Za-z0-9]+\(\) =>$/ { event = $3; print; building = 1; next }
+      building { if ($0 ~ /"\);$/) { print "        new " event "(Guid.NewGuid());"; building = 0 } next }
       /^        Assert\.Fail\("TODO\(hardslice\): / {
         print "        var added = db.ChangeTracker.Entries<" ENVIRON["AGGREGATE"] ">().ShouldHaveSingleItem().Entity;"
         print "        await using var stored = database.CreateDbContext();"
@@ -2761,8 +2790,8 @@ complete_reaction() {
 }
 
 # Generates domain events of module <module> through every path of dotnet new hardslice-event: refusals, the event <event> alone,
-# a name that HS019 does not read as a past fact, then the reaction of <event> in <module>, added with --force to the unchanged
-# event, and the event <other-event> with its reaction in the module <other-module>, which it generates and registers in
+# a name that HS019 does not read as a past fact, then the reaction of <event> in <module>, added with --reaction-only to the
+# event once changed by hand, and the event <other-event> with its reaction in the module <other-module>, which it generates and registers in
 # Program.cs. Then a forgotten registration, the TODO(hardslice): tests, and the reference completion, in which each reaction
 # adds an aggregate <aggregate> of <module> created by <create>. The module file and Program.cs are restored, the events, the
 # reactions and <other-module> removed at the end.
@@ -2799,6 +2828,7 @@ probe_event_template() {
   expect_item_refused hardslice-event "a reaction that is not <Module>/<Slice>" "--reaction 'RecordOn$event' is not <Module>/<Slice> in PascalCase" --project "$project" --module "$module" --name "$event" --reaction "RecordOn$event"
   expect_item_refused hardslice-event "a reaction with the Handler suffix" "--reaction '${reaction}Handler' ends with Handler" --project "$project" --module "$module" --name "$event" --reaction "${reaction}Handler"
   expect_item_refused hardslice-event "a reaction named as its event" "--reaction '$module/$event' is named as the event: its namespace would hide the event $event" --project "$project" --module "$module" --name "$event" --reaction "$module/$event"
+  expect_item_refused hardslice-event "--reaction-only without reaction" "--reaction-only creates the reaction slice alone: pass it with --reaction <Module>/<Slice>" --project "$project" --module "$module" --name "$event" --reaction-only
   expect_item_refused hardslice-event "a reaction in a module that does not exist" "module 'Payments' of --reaction does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/$app_name/$app_name.csproj --name Payments, then add the reaction" --project "$project" --module "$module" --name "$event" --reaction "Payments/RecordOn$event"
 
   echo "==> Generating the event $module/$event of $app_name alone with dotnet new hardslice-event"
@@ -2831,15 +2861,23 @@ probe_event_template() {
   echo "    warning: $command_name is not named as a past fact"
   rm "${events:?}/${command_name:?}.cs"
 
-  # The unchanged event receives its reaction with --force, which rewrites it as it was; the other reaction is in another module.
-  echo "==> Generating the reaction $reaction to $event, with --force on the unchanged event, and $other_reaction to $other_event in another module of $app_name"
+  # The event, changed by hand as when it is completed, receives its reaction with --reaction-only, which leaves it as it is and
+  # generates a test that builds it in a helper; the other reaction is in another module.
+  echo "==> Generating the reaction $reaction to the existing $event with --reaction-only, and $other_reaction to $other_event in another module of $app_name"
+  printf '// Completed by hand.\n' >> "$events/$event.cs"
   cp "$events/$event.cs" "$work/event.backup"
-  generate_event "$module" "$event" --reaction "$reaction" --force
+  generate_event "$module" "$event" --reaction "$reaction" --reaction-only
   if ! cmp -s "$events/$event.cs" "$work/event.backup"; then
-    echo "error: dotnet new hardslice-event --force changed the unchanged event $event." >&2
+    echo "error: dotnet new hardslice-event --reaction-only changed the existing event $event." >&2
     exit 1
   fi
   rm "$work/event.backup"
+  if [[ "$event_output" != *"The event src/$app_name.Domain/$module/Events/$event.cs was left as it is"* ]] ||
+    ! grep -Fq "TODO(hardslice): build the $event that the aggregate raises" "$app/tests/$app_name.IntegrationTests/Features/$reaction/RecordOn${event}Tests.cs"; then
+    printf '%s\n' "$event_output" >&2
+    echo "error: dotnet new hardslice-event --reaction-only did not say that it left $event as it is, or its test does not leave the building of $event to complete." >&2
+    exit 1
+  fi
   reaction_output="$event_output"
   generate_module "$other_module"
   register_module "$module_output"
@@ -3093,6 +3131,12 @@ if sample_files="$(grep -rIil --exclude-dir=rules booking "$blank")"; then
   echo "error: $blank_name mentions the Bookings sample outside docs/rules/." >&2
   exit 1
 fi
+# PB-056: their examples are illustrations; none sends the reader to a type or a file of the sample to follow or copy.
+if sample_files="$(grep -rnE '[Ff]ollow `[^`]*Booking[^`]*`|as `[^`]*Booking[^`]*` does|`Booking(Configuration|sModule|ConfigurationTests)`|`(Confirm|Cancel|Get)Booking(Validator)?Tests`' "$blank/docs/rules")"; then
+  printf '%s\n' "$sample_files" >&2
+  echo "error: a rule sheet of $blank_name sends the reader to the Bookings sample, which --no-sample leaves out." >&2
+  exit 1
+fi
 for sample_path in "src/$blank_name.Domain/Bookings" "src/$blank_name/Features" "src/$blank_name/Shared/Persistence/Migrations"; do
   if [[ -e "$blank/$sample_path" ]]; then
     echo "error: $blank_name contains $sample_path, which only the Bookings sample needs." >&2
@@ -3105,6 +3149,7 @@ if ! grep -Fq -- "- None yet: start with [Adding a first module](#adding-a-first
   exit 1
 fi
 check_agent_instructions "$blank" "$blank_name"
+check_executable_scripts "$blank" "$blank_name"
 "$repo_root/scripts/generated-workflow.sh" lint "$blank"
 while read -r cited_path; do
   if [[ ! -e "$blank/$cited_path" ]]; then

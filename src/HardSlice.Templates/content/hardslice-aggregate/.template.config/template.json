@@ -153,9 +153,80 @@
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
       }
     },
+    "NameProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "NameIsModule": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "NameProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "AppProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "AppNameOrEmpty"
+          }
+        ]
+      }
+    },
+    "NameIsNamespace": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppProbe",
+        "pattern": "^(?:(?:Domain|Features|Shared|Tests|IntegrationTests|ArchitectureTests)\\||([A-Za-z0-9]+)\\|(?:[^|]*\\.)?\\1(?:\\.[^|]*)?$)"
+      }
+    },
+    "NameIsImportedType": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "^(?:Action|Array|Assert|Attribute|Barrier|Buffer|Console|Convert|Delegate|Directory|Endpoint|Enum|Environment|Exception|File|FormFile|Guid|Host|Index|Lock|Math|Monitor|Mutex|Object|Parallel|Path|Random|Range|Record|Results|Route|Semaphore|Should|Stream|String|Task|TestContext|Thread|Timeout|Timer|Tuple|Type|TypedResults|Uri|Version)$"
+      }
+    },
+    "NameIsFree": {
+      "type": "computed",
+      "value": "(!NameIsModule && !NameIsNamespace && !NameIsImportedType)"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && TableIsValid)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && TableIsValid && NameIsFree)"
     }
   },
   "sources": [
@@ -279,6 +350,44 @@
       "manualInstructions": [
         {
           "text": "error: --table 'AggregateTable' is not a table name of letters, digits and underscores, such as --table Categories. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNameOfNamespace",
+      "condition": "(NameIsPascalCase && (NameIsModule || NameIsNamespace))",
+      "description": "Refuses an aggregate named as a module or a namespace of the application.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-aggregate.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'AggregateName' is already the name of a module or of a namespace of the application: in the mapping and the tests, it would name that namespace instead of the aggregate (CS0118). Name the aggregate after one instance, such as --name Room in module Rooms. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNameOfImportedType",
+      "condition": "(NameIsImportedType)",
+      "description": "Refuses an aggregate named as a type that every file imports.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-aggregate.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'AggregateName' is already the name of a type that the files of the application or of its tests import, from System, System.IO, System.Threading.Tasks, ASP.NET Core, xUnit or Shouldly: the mapping and the tests would not know which one they use (CS0104). Choose another name of the domain, such as --name WorkItem rather than Task. Nothing was created."
         }
       ],
       "continueOnError": false

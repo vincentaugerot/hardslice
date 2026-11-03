@@ -195,9 +195,51 @@
         "pattern": "^[A-Z][A-Za-z0-9]*$"
       }
     },
+    "ResponseIsReserved": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Response",
+        "pattern": "^Guid$"
+      }
+    },
+    "ResponseProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "Response"
+          }
+        ]
+      }
+    },
+    "ResponseIsSliceType": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ResponseProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|\\1(?:Command|Handler|Validator|Endpoint)?$"
+      }
+    },
+    "ResponseIsAccepted": {
+      "type": "computed",
+      "value": "(ResponseIsId || ResponseIsNone || (ResponseIsPascalCase && !ResponseIsReserved && !ResponseIsSliceType))"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && (ResponseIsId || ResponseIsNone || ResponseIsPascalCase))"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted)"
     }
   },
   "sources": [
@@ -340,6 +382,25 @@
       "manualInstructions": [
         {
           "text": "error: --response 'ResponseTypeName' is neither id, none nor the PascalCase name of a DTO, such as --response ExtensionDto. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseResponseThatHidesAType",
+      "condition": "(ResponseIsPascalCase && (ResponseIsReserved || ResponseIsSliceType))",
+      "description": "Refuses a DTO named as a type that the slice already uses.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --response 'ResponseTypeName' would name the DTO as a type that the slice already uses: Guid is the type of its identifier, and the slice CommandName names its command, handler, validator and endpoint. Name the DTO after what it holds, such as --response CommandNameDto, or pass --response id or --response none. Nothing was created."
         }
       ],
       "continueOnError": false

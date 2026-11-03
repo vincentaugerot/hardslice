@@ -1,3 +1,4 @@
+using MyApp.Domain;
 using MyApp.Domain.ModuleName;
 
 namespace MyApp.Tests.Domain.ModuleName;

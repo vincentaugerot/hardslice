@@ -36,6 +36,12 @@ namespace MyApp.Shared.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.ComplexProperty(typeof(Dictionary<string, object>), "Period", "MyApp.Domain.Bookings.Booking.Period#BookingPeriod", b1 =>
                         {
                             b1.IsRequired();

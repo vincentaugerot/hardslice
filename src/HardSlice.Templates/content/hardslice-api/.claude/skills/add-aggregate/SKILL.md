@@ -19,7 +19,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    dotnet new hardslice-aggregate --project src/MyApp/MyApp.csproj --module <Module> --name <Aggregate>
    ```
 
-   If the template refuses, read its message, fix the argument and run it again.
+   If the template refuses, read its message, fix the argument and run it again: a refusal prints `created successfully` first, then fails with exit code 105 and creates nothing. It refuses, among others, a name that a module, a namespace or a common type already has, such as `Rooms` or `Task`: name the aggregate after one instance, such as `Room` or `WorkItem`.
 4. Complete the aggregate in `src/MyApp.Domain/<Module>/<Aggregate>.cs`:
    - rename the factory method `Create` after the business fact, such as `Register` or `Open`, and take the state of the new aggregate as parameters;
    - throw a `DomainException` for each invariant they break, answered with 400, or a `ConflictException` for a rule that the current state breaks, answered with 409;

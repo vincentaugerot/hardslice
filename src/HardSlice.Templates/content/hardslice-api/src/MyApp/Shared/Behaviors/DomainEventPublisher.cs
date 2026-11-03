@@ -6,7 +6,8 @@ using MyApp.Shared.Persistence;
 namespace MyApp.Shared.Behaviors;
 
 // Publishes the domain events of every aggregate AppDbContext tracks to their IDomainEventHandler<TEvent>, inside the
-// command transaction and before saving: TransactionBehavior calls it once the command handler has returned.
+// command transaction and before its commit: TransactionBehavior calls it once the command handler has returned, after the save
+// of a handler that saved early, then saves what the handlers changed and commits.
 // Each aggregate's events go in the order it raised them, aggregates in the order the context started tracking them, and
 // each event to every handler in registration order. Events raised by a handler are published in turn, round after round,
 // up to MaxDepth rounds: beyond that, the handlers raise events in a loop and the command fails.

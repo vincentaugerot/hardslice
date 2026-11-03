@@ -1,5 +1,4 @@
 using FluentValidation;
-using Demo.Domain.Bookings;
 using Demo.Features.Bookings.CancelBooking;
 using Demo.Features.Bookings.ConfirmBooking;
 using Demo.Features.Bookings.GetBooking;
@@ -12,7 +11,7 @@ public static class BookingsModule
     // Handlers are registered by their contract only: endpoints reach them through IMediator, never directly.
     public static IServiceCollection AddBookingsModule(this IServiceCollection services) =>
         services
-            .AddScoped<IRequestHandler<ConfirmBookingCommand, BookingId>, ConfirmBookingHandler>()
+            .AddScoped<IRequestHandler<ConfirmBookingCommand, Guid>, ConfirmBookingHandler>()
             .AddScoped<IValidator<ConfirmBookingCommand>, ConfirmBookingValidator>()
             .AddScoped<IRequestHandler<CancelBookingCommand, CancelledBooking?>, CancelBookingHandler>()
             .AddScoped<IValidator<CancelBookingCommand>, CancelBookingValidator>()

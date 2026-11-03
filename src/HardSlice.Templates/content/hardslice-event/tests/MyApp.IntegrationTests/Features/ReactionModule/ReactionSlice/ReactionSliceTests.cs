@@ -19,11 +19,22 @@ public sealed class ReactionSliceTests(PostgresDatabase database)
         var handler = scope.ServiceProvider.GetServices<IDomainEventHandler<EventName>>().OfType<ReactionSliceHandler>().SingleOrDefault();
         handler.ShouldNotBeNull("ReactionModuleModule does not register ReactionSliceHandler as IDomainEventHandler<EventName>.");
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+#if (ReactionOnly)
+        var domainEvent = BuildEventName();
+#else
         var domainEvent = new EventName(Guid.NewGuid());
+#endif
 
         await handler.Handle(domainEvent, TestContext.Current.CancellationToken);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Fail("TODO(hardslice): assert what ReactionSliceHandler changed for domainEvent, such as the state stored in PostgreSQL, read with database.CreateDbContext().");
     }
+#if (ReactionOnly)
+
+    // The EventName that an aggregate raises, with the values of the fact that ReactionSliceHandler reads.
+    private static EventName BuildEventName() =>
+        throw new NotImplementedException("TODO(hardslice): build the EventName that the aggregate raises, with the values of the fact, "
+            + "such as the identifier of an aggregate that the test stored first.");
+#endif
 }

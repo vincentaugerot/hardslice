@@ -11,7 +11,7 @@ namespace MyApp.IntegrationTests.Features.Bookings.ConfirmBooking;
 
 public sealed class ConfirmBookingTests(PostgresDatabase database)
 {
-    private static readonly DateTimeOffset Start = new(2026, 11, 2, 9, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Start = TestInstants.Start;
 
     [Fact]
     public async Task Stores_a_confirmed_booking_in_PostgreSQL()
@@ -103,6 +103,37 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
         (await StoredCountAsync(command.RoomId)).ShouldBe(0);
     }
 
+    // Without an offset, the instant would depend on the time zone of the server: the request is refused instead.
+    [Theory]
+    [InlineData("2100-01-04T09:00:00", "2100-01-04T10:00:00Z")]
+    [InlineData("2100-01-04T09:00:00Z", "2100-01-04T10:00:00")]
+    [InlineData("2100-01-04", "2100-01-05Z")]
+    public async Task Rejects_a_date_without_offset_with_400_and_stores_nothing(string start, string end)
+    {
+        await using var app = new AppFactory(database);
+        var roomId = Guid.NewGuid();
+        using var body = new StringContent($$"""{"roomId":"{{roomId}}","start":"{{start}}","end":"{{end}}"}""", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await app.CreateClient().PostAsync("/bookings", body, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(TestContext.Current.CancellationToken);
+        problem.ShouldNotBeNull();
+        problem.Detail.ShouldNotBeNull().ShouldContain("with its offset");
+        (await StoredCountAsync(roomId)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Rejects_a_malformed_body_with_400()
+    {
+        await using var app = new AppFactory(database);
+        using var body = new StringContent("{", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await app.CreateClient().PostAsync("/bookings", body, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
     [Fact]
     public async Task Rejects_a_command_without_room_with_a_validation_problem_before_its_handler()
     {
@@ -137,6 +168,25 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
 
         await ShouldBeOverlapConflictAsync(response, roomId, new BookingPeriod(Start.AddMinutes(30), Start.AddMinutes(90)));
         (await StoredCountAsync(roomId)).ShouldBe(1);
+    }
+
+    // The status is the answer even when the client accepts no problem details: 409, without a body.
+    [Fact]
+    public async Task Answers_409_to_a_client_that_accepts_no_problem_details()
+    {
+        await using var app = new AppFactory(database);
+        var client = app.CreateClient();
+        var roomId = Guid.NewGuid();
+        (await ConfirmAsync(client, roomId, Start, Start.AddHours(1))).EnsureSuccessStatusCode();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/bookings")
+        {
+            Content = JsonContent.Create(new ConfirmBookingCommand(roomId, Start, Start.AddHours(1)))
+        };
+        request.Headers.Accept.ParseAdd("text/plain");
+
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
 
     [Fact]
@@ -205,8 +255,9 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
         concurrent.Set<Booking>().Add(Booking.Confirm(roomId, period, []));
         await concurrent.SaveChangesAsync(TestContext.Current.CancellationToken);
 
+        var blocker = await BackendPidAsync(concurrent);
         var request = ConfirmAsync(app.CreateClient(), roomId, period.Start, period.End);
-        await WaitUntilAnInsertIsBlockedAsync();
+        await WaitUntilBlockedByAsync(blocker);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
         var response = await request;
 
@@ -238,13 +289,17 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
         return problem.Errors;
     }
 
-    private async Task WaitUntilAnInsertIsBlockedAsync()
+    private static Task<int> BackendPidAsync(DbContext db) =>
+        db.Database.SqlQuery<int>($"SELECT pg_backend_pid() AS \"Value\"").SingleAsync(TestContext.Current.CancellationToken);
+
+    // Waits until a session waits for a lock that the session of the given process holds: the request above, and no other.
+    private async Task WaitUntilBlockedByAsync(int blocker)
     {
         await using var db = database.CreateDbContext();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         while (!await db.Database
-            .SqlQuery<bool>($"""SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO "Bookings"%') AS "Value" """)
+            .SqlQuery<bool>($"SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE {blocker} = ANY(pg_blocking_pids(pid))) AS \"Value\"")
             .SingleAsync(timeout.Token))
         {
             await Task.Delay(TimeSpan.FromMilliseconds(50), timeout.Token);

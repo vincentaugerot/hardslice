@@ -163,12 +163,35 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(7);
+        refusals.Length.ShouldBe(8);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
         template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
         postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+    }
+
+    // PB-056: a DTO named Guid, or after a type of the slice, would hide that type and break the build of the slice (CS0118, CS0102).
+    [Theory]
+    [InlineData("Rename", "Guid", false)]
+    [InlineData("Rename", "Rename", false)]
+    [InlineData("Rename", "RenameCommand", false)]
+    [InlineData("Rename", "RenameHandler", false)]
+    [InlineData("Rename", "RenameValidator", false)]
+    [InlineData("Rename", "RenameEndpoint", false)]
+    [InlineData("Rename", "RenameResult", true)]
+    [InlineData("Rename", "ProductName", true)]
+    public void Command_item_template_refuses_a_response_that_hides_a_type_of_the_slice(string name, string response, bool accepted)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(CommandTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+
+        var hidden = Matches(symbols, "ResponseIsReserved", response) || Matches(symbols, "ResponseIsSliceType", $"{name}|{response}");
+
+        hidden.ShouldBe(!accepted);
+        symbols.GetProperty("ResponseIsAccepted").GetProperty("value").GetString()!.ShouldContain("!ResponseIsReserved && !ResponseIsSliceType");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("ResponseIsAccepted");
     }
 
     // hardslice-query generates the two files of a query slice, at the paths of HS004 and HS018, and nothing else: a query has no validator.
@@ -349,7 +372,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(6);
+        refusals.Length.ShouldBe(8);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -421,13 +444,13 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(9);
+        refusals.Length.ShouldBe(10);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
         template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
         var warning = postActions.Single(action => action.GetProperty("id").GetString() == "warnNotPastFact");
-        warning.GetProperty("condition").GetString().ShouldBe("(Accepted && !NameIsPastFact)");
+        warning.GetProperty("condition").GetString().ShouldBe("(Accepted && !NameIsPastFact && !ReactionOnly)");
         warning.GetProperty("continueOnError").GetBoolean().ShouldBeTrue();
         warning.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldStartWith("warning: EventName is not named as a past fact: HS019 ");
         postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
@@ -435,6 +458,63 @@ public sealed class TemplatePackageTests
             .Select(instruction => instruction.GetProperty("text").GetString()!)
             .ShouldContain(text => text.Contains("\n            .AddScoped<IDomainEventHandler<EventName>, ReactionSliceHandler>()\n", StringComparison.Ordinal));
     }
+
+    // PB-056: an aggregate named after its module, a namespace of the application or a type that its files import would not build
+    // (CS0118, CS0104): the template refuses it. dotnet new evaluates regexMatch with System.Text.RegularExpressions, as here.
+    [Theory]
+    [InlineData("Rooms", "Acme.Booking", "/app/src/Acme.Booking/Features/Rooms/RoomsModule.cs", false)]
+    [InlineData("Room", "Acme.Booking", "/app/src/Acme.Booking/Features/Rooms/RoomsModule.cs", true)]
+    [InlineData("Domain", "Acme.Booking", "", false)]
+    [InlineData("Shared", "Acme.Booking", "", false)]
+    [InlineData("Acme", "Acme.Booking", "", false)]
+    [InlineData("Booking", "Acme.Booking", "", false)]
+    [InlineData("Task", "Acme.Booking", "", false)]
+    [InlineData("Guid", "Acme.Booking", "", false)]
+    [InlineData("WorkItem", "Acme.Booking", "", true)]
+    [InlineData("Product", "Acme.Booking", "/app/src/Acme.Booking/Features/Catalog/CatalogModule.cs", true)]
+    public void Aggregate_item_template_refuses_a_name_that_hides_a_module_a_namespace_or_an_imported_type(
+        string name, string application, string moduleFiles, bool accepted)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(AggregateTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+
+        var hidden = Matches(symbols, "NameIsModule", $"{name}|{moduleFiles}")
+            || Matches(symbols, "NameIsNamespace", $"{name}|{application}")
+            || Matches(symbols, "NameIsImportedType", name);
+
+        hidden.ShouldBe(!accepted);
+        symbols.GetProperty("NameIsFree").GetProperty("value").GetString().ShouldBe("(!NameIsModule && !NameIsNamespace && !NameIsImportedType)");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("NameIsFree");
+    }
+
+    // PB-056: --reaction-only adds the reaction slice of an event that exists, which --force would overwrite with a blank event.
+    [Fact]
+    public void Event_item_template_adds_a_reaction_alone_to_an_event_that_exists()
+    {
+        var root = EventTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+        var config = template.RootElement;
+
+        host.RootElement.GetProperty("symbolInfo").GetProperty("ReactionOnly").GetProperty("longName").GetString().ShouldBe("reaction-only");
+        config.GetProperty("symbols").GetProperty("ReactionOnly").GetProperty("datatype").GetString().ShouldBe("bool");
+        config.GetProperty("symbols").GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("(HasReaction || !ReactionOnly)");
+        var modifier = config.GetProperty("sources")[0].GetProperty("modifiers").EnumerateArray()
+            .Single(candidate => candidate.GetProperty("condition").GetString() == "(ReactionOnly)");
+        modifier.GetProperty("exclude").EnumerateArray().Select(glob => glob.GetString()).ShouldBe(["src/MyApp.Domain/**/*"]);
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        postActions.ShouldContain(action => action.GetProperty("id").GetString() == "refuseReactionOnlyWithoutReaction");
+        postActions.Single(action => action.GetProperty("id").GetString() == "warnNotPastFact")
+            .GetProperty("condition").GetString()!.ShouldContain("!ReactionOnly");
+        File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ReactionModule", "ReactionSlice", "ReactionSliceTests.cs"))
+            .ShouldContain("#if (ReactionOnly)");
+        File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".claude", "skills", "add-domain-event", "SKILL.md"))
+            .ShouldContain("--reaction-only");
+    }
+
+    private static bool Matches(JsonElement symbols, string symbol, string source) =>
+        Regex.IsMatch(source, symbols.GetProperty(symbol).GetProperty("parameters").GetProperty("pattern").GetString()!);
 
     // In the repository, the template holds the token in place of the version, in its reference to the analyzers and in its tool entry only.
     [Fact]
@@ -589,6 +669,87 @@ public sealed class TemplatePackageTests
             .ShouldBeEmpty($"{file} copies golden rules of AGENTS.md.");
     }
 
+    // PB-056: the Agent kit of AGENTS.md lists the skills once; an instruction file links to it instead of keeping a copy that drifts.
+    [Theory]
+    [MemberData(nameof(AgentInstructionFiles))]
+    public void Agent_instruction_file_links_to_the_agent_kit_instead_of_listing_the_skills(string file)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var instructions = File.ReadAllText(Path.Combine(templateRoot, file));
+
+        instructions.ShouldContain("AGENTS.md#agent-kit)");
+        SkillNames.Where(skill => instructions.Contains(skill, StringComparison.Ordinal))
+            .ShouldBeEmpty($"{file} lists skills that the Agent kit of AGENTS.md already lists.");
+        if (file != "GEMINI.md")
+            instructions.ShouldContain("Until it is restored, the hooks do nothing.", Case.Sensitive, $"{file} does not say that the hooks wait for the tool.");
+    }
+
+    // PB-056: the slice templates call the group of the module named in kebab-case; a module created with --route maps another one.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_to_change_the_route_of_the_generated_tests_in_a_module_mapped_with_its_own_route(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = string.Join('\n', AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample));
+        var addSlice = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-slice", "SKILL.md"));
+
+        agents.ShouldContain("In a module mapped with `--route`, change `Route` in its generated tests.");
+        addSlice.ShouldContain("change `Route` in the generated tests");
+    }
+
+    // PB-056: dotnet new does not keep the executable bit of a packed file: the template sets it back on the scripts it ships,
+    // except on Windows, where Git for Windows runs the hook without it.
+    [Fact]
+    public void Api_template_makes_the_pre_commit_hook_and_the_check_script_executable()
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(templateRoot, ".template.config", "template.json")));
+        var action = template.RootElement.GetProperty("postActions").EnumerateArray()
+            .Single(candidate => candidate.GetProperty("id").GetString() == "makeScriptsExecutable");
+
+        action.GetProperty("actionId").GetString()!.ToLowerInvariant().ShouldBe("cb9a6cf3-4f5c-4860-b9d2-03a574959774");
+        action.GetProperty("condition").GetString().ShouldBe("(HostOS != \"Windows_NT\")");
+        action.GetProperty("continueOnError").GetBoolean().ShouldBeTrue();
+        var scripts = action.GetProperty("args").GetProperty("+x").EnumerateArray().Select(script => script.GetString()!).ToArray();
+        scripts.ShouldBe([".githooks/pre-commit", "scripts/check.sh"]);
+        scripts.ShouldAllBe(script => File.Exists(Path.Combine(templateRoot, script)));
+        template.RootElement.GetProperty("symbols").GetProperty("HostOS").GetProperty("binding").GetString().ShouldBe("env:OS");
+    }
+
+    // PB-056: --no-sample leaves out the Bookings module only; the tests of the foundation (transaction, domain events) stay.
+    [Fact]
+    public void Api_template_without_the_sample_leaves_out_the_Bookings_module_and_its_migrations_only()
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(templateRoot, ".template.config", "template.json")));
+        var modifier = template.RootElement.GetProperty("sources")[0].GetProperty("modifiers").EnumerateArray()
+            .Single(candidate => candidate.GetProperty("condition").GetString() == "(NoSample)");
+
+        modifier.GetProperty("exclude").EnumerateArray().Select(glob => glob.GetString()!)
+            .ShouldAllBe(glob => glob.EndsWith("/Bookings/**", StringComparison.Ordinal) || glob == "src/MyApp/Shared/Persistence/Migrations/**");
+        foreach (var test in new[] { "TransactionBehaviorTests.cs", "DomainEventPublisherTests.cs" })
+        {
+            var text = File.ReadAllText(Path.Combine(templateRoot, "tests", "MyApp.IntegrationTests", "Shared", "Behaviors", test));
+            Regex.Split(text, @"#if \(!NoSample\)[\s\S]*?#endif").ShouldContain(
+                part => part.Contains("[Fact]", StringComparison.Ordinal), $"{test} keeps no test of the foundation without the sample.");
+        }
+    }
+
+    // PB-056: a rule sheet may illustrate a rule with the sample, but never sends the reader to one of its files, which --no-sample removes.
+    [Fact]
+    public void Rule_sheets_send_the_reader_to_what_the_templates_generate_not_to_the_files_of_the_sample()
+    {
+        var rules = Path.Combine(TemplateRoot(FindRepositoryRoot()), "docs", "rules");
+        var reference = new Regex(
+            @"[Ff]ollow `[^`]*Booking[^`]*`|as `[^`]*Booking[^`]*` does|`Booking(Configuration|sModule|ConfigurationTests)`|`(Confirm|Cancel|Get)Booking(Validator)?Tests`");
+
+        Directory.EnumerateFiles(rules, "*.md")
+            .Where(sheet => reference.IsMatch(File.ReadAllText(sheet)))
+            .Select(Path.GetFileName)
+            .ShouldBeEmpty("These rule sheets send the reader to a file of the Bookings sample.");
+    }
+
     // Every Markdown link of the agent guidance resolves to a file of the template, and its anchor to a heading of that file.
     [Theory]
     [InlineData("AGENTS.md")]
@@ -676,7 +837,7 @@ public sealed class TemplatePackageTests
             if (GeneratingSkills.Contains(skill))
                 header["description"].ShouldContain("dotnet new hardslice-", Case.Sensitive, $"The description of {skill} does not name its template.");
             else
-                header["description"].ShouldContain($"Skill {skill}", Case.Sensitive, $"The description of {skill} does not say that a message names it.");
+                header["description"].ShouldContain($"`Skill: {skill}`", Case.Sensitive, $"The description of {skill} does not quote the words of the messages that name it.");
             lines.Skip(end + 1).ShouldContain(line => line.StartsWith("# ", StringComparison.Ordinal));
         }
     }

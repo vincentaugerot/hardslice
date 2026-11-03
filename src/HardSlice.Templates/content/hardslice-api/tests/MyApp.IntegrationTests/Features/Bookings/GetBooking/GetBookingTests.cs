@@ -11,7 +11,7 @@ namespace MyApp.IntegrationTests.Features.Bookings.GetBooking;
 
 public sealed class GetBookingTests(PostgresDatabase database)
 {
-    private static readonly DateTimeOffset Start = new(2099, 11, 2, 9, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Start = TestInstants.Start;
 
     [Fact]
     public async Task Reads_a_confirmed_booking_at_the_location_returned_by_its_creation()

@@ -7,7 +7,7 @@ description: Adds a domain event to this HardSlice solution with dotnet new hard
 
 A domain event is a fact that an aggregate records, a `sealed record` named in the past tense in `src/MyApp.Domain/<Module>/Events/`. A reaction slice holds the handler that reacts to it, in `src/MyApp/Features/<Module>/<Reaction>/`, with its integration tests. The template creates both: never write that structure by hand.
 
-The pipeline publishes the events of a command to their handlers after the command handler and before saving, in the same transaction: an exception of a handler rolls the whole command back. Events are not stored.
+The pipeline publishes the events of a command to their handlers after the command handler and before the commit, in the same transaction: an exception of a handler rolls the whole command back. Events are not stored.
 
 Run every command from the root of the solution, the folder of `MyApp.slnx`. If the solution was never built, run `dotnet build` first: the template reads the web project.
 
@@ -21,12 +21,12 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    dotnet new hardslice-event --project src/MyApp/MyApp.csproj --module <Module> --name <Event> --reaction <ReactionModule>/<Reaction>
    ```
 
-   Leave out `--reaction <ReactionModule>/<Reaction>` for an event that nothing handles yet. To add a reaction later to an event the template created and you have not changed, run it again with `--reaction` and `--force`; once the event is completed, write the reaction on the model of a generated one. If the template refuses or warns that the name is not a past fact, read its message, fix the name and run it again.
-4. Complete the event in `src/MyApp.Domain/<Module>/Events/<Event>.cs`: replace `Id` with the values of the fact that a handler needs, such as the identifier of the aggregate and the new name. Values only: an identifier, never the aggregate itself.
+   Leave out `--reaction <ReactionModule>/<Reaction>` for an event that nothing handles yet. To add a reaction to an event that already exists, run the same command with `--reaction-only` too: it creates the reaction slice alone and leaves the event as it is. Never pass `--force`: it rewrites the event, and the values you gave it are lost. If the template refuses or warns that the name is not a past fact, read its message, fix the name and run it again: a refusal prints `created successfully` first, then fails with exit code 105 and creates nothing.
+4. For a new event, complete it in `src/MyApp.Domain/<Module>/Events/<Event>.cs`: replace `Id` with the values of the fact that a handler needs, such as the identifier of the aggregate and the new name. Values only: an identifier, never the aggregate itself.
 5. Raise it from the aggregate: in the method where the fact happens, after its rules hold, add `_domainEvents.Add(new <Event>(...));`. Do not raise it when the method changes nothing. Add to the unit tests of the aggregate, in `tests/MyApp.Tests/Domain/<Module>/`, an assertion that the method records the event with its values in `DomainEvents`, and that a refused call records none.
 6. Register the reaction with the lines the template printed, in `src/MyApp/Features/<ReactionModule>/<ReactionModule>Module.cs`: the usings the file does not have yet and `.AddScoped<IDomainEventHandler<<Event>>, <Reaction>Handler>()` in `Add<ReactionModule>Module`. A forgotten registration fails `ProgramTests`, which names the type.
 7. Implement the handler in `src/MyApp/Features/<ReactionModule>/<Reaction>/<Reaction>.cs`: inject `AppDbContext`, load the aggregate to change with `Set<TAggregate>()`, and call its method. It never calls `SaveChangesAsync`, never sends a request through `IMediator`, and never has an external effect, such as an e-mail or an HTTP call, which would happen even if the transaction rolls back.
-8. Replace every `TODO(hardslice):` marker of the reaction and of its tests: search for `TODO(hardslice):` under `src/` and `tests/`. The integration test asserts what the handler changed, read back from PostgreSQL. An empty test, or one that asserts nothing, does not replace a marker.
+8. Replace every `TODO(hardslice):` marker of the reaction and of its tests, such as the building of an existing event with its values: search for `TODO(hardslice):` under `src/` and `tests/`. The integration test asserts what the handler changed, read back from PostgreSQL. An empty test, or one that asserts nothing, does not replace a marker.
 9. Add the reaction to the entry of its module in the "Modules and slices" map of `AGENTS.md`, as a reaction to `<Event>`.
 10. Run the check, and fix the code until it exits 0:
 
@@ -39,7 +39,8 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
 
 These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the check cannot pass without one, stop and explain the conflict instead.
 
-- Write the event or the reaction slice yourself, or make the event a `class`.
+- Write the event or the reaction slice yourself, or make the event a `class`: the template creates both, the reaction alone included.
+- Run the template with `--force` on an event that exists.
 - Raise the event from a handler or an endpoint instead of the aggregate.
 - Make the handler `public`, give the reaction slice a request or an endpoint, or use a type of another slice or of another module outside its public contract.
 - Leave an empty test or an assertion that checks nothing in place of a `TODO(hardslice):` marker.

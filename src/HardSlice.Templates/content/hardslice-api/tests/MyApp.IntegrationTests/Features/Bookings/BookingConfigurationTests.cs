@@ -9,7 +9,7 @@ namespace MyApp.IntegrationTests.Features.Bookings;
 
 public sealed class BookingConfigurationTests(PostgresDatabase database)
 {
-    private static readonly DateTimeOffset Start = new(2026, 11, 2, 9, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Start = TestInstants.Start;
 
     [Fact]
     public async Task Database_rejects_an_empty_period_even_when_bypassing_the_domain()

@@ -8,9 +8,7 @@ public sealed class BookingTests
 {
     private static readonly Guid RoomId = Guid.NewGuid();
 
-    private static readonly BookingPeriod Period = new(
-        new DateTimeOffset(2026, 11, 2, 9, 0, 0, TimeSpan.Zero),
-        new DateTimeOffset(2026, 11, 2, 10, 0, 0, TimeSpan.Zero));
+    private static readonly BookingPeriod Period = new(TestInstants.Start, TestInstants.Start.AddHours(1));
 
     [Fact]
     public void Confirm_creates_a_confirmed_booking_for_the_room_and_period()

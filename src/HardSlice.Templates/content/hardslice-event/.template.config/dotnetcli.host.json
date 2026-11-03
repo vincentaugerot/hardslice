@@ -8,6 +8,10 @@
     "Reaction": {
       "longName": "reaction",
       "shortName": ""
+    },
+    "ReactionOnly": {
+      "longName": "reaction-only",
+      "shortName": ""
     }
   }
 }

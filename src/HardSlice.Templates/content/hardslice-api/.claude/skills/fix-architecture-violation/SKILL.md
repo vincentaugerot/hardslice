@@ -1,6 +1,6 @@
 ---
 name: fix-architecture-violation
-description: Fixes a HardSlice diagnostic or a failing architecture test of this solution by reading the message, opening the sheet of its rule with dotnet hardslice explain, applying the first fix of the sheet that matches, then running the check again, and stops to explain the conflict when only a workaround would make it pass. Use when the build or the check fails with a HardSlice rule, HS000 to HS902, or when a message ends with Skill fix-architecture-violation, such as a domain type that uses EF Core, an endpoint that reads the database or a query handler that writes.
+description: Fixes a HardSlice diagnostic or a failing architecture test of this solution by reading the message, opening the sheet of its rule with dotnet hardslice explain, applying the first fix of the sheet that matches, then running the check again, and stops to explain the conflict when only a workaround would make it pass. Use when the build or the check fails with a HardSlice rule, HS000 to HS902, or when a message names `Skill: fix-architecture-violation`, such as a domain type that uses EF Core, an endpoint that reads the database or a query handler that writes.
 ---
 
 # Fix an architecture violation

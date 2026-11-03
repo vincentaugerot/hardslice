@@ -5,7 +5,7 @@ namespace MyApp.Tests.Features.Bookings.ConfirmBooking;
 
 public sealed class ConfirmBookingValidatorTests
 {
-    private static readonly DateTimeOffset Start = new(2026, 11, 2, 9, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Start = TestInstants.Start;
 
     private readonly ConfirmBookingValidator _validator = new();
 

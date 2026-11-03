@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using MyApp.Domain;
 using MyApp.Shared.Messaging;
 using MyApp.Shared.Persistence;
 
@@ -21,12 +23,19 @@ internal sealed class TransactionBehavior<TCommand, TResponse>(AppDbContext db, 
             await transaction.CommitAsync(cancellationToken);
             return response;
         }
-        catch
+        catch (Exception exception)
         {
             // Rollback does not undo tracked mutations, even after an early save.
             // Later commands in this scope must reload the database state.
             domainEvents.Discard();
             db.ChangeTracker.Clear();
+            if (exception is DbUpdateConcurrencyException)
+            {
+                // An aggregate with a concurrency token, such as xmin, was changed by another request since this one loaded it.
+                throw new ConflictException(
+                    "The data this request changes was changed by another request in the meantime: read it again, then retry.");
+            }
+
             throw;
         }
     }

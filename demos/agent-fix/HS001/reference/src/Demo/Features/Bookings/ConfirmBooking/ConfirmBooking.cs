@@ -7,7 +7,8 @@ using Npgsql;
 
 namespace Demo.Features.Bookings.ConfirmBooking;
 
-public sealed record ConfirmBookingCommand(Guid RoomId, DateTimeOffset Start, DateTimeOffset End) : ICommand<BookingId>;
+// The request of a slice speaks in values: identifiers are Guid, converted to the typed identifiers of the domain by the handler.
+public sealed record ConfirmBookingCommand(Guid RoomId, DateTimeOffset Start, DateTimeOffset End) : ICommand<Guid>;
 
 // Checks the shape of the input only: business rules, such as a period that ends after its start, stay in the domain.
 internal sealed class ConfirmBookingValidator : AbstractValidator<ConfirmBookingCommand>
@@ -20,12 +21,12 @@ internal sealed class ConfirmBookingValidator : AbstractValidator<ConfirmBooking
     }
 }
 
-internal sealed class ConfirmBookingHandler(AppDbContext db, IConfiguration configuration) : IRequestHandler<ConfirmBookingCommand, BookingId>
+internal sealed class ConfirmBookingHandler(AppDbContext db, IConfiguration configuration) : IRequestHandler<ConfirmBookingCommand, Guid>
 {
     // Created by the AddBookingNoOverlapConstraint migration.
     private const string NoOverlapConstraint = "EX_Bookings_RoomId_Period";
 
-    public async Task<BookingId> Handle(ConfirmBookingCommand command, CancellationToken cancellationToken)
+    public async Task<Guid> Handle(ConfirmBookingCommand command, CancellationToken cancellationToken)
     {
         var period = new BookingPeriod(command.Start, command.End);
         new BookingDurationPolicy(TimeSpan.FromHours(configuration.GetValue("Bookings:MaximumHours", 24))).Check(period);
@@ -49,7 +50,7 @@ internal sealed class ConfirmBookingHandler(AppDbContext db, IConfiguration conf
             throw new BookingConflictException(command.RoomId, period);
         }
 
-        return booking.Id;
+        return booking.Id.Value;
     }
 
     // An overlapping confirmation reached the database after the bookings above were loaded. PostgreSQL rejects this

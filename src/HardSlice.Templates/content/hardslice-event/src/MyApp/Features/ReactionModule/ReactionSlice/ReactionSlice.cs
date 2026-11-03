@@ -3,8 +3,8 @@ using MyApp.Shared.Messaging;
 
 namespace MyApp.Features.ReactionModule.ReactionSlice;
 
-// Reacts to EventName inside the transaction of the command whose aggregate raised it, before anything is saved: its changes are
-// saved and committed with the command, and its exception rolls the whole command back.
+// Reacts to EventName inside the transaction of the command whose aggregate raised it, before that transaction commits: its
+// changes are saved and committed with the command, and its exception rolls the whole command back.
 internal sealed class ReactionSliceHandler : IDomainEventHandler<EventName>
 {
     public Task Handle(EventName domainEvent, CancellationToken cancellationToken) =>

@@ -20,7 +20,7 @@ public sealed class AggregateName : IAggregateRoot
     // Events raised and not yet published. Not persisted: a reloaded aggregate has none.
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
-    // Creates the aggregate once its rules hold. Name it after the business fact, such as Booking.Confirm, take the state of
+    // Creates the aggregate once its rules hold. Name it after the business fact, such as Order.Place, take the state of
     // the new aggregate as parameters, and throw a DomainException, or a ConflictException, for each rule they break.
     public static AggregateName Create() => new(AggregateNameId.New());
 

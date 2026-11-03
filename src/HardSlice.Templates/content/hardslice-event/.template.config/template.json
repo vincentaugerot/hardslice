@@ -33,6 +33,12 @@
       "datatype": "text",
       "description": "The reaction slice that handles the event, as <Module>/<Slice> in PascalCase, such as Rooms/NotifyOnRoomRenamed: its module must exist, and may differ from the module of the event. Without it, only the event is created."
     },
+    "ReactionOnly": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Creates the reaction slice of --reaction alone, for an event that already exists: the event is left as it is."
+    },
     "AppName": {
       "type": "bind",
       "binding": "msbuild:RootNamespace",
@@ -266,7 +272,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && ReactionIsAccepted)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && ReactionIsAccepted && (HasReaction || !ReactionOnly))"
     }
   },
   "sources": [
@@ -283,6 +289,12 @@
           "exclude": [
             "src/MyApp/**/*",
             "tests/**/*"
+          ]
+        },
+        {
+          "condition": "(ReactionOnly)",
+          "exclude": [
+            "src/MyApp.Domain/**/*"
           ]
         }
       ]
@@ -459,8 +471,27 @@
       "continueOnError": false
     },
     {
+      "id": "refuseReactionOnlyWithoutReaction",
+      "condition": "(ReactionOnly && !HasReaction)",
+      "description": "Refuses --reaction-only without the reaction to create.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-event.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --reaction-only creates the reaction slice alone: pass it with --reaction <Module>/<Slice>, such as --reaction ModuleName/NotifyOnEventName. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "warnNotPastFact",
-      "condition": "(Accepted && !NameIsPastFact)",
+      "condition": "(Accepted && !NameIsPastFact && !ReactionOnly)",
       "description": "Warns about a name that HS019 does not read as a past fact.",
       "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
       "applyFileRenamesToManualInstructions": true,
@@ -480,10 +511,14 @@
       "manualInstructions": [
         {
           "condition": "(!HasReaction)",
-          "text": "Raise EventName from the aggregate of module ModuleName that records the fact:\n1. Replace the Id of src/MyApp.Domain/ModuleName/Events/EventName.cs with the values of the fact, such as the identifier of the aggregate.\n2. In the method of the aggregate where the fact happens, add the event to its private list of events:\n_domainEvents.Add(new EventName(...));\nThe pipeline publishes it, inside the transaction of the command, to every IDomainEventHandler<EventName> that a module registers. To generate a reaction slice with its test, run the template with --reaction <Module>/<Slice>, and --force while the event is unchanged."
+          "text": "Raise EventName from the aggregate of module ModuleName that records the fact:\n1. Replace the Id of src/MyApp.Domain/ModuleName/Events/EventName.cs with the values of the fact, such as the identifier of the aggregate.\n2. In the method of the aggregate where the fact happens, add the event to its private list of events:\n_domainEvents.Add(new EventName(...));\nThe pipeline publishes it, inside the transaction of the command, to every IDomainEventHandler<EventName> that a module registers. To generate a reaction slice with its test later, run the template again with --reaction <Module>/<Slice> --reaction-only, which leaves the event as it is. Never pass --force: it would rewrite the event."
         },
         {
-          "condition": "(HasReaction)",
+          "condition": "(HasReaction && ReactionOnly)",
+          "text": "Register the reaction in src/MyApp/Features/ReactionModule/ReactionModuleModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Domain.ModuleName.Events;\nusing MyApp.Features.ReactionModule.ReactionSlice;\nusing MyApp.Shared.Messaging;\n2. In AddReactionModuleModule, register the handler by its contract:\n            .AddScoped<IDomainEventHandler<EventName>, ReactionSliceHandler>()\nThe event src/MyApp.Domain/ModuleName/Events/EventName.cs was left as it is: the reaction does not build until it exists. The pipeline publishes it to ReactionSliceHandler inside the transaction of the command. Complete the reaction and its test, which builds EventName with the values of the fact: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(HasReaction && !ReactionOnly)",
           "text": "Register the reaction in src/MyApp/Features/ReactionModule/ReactionModuleModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Domain.ModuleName.Events;\nusing MyApp.Features.ReactionModule.ReactionSlice;\nusing MyApp.Shared.Messaging;\n2. In AddReactionModuleModule, register the handler by its contract:\n            .AddScoped<IDomainEventHandler<EventName>, ReactionSliceHandler>()\nThen raise EventName from the aggregate of module ModuleName that records the fact: replace the Id of src/MyApp.Domain/ModuleName/Events/EventName.cs with the values of the fact, and add the event to the private list of events of the aggregate, in the method where the fact happens. The pipeline publishes it to ReactionSliceHandler inside the transaction of the command. Complete the reaction and its test: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],

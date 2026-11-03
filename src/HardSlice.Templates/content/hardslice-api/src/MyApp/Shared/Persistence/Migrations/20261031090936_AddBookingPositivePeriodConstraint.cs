@@ -10,6 +10,9 @@ namespace MyApp.Shared.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // BookingPeriod truncates its bounds to microseconds, the precision of PostgreSQL, before it checks that the period ends
+            // after it starts. A database that holds empty periods stored before that rule fails this constraint: repair those rows
+            // explicitly before applying it.
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Bookings_Period_Positive",
                 table: "Bookings",

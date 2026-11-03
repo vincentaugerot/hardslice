@@ -40,6 +40,12 @@
       "replaces": "myapp",
       "description": "The same name in lower case, without the leading underscores that a container name refuses: the local database and its container."
     },
+    "HostOS": {
+      "type": "bind",
+      "binding": "env:OS",
+      "defaultValue": "",
+      "description": "Windows_NT on Windows, where files have no executable bit: the other systems make the scripts executable."
+    },
     "NoSample": {
       "type": "parameter",
       "datatype": "bool",
@@ -58,12 +64,27 @@
             "src/MyApp/Shared/Persistence/Migrations/**",
             "tests/MyApp.Tests/Domain/Bookings/**",
             "tests/MyApp.Tests/Features/Bookings/**",
-            "tests/MyApp.IntegrationTests/Features/Bookings/**",
-            "tests/MyApp.IntegrationTests/Shared/Behaviors/TransactionBehaviorTests.cs",
-            "tests/MyApp.IntegrationTests/Shared/Behaviors/DomainEventPublisherTests.cs"
+            "tests/MyApp.IntegrationTests/Features/Bookings/**"
           ]
         }
       ]
+    }
+  ],
+  "postActions": [
+    {
+      "id": "makeScriptsExecutable",
+      "condition": "(HostOS != \"Windows_NT\")",
+      "description": "Makes the pre-commit hook and the check script executable: the package does not keep the executable bit.",
+      "actionId": "cb9a6cf3-4f5c-4860-b9d2-03a574959774",
+      "args": {
+        "+x": [".githooks/pre-commit", "scripts/check.sh"]
+      },
+      "manualInstructions": [
+        {
+          "text": "Make the pre-commit hook and the check script executable: chmod +x .githooks/pre-commit scripts/check.sh"
+        }
+      ],
+      "continueOnError": true
     }
   ]
 }

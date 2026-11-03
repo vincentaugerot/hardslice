@@ -624,16 +624,16 @@ public sealed class BookingsReferenceTests
     {
         var path = "Features/Bookings/ConfirmBooking/ConfirmBooking.cs";
         var confirmBooking = ReferenceSource(path);
-        string[] replaced = ["ICommand<BookingId>;", "IRequestHandler<ConfirmBookingCommand, BookingId>", "public async Task<BookingId> Handle", "return booking.Id;"];
+        string[] replaced = ["ICommand<Guid>;", "IRequestHandler<ConfirmBookingCommand, Guid>", "public async Task<Guid> Handle", "return booking.Id.Value;"];
         foreach (var text in replaced)
             confirmBooking.ShouldContain(text);
 
         return CompileApplication((path, confirmBooking
-            .Replace("ICommand<BookingId>;", "ICommand<ConfirmationDto>;\n\npublic sealed record ConfirmationDto(Guid RoomId, Booking Booking);")
-            .Replace("IRequestHandler<ConfirmBookingCommand, BookingId>", "IRequestHandler<ConfirmBookingCommand, ConfirmationDto>")
-            .Replace("public async Task<BookingId> Handle", "public async Task<ConfirmationDto> Handle")
-            .Replace("return booking.Id;", "return new ConfirmationDto(command.RoomId, booking);")),
-            BookingsModuleRegistration("IRequestHandler<ConfirmBookingCommand, BookingId>", "IRequestHandler<ConfirmBookingCommand, ConfirmationDto>"));
+            .Replace("ICommand<Guid>;", "ICommand<ConfirmationDto>;\n\npublic sealed record ConfirmationDto(Guid RoomId, Booking Booking);")
+            .Replace("IRequestHandler<ConfirmBookingCommand, Guid>", "IRequestHandler<ConfirmBookingCommand, ConfirmationDto>")
+            .Replace("public async Task<Guid> Handle", "public async Task<ConfirmationDto> Handle")
+            .Replace("return booking.Id.Value;", "return new ConfirmationDto(command.RoomId, booking);")),
+            BookingsModuleRegistration("IRequestHandler<ConfirmBookingCommand, Guid>", "IRequestHandler<ConfirmBookingCommand, ConfirmationDto>"));
     }
 
     // ConfirmBooking, whose handler blocks on the bookings it loads instead of awaiting them.

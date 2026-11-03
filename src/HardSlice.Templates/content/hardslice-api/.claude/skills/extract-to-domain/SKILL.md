@@ -1,6 +1,6 @@
 ---
 name: extract-to-domain
-description: Moves a business rule out of the slices of this HardSlice solution into its aggregate, when two slices share or copy the rule, or when a slice sets the state of an entity itself, by adding a method with its unit tests to the aggregate, making each slice call it, then running the check. Use when a message ends with Skill extract-to-domain (HS007, HS016), when a slice uses a type of another slice, or when asked to remove a rule duplicated in two use cases, such as two commands that both check whether an order can still change.
+description: Moves a business rule out of the slices of this HardSlice solution into its aggregate, when two slices share or copy the rule, or when a slice sets the state of an entity itself, by adding a method with its unit tests to the aggregate, making each slice call it, then running the check. Use when a message names `Skill: extract-to-domain` (HS007, HS016), when a slice uses a type of another slice, or when asked to remove a rule duplicated in two use cases, such as two commands that both check whether an order can still change.
 ---
 
 # Extract a rule to the domain

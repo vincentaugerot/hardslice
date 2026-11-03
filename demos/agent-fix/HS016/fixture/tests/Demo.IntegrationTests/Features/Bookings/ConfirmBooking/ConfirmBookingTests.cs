@@ -19,7 +19,7 @@ public sealed class ConfirmBookingTests(PostgresDatabase database)
     {
         var command = new ConfirmBookingCommand(Guid.NewGuid(), Start, Start.AddHours(1));
 
-        var id = await SendAsync(command, _beforeStart);
+        var id = new BookingId(await SendAsync(command, _beforeStart));
 
         await using var db = database.CreateDbContext();
         var booking = await db.Set<Booking>().SingleOrDefaultAsync(booking => booking.Id == id, TestContext.Current.CancellationToken);

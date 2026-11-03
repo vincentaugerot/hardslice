@@ -1,5 +1,4 @@
 using FluentValidation;
-using Demo.Domain.Bookings;
 using Demo.Features.Bookings.CancelBooking;
 using Demo.Features.Bookings.ConfirmBooking;
 using Demo.Features.Bookings.GetBooking;
@@ -13,7 +12,7 @@ public static class BookingsModule
     public static IServiceCollection AddBookingsModule(this IServiceCollection services) =>
         services
             .AddSingleton(TimeProvider.System)
-            .AddScoped<IRequestHandler<ConfirmBookingCommand, BookingId>, ConfirmBookingHandler>()
+            .AddScoped<IRequestHandler<ConfirmBookingCommand, Guid>, ConfirmBookingHandler>()
             .AddScoped<IValidator<ConfirmBookingCommand>, ConfirmBookingValidator>()
             .AddScoped<IRequestHandler<CancelBookingCommand, bool>, CancelBookingHandler>()
             .AddScoped<IValidator<CancelBookingCommand>, CancelBookingValidator>()

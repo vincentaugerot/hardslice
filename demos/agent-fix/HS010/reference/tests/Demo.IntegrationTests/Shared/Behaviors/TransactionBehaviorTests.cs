@@ -10,9 +10,29 @@ namespace Demo.IntegrationTests.Shared.Behaviors;
 // Commands sent through the application's own pipeline, with handlers registered for these tests only.
 public sealed class TransactionBehaviorTests(PostgresDatabase database)
 {
-    private static readonly BookingPeriod Period = new(
-        new DateTimeOffset(2026, 11, 2, 9, 0, 0, TimeSpan.Zero),
-        new DateTimeOffset(2026, 11, 2, 10, 0, 0, TimeSpan.Zero));
+    [Fact]
+    public async Task Commits_what_a_handler_wrote_inside_the_transaction_of_its_command()
+    {
+        var id = Guid.NewGuid();
+        await CreateProbeTableAsync();
+
+        await SendAsync(new WriteProbe(id, Fail: false));
+
+        (await ProbeCountAsync(id)).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Rolls_back_what_a_handler_wrote_when_it_throws()
+    {
+        var id = Guid.NewGuid();
+        await CreateProbeTableAsync();
+
+        await Should.ThrowAsync<InvalidOperationException>(() => SendAsync(new WriteProbe(id, Fail: true)));
+
+        (await ProbeCountAsync(id)).ShouldBe(0);
+    }
+
+    private static readonly BookingPeriod Period = new(TestInstants.Start, TestInstants.Start.AddHours(1));
 
     [Fact]
     public async Task Saves_and_commits_what_the_handler_changed()
@@ -91,10 +111,41 @@ public sealed class TransactionBehaviorTests(PostgresDatabase database)
         await using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services
             .AddScoped<IRequestHandler<AddBooking, bool>, AddBookingHandler>()
             .AddScoped<IRequestHandler<SaveBookingThenFail, bool>, SaveBookingThenFailHandler>()
-            .AddScoped<IRequestHandler<CancelBookingThenFail, bool>, CancelBookingThenFailHandler>()));
+            .AddScoped<IRequestHandler<CancelBookingThenFail, bool>, CancelBookingThenFailHandler>()
+            .AddScoped<IRequestHandler<WriteProbe, bool>, WriteProbeHandler>()));
         await using var scope = app.Services.CreateAsyncScope();
 
         await action(scope.ServiceProvider.GetRequiredService<IMediator>(), scope.ServiceProvider.GetRequiredService<AppDbContext>());
+    }
+
+    // A table of these tests only, outside the model: what a handler writes there with SQL shows what the transaction kept.
+    private async Task CreateProbeTableAsync()
+    {
+        await using var db = database.CreateDbContext();
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE TABLE IF NOT EXISTS \"TransactionBehaviorProbes\" (\"Id\" uuid PRIMARY KEY)", TestContext.Current.CancellationToken);
+    }
+
+    private async Task<int> ProbeCountAsync(Guid id)
+    {
+        await using var db = database.CreateDbContext();
+        return await db.Database
+            .SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM \"TransactionBehaviorProbes\" WHERE \"Id\" = {id}")
+            .SingleAsync(TestContext.Current.CancellationToken);
+    }
+
+    public sealed record WriteProbe(Guid Id, bool Fail) : ICommand<bool>;
+
+    private sealed class WriteProbeHandler(AppDbContext db) : IRequestHandler<WriteProbe, bool>
+    {
+        public async Task<bool> Handle(WriteProbe command, CancellationToken cancellationToken)
+        {
+            db.Database.CurrentTransaction.ShouldNotBeNull();
+            await db.Database.ExecuteSqlAsync($"INSERT INTO \"TransactionBehaviorProbes\" (\"Id\") VALUES ({command.Id})", cancellationToken);
+            if (command.Fail)
+                throw new InvalidOperationException("Failed after writing a probe.");
+            return true;
+        }
     }
 
     private async Task<int> StoredCountAsync(Guid roomId)

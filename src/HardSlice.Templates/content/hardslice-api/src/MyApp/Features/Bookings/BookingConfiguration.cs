@@ -29,6 +29,11 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasConversion<string>()
             .HasMaxLength(16);
 
+        // Optimistic concurrency: PostgreSQL changes the xmin system column of a row at each update, and EF Core updates a booking
+        // only while its xmin is the one it loaded. A command that changes a booking another request changed since it loaded it
+        // saves nothing: TransactionBehavior answers it with 409. A shadow property, so that the domain knows nothing of it.
+        builder.Property<uint>("Version").IsRowVersion();
+
         builder.Ignore(booking => booking.DomainEvents);
     }
 }

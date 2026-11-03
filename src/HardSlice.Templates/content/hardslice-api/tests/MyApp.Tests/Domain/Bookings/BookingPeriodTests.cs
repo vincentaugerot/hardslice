@@ -5,7 +5,7 @@ namespace MyApp.Tests.Domain.Bookings;
 
 public sealed class BookingPeriodTests
 {
-    private static readonly DateTimeOffset Start = new(2026, 11, 2, 9, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Start = TestInstants.Start;
 
     [Fact]
     public void Accepts_an_end_after_the_start()

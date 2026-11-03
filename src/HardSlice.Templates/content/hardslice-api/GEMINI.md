@@ -7,4 +7,4 @@ For Gemini CLI only. `AGENTS.md`, imported below, holds the rules of every agent
 ## Gemini CLI
 
 - Hooks: none. Nothing checks your edits as you make them: before you finish, run the check script as [Verify](AGENTS.md#verify) says.
-- Skills: Gemini CLI reads the skills of `.agents/skills/`, copies of those of `.claude/skills/`: `add-module`, `add-aggregate`, `add-slice`, `add-domain-event`, `extract-to-domain` and `fix-architecture-violation`, listed in the [Agent kit](AGENTS.md#agent-kit).
+- Skills: Gemini CLI reads those of `.agents/skills/`, copies of `.claude/skills/`, which the [Agent kit](AGENTS.md#agent-kit) lists.

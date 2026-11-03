@@ -27,13 +27,13 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
      dotnet new hardslice-query --project src/MyApp/MyApp.csproj --module <Module> --name <Slice> --aggregate <Aggregate>
      ```
 
-   If the template refuses, read its message, fix the argument and run it again.
+   If the template refuses, read its message, fix the argument and run it again: a refusal prints `created successfully` first, then fails with exit code 105 and creates nothing.
 5. Register the slice with the lines the template printed, in `src/MyApp/Features/<Module>/<Module>Module.cs`: the usings the file does not have yet, the registrations by contract in `Add<Module>Module`, and `<Slice>Endpoint.Map(group);` in `Map<Module>Module`. A forgotten registration fails `ProgramTests`, which names the type.
 6. Fill the logic in `src/MyApp/Features/<Module>/<Slice>/<Slice>.cs`:
    - command: replace the `Id` field with the fields of the use case; the validator checks only their shape (required, format, length); the handler injects `AppDbContext`, loads the aggregate with `Set<TAggregate>()` (or adds a new one), calls the method of the aggregate and returns the response. It never calls `SaveChangesAsync`: the pipeline saves and commits the transaction. It injects `TimeProvider` when the domain needs the current instant;
    - query: add the values the use case reads to the DTO and project them in `Select`. Keep `AsNoTracking()`: a query never loads an aggregate to change it and never saves. Add a parameter, and its validator, only for a filter;
    - endpoint: give it its route and its HTTP method, keep it on the group of the module, sending the request through `IMediator` and answering with `TypedResults`.
-7. Replace every `TODO(hardslice):` marker of the slice and of its tests: search for `TODO(hardslice):` under `src/` and `tests/`. The integration tests assert the business outcome, such as the state stored in PostgreSQL, read back from the database, the 400 of an invalid request and the 404 of an unknown identifier; the validator tests assert each refused input. An empty test, or one that asserts nothing, does not replace a marker.
+7. Replace every `TODO(hardslice):` marker of the slice and of its tests: search for `TODO(hardslice):` under `src/` and `tests/`. The integration tests assert the business outcome, such as the state stored in PostgreSQL, read back from the database, the 400 of an invalid request and the 404 of an unknown identifier; the validator tests assert each refused input. An empty test, or one that asserts nothing, does not replace a marker. If the module maps another group than its name in kebab-case, a route of its own given when it was created, change `Route` in the generated tests: they answer 404 until then.
 8. Add the slice to the entry of its module in the "Modules and slices" map of `AGENTS.md`, among its commands or its queries.
 9. Run the check, and fix the code until it exits 0. A HardSlice diagnostic names its rule and its sheet in `docs/rules/`: apply the first fix of the sheet that matches.
 
@@ -42,7 +42,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    pwsh scripts/check.ps1    # Windows, PowerShell
    ```
 
-When the use case produces a fact that other code reacts to, use the `add-domain-event` skill once the slice passes.
+When the use case produces a fact that other code reacts to, use the `add-domain-event` skill once the slice passes. A domain event handler without tests (HS014, HS018) is a reaction slice: `add-domain-event` gives it its tests, which handle the event and assert what the handler changed.
 
 ## Never
 

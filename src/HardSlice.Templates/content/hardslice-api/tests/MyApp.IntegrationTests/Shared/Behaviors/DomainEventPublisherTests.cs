@@ -1,25 +1,112 @@
+#if (!NoSample)
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
+#endif
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using MyApp.Domain;
+#if (!NoSample)
 using MyApp.Domain.Bookings;
 using MyApp.Domain.Bookings.Events;
 using MyApp.Features.Bookings.ConfirmBooking;
 using MyApp.Features.Bookings.GetBooking;
 using MyApp.Shared.Behaviors;
+#endif
 using MyApp.Shared.Messaging;
 using MyApp.Shared.Persistence;
 
 namespace MyApp.IntegrationTests.Shared.Behaviors;
 
-// BookingConfirmed, raised when ConfirmBooking confirms a booking, published to handlers registered for these tests only.
+// Domain events published to handlers registered for these tests only: those of Probe, an aggregate that only these tests map,
+#if (!NoSample)
+// and BookingConfirmed, raised when ConfirmBooking confirms a booking.
+#endif
 public sealed class DomainEventPublisherTests(PostgresDatabase database)
 {
-    private static readonly DateTimeOffset Start = new(2026, 11, 2, 9, 0, 0, TimeSpan.Zero);
+    // Without any module: the command handler tracks an aggregate that raised two events, which are published in order to their
+    // handler, inside the transaction of the command.
+    [Fact]
+    public async Task Publishes_the_events_of_a_tracked_aggregate_in_order_inside_the_command_transaction()
+    {
+        var id = Guid.NewGuid();
+        var observations = new List<ProbeObservation>();
+        await using var app = App(services => services
+            .ConfigureDbContext<AppDbContext>(options => options.ReplaceService<IModelCustomizer, ProbeModelCustomizer>())
+            .AddSingleton(observations)
+            .AddScoped<IRequestHandler<RaiseProbeEvents, bool>, RaiseProbeEventsHandler>()
+            .AddScoped<IDomainEventHandler<ProbeRaised>, ObservingProbeHandler>());
+        await using var scope = app.Services.CreateAsyncScope();
+
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new RaiseProbeEvents(id, 2), TestContext.Current.CancellationToken);
+
+        observations.ShouldBe([new ProbeObservation(id, 1, InTransaction: true), new ProbeObservation(id, 2, InTransaction: true)]);
+    }
+
+    public sealed record RaiseProbeEvents(Guid Id, int Count) : ICommand<bool>;
+
+    public sealed record ProbeRaised(Guid ProbeId, int Order) : IDomainEvent;
+
+    public sealed record ProbeObservation(Guid ProbeId, int Order, bool InTransaction);
+
+    // An aggregate of these tests: attached unchanged, it is never saved, so it needs no table.
+    public sealed class Probe : IAggregateRoot
+    {
+        private readonly List<IDomainEvent> _domainEvents = [];
+
+        private Probe(Guid id) => Id = id;
+
+        public Guid Id { get; }
+
+        public static Probe Raise(Guid id, int count)
+        {
+            var probe = new Probe(id);
+            for (var order = 1; order <= count; order++)
+                probe._domainEvents.Add(new ProbeRaised(id, order));
+            return probe;
+        }
+
+        public IReadOnlyList<IDomainEvent> DequeueDomainEvents()
+        {
+            var domainEvents = _domainEvents.ToArray();
+            _domainEvents.Clear();
+            return domainEvents;
+        }
+    }
+
+    // Adds Probe to the model of AppDbContext for these tests, beside the mappings of the modules.
+    private sealed class ProbeModelCustomizer(ModelCustomizerDependencies dependencies) : RelationalModelCustomizer(dependencies)
+    {
+        public override void Customize(ModelBuilder modelBuilder, DbContext context)
+        {
+            base.Customize(modelBuilder, context);
+            modelBuilder.Entity<Probe>().HasKey(probe => probe.Id);
+        }
+    }
+
+    private sealed class RaiseProbeEventsHandler(AppDbContext db) : IRequestHandler<RaiseProbeEvents, bool>
+    {
+        public Task<bool> Handle(RaiseProbeEvents command, CancellationToken cancellationToken)
+        {
+            db.Attach(Probe.Raise(command.Id, command.Count));
+            return Task.FromResult(true);
+        }
+    }
+
+    private sealed class ObservingProbeHandler(AppDbContext db, List<ProbeObservation> observations) : IDomainEventHandler<ProbeRaised>
+    {
+        public Task Handle(ProbeRaised domainEvent, CancellationToken cancellationToken)
+        {
+            observations.Add(new ProbeObservation(domainEvent.ProbeId, domainEvent.Order, db.Database.CurrentTransaction is not null));
+            return Task.CompletedTask;
+        }
+    }
+#if (!NoSample)
+
+    private static readonly DateTimeOffset Start = TestInstants.Start;
 
     [Fact]
     public async Task Publishes_the_event_once_inside_the_transaction_before_anything_is_committed()
@@ -111,9 +198,11 @@ public sealed class DomainEventPublisherTests(PostgresDatabase database)
         exception.Message.ShouldStartWith("Domain event handler 'SendingHandler' sent 'GetBookingQuery' through IMediator while handling 'BookingConfirmed'. ");
         (await StoredCountAsync(roomId)).ShouldBe(0);
     }
+#endif
 
     private WebApplicationFactory<Program> App(Action<IServiceCollection> handlers) =>
         new AppFactory(database).WithWebHostBuilder(builder => builder.ConfigureTestServices(handlers));
+#if (!NoSample)
 
     private static async Task SendAsync(WebApplicationFactory<Program> app, ConfirmBookingCommand command)
     {
@@ -194,4 +283,5 @@ public sealed class DomainEventPublisherTests(PostgresDatabase database)
         public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) =>
             mediator.Send(new GetBookingQuery(domainEvent.BookingId.Value), cancellationToken);
     }
+#endif
 }
