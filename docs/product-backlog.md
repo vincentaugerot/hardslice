@@ -1,6 +1,6 @@
 # HardSlice — backlog produit
 
-Statut : backlog actif, 31/10/2026.
+Statut : backlog actif, 03/11/2026.
 
 Source de vérité produit : [specifications.md](specifications.md).
 
@@ -673,7 +673,9 @@ L'incrément est terminé lorsque PB-009 à PB-017 sont satisfaits depuis un che
 
 Aucune porte documentaire supplémentaire ne s'applique.
 
-## 4. Incrément actif : Analyseurs v0.2
+## 4. Incrément terminé : Analyseurs v0.2
+
+Statut : PB-018 à PB-032 terminés le 02/11/2026. PB-033 n'est pas publié seul : sa publication est reprise par PB-051, qui publie une seule préversion, `0.3.0-preview.1`.
 
 Statut : actif depuis le 30/10/2026, l'incrément 2 étant terminé. Le travail commence par PB-018 ; les tickets peuvent être menés un par un dans l'ordre des numéros, qui respecte le graphe des dépendances.
 
@@ -1622,9 +1624,9 @@ L'incrément est terminé lorsque PB-018 à PB-033 sont satisfaits et que les jo
 - les seuils de PB-019 sont respectés ;
 - les paquets `0.2.0-preview.1` sont publiés et la solution générée depuis NuGet.org passe `dotnet hardslice check`.
 
-## 5. Incrément suivant : Boucle agent v0.3
+## 5. Incrément terminé : Boucle agent v0.3
 
-Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. Il peut démarrer : PB-018 à PB-032 sont intégrés, et seule sa publication finale (PB-051) attend la préversion `0.2.0-preview.1` (PB-033) et son workflow.
+Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-059) terminée.
 
 ### Résultat attendu
 
@@ -2388,13 +2390,13 @@ Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org,
 
 **Périmètre**
 
-- version `0.3.0-preview.1` dans `Directory.Build.props` ;
-- workflow de publication de PB-033, déclenché par l'étiquette `v0.3.0-preview.1` ; job de contrôle étendu aux cinq templates d'éléments et aux hooks Claude Code ;
-- `README.md` et notes de version : templates, skills, hooks, agents pris en charge, HS000.
+- étiquette `v0.3.0-preview.1` posée sur le commit de `main` qui termine PB-059, après le feu vert du mainteneur ;
+- workflow de publication de PB-033, avec le job de contrôle étendu par PB-059 aux templates d'éléments ;
+- GitHub Release de la version, avec les notes de `CHANGELOG.md` (PB-058).
 
 **Dépendances**
 
-PB-034 à PB-050, PB-033.
+PB-034 à PB-050, PB-033, PB-052 à PB-059.
 
 **Acceptation**
 
@@ -2413,7 +2415,341 @@ L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jo
 - chaque règle bloquante a sa boucle E2E en CI, et la démonstration d'ajout de fonctionnalité est publiée ;
 - les paquets `0.3.0-preview.1` sont publiés.
 
-## 6. Incréments suivants
+## 6. Incrément actif : Préparation de la publication 0.3.0-preview.1
+
+Statut : découpé le 03/11/2026 à partir d'une revue complète du dépôt avant publication (code, template, kit agents, outil, CI, documentation), arbitrages validés par le mainteneur le même jour. Une version publiée sur NuGet.org ne se remplace jamais : ce qui est figé dans les paquets (code généré, kit agents, liste des fichiers protégés, textes des diagnostics, README des paquets, format de `hardslice.json`, codes de sortie) est corrigé avant PB-051.
+
+### Résultat attendu
+
+> `dotnet new hardslice-api` génère une solution qui compile et passe la vérification quel que soit le nom accepté par `dotnet new`, `Acme.Rooms` et `my-app` compris. Aucun fichier qui règle les analyseurs ne peut être modifié par un agent sans être refusé par les hooks et par la CI. Les analyseurs ne font jamais tomber le compilateur ni l'IDE sur du code en cours d'écriture, et ne se taisent jamais sans HS900 sur une configuration incomplète. Les contrats publics figés par la préversion (`hardslice.json`, codes de sortie de `check`, liste des fichiers protégés) laissent évoluer les versions suivantes. La documentation publique est exacte, en anglais, sans information personnelle, et un visiteur venu de NuGet.org trouve en moins d'une page ce qu'il obtient et comment l'essayer. Les trois paquets sont prêts à être publiés en `0.3.0-preview.1`.
+
+### Arbitrages de l'incrément
+
+Décisions du mainteneur du 03/11/2026 :
+
+- **Une seule forme du nom de l'application.** Le nom passé à `--name` est converti une fois en identifiant .NET sûr (`my-app` devient `my_app`, `1Rooms` devient `_1Rooms`, `Acme.Rooms` reste `Acme.Rooms`), et cette forme sert partout : dossiers, projets, assemblies, espaces de noms, `.slnx`, `hardslice.json`. Seul le dossier de sortie garde le nom tapé. Aucun nom de type ne dérive du nom de l'application. Refuser les noms non identifiants est écarté : `dotnet new` ne sait pas refuser avant de créer les fichiers.
+- **`.agents/` est protégé**, comme `.claude/` : c'est la copie des skills que lisent Codex, Gemini CLI et Copilot CLI.
+- **`hardslice.json` porte une version.** `"version": 1` est exigé ; une version inconnue produit HS900 avec un message qui demande de mettre à jour `HardSlice.Analyzers`. `$schema` est accepté. Le reste du format reste strict : une clé inconnue est une faute de frappe qui désactiverait une règle sans le dire.
+- **Codes de sortie de `check` :** `0` vérification réussie, `1` une étape a échoué (sa sortie reste affichée telle quelle), `2` mauvais usage seulement.
+- **Les alertes de sécurité NuGet ne cassent pas la restauration** d'une solution générée : NU1901 à NU1904 restent des avertissements, affichés, malgré `TreatWarningsAsErrors`.
+- **La documentation de conception reste publique, en français.** Spécification, plan et backlog vont dans `docs/design/`, nettoyés de ce qui concerne le mainteneur plutôt que le produit, avec une bannière qui les présente comme documents de travail. `docs/plans/` est supprimé. Tout ce que le README et les paquets présentent à l'utilisateur est en anglais.
+- **Les démonstrations gardent leurs traces brutes,** filtrées de l'inventaire local des CLI et des blocs de raisonnement chiffrés, et leurs README disent exactement dans quelles conditions elles ont tourné.
+- **L'historique git n'est pas réécrit.** Le dépôt est déjà public ; l'historique est conservé tel quel.
+
+### Critères communs à tous les tickets de l'incrément
+
+- les critères communs de la section 5 restent applicables (anglais, sans tiret cadratin, `AGENTS.md` généré sous 150 lignes dans les deux variantes, aucune dépendance runtime, hooks testés par leur charge utile documentée) ;
+- tout constat corrigé reçoit un test qui échouait avant la correction : test unitaire, test du template ou sonde de `scripts/test-template.sh` ;
+- chaque ticket lance localement `dotnet build --no-restore`, `dotnet test --no-build` et les sondes de `scripts/test-template.sh` de sa zone, extraites et lancées seules sur une solution générée depuis les paquets locaux ; le passage complet de `scripts/test-template.sh` tourne en CI à chaque push et localement dans PB-059 ;
+- aucune étiquette `v*` n'est posée et rien n'est publié sur NuGet.org avant PB-051 ;
+- les jobs CI build, template, démonstration et performance restent verts sur `main`.
+
+### Graphe des dépendances
+
+| Ticket | Dépend de | Peut avancer en parallèle de |
+|---|---|---|
+| PB-052 (nom de l'application) | incrément 4 | PB-053 à PB-055, PB-057 |
+| PB-053 (fichiers protégés) | incrément 4 | PB-052, PB-054, PB-055, PB-057 |
+| PB-054 (robustesse des analyseurs) | incrément 4 | PB-052, PB-053, PB-055 à PB-057 |
+| PB-055 (contrats publics) | incrément 4 | PB-052 à PB-054, PB-057 |
+| PB-056 (application générée et kit agents) | PB-052, PB-053 | PB-054, PB-055, PB-057 |
+| PB-057 (démonstrations) | incrément 4 | PB-052 à PB-056 |
+| PB-058 (documentation) | PB-052 à PB-057 | aucun |
+| PB-059 (paquets prêts à publier) | PB-058 | aucun |
+
+Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
+
+### PB-052 : Générer une solution valide quel que soit le nom de l'application
+
+**Résultat observable**
+
+`dotnet new hardslice-api --name Acme.Rooms`, `--name my-app` et `--name 1Rooms --no-sample` génèrent des solutions qui compilent et passent `dotnet hardslice check`. Les templates d'éléments s'y appliquent, et une violation semée y est détectée.
+
+**Constat**
+
+Le 03/11/2026, avec les paquets construits depuis `main` : `--name my-app` crée `src/my-app/` alors que `.slnx`, les `ProjectReference` et `hardslice.json` visent `my_app` (MSB3202) ; `--name 1Rooms` échoue de même avec `_1Rooms` ; `--name Acme.Rooms` génère `public sealed class Acme.RoomsFactory` (CS1022). `sourceName` sert à la fois de nom de fichier, d'espace de noms, d'assembly et de nom de classe (`MyAppFactory`). `scripts/test-template.sh` ne génère que `Demo` et une solution vierge.
+
+**Périmètre**
+
+- `hardslice-api` : un symbole dérivé du nom, en forme d'espace de noms sûr, remplace `MyApp` dans les contenus et dans les noms de fichiers et de dossiers ; le mécanisme exact est libre tant que toutes les occurrences partagent une forme ;
+- aucun nom de type ne dérive du nom de l'application : `MyAppFactory` devient un nom fixe (par exemple `AppFactory`) dans `hardslice-api`, `hardslice-command` et `hardslice-query` ;
+- templates d'éléments : leurs fichiers atterrissent dans les projets de la solution avec ces noms (symbole `AppName`, `msbuild:RootNamespace`) ;
+- analyseurs : `SliceMap` reconnaît les slices par `AssemblyName` ; vérifier qu'avec la forme unique l'assembly et le préfixe des espaces de noms coïncident ; sinon, lire `RootNamespace` (exposé par `CompilerVisibleProperty`), `AssemblyName` en repli ;
+- tests d'architecture : vérifier que HS012, HS016 et HS017, qui déduisent le préfixe des espaces de noms du nom d'assembly, ne passent pas à vide avec ces noms ;
+- `scripts/test-template.sh` : génère `Acme.Rooms` avec Bookings et `my-app` sans, vérifie les deux, y applique `hardslice-module` et `hardslice-command`, et y sème une violation HS016 qui doit échouer ;
+- `README.md` : la conversion du nom est dite en une phrase.
+
+**Cas vérifiés**
+
+- `Acme.Rooms`, `my-app` et `1Rooms` : solution générée, vérification verte ;
+- HS016 semée dans `Acme.Rooms` : diagnostic de l'analyseur et échec du test d'architecture ;
+- `hardslice-command` dans `my-app` : fichiers créés dans `src/my_app/Features/...` et `tests/my_app.*`, vérification verte après complétion de référence.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes « nom de l'application » de scripts/test-template.sh
+```
+
+### PB-053 : Protéger tous les fichiers qui règlent les analyseurs, à partir d'une seule liste
+
+**Résultat observable**
+
+Un agent qui crée ou modifie un `.globalconfig`, un `Directory.Build.rsp` ou un fichier sous `.agents/` est refusé par le hook avant édition de Claude Code, Codex et Copilot CLI, et la CI générée échoue sur une pull request qui le fait sans le label `hardslice-approved`. La liste des fichiers protégés est la même dans l'outil, `AGENTS.md` et les skills.
+
+**Constat**
+
+`src/HardSlice.Tool/ProtectedFiles.cs` protège `.editorconfig`, `Directory.Build.props`, `Directory.Build.targets` et `Directory.Packages.props`, mais ni `.globalconfig` ni `Directory.Build.rsp`, alors que la spécification, le README et `AGENTS.md` annoncent `.globalconfig` protégé. Le SDK charge tout `.globalconfig` d'un dossier parent d'un fichier compilé, et celui de la solution l'emporte sur `HardSlice.All.globalconfig` (`global_level = -1`) : `dotnet_diagnostic.HS016.severity = none` y éteint la règle, hooks et CI verts. `Directory.Build.rsp` avec `-p:RunAnalyzers=false` fait de même. Les six skills recopient une liste qui diverge : elles annoncent `.agents/` protégé, que rien ne protège, et omettent `.codex/`, `.github/hooks/`, `.githooks/` et le workflow.
+
+**Périmètre**
+
+- `ProtectedFiles` : `.globalconfig` et `Directory.Build.rsp` dans tout dossier, `Directory.Solution.props`, `Directory.Solution.targets` et `nuget.config` à la racine, `.agents/` parmi les dossiers ;
+- `check` échoue (code `1`, message explicite) quand un des trois projets de tests n'est plus dans `<Name>.slnx` : sinon `dotnet test --no-build` exécute un ancien binaire et le check local est vert à tort ;
+- une seule liste écrite : `AGENTS.md` (section « Forbidden ») la porte, les skills y renvoient au lieu de la recopier ; `AGENTS.md` reste sous 150 lignes en `--no-sample` (il en a 149 : l'énumération des 22 fiches peut devenir « `docs/rules/<rule>.md` ») ;
+- `dotnet hardslice protected` en mode ligne refuse (code `2`) un chemin cité par git (qui commence par `"`), et son aide recommande `-z` ;
+- CI générée : `defaults: run: shell: bash` (donc `pipefail`) dans `.github/workflows/hardslice.yml` ; `scripts/generated-workflow.sh` reproduit le shell effectif d'une étape, avec ou sans clé `shell` ;
+- `README.md`, Known limitations : le label `hardslice-approved` vaut aussi pour les commits poussés après sa pose ;
+- `docs/specifications.md` et `README.md` : liste des fichiers protégés à jour.
+
+**Cas vérifiés**
+
+- hook avant édition, pour chaque CLI : création de `src/MyApp/.globalconfig`, de `Directory.Build.rsp` et de `.agents/skills/add-slice/SKILL.md` refusée ;
+- `protected` : ces chemins listés, code `1` ; une ligne citée par git, code `2` ;
+- un projet de tests retiré du `.slnx` : `check` échoue avec un message qui le nomme ;
+- sonde de `test-template.sh` : un `.globalconfig` qui éteint HS016 fait échouer le job `protected-files` du workflow généré.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes « fichiers protégés » et « workflow généré » de scripts/test-template.sh
+```
+
+### PB-054 : Rendre les analyseurs sûrs sur du code en cours d'écriture et sur une configuration incomplète
+
+**Résultat observable**
+
+Aucun analyseur ne lève d'exception ni ne fait déborder la pile sur du code qui ne compile pas encore. Un contrat de `hardslice.json` inutilisable produit toujours HS900 au lieu de taire des règles. Les textes figés par la préversion (titres, correctifs) sont lisibles.
+
+**Constat**
+
+- `QueryHandlerTrackingAnalyzer` (`Query.Recognize`) suit une locale vers son initialiseur sans détecter de cycle : `IQueryable<Booking> query = query.Where(...)` dans un handler de requête, erreur banale pendant la frappe, fait déborder la pile et tue le compilateur ou l'hôte d'analyse de l'IDE ;
+- `Configuration/JsonReader.cs` n'a pas de limite de profondeur : un `hardslice.json` très imbriqué fait de même ;
+- le harnais de tests (`AnalyzerHarness.Compile`) exige une compilation sans erreur : aucun test n'exerce les analyseurs sur du code incomplet ;
+- `DomainModel.cs` ignore sans problème un contrat dont l'assembly n'est ni la compilation ni une référence : un projet renommé fait taire HS004, HS005, HS006 et une partie de HS901 sans HS900 ;
+- en mode `Minimum`, HS901 exige les contrats `command` et `query`, que ce mode ne suppose pas ;
+- HS016 se déclenche sur un `<see cref>` de commentaire de documentation ;
+- `SliceStructureAnalyzer` construit un `Lazy` qui capture le jeton d'annulation du démarrage de compilation (exception mise en cache possible dans l'IDE) ;
+- sans contrats utilisables, chaque slice de réaction reçoit HS004 « declares no endpoint » à côté de HS900 ;
+- la configuration et le modèle de domaine sont recalculés par neuf analyseurs à chaque compilation ;
+- le titre de HS004 est long et à la forme négative, et le correctif de HS019 propose toujours `BookingConfirmed`.
+
+**Périmètre**
+
+- garde de cycle dans `Query.Recognize` et limite de profondeur (64) dans `JsonReader`, HS900 « nesting too deep » ;
+- harnais : une variante qui accepte du code en erreur ; test sur des extraits incomplets (locale auto-référente, générique inachevé, record tronqué, lambda inachevée, `MapGet` sans arguments, `partial` async) qui exige zéro exception d'analyseur ;
+- HS900 quand la compilation contient `<Assembly>.Features` et qu'un contrat désigne un assembly ni courant ni référencé ; le Domain, sans `Features`, garde le comportement actuel ;
+- HS901 : la vérification commande et requête ne réclame `command` et `query` que dans les modes qui les supposent ; la matrice des niveaux et la fiche suivent ;
+- HS016 ignore les noms situés dans une trivia structurée (`cref`) ;
+- `Lazy` sans jeton capturé, comme `AggregateReferenceAnalyzer` ;
+- contrôle d'endpoint de HS004 sauté quand les contrats de messagerie sont inutilisables ;
+- cache de la configuration et du modèle de domaine indexé par compilation (`ConditionalWeakTable`), partagé par les analyseurs ; les seuils de `scripts/measure-analyzers.sh` restent tenus ;
+- descripteurs : `helpLinkUri` vers la fiche de la règle ; titre de HS004 raccourci ; correctif de HS019 qui demande un nom au participe passé sans imposer `BookingConfirmed` ; fiches et `README.md` alignés.
+
+**Limites**
+
+Les duplications entre analyseurs (formats d'affichage, `OperationLocation`, détection des arbres d'expression) sont factorisées plus tard, sans changement de comportement.
+
+**Cas vérifiés**
+
+- locale auto-référente dans un handler de requête : aucun débordement, aucun AD0001 ;
+- `hardslice.json` imbriqué sur 10 000 niveaux : HS900 ;
+- contrat `"..., MyApp.Web"` absent : HS900 dans le projet web ;
+- solution en `Minimum` sans `command` ni `query` : pas de HS900 ;
+- `<see cref>` vers une autre slice : pas de HS016 ;
+- toutes les règles : diagnostics inchangés sur la référence Bookings et sur les cas existants.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/measure-analyzers.sh
+```
+
+### PB-055 : Figer des contrats publics qui laissent évoluer les versions suivantes
+
+**Résultat observable**
+
+`hardslice.json` porte `"version": 1`, `check` sort avec `0`, `1` ou `2` selon un contrat documenté, une nouvelle alerte de sécurité NuGet ne casse pas la restauration d'une solution générée, la solution générée a un `.gitignore`, et un hook ne laisse jamais passer un agent parce qu'il a lui-même planté.
+
+**Constat**
+
+- `HardSliceConfiguration` refuse toute clé racine inconnue et n'a pas de version : les analyseurs figés refuseraient tout format enrichi plus tard (`baseline` en v0.5, `$schema`) ; son commentaire de tête dit le contraire du code ;
+- `check` renvoie tel quel le code de l'étape qui échoue : `2` veut dire à la fois « argument invalide » et « un test a échoué » (code de Microsoft.Testing.Platform) ;
+- avec `TreatWarningsAsErrors`, NU1901 à NU1904 deviennent des erreurs de restauration : la première vulnérabilité publiée sur une dépendance épinglée casserait toute nouvelle solution générée par cette version figée ;
+- la solution générée n'a pas de `.gitignore` : le premier `git add -A` commite `bin/`, `obj/` et `TestResults/` (`scripts/test-template.sh` contourne le manque par `.git/info/exclude`) ;
+- `AgentHook` n'attrape aucune exception imprévue : le processus sort avec un code que Claude Code et Codex lisent comme non bloquant. L'état des relances vit dans `/tmp/hardslice/hooks`, partagé entre les comptes de la machine, et son écriture lève une exception pour le second ;
+- après une édition, le hook dit « the build fails » quand le build passe et que seuls des marqueurs `TODO(hardslice):` restent ;
+- l'empreinte d'un échec ne normalise que les chiffres : un GUID dans une erreur relance le compteur à chaque check ;
+- l'entrée des hooks est lue dans l'encodage de la console : sous Windows, un chemin non ASCII peut échapper au refus d'un fichier protégé.
+
+**Périmètre**
+
+- `hardslice.json` : `version` exigée (absente ou inconnue : HS900 explicite), `$schema` accepté, le reste strict ; le template l'écrit ; fiche HS900, commentaire de `HardSliceConfiguration` et spécification à jour ;
+- `check` : `1` pour toute étape en échec, `2` pour l'usage seulement ; `check.sh`, `check.ps1`, hooks, aide, README de l'outil et tests suivent ;
+- `Directory.Build.props` généré : `WarningsNotAsErrors` pour NU1901 à NU1904 ;
+- `.gitignore` dans `hardslice-api` (`bin/`, `obj/`, `TestResults/`, `.vs/`, `.idea/`, `*.user`) ; `TemplatePackageTests` vérifie qu'il est packé ; le contournement de `test-template.sh` est retiré ;
+- hooks : `AgentHook.Run` attrape toute exception ; après édition et en fin de tour, l'échec est rendu à l'agent comme une vérification en échec, avec le message ; avant édition, l'erreur est affichée et l'édition refusée ; état des relances dans un dossier propre à l'utilisateur, erreurs d'entrée-sortie attrapées ; `dotnet` lancé par `DOTNET_HOST_PATH` quand il est défini ;
+- message après édition distinct quand seuls des marqueurs restent : le build passe, N marqueurs `TODO(hardslice):` sont à finir avant de rendre la main ;
+- empreinte : GUID et identifiants hexadécimaux normalisés ; plafond de relances par session, toutes empreintes confondues ;
+- entrée et sorties des hooks en UTF-8 explicite.
+
+**Cas vérifiés**
+
+- `hardslice.json` sans `version`, avec `"version": 2`, avec `$schema` ;
+- `check` : argument inconnu `2`, test en échec `1`, marqueurs restants `1`, tout vert `0` ;
+- solution générée : `git init && git add -A` ne suit ni `bin/` ni `obj/` après la vérification ;
+- état des relances non inscriptible : le hook de fin bloque l'agent avec le message ;
+- après édition avec marqueurs restants et build vert : message des marqueurs ;
+- erreur contenant un GUID différent à chaque passage : le compteur de relances avance.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes « modes de check », « hooks » et « pre-commit » de scripts/test-template.sh
+```
+
+### PB-056 : Corriger l'application générée et le kit agents avant de les figer
+
+**Résultat observable**
+
+L'application générée et le kit agents ne contiennent plus d'exemple trompeur, d'instruction contradictoire ni de renvoi à un fichier absent, dans les deux variantes.
+
+**Constat et périmètre**
+
+Application générée :
+- une date JSON sans décalage horaire est lue dans le fuseau du serveur (`ConfirmBookingCommand`, `BookingPeriod`) : la refuser (400) ;
+- l'agrégat `Booking` n'a pas de jeton de concurrence optimiste : deux annulations simultanées répondent 204 toutes les deux. Ajouter le jeton (`xmin` de PostgreSQL) et la traduction d'un conflit en 409, avec la migration ;
+- commentaires qui disent les événements publiés avant l'enregistrement, alors que `ConfirmBooking` enregistre avant de publier : les corriger ;
+- identifiant `BookingId` à la création, `Guid` en lecture et en annulation : un seul type dans les trois slices ;
+- dates des tests figées dans le passé et différentes selon les classes : une base unique, dans le futur ;
+- en `--no-sample`, `TransactionBehavior` et `DomainEventPublisher` n'ont plus de test : un test minimal sans Bookings ;
+- `.githooks/pre-commit` perd son bit exécutable : post-action `chmod` de `dotnet new`.
+
+Kit agents et templates d'éléments :
+- `add-domain-event` dit à l'étape 3 d'écrire à la main la réaction à un événement déjà complété, et l'interdit dans « Never » ; son `--force` réécrit aussi un événement complété : une seule consigne, cohérente avec `hardslice-event` ;
+- `hardslice-aggregate` accepte un agrégat du nom de son module (CS0118) ou d'un type des usings implicites, comme `Task` (CS0104) : les refuser ; `hardslice-command --response` accepte `Id`, `Guid`, `None` et le nom de la slice, qui ne compilent pas ou trompent : les refuser ;
+- un module créé avec `--route` : les tests générés par `hardslice-command` et `hardslice-query` appellent la route par défaut (404) ; `AGENTS.md` et `add-slice` le disent, ou les templates lisent la route du module ;
+- en `--no-sample`, six fiches de règles et un commentaire de l'agrégat généré renvoient à `ConfirmBooking`, `CancelBooking` ou `BookingConfiguration` : les rendre justes dans les deux variantes ;
+- HS014 sur un gestionnaire d'événement nomme `add-slice`, qui ne traite pas les réactions ; `AGENTS.md` ne parle que des handlers de commande pour HS014 ;
+- `AGENTS.md` décrit `--response none` comme « returns nothing » alors qu'il renvoie un `bool` (404 pour un agrégat inconnu) ;
+- le test d'agrégat généré n'a pas `using <App>.Domain;` ;
+- les skills ne disent pas qu'un refus affiche « created successfully » avant d'échouer avec le code 105 sans rien créer ;
+- descriptions de `extract-to-domain` et `fix-architecture-violation` : « when a message names `Skill: ...` » ;
+- `HS016.md` demande `dotnet build` et `dotnet test` au lieu du script de vérification ;
+- le détail de migration propre à Bookings quitte `AGENTS.md` pour un commentaire de la migration ;
+- `CLAUDE.md`, `GEMINI.md` et `copilot-instructions.md` ne recopient plus la liste des skills ni ce que dit `AGENTS.md`, et disent la même chose des hooks avant `dotnet tool restore` ;
+- matcher `Edit|Write` de `.claude/settings.json` : vérifier qu'aucun outil d'édition de la version courante de Claude Code n'y échappe.
+
+**Cas vérifiés**
+
+- `POST /bookings` avec une date sans décalage : 400 ;
+- deux annulations simultanées : 204 puis 409 ;
+- `hardslice-aggregate --name Task` et un agrégat du nom de son module : refus ;
+- module `--route`, commande générée : vérification verte après complétion de référence, ou consigne présente dans `AGENTS.md` et `add-slice` ;
+- `--no-sample` : aucun fichier livré ne cite un type de Bookings ;
+- `AGENTS.md` sous 150 lignes dans les deux variantes.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes du template d'application et des templates d'éléments de scripts/test-template.sh, dans les deux variantes
+```
+
+### PB-057 : Publier des démonstrations exactes et sans inventaire local
+
+**Résultat observable**
+
+Les traces de `demos/` ne contiennent plus l'inventaire local des CLI ni de blocs de raisonnement chiffrés, et `scripts/demo-agent-fix.sh verify-reference` et `scripts/demo-add-feature.sh verify-recorded` passent sur les traces filtrées. Les README des démonstrations décrivent exactement leurs conditions.
+
+**Constat**
+
+- `demos/add-feature/README.md` affirme « project settings only », mais le run Codex a chargé une skill personnelle de `~/.agents/skills`, dont le texte est dans la trace ;
+- les `trace.jsonl` de Claude Code publient l'inventaire du CLI (outils, plugins, chemins locaux) et des blocs de raisonnement chiffrés ;
+- `scripts/agent-trace.py` découpe les commandes sur `;`, `|` et les retours à la ligne avant `shlex`, compte `true || dotnet new ...` comme exécuté et une commande Codex sans `exit_code` comme réussie.
+
+**Périmètre**
+
+- `scripts/agent-trace.py` : filtre à l'enregistrement (événements d'initialisation, blocs chiffrés) et découpage des commandes par `shlex` avec ponctuation ; une commande sans code de sortie n'est pas réussie ;
+- traces existantes filtrées par le même code, sans relancer les agents ;
+- `demos/add-feature/README.md` : ce que le run Codex a chargé, et l'isolation complète renvoyée au runner du benchmark (v0.4) ;
+- `demos/README.md` : index des deux démonstrations et de ce qu'elles prouvent.
+
+**Acceptation**
+
+```text
+scripts/demo-agent-fix.sh verify-reference "$(mktemp -d)"
+scripts/demo-add-feature.sh verify-recorded "$(mktemp -d)"
+```
+
+### PB-058 : Réorganiser la documentation publique
+
+**Résultat observable**
+
+Le README racine se lit en une page par un nouveau venu, en anglais. Le détail est dans des pages anglaises de `docs/`. Les documents de conception sont dans `docs/design/`, exacts, sans information personnelle. Le dépôt a ses fichiers de contribution, de sécurité et de notes de version.
+
+**Périmètre**
+
+- `README.md` racine, environ 130 lignes : accroche, diagnostic HS016 montré d'abord, statut, « Getting started » (ancre conservée : les README de paquets y pointent), ce qu'on obtient, agents pris en charge, « Rules » (ancre et tableau conservés, exigés par `ReadmeTests`), preuves (démonstrations, coût mesuré), cinq limites principales, feuille de route, liens ;
+- nouvelles pages anglaises : `docs/getting-started.md` (prérequis, étapes 1 à 5, PostgreSQL, migration), `docs/item-templates.md`, `docs/agent-loop.md` (hooks, fichiers protégés, skills, pre-commit, CI générée, approbation Codex), `docs/rules.md` (niveaux d'analyse, limites règle par règle), `docs/README.md` (index) ;
+- `docs/design/` : `specifications.md`, `plan.md` et `product-backlog.md` déplacés, liens relatifs corrigés, bannière ; la spécification perd « Pour Vincent », « Monétisation », les indicateurs personnels de la section 14 et « Projet lié » ; spécification, plan et backlog à jour (incréments terminés, prochaine action, « 7 règles d'or » devenues 11, `--result many`) ; aucun tiret cadratin ;
+- `docs/plans/` supprimé ;
+- `docs/agents/support.md` et `docs/performance/analyzers.md` gardent leur chemin (tests et scripts en dépendent), avec un résumé anglais en tête ; `docs/releasing.md` traduit en anglais ;
+- `CONTRIBUTING.md` (construire, tester, conventions de commit et de ticket, contenu de « Working on HardSlice »), `AGENTS.md` racine suivi qui y renvoie, `SECURITY.md`, `CHANGELOG.md` avec l'entrée `0.3.0-preview.1` ;
+- commentaires des scripts et de `release.yml` qui citent des sections du README : pointés vers les nouvelles pages ;
+- `ReadmeTests` : les liens relatifs de `docs/*.md` sont vérifiés aussi.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+git grep -nP '\x{2014}' -- . ':!demos'   # aucune ligne (tiret cadratin)
+```
+
+### PB-059 : Préparer les paquets 0.3.0-preview.1
+
+**Résultat observable**
+
+`Directory.Build.props` porte `0.3.0-preview.1`, les trois paquets ont un README exact, une icône et des liens qui ne dérivent pas, la publication refuse de mélanger deux commits, et le parcours complet de `scripts/test-template.sh` et de `scripts/verify-published.sh` passe sur les paquets locaux. Il ne reste qu'à poser l'étiquette (PB-051).
+
+**Périmètre**
+
+- version `0.3.0-preview.1` dans `Directory.Build.props`, le README, `docs/releasing.md` et partout où `0.2.0-preview.1` apparaît encore ;
+- README des trois paquets : HS000 listée, et la nuance « `.editorconfig` l'emporte sur le niveau, sauf HS000 » ; ligne d'installation ; hooks des trois CLI et approbation de Codex dans `/hooks` ; exemple de réaction sans effet externe (`InvoiceOnBookingExtended` au lieu de `ChargeOnBookingExtended`) ; liens vers l'étiquette de la version plutôt que `main`, sauf la licence ;
+- icône de paquet (`PackageIcon`) ;
+- `AnalyzerReleases.Shipped.md` : les règles sous `## Release 0.3.0-preview.1`, `Unshipped.md` vidé ; l'étape ajoutée à `docs/releasing.md` ;
+- `release.yml` : avant chaque push, une version déjà présente sur NuGet.org doit avoir le SHA-512 de l'artefact, sinon échec ; l'étiquette doit toujours viser le commit du run ; `verify` compare les paquets servis à l'artefact `packages` ; `docs/releasing.md` : rejeter le déploiement en attente avant de reposer une étiquette, et passer à la préversion suivante après un rejet non transitoire ;
+- `scripts/verify-published.sh` étendu à `hardslice-module` et `hardslice-command` sur la solution générée ;
+- `ContinuousIntegrationBuild` sur GitHub Actions ;
+- passage complet de `scripts/test-template.sh` et de `scripts/verify-published.sh --source artifacts/packages`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o artifacts/packages; done
+scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/packages
+```
+
+### Définition de fini
+
+L'incrément est terminé lorsque PB-052 à PB-059 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. PB-051 peut alors être lancé sur le feu vert du mainteneur.
+
+## 7. Incréments suivants
 
 | Incrément | Résultat produit | Contenu principal | Acceptation globale |
 |---|---|---|---|
@@ -2424,7 +2760,7 @@ L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jo
 | **7 — Comparaison v0.6** | Les architectures couches et slices sont comparées | Applications équivalentes, mêmes tâches, agents, modèles et budgets | Les conclusions distinguent l'effet de l'architecture de celui des garde-fous |
 | **8 — Distribution v1.0** | HardSlice devient un produit open source installable et maintenable | Paquets stables, documentation, site, CI de publication, compatibilité, sécurité et contribution, options de template `--aspire` et SQL Server | Un utilisateur externe réussit les parcours greenfield et adoption depuis la documentation publique |
 
-## 7. Différé, mais non abandonné
+## 8. Différé, mais non abandonné
 
 | Élément | Incrément prévu |
 |---|---:|
