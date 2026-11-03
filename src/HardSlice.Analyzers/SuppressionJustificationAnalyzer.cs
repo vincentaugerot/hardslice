@@ -31,6 +31,7 @@ public sealed class SuppressionJustificationAnalyzer : DiagnosticAnalyzer
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId),
         // HS000 would hide the suppressions it reports. NotConfigurable: no pragma, <NoWarn> or severity setting turns it off.
         // Compiler: the compiler does not apply SuppressMessage attributes to it, which NotConfigurable alone does not prevent.
         customTags: [WellKnownDiagnosticTags.NotConfigurable, WellKnownDiagnosticTags.Compiler]);

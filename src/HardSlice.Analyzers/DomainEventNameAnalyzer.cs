@@ -19,11 +19,12 @@ public sealed class DomainEventNameAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A domain event is not named as a past fact",
-        messageFormat: "domain event '{0}' is not named as a past fact. Domain events are named in the past tense. Fix: rename it, for example to 'BookingConfirmed'. Skill: add-domain-event. Doc: 'docs/rules/HS019.md'.",
+        messageFormat: "domain event '{0}' is not named as a past fact. Domain events are named in the past tense. Fix: rename it after the fact that happened, with a past participle as its last word. Skill: add-domain-event. Doc: 'docs/rules/HS019.md'.",
         category: "HardSlice.Naming",
         defaultSeverity: DiagnosticSeverity.Info,
         // Off by default, as in the Recommended mode: the All mode turns it on as a suggestion. HS900 knows it from OffByDefault.
-        isEnabledByDefault: false);
+        isEnabledByDefault: false,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     // Irregular past participles that do not end with 'ed', as the sheet lists them. Compared without case.
     private static readonly ImmutableHashSet<string> IrregularPastParticiples = new[]
@@ -56,7 +57,7 @@ public sealed class DomainEventNameAnalyzer : DiagnosticAnalyzer
                 return;
 
             // Without a usable domainEvent contract, HS900 reports the configuration and no event can be recognized.
-            var model = DomainModel.Create(start.Compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
+            var model = DomainModel.For(start.Compilation, start.Options, start.CancellationToken);
             if (model.Contract(ContractKeys.DomainEvent) is null)
                 return;
 

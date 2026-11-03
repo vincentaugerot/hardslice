@@ -23,7 +23,8 @@ public sealed class DomainEventRecordAnalyzer : DiagnosticAnalyzer
         messageFormat: "domain event '{0}' is a {1}. Domain events are records. Fix: declare it as '{2}'. Skill: add-domain-event. Doc: 'docs/rules/HS009.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -43,7 +44,7 @@ public sealed class DomainEventRecordAnalyzer : DiagnosticAnalyzer
                 return;
 
             // Without a usable domainEvent contract, HS900 reports the configuration and no event can be recognized.
-            var model = DomainModel.Create(start.Compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
+            var model = DomainModel.For(start.Compilation, start.Options, start.CancellationToken);
             if (model.Contract(ContractKeys.DomainEvent) is null)
                 return;
 

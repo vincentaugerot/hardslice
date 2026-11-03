@@ -391,6 +391,36 @@ public sealed class AnalysisModeTests
             .ShouldBe(on && configurable ? [] : [rule], $"{rule} = {setting} in .editorconfig under {mode}.");
     }
 
+    // A solution with its own messaging declares no command nor query: the Minimum mode, which assumes no messaging,
+    // never requires them, while the modes whose rules check requests do, through HS901 among others.
+    [Theory]
+    [InlineData("Minimum", false)]
+    [InlineData("Recommended", true)]
+    [InlineData("All", true)]
+    public async Task Only_the_modes_that_assume_the_messaging_require_the_command_and_query_contracts(string mode, bool required)
+    {
+        var configuration = Configuration
+            .Replace("\"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\",", "")
+            .Replace("\"query\": \"MyApp.Shared.Messaging.IQuery`1, MyApp\",", "");
+        configuration.ShouldNotContain("command\"");
+        configuration.ShouldNotContain("query\"");
+
+        var diagnostics = await AnalyzeAllAsync(CompileProbe(), configuration, [(ModePath(mode), ModeFile(mode))]);
+
+        diagnostics.Select(diagnostic => diagnostic.GetMessage()).ShouldBe(
+            !required
+                ? []
+                : [
+                    "hardslice.json declares no contract 'contracts.command'. The contracts of hardslice.json classify the types checked by HS004, HS005 and HS901. "
+                        + "Fix: restore hardslice.json from version control; it declares \"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\". "
+                        + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.",
+                    "hardslice.json declares no contract 'contracts.query'. The contracts of hardslice.json classify the types checked by HS004, HS006 and HS901. "
+                        + "Fix: restore hardslice.json from version control; it declares \"query\": \"MyApp.Shared.Messaging.IQuery`1, MyApp\". "
+                        + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'."
+                ],
+            ignoreOrder: true);
+    }
+
     // A suppression in source, justified for HS000, acts on the rule it names only: the other HardSlice rule of the same compilation stays.
     [Theory]
     [InlineData("HS016", "pragma", "HS901")]

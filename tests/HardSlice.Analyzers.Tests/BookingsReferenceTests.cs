@@ -25,10 +25,10 @@ public sealed class BookingsReferenceTests
 
     private static readonly string TemplateDocsDirectory = Path.Combine(AppContext.BaseDirectory, "TemplateDocs");
 
-    private static readonly string Configuration = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TemplateConfiguration", "hardslice.json"));
+    internal static readonly string Configuration = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TemplateConfiguration", "hardslice.json"));
 
     // The global config of the All mode, the mode of the template, as build/HardSlice.Analyzers.targets gives it to the compiler.
-    private static readonly (string Path, string Text)[] AllMode =
+    internal static readonly (string Path, string Text)[] AllMode =
     [
         ("/packages/hardslice.analyzers/build/HardSlice.All.globalconfig",
             File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "AnalysisModes", "HardSlice.All.globalconfig")))
@@ -268,7 +268,7 @@ public sealed class BookingsReferenceTests
         diagnostic.Severity.ShouldBe(DiagnosticSeverity.Info);
         diagnostic.GetMessage().ShouldBe(
             "domain event 'ConfirmBooking' is not named as a past fact. Domain events are named in the past tense. "
-            + "Fix: rename it, for example to 'BookingConfirmed'. Skill: add-domain-event. Doc: 'docs/rules/HS019.md'.");
+            + "Fix: rename it after the fact that happened, with a past participle as its last word. Skill: add-domain-event. Doc: 'docs/rules/HS019.md'.");
     }
 
     [Fact]
@@ -730,6 +730,18 @@ public sealed class BookingsReferenceTests
             [domain.ToMetadataReference(), .. PackageReferences(PackageAssemblyPrefixes)],
             OutputKind.ConsoleApplication);
     }
+
+    // The application of the reference with extra files that may not compile, as the IDE analyzes code being typed.
+    internal static CSharpCompilation CompileApplicationWithErrors(params (string Path, string Source)[] extraFiles) =>
+        CompileWithErrors(
+            "MyApp",
+            SourceFiles("MyApp")
+                .Where(file => extraFiles.All(extra => extra.Path != file.Path))
+                .Concat(extraFiles)
+                .Append(("Usings.cs", ImplicitUsings))
+                .Append(("WebUsings.cs", WebImplicitUsings)),
+            [CompileDomain().ToMetadataReference(), .. PackageReferences(PackageAssemblyPrefixes)],
+            OutputKind.ConsoleApplication);
 
     private static IEnumerable<(string Path, string Source)> SourceFiles(string project)
     {

@@ -11,6 +11,10 @@ namespace HardSlice.Analyzers.Configuration;
 // and keeps the span of every value so that a diagnostic can point at the offending key.
 internal static class JsonReader
 {
+    // hardslice.json nests three levels; a deeper file is refused before the recursion of the parser can exhaust the stack
+    // of the compiler or of the IDE.
+    public const int MaxDepth = 64;
+
     private static readonly Regex Number = new(@"\G-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?", RegexOptions.CultureInvariant);
 
     public static JsonNode Parse(string text)
@@ -24,6 +28,7 @@ internal static class JsonReader
     private sealed class Parser(string text)
     {
         private int _position;
+        private int _depth;
 
         public JsonNode ParseValue()
         {
@@ -49,11 +54,11 @@ internal static class JsonReader
 
         private JsonObject ParseObject()
         {
-            var start = _position++;
+            var start = Enter();
             var properties = ImmutableArray.CreateBuilder<JsonProperty>();
             SkipTrivia();
             if (TryConsume('}'))
-                return new JsonObject(properties.ToImmutable(), TextSpan.FromBounds(start, _position));
+                return Leave(new JsonObject(properties.ToImmutable(), TextSpan.FromBounds(start, _position)));
 
             while (true)
             {
@@ -69,7 +74,7 @@ internal static class JsonReader
                 properties.Add(new JsonProperty(name.Value, name.Span, ParseValue()));
                 SkipTrivia();
                 if (TryConsume('}'))
-                    return new JsonObject(properties.ToImmutable(), TextSpan.FromBounds(start, _position));
+                    return Leave(new JsonObject(properties.ToImmutable(), TextSpan.FromBounds(start, _position)));
                 if (!TryConsume(','))
                     throw Error("expected ',' or '}' after a property value");
             }
@@ -77,18 +82,18 @@ internal static class JsonReader
 
         private JsonArray ParseArray()
         {
-            var start = _position++;
+            var start = Enter();
             var items = ImmutableArray.CreateBuilder<JsonNode>();
             SkipTrivia();
             if (TryConsume(']'))
-                return new JsonArray(items.ToImmutable(), TextSpan.FromBounds(start, _position));
+                return Leave(new JsonArray(items.ToImmutable(), TextSpan.FromBounds(start, _position)));
 
             while (true)
             {
                 items.Add(ParseValue());
                 SkipTrivia();
                 if (TryConsume(']'))
-                    return new JsonArray(items.ToImmutable(), TextSpan.FromBounds(start, _position));
+                    return Leave(new JsonArray(items.ToImmutable(), TextSpan.FromBounds(start, _position)));
                 if (!TryConsume(','))
                     throw Error("expected ',' or ']' after an array item");
             }
@@ -156,6 +161,21 @@ internal static class JsonReader
 
             _position += number.Length;
             return new JsonLiteral(TextSpan.FromBounds(start, _position));
+        }
+
+        // Opens an object or an array, and returns its start.
+        private int Enter()
+        {
+            if (++_depth > MaxDepth)
+                throw Error($"nesting deeper than {MaxDepth} levels");
+
+            return _position++;
+        }
+
+        private T Leave<T>(T node)
+        {
+            _depth--;
+            return node;
         }
 
         private bool TryConsume(char expected)

@@ -21,7 +21,8 @@ public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
         messageFormat: "{0} reads '{1}'. The domain and the slices never read the system clock. Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS010.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 
@@ -38,7 +39,7 @@ public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
             var compilation = start.Compilation;
             var clock = ClockProperties.Create(compilation);
             // Without a usable entity contract, HS900 reports the configuration and the domain cannot be recognized.
-            var isDomain = DomainModel.Create(compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken))
+            var isDomain = DomainModel.For(compilation, start.Options, start.CancellationToken)
                 .Contract(ContractKeys.Entity) is { } entity
                 && SymbolEqualityComparer.Default.Equals(entity.ContainingAssembly, compilation.Assembly);
             var slices = new SliceMap(compilation);

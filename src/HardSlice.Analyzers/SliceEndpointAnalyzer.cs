@@ -26,7 +26,8 @@ public sealed class SliceEndpointAnalyzer : DiagnosticAnalyzer
         MessageFormat,
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     // Whether the module calls the method that maps an endpoint is known at the end of the compilation only: in the IDE,
     // this part of the rule is reported by full solution analysis.
@@ -37,6 +38,7 @@ public sealed class SliceEndpointAnalyzer : DiagnosticAnalyzer
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId),
         customTags: WellKnownDiagnosticTags.CompilationEnd);
 
     private const string HttpResultsNamespace = "Microsoft.AspNetCore.Http.HttpResults";

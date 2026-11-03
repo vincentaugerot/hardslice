@@ -20,7 +20,8 @@ public sealed class CommandResponseAnalyzer : DiagnosticAnalyzer
         messageFormat: "handler '{0}' of command '{1}' returns {2}. Command handlers return an identifier, a DTO of values or nothing. Fix: {3}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS005.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -41,7 +42,7 @@ public sealed class CommandResponseAnalyzer : DiagnosticAnalyzer
                 return;
 
             // Without usable contracts, HS900 reports the configuration. The domain sees neither the command nor the handler contract.
-            var model = DomainModel.Create(start.Compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
+            var model = DomainModel.For(start.Compilation, start.Options, start.CancellationToken);
             if (model.Contract(ContractKeys.Command) is not { } command
                 || model.Contract(ContractKeys.RequestHandler) is not { } handler
                 || EntityContainment.Create(start.Compilation, model) is not { } containment)

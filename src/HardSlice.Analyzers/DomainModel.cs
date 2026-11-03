@@ -1,6 +1,8 @@
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 using HardSlice.Analyzers.Configuration;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace HardSlice.Analyzers;
 
@@ -9,6 +11,10 @@ namespace HardSlice.Analyzers;
 // compiled on its own. Unlike SliceMap, it does not depend on namespaces of the analyzed compilation.
 internal sealed class DomainModel
 {
+    // The model of each compilation, read once for every analyzer: in the IDE, each keystroke creates a compilation.
+    // Keyed by the compilation, then by the options that carry hardslice.json, it holds no state between compilations.
+    private static readonly ConditionalWeakTable<Compilation, ConditionalWeakTable<AnalyzerOptions, DomainModel>> Models = new();
+
     private readonly ImmutableDictionary<string, INamedTypeSymbol> _contracts;
 
     private DomainModel(ImmutableDictionary<string, INamedTypeSymbol> contracts, ImmutableArray<ContractProblem> problems)
@@ -74,8 +80,16 @@ internal sealed class DomainModel
         }
     }
 
+    // The model of the compilation, with the hardslice.json of its options, shared by the analyzers of the compilation.
+    // A canceled computation stores nothing: the next analyzer computes it again.
+    public static DomainModel For(Compilation compilation, AnalyzerOptions options, CancellationToken cancellationToken) =>
+        Models.GetValue(compilation, _ => new ConditionalWeakTable<AnalyzerOptions, DomainModel>())
+            .GetValue(options, _ => Create(compilation, HardSliceConfiguration.Read(options, cancellationToken)));
+
     // A contract is required in its declaring assembly and in every compilation that references it. Elsewhere it is
-    // invisible, which is not an error: the compilation of MyApp.Domain does not reference MyApp.
+    // invisible, which is not an error: the compilation of MyApp.Domain does not reference MyApp. The compilation that
+    // holds the slices, '<AssemblyName>.Features', classifies with every contract: there, a contract of an assembly that is
+    // neither the compilation nor one of its references is a problem, such as after a rename.
     public static DomainModel Create(Compilation compilation, HardSliceConfiguration configuration)
     {
         if (configuration.FileProblem is { } fileProblem)
@@ -103,7 +117,20 @@ internal sealed class DomainModel
             }
 
             if (DeclaringAssembly(compilation, entry.AssemblyName!) is not { } assembly)
+            {
+                if (SliceMap.HoldsFeatures(compilation))
+                {
+                    problems.Add(new ContractProblem(
+                        new ConfigurationProblem(
+                            $"contract 'contracts.{key}' of {HardSliceConfiguration.FileName}, '{entry.MetadataName}', names assembly '{entry.AssemblyName}', "
+                                + $"which is neither project '{compilation.AssemblyName}' nor one of its references",
+                            $"restore {HardSliceConfiguration.FileName}, or the name of the project that declares '{entry.MetadataName}', from version control",
+                            entry.Location),
+                        [key]));
+                }
+
                 continue;
+            }
 
             if (assembly.GetTypeByMetadataName(entry.MetadataName!) is { } contract)
             {

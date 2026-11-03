@@ -230,8 +230,8 @@ Diagnostics de configuration, émis seulement lorsqu'une règle active en dépen
 
 | Id | Condition |
 |---|---|
-| HS900 | `hardslice.json` introuvable ou invalide, contrat absent, mal formé ou introuvable dans son assembly déclarant alors que la compilation le référence, contrats incohérents |
-| HS901 | Type classé dans deux catégories incompatibles : entité et événement, commande et requête, entité et commande ou requête |
+| HS900 | `hardslice.json` introuvable, invalide ou imbriqué sur plus de 64 niveaux, contrat absent, mal formé ou introuvable dans son assembly déclarant alors que la compilation le référence, contrat d'un assembly ni courant ni référencé dans le projet des slices (`<Assembly>.Features`), contrats incohérents |
+| HS901 | Type classé dans deux catégories incompatibles : entité et événement, commande et requête, entité et commande ou requête. Les contrats `command` et `query` ne sont exigés que si HS004, HS005 ou HS006 est actif (jamais en `Minimum`) |
 | HS902 | Type de l'assembly du Domain mappé comme entité EF Core (`IEntityTypeConfiguration<T>`, `DbSet<T>`, `ModelBuilder.Entity<T>()`) sans implémenter `IEntity` |
 
 Restent indétectables : une entité mappée par convention, par `Entity(typeof(T))` ou par nom, une entité enfant mappée comme type possédé (`OwnsOne`, `OwnsMany`) qui n'implémente pas `IEntity`, car le mapping ne dit pas si un type possédé est un objet valeur ou une entité : seuls les contrats font autorité, une entité non persistée qui n'implémente aucun contrat, un mapping dans un projet qui n'utilise pas les analyseurs.

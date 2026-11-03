@@ -28,11 +28,7 @@ internal static class AnalyzerHarness
         MetadataReference[]? references = null,
         OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
     {
-        var compilation = CSharpCompilation.Create(
-            assemblyName,
-            files.Select(file => CSharpSyntaxTree.ParseText(file.Source, new CSharpParseOptions(LanguageVersion.Latest), file.Path)),
-            FrameworkReferences.AddRange(references ?? []),
-            new CSharpCompilationOptions(outputKind, nullableContextOptions: NullableContextOptions.Enable));
+        var compilation = CompileWithErrors(assemblyName, files, references, outputKind);
 
         compilation.GetDiagnostics(TestContext.Current.CancellationToken)
             .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
@@ -40,6 +36,18 @@ internal static class AnalyzerHarness
 
         return compilation;
     }
+
+    // The same, for code being typed: the IDE runs the analyzers on code that does not compile yet.
+    public static CSharpCompilation CompileWithErrors(
+        string assemblyName,
+        IEnumerable<(string Path, string Source)> files,
+        MetadataReference[]? references = null,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary) =>
+        CSharpCompilation.Create(
+            assemblyName,
+            files.Select(file => CSharpSyntaxTree.ParseText(file.Source, new CSharpParseOptions(LanguageVersion.Latest), file.Path)),
+            FrameworkReferences.AddRange(references ?? []),
+            new CSharpCompilationOptions(outputKind, nullableContextOptions: NullableContextOptions.Enable));
 
     public static Task<ImmutableArray<Diagnostic>> AnalyzeAsync(Compilation compilation) =>
         compilation
@@ -67,6 +75,27 @@ internal static class AnalyzerHarness
                 AnalyzerConfigSet.Create(analyzerConfigs.Select(config => AnalyzerConfig.Parse(config.Text, config.Path)).ToImmutableArray()))))
             .WithAnalyzers(Analyzers(), Options(configuration))
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
+
+    // Every analyzer, with the given analyzer configs, collecting the exceptions they throw instead of failing on them:
+    // the compiler reports each one as AD0001 and the analyzer stops for the compilation.
+    public static async Task<(ImmutableArray<Diagnostic> Diagnostics, ImmutableArray<Exception> Exceptions)> AnalyzeCollectingExceptionsAsync(
+        Compilation compilation,
+        string? configuration,
+        IEnumerable<(string Path, string Text)> analyzerConfigs)
+    {
+        var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+        var options = new CompilationWithAnalyzersOptions(
+            Options(configuration),
+            (exception, _, _) => exceptions.Enqueue(exception),
+            concurrentAnalysis: true,
+            logAnalyzerExecutionTime: false);
+        var diagnostics = await compilation
+            .WithOptions(compilation.Options.WithSyntaxTreeOptionsProvider(new AnalyzerConfigSeverities(
+                AnalyzerConfigSet.Create(analyzerConfigs.Select(config => AnalyzerConfig.Parse(config.Text, config.Path)).ToImmutableArray()))))
+            .WithAnalyzers(Analyzers(), options)
+            .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
+        return (diagnostics, [.. exceptions]);
+    }
 
     public static ImmutableArray<DiagnosticAnalyzer> Analyzers() =>
         [new SuppressionJustificationAnalyzer(), new SliceReferenceAnalyzer(), new ClassificationAnalyzer(), new EndpointDatabaseAccessAnalyzer(), new SliceEndpointAnalyzer(), new AsyncUsageAnalyzer(), new SystemClockAnalyzer(), new SliceStructureAnalyzer(), new CommandResponseAnalyzer(), new QueryHandlerTrackingAnalyzer(), new EntityStateAnalyzer(), new AggregateReferenceAnalyzer(), new DomainEventRecordAnalyzer(), new DomainEventNameAnalyzer()];

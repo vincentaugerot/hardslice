@@ -278,7 +278,7 @@ The MSBuild property `HardSliceAnalysisMode` chooses which analyzer rules are on
 | HS019 | – | – | suggestion |
 | HS900 to HS902 | error | error | error |
 
-A dash means the mode turns the rule off: `Minimum` keeps the rules that assume neither the shape of a slice, the messaging of the template, its aggregates referenced by identifier nor its domain events declared as records, plus HS016. HS019, a heuristic, is a suggestion of the `All` mode only: it never blocks the build, even with `TreatWarningsAsErrors`. HS900 to HS902 are reported only when an active rule depends on the classification of types. HS000 is not configurable: no mode, `.editorconfig` line or `<NoWarn>` turns it off. The architecture tests do not depend on the mode.
+A dash means the mode turns the rule off: `Minimum` keeps the rules that assume neither the shape of a slice, the messaging of the template, its aggregates referenced by identifier nor its domain events declared as records, plus HS016. HS019, a heuristic, is a suggestion of the `All` mode only: it never blocks the build, even with `TreatWarningsAsErrors`. HS900 to HS902 are reported only when an active rule depends on the classification of types: in `Minimum`, HS901 never requires the `command` and `query` contracts. HS000 is not configurable: no mode, `.editorconfig` line or `<NoWarn>` turns it off. The architecture tests do not depend on the mode.
 
 ## Known limitations
 

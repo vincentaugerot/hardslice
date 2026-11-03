@@ -24,7 +24,8 @@ public sealed class EntityStateAnalyzer : DiagnosticAnalyzer
         messageFormat: "entity '{0}' {1}. The state of an entity changes only through its methods, which protect its invariants. Fix: {2}. Skill: extract-to-domain. Doc: 'docs/rules/HS007.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -44,7 +45,7 @@ public sealed class EntityStateAnalyzer : DiagnosticAnalyzer
                 return;
 
             // Without a usable entity contract, HS900 reports the configuration and no entity can be recognized.
-            var model = DomainModel.Create(start.Compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
+            var model = DomainModel.For(start.Compilation, start.Options, start.CancellationToken);
             if (model.Contract(ContractKeys.Entity) is null)
                 return;
 

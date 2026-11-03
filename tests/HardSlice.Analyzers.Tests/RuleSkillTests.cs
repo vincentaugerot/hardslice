@@ -70,6 +70,28 @@ public sealed partial class RuleSkillTests
         }
     }
 
+    // The IDE opens the sheet of a rule from its id: the sheet of the template, on GitHub, at the tag of this version.
+    [Fact]
+    public void Every_descriptor_links_to_the_sheet_of_its_rule_at_the_tag_of_its_version()
+    {
+        var version = typeof(SliceReferenceAnalyzer).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .Cast<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .Single().InformationalVersion.Split('+')[0];
+        var descriptors = typeof(SliceReferenceAnalyzer).Assembly.GetTypes()
+            .Where(type => !type.IsAbstract && typeof(DiagnosticAnalyzer).IsAssignableFrom(type))
+            .SelectMany(type => ((DiagnosticAnalyzer)Activator.CreateInstance(type)!).SupportedDiagnostics)
+            .ToArray();
+
+        descriptors.ShouldNotBeEmpty();
+        foreach (var descriptor in descriptors)
+        {
+            descriptor.HelpLinkUri.ShouldBe(
+                $"https://github.com/vincentaugerot/hardslice/blob/v{version}/src/HardSlice.Templates/content/hardslice-api/docs/rules/{descriptor.Id}.md");
+            File.Exists(Path.Combine(TemplateRoot(), "docs", "rules", $"{descriptor.Id}.md")).ShouldBeTrue($"The sheet of {descriptor.Id} does not exist.");
+        }
+    }
+
     // Each message of the architecture tests is a string of their sources, comments aside: every 'Doc:' follows the skill of its rule.
     [Fact]
     public void Every_architecture_test_message_names_the_skill_of_its_rule_before_its_sheet()

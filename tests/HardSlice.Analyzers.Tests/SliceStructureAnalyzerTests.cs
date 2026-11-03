@@ -824,8 +824,8 @@ public sealed class SliceStructureAnalyzerTests
         Fixes(diagnostics).ShouldBe(["rename the handler to 'ArchiveBookingHandler'"]);
     }
 
-    // Without hardslice.json, requests and handlers cannot be recognized: HS900 reports it, and only the endpoint and
-    // the folders are checked.
+    // Without hardslice.json, requests and handlers cannot be recognized: HS900 reports it, and only the existing endpoints
+    // and the folders are checked.
     [Fact]
     public async Task Checks_the_endpoint_and_the_folders_only_without_the_messaging_contracts()
     {
@@ -845,6 +845,25 @@ public sealed class SliceStructureAnalyzerTests
             "endpoint 'ArchiveBookingEndpoint' of slice 'Bookings/ArchiveBooking' is not static",
             "'ArchiveBookingEndpoint' of slice 'Bookings/ArchiveBooking' is declared in 'Features/Bookings/ArchiveBooking.cs', outside the folder of its slice"
         ], ignoreOrder: true);
+    }
+
+    // A slice without endpoint cannot be told from a reaction slice without the contracts: HS900 alone reports the
+    // configuration, so that an agent never adds an endpoint to a reaction.
+    [Fact]
+    public async Task Does_not_require_an_endpoint_without_the_messaging_contracts()
+    {
+        await VerifyAsync(
+            configuration: null,
+            [],
+            ArchiveBooking(endpoint: ""),
+            BookingEvents,
+            NotifyOnBookingConfirmed(
+                """
+                internal sealed class NotifyOnBookingConfirmedHandler : IDomainEventHandler<BookingConfirmed>
+                {
+                    public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+                """));
     }
 
     [Fact]

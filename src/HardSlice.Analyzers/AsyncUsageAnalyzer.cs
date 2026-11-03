@@ -25,7 +25,8 @@ public sealed class AsyncUsageAnalyzer : DiagnosticAnalyzer
         messageFormat: "{0}. {1} Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS011.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = ContainingMember.DisplayFormat;
 

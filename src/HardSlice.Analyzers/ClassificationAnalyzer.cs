@@ -30,9 +30,17 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
         (DomainEventRecordAnalyzer.DiagnosticId, [ContractKeys.DomainEvent]),
         (SystemClockAnalyzer.DiagnosticId, [ContractKeys.Entity]),
         (DomainEventNameAnalyzer.DiagnosticId, [ContractKeys.DomainEvent]),
-        (AmbiguityId, [ContractKeys.Entity, ContractKeys.AggregateRoot, ContractKeys.DomainEvent, ContractKeys.Command, ContractKeys.Query]),
+        (AmbiguityId, [ContractKeys.Entity, ContractKeys.AggregateRoot, ContractKeys.DomainEvent]),
         (UnclassifiedEntityId, [ContractKeys.Entity, ContractKeys.AggregateRoot])
     ];
+
+    // HS901 checks commands and queries where the messaging of the template is assumed, that is while a rule written for
+    // it is on: the Minimum mode turns them off, and a solution with its own messaging declares no command nor query.
+    // Elsewhere it checks them only when their contracts are usable.
+    private static readonly ImmutableArray<string> MessagingRules =
+        [SliceStructureAnalyzer.DiagnosticId, CommandResponseAnalyzer.DiagnosticId, QueryHandlerTrackingAnalyzer.DiagnosticId];
+
+    private static readonly ImmutableArray<string> RequestContracts = [ContractKeys.Command, ContractKeys.Query];
 
     // The rules of ContractsByRule whose descriptor is off by default: they need their contracts only where a setting,
     // such as the All analysis mode, turns them on.
@@ -45,6 +53,7 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(ConfigurationId),
         customTags: WellKnownDiagnosticTags.CompilationEnd);
 
     private static readonly DiagnosticDescriptor AmbiguityRule = new(
@@ -53,7 +62,8 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
         messageFormat: "'{0}' is both {1} and {2}: it implements '{3}' and '{4}'. {5}. Fix: {6}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS901.md'.",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(AmbiguityId));
 
     private static readonly DiagnosticDescriptor UnclassifiedEntityRule = new(
         UnclassifiedEntityId,
@@ -63,7 +73,8 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
             + "Fix: implement {3} if '{0}' is the root of its aggregate, {2} otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(UnclassifiedEntityId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -87,10 +98,16 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
             var activeRules = ContractsByRule
                 .Where(rule => RuleActivation.IsActive(compilation, rule.RuleId, start.CancellationToken, !OffByDefault.Contains(rule.RuleId)))
                 .ToImmutableArray();
+            if (activeRules.Any(rule => MessagingRules.Contains(rule.RuleId)))
+            {
+                activeRules = activeRules
+                    .Select(rule => rule.RuleId == AmbiguityId ? (rule.RuleId, rule.Contracts.AddRange(RequestContracts)) : rule)
+                    .ToImmutableArray();
+            }
             if (activeRules.IsEmpty)
                 return;
 
-            var model = DomainModel.Create(compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
+            var model = DomainModel.For(compilation, start.Options, start.CancellationToken);
             // HS900 has no source location: the compiler filters it by the global options only, never by .editorconfig.
             if (RuleActivation.IsActive(compilation, ConfigurationId, start.CancellationToken))
                 start.RegisterCompilationEndAction(end => ReportConfigurationProblems(end, model, activeRules));

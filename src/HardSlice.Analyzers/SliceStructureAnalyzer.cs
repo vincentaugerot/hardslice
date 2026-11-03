@@ -32,11 +32,12 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
-        title: "A slice is not one entry named after it, a request with its handler and endpoint or a domain event handler, declared in its folder",
+        title: "A slice is not shaped as one entry named after it",
         messageFormat: "{0}. {1} Fix: {2}. Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -57,11 +58,9 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
             var compilation = start.Compilation;
             var slices = new SliceMap(compilation);
-            // Without usable messaging contracts, HS900 reports the configuration: only the endpoint and the folders are checked.
-            var messaging = Messaging.Create(
-                DomainModel.Create(compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken)),
-                compilation,
-                start.CancellationToken);
+            // Without usable messaging contracts, HS900 reports the configuration: only the folders and the existing endpoints
+            // are checked, since a missing endpoint cannot be told from a reaction slice.
+            var messaging = Messaging.Create(DomainModel.For(compilation, start.Options, start.CancellationToken), compilation);
             start.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.MSBuildProjectDirectory", out var projectDirectory);
             var files = new ProjectFiles(projectDirectory, start.Options);
 
@@ -179,7 +178,7 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         var endpointName = sliceName + "Endpoint";
         var endpoints = types.Where(type => type.Name == endpointName).ToArray();
         var endpointLocation = request is null ? sliceLocation : files.FirstLocation(request);
-        if (endpoints.Length == 0)
+        if (endpoints.Length == 0 && messaging is not null)
         {
             var lookalikes = checkedTypes.Where(type => type.Name.EndsWith("Endpoint", StringComparison.Ordinal)).ToArray();
             var fix = lookalikes.Length == 1
@@ -471,8 +470,7 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
             INamedTypeSymbol handler,
             INamedTypeSymbol eventHandler,
             INamedTypeSymbol? validator,
-            Compilation compilation,
-            CancellationToken cancellationToken)
+            Compilation compilation)
         {
             _model = model;
             Command = command;
@@ -480,7 +478,9 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
             _handler = handler;
             EventHandler = eventHandler;
             _validator = validator;
-            _handledRequests = new Lazy<ImmutableHashSet<ISymbol>>(() => CollectHandledRequests(compilation, cancellationToken));
+            // Without the token of the compilation start: the IDE reuses this start for analyses canceled by their own token,
+            // and a Lazy would keep the exception of a canceled evaluation for the whole compilation.
+            _handledRequests = new Lazy<ImmutableHashSet<ISymbol>>(() => CollectHandledRequests(compilation), LazyThreadSafetyMode.ExecutionAndPublication);
         }
 
         public INamedTypeSymbol Command { get; }
@@ -489,12 +489,12 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
         public INamedTypeSymbol EventHandler { get; }
 
-        public static Messaging? Create(DomainModel model, Compilation compilation, CancellationToken cancellationToken) =>
+        public static Messaging? Create(DomainModel model, Compilation compilation) =>
             model.Contract(ContractKeys.Command) is { } command
             && model.Contract(ContractKeys.Query) is { } query
             && model.Contract(ContractKeys.RequestHandler) is { } handler
             && model.Contract(ContractKeys.DomainEventHandler) is { } eventHandler
-                ? new Messaging(model, command, query, handler, eventHandler, compilation.GetTypeByMetadataName("FluentValidation.IValidator`1"), compilation, cancellationToken)
+                ? new Messaging(model, command, query, handler, eventHandler, compilation.GetTypeByMetadataName("FluentValidation.IValidator`1"), compilation)
                 : null;
 
         // "command" or "query" for a class or a struct that can be sent; a type both is reported by HS901 and named as a command.
@@ -565,14 +565,11 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
         // The requests the handlers of this compilation handle, wherever they are declared: a request whose handler is
         // outside its slice is reported once, on the handler.
-        private ImmutableHashSet<ISymbol> CollectHandledRequests(Compilation compilation, CancellationToken cancellationToken)
+        private ImmutableHashSet<ISymbol> CollectHandledRequests(Compilation compilation)
         {
             var requests = ImmutableHashSet.CreateBuilder<ISymbol>(SymbolEqualityComparer.Default);
             foreach (var type in TypesOf(compilation.Assembly.GlobalNamespace))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
                 requests.UnionWith(HandledRequests(type));
-            }
 
             return requests.ToImmutable();
         }

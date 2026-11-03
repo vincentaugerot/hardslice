@@ -25,7 +25,8 @@ public sealed class AggregateReferenceAnalyzer : DiagnosticAnalyzer
         messageFormat: "{0} references {1} through {2}. An aggregate references another aggregate only by its identifier. Fix: {3} and load '{4}' in the handler that needs it. Skill: add-aggregate. Doc: 'docs/rules/HS008.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -45,7 +46,7 @@ public sealed class AggregateReferenceAnalyzer : DiagnosticAnalyzer
                 return;
 
             // Without usable entity and aggregate root contracts, HS900 reports the configuration and no aggregate can be recognized.
-            var model = DomainModel.Create(start.Compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
+            var model = DomainModel.For(start.Compilation, start.Options, start.CancellationToken);
             if (model.Contract(ContractKeys.Entity) is null || model.Contract(ContractKeys.AggregateRoot) is null)
                 return;
 

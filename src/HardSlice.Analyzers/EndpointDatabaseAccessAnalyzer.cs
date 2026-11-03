@@ -21,7 +21,8 @@ public sealed class EndpointDatabaseAccessAnalyzer : DiagnosticAnalyzer
             + "Fix: move the data access into the handler of {4} and send {5} with IMediator. Skill: fix-architecture-violation. Doc: 'docs/rules/HS003.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 

@@ -24,7 +24,8 @@ public sealed class SliceReferenceAnalyzer : DiagnosticAnalyzer
             + "Skill: extract-to-domain. Doc: 'docs/rules/HS016.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -90,8 +91,9 @@ public sealed class SliceReferenceAnalyzer : DiagnosticAnalyzer
         SliceMap slices,
         ConcurrentDictionary<DiagnosticKey, byte> reported)
     {
+        // A name of a documentation comment, such as '<see cref="..."/>', is no use of the type: nothing depends on it.
         var name = (SimpleNameSyntax)context.Node;
-        if (name.IsVar)
+        if (name.IsVar || name.IsPartOfStructuredTrivia())
             return;
 
         var sourceType = context.ContainingSymbol as INamedTypeSymbol ?? context.ContainingSymbol?.ContainingType;

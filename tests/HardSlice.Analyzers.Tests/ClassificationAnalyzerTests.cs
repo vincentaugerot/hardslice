@@ -531,6 +531,65 @@ public sealed class ClassificationAnalyzerTests
         diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(3);
     }
 
+    // The reader stops at 64 levels, before its recursion can exhaust the stack of the compiler.
+    [Fact]
+    public async Task Reports_HS900_when_hardslice_json_nests_too_deep()
+    {
+        var configuration = new string('[', 10_000) + new string(']', 10_000);
+
+        var diagnostic = (await AnalyzeAllAsync(CompileDomain(), configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
+        diagnostic.GetMessage().ShouldStartWith("hardslice.json is not valid JSON at line 1, column 65: nesting deeper than 64 levels. ");
+    }
+
+    [Fact]
+    public async Task Accepts_hardslice_json_nested_64_levels_deep()
+    {
+        var nested = new string('[', 62) + new string(']', 62);
+        var configuration = Configuration.Replace("[\"Messaging\", \"Persistence\", \"Behaviors\"]", nested);
+        configuration.ShouldContain(nested);
+
+        // The architecture tests validate 'shared': the analyzers only read it as JSON.
+        (await AnalyzeAllAsync(CompileDomain(), configuration)).ShouldBeEmpty();
+    }
+
+    // The project that holds the slices classifies with every contract: one of an assembly it neither is nor references,
+    // such as after a rename, would silence HS004 to HS006 and HS901.
+    [Fact]
+    public async Task Reports_HS900_in_the_project_of_the_slices_when_a_contract_names_an_assembly_it_does_not_see()
+    {
+        var configuration = Configuration.Replace("`1, MyApp\"", "`1, MyApp.Web\"").Replace("`2, MyApp\"", "`2, MyApp.Web\"");
+        var domain = CompileDomain();
+        var application = CompileApplication(domain.ToMetadataReference(), "namespace MyApp.Features.Bookings { public static class BookingsModule; }");
+
+        (await AnalyzeAllAsync(domain, configuration)).ShouldBeEmpty();
+        var diagnostics = await AnalyzeAllAsync(application, configuration);
+
+        diagnostics.Select(diagnostic => diagnostic.Id).Distinct().ShouldBe([ClassificationAnalyzer.ConfigurationId]);
+        diagnostics.Select(diagnostic => diagnostic.GetMessage().Split(". ")[0]).ShouldBe(
+            [
+                "contract 'contracts.command' of hardslice.json, 'MyApp.Shared.Messaging.ICommand`1', names assembly 'MyApp.Web', which is neither project 'MyApp' nor one of its references",
+                "contract 'contracts.query' of hardslice.json, 'MyApp.Shared.Messaging.IQuery`1', names assembly 'MyApp.Web', which is neither project 'MyApp' nor one of its references",
+                "contract 'contracts.requestHandler' of hardslice.json, 'MyApp.Shared.Messaging.IRequestHandler`2', names assembly 'MyApp.Web', which is neither project 'MyApp' nor one of its references",
+                "contract 'contracts.domainEventHandler' of hardslice.json, 'MyApp.Shared.Messaging.IDomainEventHandler`1', names assembly 'MyApp.Web', which is neither project 'MyApp' nor one of its references"
+            ],
+            ignoreOrder: true);
+        diagnostics.First().GetMessage().ShouldEndWith(
+            "Fix: restore hardslice.json, or the name of the project that declares 'MyApp.Shared.Messaging.ICommand`1', from version control. "
+            + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
+    }
+
+    // Without 'MyApp.Features', a project only references some contracts: the others stay invisible, as in the domain.
+    [Fact]
+    public async Task Does_not_require_an_unseen_assembly_in_a_project_without_slices()
+    {
+        var configuration = Configuration.Replace("`1, MyApp\"", "`1, MyApp.Web\"").Replace("`2, MyApp\"", "`2, MyApp.Web\"");
+        var application = CompileApplication(CompileDomain().ToMetadataReference(), "namespace MyApp.Shared.Clock { public sealed class Clock; }");
+
+        (await AnalyzeAllAsync(application, configuration)).ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task Reports_HS900_when_a_contract_key_is_missing()
     {

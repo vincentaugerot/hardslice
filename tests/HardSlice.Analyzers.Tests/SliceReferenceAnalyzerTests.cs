@@ -177,6 +177,24 @@ public sealed class SliceReferenceAnalyzerTests
         internal delegate void CancelBookingCallback([|ConfirmBookingCommand|] command);
         """);
 
+    // A documentation comment names a type without depending on it: only the code of the slice is checked.
+    [Fact]
+    public Task Ignores_types_from_another_slice_named_in_documentation_comments() => VerifyAsync(
+        ConfirmBookingSlice,
+        """
+        using MyApp.Features.Bookings.ConfirmBooking;
+
+        namespace MyApp.Features.Bookings.CancelBooking;
+
+        /// <summary>Same as <see cref="MyApp.Features.Bookings.ConfirmBooking.ConfirmBookingHandler.Handle(ConfirmBookingCommand)"/>,
+        /// after <see cref="ConfirmBookingCommand"/> and <seealso cref="ConfirmBookingResult{T}"/>.</summary>
+        internal sealed class CancelBookingHandler
+        {
+            /// <param name="command">A <see cref="ConfirmBookingHandler.Result"/>, never a <see cref="ConfirmBookingCommand"/>.</param>
+            public int Handle(int command) => command + [|ConfirmBookingHandler|].Order;
+        }
+        """);
+
     [Fact]
     public Task Reports_types_from_another_slice_used_as_or_with_generics() => VerifyAsync(
         ConfirmBookingSlice,

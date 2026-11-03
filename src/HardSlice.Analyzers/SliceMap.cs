@@ -33,6 +33,24 @@ internal sealed class SliceMap(Compilation compilation)
 
     public static string ModuleOf(string slice) => slice.Substring(0, slice.IndexOf('/'));
 
+    // Whether the compilation declares the namespace '<AssemblyName>.Features', which holds its slices.
+    public static bool HoldsFeatures(Compilation compilation)
+    {
+        if (string.IsNullOrEmpty(compilation.AssemblyName))
+            return false;
+
+        var ns = compilation.Assembly.GlobalNamespace;
+        foreach (var segment in compilation.AssemblyName!.Split('.').Append(FeaturesSegment))
+        {
+            if (ns.GetNamespaceMembers().FirstOrDefault(member => member.Name == segment) is not { } child)
+                return false;
+
+            ns = child;
+        }
+
+        return true;
+    }
+
     private string? ComputeSlice(INamespaceSymbol ns) =>
         ComputeFeaturesPath(ns) is { Length: >= 2 } path ? $"{path[0]}/{path[1]}" : null;
 

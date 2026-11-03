@@ -24,7 +24,8 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
         messageFormat: "query handler '{0}' {1}. Query handlers read without tracking and never write. Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
     private const string WriteFix = "move the write into a command slice";
 
@@ -49,7 +50,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                 return;
 
             // Without usable contracts, HS900 reports the configuration. Without EF Core, a handler has nothing to track.
-            var model = DomainModel.Create(start.Compilation, HardSliceConfiguration.Read(start.Options, start.CancellationToken));
+            var model = DomainModel.For(start.Compilation, start.Options, start.CancellationToken);
             if (model.Contract(ContractKeys.Query) is not { } query
                 || model.Contract(ContractKeys.RequestHandler) is not { } handler
                 || EntityContainment.Create(start.Compilation, model) is not { } containment
@@ -235,7 +236,17 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
 
         // Null when the query cannot be analyzed: obtained from a field, a property, a parameter or a method other than an
         // operator, rooted in a set of types that are not entities, or held by a local reassigned another way.
-        public static Query? Recognize(IOperation source, EntityFramework entityFramework, EntityContainment containment, CancellationToken cancellationToken)
+        public static Query? Recognize(IOperation source, EntityFramework entityFramework, EntityContainment containment, CancellationToken cancellationToken) =>
+            Recognize(source, entityFramework, containment, ImmutableHashSet<ILocalSymbol>.Empty.WithComparer(SymbolEqualityComparer.Default), cancellationToken);
+
+        // 'followed' holds the locals whose initializer is being recognized: code being typed, such as
+        // 'IQueryable<Booking> query = query.Where(...)', reaches a local from its own initializer, which is never a query.
+        private static Query? Recognize(
+            IOperation source,
+            EntityFramework entityFramework,
+            EntityContainment containment,
+            ImmutableHashSet<ILocalSymbol> followed,
+            CancellationToken cancellationToken)
         {
             var value = WithoutConversions(source);
             if (entityFramework.QueryElement(value.Type) is not { } elementType)
@@ -266,8 +277,9 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                             : null;
 
                     case ILocalReferenceOperation local:
-                        return Initializer(local, entityFramework) is { } initializer
-                            && Recognize(initializer, entityFramework, containment, cancellationToken) is { } initialized
+                        return !followed.Contains(local.Local)
+                            && Initializer(local, entityFramework) is { } initializer
+                            && Recognize(initializer, entityFramework, containment, followed.Add(local.Local), cancellationToken) is { } initialized
                             ? Create(initialized.Root, operators, elementType, initialized.Guaranteed, initialized.LastProjection)
                             : null;
 
