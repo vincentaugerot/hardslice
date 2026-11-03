@@ -11,6 +11,19 @@ fail() {
   exit 1
 }
 
+# Runs <command...> in a subshell with its output in <log>, and sets verification_status to its exit code. Bash ignores set -e in
+# every command an if, a while, a ! or a && or || list tests, the functions it calls and their subshells included: a verifier tested
+# that way would carry on past a failed step, such as a failed trusted check, and succeed. Call it as a plain command, never as a
+# condition, then test verification_status.
+run_logged() {
+  local log="$1"
+  shift
+  set +e
+  (set -e; "$@") > "$log" 2>&1
+  verification_status=$?
+  set -e
+}
+
 prepare_empty_dir() {
   local dir="$1"
   if [[ -e "$dir" ]]; then

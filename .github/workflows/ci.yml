@@ -55,7 +55,8 @@ jobs:
         run: scripts/test-template.sh
 
   # Separate job for the same reason: each fixture of demos/agent-fix/ must keep producing exactly its diagnostic on the current
-  # template, verify must keep rejecting each known workaround, and the reference correction of each rule must pass it.
+  # template, verify must keep rejecting each known workaround, and the reference correction of each rule must pass it; each
+  # recorded run of demos/add-feature/ must keep reaching its verdict.
   demo:
     runs-on: ubuntu-latest
     steps:
@@ -70,6 +71,9 @@ jobs:
 
       - name: Prepare every agent fix demonstration, then verify its reference correction and known workarounds
         run: scripts/demo-agent-fix.sh verify-reference "$(mktemp -d)"
+
+      - name: Verify every recorded add-feature run from its changes and its trace
+        run: scripts/demo-add-feature.sh verify-recorded "$(mktemp -d)"
 
   # Separate job: the CI that a generated solution ships, .github/workflows/hardslice.yml, run on that solution from a fresh runner.
   # Its actions are those of this workflow at the same pins (TemplatePackageTests): this job sets up the SDK of the generated

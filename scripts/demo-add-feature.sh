@@ -7,8 +7,8 @@
 #                                  into a clean tree, checks the expected elements, no TODO(hardslice): marker and the trusted check,
 #                                  then checks that the trace of the agent runs each dotnet new hardslice-* command.
 #   record <dir> <trace> <run>     keeps the changes of <dir>/Shop and the trace in demos/add-feature/runs/<run>/.
-#   verify-recorded <dir> [run...] generates Shop once, then verifies every recorded run, or the given ones, from its changes and its
-#                                  trace: each must reach the verdict written in its verdict file.
+#   verify-recorded <dir> [run...] generates Shop once, then verifies every recorded run, or the given ones, from its changes, with
+#                                  the renames of its changes.rename, and its trace: each must reach the verdict of its verdict file.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -204,9 +204,10 @@ verify() {
   trap - EXIT
 }
 
-# Keeps the changes of <dir>/Shop against its generated copy as an overlay, and the trace without the streaming events of Copilot
-# and with the work directory and the home folder replaced, as the fixtures of the hooks do, in their
-# path form and in the form of the project folder of Claude Code.
+# Keeps the changes of <dir>/Shop against its generated copy as an overlay, and the trace as agent-trace.py filter prints it:
+# without the streaming events of Copilot, the inventory of the CLI and the encrypted reasoning blocks, and with the work
+# directory and the home folder replaced, as the fixtures of the hooks do, in their path form and in the form of the project
+# folder of Claude Code.
 record() {
   work="$(cd "$1" && pwd)"
   local trace="$2"
@@ -233,20 +234,30 @@ record() {
   done < "$scratch/changed-paths"
   rm -rf -- "${scratch:?}"
 
-  WORK="$work" HOME_DIR="$HOME" python3 -I -c '
-import json, os, sys
-work, home = os.environ["WORK"], os.environ["HOME_DIR"]
-for line in sys.stdin:
-    if not line.strip():
-        continue
-    if json.loads(line).get("ephemeral") is True:
-        continue
-    # Claude Code also names its project folder after the work directory, with - in place of /.
-    line = line.replace(work, "/home/dev/work").replace(work.replace("/", "-"), "-home-dev-work")
-    sys.stdout.write(line.replace(home, "/home/dev"))
-' < "$trace" > "$run_dir/trace.jsonl"
+  "${trace_tool[@]}" filter "$trace" "$work" "$HOME" > "$run_dir/trace.jsonl"
   echo "==> Recorded $(find "$run_dir/changes" -type f | wc -l) changed files and the trace in $run_dir"
   echo "    Write its verdict (pass or fail) in $run_dir/verdict and its account in $run_dir/trace.md."
+}
+
+# The recorded changes stay as the agent wrote them, against the template of their run. <run>/changes.rename lists, one
+# "<old> <new>" pair of identifiers per line, the types of the generated solution that the template renamed since then: each is
+# renamed in the C# files of the changes, laid over <app>, before they are verified.
+apply_template_renames() {
+  local run_dir="$1"
+  local app="$2"
+  local old
+  local new
+  local extra
+  local path
+  [[ -f "$run_dir/changes.rename" ]] || return 0
+  while read -r old new extra || [[ -n "$old" ]]; do
+    [[ -n "$old" && "$old" != \#* ]] || continue
+    [[ "$old" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && "$new" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -z "$extra" ]] ||
+      fail "$run_dir/changes.rename: '$old $new $extra' is not a pair of identifiers."
+    while IFS= read -r path; do
+      OLD="$old" NEW="$new" perl -pi -e 's/\b\Q$ENV{OLD}\E\b/$ENV{NEW}/g' "$app/$path"
+    done < <(cd "$run_dir/changes" && find . -type f -name '*.cs' | sed 's|^[.]/||' | LC_ALL=C sort)
+  done < "$run_dir/changes.rename"
 }
 
 recorded_runs() {
@@ -278,8 +289,10 @@ verify_recorded() {
     echo "==> $run: laying the recorded changes over the generated $app_name"
     copy_sources "$generated_app" "$work/$run/$app_name"
     apply_overlay "$runs/$run/changes" "$work/$run/$app_name"
+    apply_template_renames "$runs/$run" "$work/$run/$app_name"
     log="$work/$run/verify.log"
-    if (verify_candidate "$generated_app" "$work/$app_name" "$work/$run/$app_name" "$runs/$run/trace.jsonl" "$work/$run/check") > "$log" 2>&1; then
+    run_logged "$log" verify_candidate "$generated_app" "$work/$app_name" "$work/$run/$app_name" "$runs/$run/trace.jsonl" "$work/$run/check"
+    if [[ "$verification_status" -eq 0 ]]; then
       actual=pass
     else
       actual=fail

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Agent | GitHub Copilot CLI 1.0.105, headless (`copilot -p --output-format json`), model `claude-sonnet-4.6` |
-| Mode | Native adapter: the hooks of `.github/hooks/hardslice.json` in a trusted folder; the skills of `.claude/skills/` and `.agents/skills/` |
+| Mode | Native adapter: the hooks of `.github/hooks/hardslice.json` in a trusted folder; the skills of `.claude/skills/` and `.agents/skills/`; the user configuration of `~/.copilot/`, without MCP server of the user |
 | Prompt | [`prompt.md`](../../prompt.md), unchanged |
 | Run | 5 min 26 s, 9 premium requests |
 | Command | As in [GitHub Copilot CLI](../../README.md#github-copilot-cli), with `--log-dir` and `--log-level all` to read the answers of the hooks |

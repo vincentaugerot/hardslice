@@ -58,11 +58,19 @@ scripts/demo-add-feature.sh record <dir> <trace> <run>
 scripts/demo-add-feature.sh verify-recorded <dir> [run...]
 ```
 
-`record` keeps the changes of the candidate as an overlay in `runs/<run>/changes/` and the trace in `runs/<run>/trace.jsonl`, without the streaming events of Copilot, and with the work folder and the home folder replaced by `/home/dev/work` and `/home/dev`. `verify-recorded` generates `Shop` once, lays the changes of each recorded run over a copy, runs the whole of `verify` on it with its trace, and fails unless each run reaches the verdict written in its `verdict` file, `pass` or `fail`.
+`record` keeps the changes of the candidate as an overlay in `runs/<run>/changes/` and the trace in `runs/<run>/trace.jsonl`, as `scripts/agent-trace.py filter` prints it: the raw output of the CLI without the streaming events of Copilot, without the inventory of the CLI that ran (the tools, commands, plugins, skills and local paths of the initialization event of Claude Code, its rate limit event, the tool list of the usage checkpoint of Copilot), without the encrypted reasoning blocks (signatures of Claude Code, opaque reasoning of Copilot), and with the work folder and the home folder replaced by `/home/dev/work` and `/home/dev`. Every other line is kept byte for byte, the readable reasoning and the output of the commands included. `verify-recorded` generates `Shop` once, lays the changes of each recorded run over a copy, runs the whole of `verify` on it with its trace, and fails unless each run reaches the verdict written in its `verdict` file, `pass` or `fail`. The changes stay as the agent wrote them, against the template of their day: when the template later renames a type of the generated solution, `runs/<run>/changes.rename` lists the pair, `<old> <new>`, and `verify-recorded` renames it in the C# files of the changes before verifying them. The four runs below hold one: `ShopFactory`, the factory of the integration tests, which PB-052 renamed `AppFactory` on 03/11/2026. The CI job `demo` runs `verify-recorded` on every recorded run.
 
 ## Running an agent
 
-Each run below started from its own `prepare`, in its native mode: the hooks and skills of the generated solution, the project settings only, no MCP server of the user. `SIDEHUB_*` variables were unset, `DOTNET_CLI_HOME` set as `prepare` prints, and `MSBUILDDISABLENODEREUSE=1` exported, as for the hook trials of [`docs/agents/support.md`](../../docs/agents/support.md).
+Each run below started from its own `prepare`, in its native mode: the hooks and skills of the generated solution. `DOTNET_CLI_HOME` was set as `prepare` prints, `MSBUILDDISABLENODEREUSE=1` exported and the variables of the tool that launches agents on the machine of the runs (`SIDEHUB_*`) unset, as for the hook trials of [`docs/agents/support.md`](../../docs/agents/support.md). Each CLI ran as the same user of that machine, with its own home folder:
+
+| CLI | What it read outside the solution |
+|---|---|
+| Claude Code | No user setting, hook, skill, plugin or MCP server: `--setting-sources project` leaves out the user settings, with their hooks, skills and plugins, and `--strict-mcp-config` every MCP server. The CLI still offered the skills and plugins built into it; both runs loaded the four skills of the solution and no other. |
+| Codex | Its user configuration, `~/.codex/config.toml`, which sets the reasoning effort `xhigh`, and the user skills of `~/.agents/skills/`: its first command read `brainstorming`, a third-party skill of that folder, with the skills of the solution. Its trace keeps the text of that skill, as the output of the command. It calls no MCP tool. |
+| GitHub Copilot CLI | Its user configuration, `~/.copilot/`, without any MCP server of the user: the tools its usage checkpoint listed were those built into the CLI, its GitHub MCP server included. It loaded `add-module` and no other skill. |
+
+These runs are therefore not isolated from the machine: a run in an empty home folder, which every CLI would read as a new user, is left to the runner of the benchmark planned for v0.4.
 
 ### Claude Code
 
@@ -112,7 +120,7 @@ Five runs on 01/11/2026, each from its own `prepare`, with the commands above. T
 |---|---|---|---|---|---|---|
 | [claude-sonnet-1](runs/claude-sonnet-1/trace.md) | Claude Code 2.1.316, `claude-sonnet-5-5` | native | 45 turns, 3 min 22 s, $0.53 | the four, at once | 14 `PostToolUse` blocks, `Stop` passed in 26 s | `pass` |
 | [claude-opus-2](runs/claude-opus-2/trace.md) | Claude Code 2.1.316, `claude-opus-5-5` | native | 81 turns, 6 min 26 s, $1.51 | the four, each at its step | 20 `PostToolUse` blocks, `Stop` passed in 18 s | `pass` |
-| [codex](runs/codex/trace.md) | Codex CLI 0.165.0, `gpt-6-astra` | native, hooks approved in `/hooks` | 6 min 37 s, 1.57 M tokens | the four, read with `cat` | not reported by `codex exec --json`; `Stop` seen through its effects | `pass` |
+| [codex](runs/codex/trace.md) | Codex CLI 0.165.0, `gpt-6-astra` | native, hooks approved in `/hooks`, user configuration and skills | 6 min 37 s, 1.57 M tokens | the four, read with `cat`, and the user skill `brainstorming` | not reported by `codex exec --json`; `Stop` seen through its effects | `pass` |
 | [copilot](runs/copilot/trace.md) | Copilot CLI 1.0.105, `claude-sonnet-4.6` | native | 5 min 26 s, 9 premium requests | `add-module` only | 11 `postToolUse` answers, `agentStop` silent | `pass` |
 | [gemini](runs/gemini/trace.md) | Gemini CLI 0.64.0 | fallback | stopped at authentication (`UNSUPPORTED_CLIENT`) | | | not run |
 

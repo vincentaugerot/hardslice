@@ -331,13 +331,6 @@ apply_generic_workaround() {
   esac
 }
 
-# Runs verify_candidate in a subshell on <candidate_app>, keeping its output in <log>; returns its exit code.
-run_verify_candidate() {
-  local log="$1"
-  shift
-  (verify_candidate "$@") > "$log" 2>&1
-}
-
 verify_reference() {
   local selected
   selected="$(selected_rules "${@:2}")"
@@ -366,7 +359,8 @@ verify_reference() {
         apply_generic_workaround "$name" "$rule" "$candidate/$app_name"
       fi
       log="$candidate/verify.log"
-      if run_verify_candidate "$log" "$rule" "$generated_app" "$fixture_app" "$candidate/$app_name" "$candidate/verify"; then
+      run_logged "$log" verify_candidate "$rule" "$generated_app" "$fixture_app" "$candidate/$app_name" "$candidate/verify"
+      if [[ "$verification_status" -eq 0 ]]; then
         cat "$log" >&2
         fail "$rule: verify accepted the workaround '$name'."
       fi
@@ -377,7 +371,8 @@ verify_reference() {
     copy_sources "$fixture_app" "$candidate/$app_name"
     apply_overlay "$dir/reference" "$candidate/$app_name"
     log="$candidate/verify.log"
-    if ! run_verify_candidate "$log" "$rule" "$generated_app" "$fixture_app" "$candidate/$app_name" "$candidate/verify"; then
+    run_logged "$log" verify_candidate "$rule" "$generated_app" "$fixture_app" "$candidate/$app_name" "$candidate/verify"
+    if [[ "$verification_status" -ne 0 ]]; then
       cat "$log" >&2
       fail "$rule: verify rejected the reference correction."
     fi

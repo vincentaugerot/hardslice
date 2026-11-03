@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Agent | Codex CLI 0.165.0, headless (`codex exec --json`), model `gpt-6-astra`, reasoning effort `xhigh` (the configuration of the machine) |
-| Mode | Native adapter: the three hooks of `.codex/hooks.json`, approved one by one in `/hooks` before the run (approval removed from `~/.codex/config.toml` after it); the skills of `.agents/skills/` |
+| Mode | Native adapter: the three hooks of `.codex/hooks.json`, approved one by one in `/hooks` before the run (approval removed from `~/.codex/config.toml` after it); the skills of `.agents/skills/`; the user configuration of `~/.codex/config.toml` and the user skills of `~/.agents/skills/` (see [Running an agent](../../README.md#running-an-agent)) |
 | Prompt | [`prompt.md`](../../prompt.md), unchanged |
 | Run | 6 min 37 s, 1,555,463 input tokens (1,508,480 cached), 15,158 output tokens of which 4,029 of reasoning |
 | Command | As in [Codex](../../README.md#codex) |
