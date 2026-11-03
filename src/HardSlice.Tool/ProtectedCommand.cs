@@ -18,8 +18,20 @@ internal static class ProtectedCommand
         if (solution is null)
             return Cli.UsageError;
 
-        var paths = input.ReadToEnd()
-            .Split(['\0', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var text = input.ReadToEnd();
+        var records = text.Split(['\0', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        // Without -z, git quotes a name with a character other than printable ASCII (core.quotePath) and escapes it:
+        // "src/Modul\303\251/Directory.Build.props" names no protected entry. Such a name is refused, never read as safe.
+        if (!text.Contains('\0') && records.FirstOrDefault(record => record.StartsWith('"')) is { } quoted)
+        {
+            error.WriteLine(
+                $"error: {quoted} is quoted by git, which escapes the name of the file: protected cannot read it. "
+                + "Pass the paths separated by NUL characters, with git diff --name-only -z, which keeps every name as is.");
+            return Cli.UsageError;
+        }
+
+        var paths = records
             .Select(Normalize)
             .Where(path => path.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # PB-048: the CI workflow of a generated solution, .github/workflows/hardslice.yml, outside GitHub Actions.
 #   lint <solution>         validates the workflow with actionlint, shellcheck of its run steps included.
-#   run <solution> <job>    runs the run steps of one job in order, in the root of the solution, as a runner does:
-#                           bash --noprofile --norc -eo pipefail, the steps sharing the environment of this script.
+#   run <solution> <job>    runs the run steps of one job in order, in the root of the solution, with the shell that a Linux
+#                           runner gives them: bash --noprofile --norc -eo pipefail with shell: bash (on the step, in the
+#                           defaults of its job or of the workflow), bash -e without shell, which does not fail a pipe on
+#                           its first command. The steps share the environment of this script.
 # run skips the steps that use an action: the caller reproduces them, as the generated-workflow job of ci.yml does with the
 # same actions at the same pins (TemplatePackageTests checks the pins). The expressions of the workflow are not evaluated:
-# the caller sets the variables that a step reads in its env, and a run step with any key but name, env and run is refused.
+# the caller sets the variables that a step reads in its env, and a run step with any key but name, env, shell and run, or
+# with a shell other than bash, is refused.
 # actionlint and yq run in containers pinned by digest: it needs a Docker-compatible container runtime.
 set -euo pipefail
 
@@ -54,14 +57,23 @@ case "$command" in
         echo "==> $job, step $((index + 1)): $(yq "$step.uses"), reproduced by the caller"
         continue
       fi
-      keys="$(yq "$step | keys | .[] | select(. != \"name\" and . != \"env\" and . != \"run\")")"
+      keys="$(yq "$step | keys | .[] | select(. != \"name\" and . != \"env\" and . != \"shell\" and . != \"run\")")"
       if [[ -n "$keys" ]]; then
         echo "error: step $((index + 1)) of the job $job has keys that this script does not reproduce: ${keys//$'\n'/, }." >&2
         exit 1
       fi
+      shell="$(yq "$step.shell // .jobs.$job.defaults.run.shell // .defaults.run.shell // \"\"")"
+      case "$shell" in
+        bash) shell_command=(bash --noprofile --norc -eo pipefail) ;;
+        "") shell_command=(bash -e) ;;
+        *)
+          echo "error: step $((index + 1)) of the job $job runs with the shell '$shell', which this script does not reproduce." >&2
+          exit 1
+          ;;
+      esac
       yq "$step.run" > "$step_file"
-      echo "==> $job, step $((index + 1)): $(yq "$step.name // \"run\"")"
-      (cd "$solution" && bash --noprofile --norc -eo pipefail "$step_file")
+      echo "==> $job, step $((index + 1)): $(yq "$step.name // \"run\""), with ${shell_command[*]}"
+      (cd "$solution" && "${shell_command[@]}" "$step_file")
     done
     ;;
   *)

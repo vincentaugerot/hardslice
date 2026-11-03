@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace HardSlice.Tool.Tests;
 
@@ -101,6 +102,11 @@ public sealed class ClaudeHookTests : IDisposable
     [InlineData(".github/workflows/hardslice.yml", ".github/workflows/hardslice.yml")]
     [InlineData("src/../scripts/check.sh", "scripts/")]
     [InlineData("SCRIPTS/check.sh", "scripts/")]
+    [InlineData("src/Demo/.globalconfig", ".globalconfig")]
+    [InlineData("Directory.Build.rsp", "Directory.Build.rsp")]
+    [InlineData(".agents/skills/add-slice/SKILL.md", ".agents/")]
+    [InlineData("Directory.Solution.props", "Directory.Solution.props")]
+    [InlineData("nuget.config", "nuget.config")]
     public void The_edit_of_a_protected_file_is_refused_with_the_reason(string file, string entry)
     {
         var runner = new FakeRunner();
@@ -340,13 +346,16 @@ public sealed class ClaudeHookTests : IDisposable
         hook.GetProperty("timeout").GetInt32().ShouldBe(timeout);
     }
 
-    // The refusal sends the agent to "Forbidden" of AGENTS.md, which names every file that the hook protects.
+    // The refusal sends the agent to "Forbidden" of AGENTS.md, whose list of protected files is the only one written for agents,
+    // which the skills link to: it names exactly the entries that the hooks and the CI protect, no more, no less.
     [Fact]
-    public void Forbidden_in_AGENTS_md_names_every_protected_file()
+    public void Forbidden_in_AGENTS_md_lists_exactly_the_protected_files()
     {
         var forbidden = File.ReadAllText(Path.Combine(Repository.Template, "AGENTS.md")).Split("## Forbidden")[1];
+        var list = forbidden.Split('\n').Where(line => line.StartsWith("Protected files: ", StringComparison.Ordinal)).ShouldHaveSingleItem();
+        var named = Regex.Matches(list.Split(". ")[0], "`(?<entry>[^`]+)`").Select(match => match.Groups["entry"].Value);
 
-        ProtectedFiles.Entries("MyApp").ShouldAllBe(entry => forbidden.Contains($"`{entry}`", StringComparison.Ordinal));
+        named.Order(StringComparer.Ordinal).ShouldBe(ProtectedFiles.Entries("MyApp").Order(StringComparer.Ordinal));
     }
 
     private (int ExitCode, string Output, string Error) Hook(string eventName, string payload, FakeRunner runner, bool copilot = false)

@@ -6,10 +6,17 @@ namespace HardSlice.Tool;
 // and the CI of the solution fails a pull request that changes one without the approval of a maintainer (dotnet hardslice protected).
 internal static class ProtectedFiles
 {
-    // Build and analyzer settings that a copy in any folder of the solution would override for the projects below it.
-    private static readonly string[] AnyFolderFiles = [".editorconfig", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props"];
+    // Build and analyzer settings that a copy in any folder of the solution would override for the projects below it. The SDK
+    // reads every .globalconfig of a parent folder of a compiled file, above HardSlice.All.globalconfig (global_level -1), and
+    // MSBuild every Directory.Build.rsp of the folder it builds and its parents, whose properties, such as RunAnalyzers=false,
+    // are global: no project file can set them back.
+    private static readonly string[] AnyFolderFiles =
+        [".editorconfig", ".globalconfig", "Directory.Build.props", "Directory.Build.targets", "Directory.Build.rsp", "Directory.Packages.props"];
 
-    private static readonly string[] RootFiles = ["hardslice.json", ".config/dotnet-tools.json", ".github/workflows/hardslice.yml"];
+    // Directory.Solution.props and .targets are imported by the build of the .slnx, and nuget.config chooses where
+    // HardSlice.Analyzers and the tool are restored from.
+    private static readonly string[] RootFiles =
+        ["hardslice.json", ".config/dotnet-tools.json", ".github/workflows/hardslice.yml", "Directory.Solution.props", "Directory.Solution.targets", "nuget.config"];
 
     // The protected entries as AGENTS.md and the instruction files name them, for the solution of the given name.
     public static IReadOnlyList<string> Entries(string solutionName) =>
@@ -24,8 +31,8 @@ internal static class ProtectedFiles
         return file ?? RootFolders(solutionName).FirstOrDefault(folder => relativePath.StartsWith(folder, StringComparison.OrdinalIgnoreCase));
     }
 
-    // .claude/, .codex/ and .github/hooks/ hold the hooks of Claude Code, Codex and Copilot CLI, and .claude/ the skills too;
-    // .githooks/ holds the pre-commit hook.
+    // .claude/, .codex/ and .github/hooks/ hold the hooks of Claude Code, Codex and Copilot CLI, .claude/ the skills too and
+    // .agents/ their copy, which Codex, Gemini CLI and Copilot CLI read; .githooks/ holds the pre-commit hook.
     private static string[] RootFolders(string solutionName) =>
-        ["scripts/", $"tests/{solutionName}.ArchitectureTests/", ".claude/", ".codex/", ".github/hooks/", ".githooks/"];
+        ["scripts/", $"tests/{solutionName}.ArchitectureTests/", ".claude/", ".agents/", ".codex/", ".github/hooks/", ".githooks/"];
 }

@@ -15,10 +15,11 @@ internal static class Cli
           check --build   The incremental build alone, errors only, then the TODO(hardslice): markers:
                           the verification after an edit. Its success does not mean the work is done.
           explain <rule>  Prints the sheet of a HardSlice rule, such as HS016.
-          protected       Reads paths relative to the root of the solution on the standard input, one per line or
-                          separated by NUL characters (git diff --name-only -z), and lists those that agents never edit.
-                          Exits 1 when one is protected, 0 when none is: the CI of the solution runs it on the files
-                          of a pull request, which a maintainer approves with the label hardslice-approved.
+          protected       Reads paths relative to the root of the solution on the standard input, separated by NUL
+                          characters (git diff --name-only -z, recommended) or one per line, and lists those that agents
+                          never edit. Exits 1 when one is protected, 0 when none is, 2 on a line that git quoted, which
+                          only -z avoids: the CI of the solution runs it on the files of a pull request, which a
+                          maintainer approves with the label hardslice-approved.
           hook <cli> <event>
                           The hooks of an agent: reads the payload of the CLI on the standard input, refuses the edit
                           of a protected file, runs check --build after the edit of a .cs file and check before the

@@ -54,4 +54,4 @@ These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the c
 - Put an invariant in a handler, a validator or an endpoint instead of the aggregate.
 - Leave an empty test or an assertion that checks nothing in place of the `TODO(hardslice):` marker.
 - Suppress a HardSlice diagnostic, lower its severity or turn the analyzers off.
-- Edit a protected file: `.editorconfig`, `hardslice.json`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `.config/dotnet-tools.json`, `scripts/`, `tests/MyApp.ArchitectureTests/`, `.claude/` and `.agents/`.
+- Create, edit or delete a protected file: the list of [Forbidden](../../../AGENTS.md#forbidden) names them all.

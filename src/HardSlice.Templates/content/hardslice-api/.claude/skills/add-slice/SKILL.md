@@ -54,4 +54,4 @@ These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the c
 - Put a business rule in the handler, the validator or the endpoint.
 - Leave an empty validator or an empty test, or write a placeholder file, to satisfy a rule.
 - Suppress a HardSlice diagnostic, lower its severity or turn the analyzers off.
-- Edit a protected file: `.editorconfig`, `hardslice.json`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `.config/dotnet-tools.json`, `scripts/`, `tests/MyApp.ArchitectureTests/`, `.claude/` and `.agents/`.
+- Create, edit or delete a protected file: the list of [Forbidden](../../../AGENTS.md#forbidden) names them all.

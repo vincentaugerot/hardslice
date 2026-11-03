@@ -11,16 +11,21 @@ internal sealed class TemporarySolution : IDisposable
         Root = Directory.CreateTempSubdirectory("hardslice-tool-").FullName;
         Directory.CreateDirectory(Path.Combine(Root, ".config"));
         File.WriteAllText(Path.Combine(Root, ".config", "dotnet-tools.json"), "{}");
-        File.WriteAllText(Path.Combine(Root, $"{name}.slnx"), "<Solution />");
         WritePackages($"""<GlobalPackageReference Include="HardSlice.Analyzers" Version="{analyzerVersion ?? ToolVersion.Current}" />""");
+        WriteProjects([.. TestProjects.Select(project => (project, true))]);
     }
+
+    // The test projects that the full check runs, which it requires in the .slnx.
+    public IReadOnlyList<string> TestProjects =>
+        [.. new[] { "Tests", "ArchitectureTests", "IntegrationTests" }.Select(suffix => $"tests/{_name}.{suffix}/{_name}.{suffix}.csproj")];
 
     public string Root { get; }
 
     public void WritePackages(string items) =>
         File.WriteAllText(Path.Combine(Root, "Directory.Packages.props"), $"<Project><ItemGroup>{items}</ItemGroup></Project>");
 
-    // Lists the projects in the .slnx, each with an assets file when restored, written after the project file.
+    // Lists the projects in the .slnx instead of those listed before, each with an assets file when restored, written after
+    // the project file, and without one otherwise.
     public void WriteProjects(params (string Path, bool Restored)[] projects)
     {
         var restoredAt = DateTime.UtcNow;
@@ -30,12 +35,16 @@ internal sealed class TemporarySolution : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             File.WriteAllText(file, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
             File.SetLastWriteTimeUtc(file, restoredAt.AddMinutes(-10));
+            var assets = Path.Combine(Path.GetDirectoryName(file)!, "obj", "project.assets.json");
             if (restored)
             {
-                var assets = Path.Combine(Path.GetDirectoryName(file)!, "obj", "project.assets.json");
                 Directory.CreateDirectory(Path.GetDirectoryName(assets)!);
                 File.WriteAllText(assets, "{}");
                 File.SetLastWriteTimeUtc(assets, restoredAt);
+            }
+            else if (File.Exists(assets))
+            {
+                File.Delete(assets);
             }
         }
 

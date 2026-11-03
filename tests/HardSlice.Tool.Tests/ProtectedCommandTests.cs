@@ -21,6 +21,15 @@ public sealed class ProtectedCommandTests : IDisposable
     [InlineData(".github/hooks/hardslice.json", ".github/hooks/")]
     [InlineData(".githooks/pre-commit", ".githooks/")]
     [InlineData(".github/workflows/hardslice.yml", ".github/workflows/hardslice.yml")]
+    [InlineData("src/Demo/.globalconfig", ".globalconfig")]
+    [InlineData(".globalconfig", ".globalconfig")]
+    [InlineData("Directory.Build.rsp", "Directory.Build.rsp")]
+    [InlineData("src/Demo/Directory.Build.rsp", "Directory.Build.rsp")]
+    [InlineData("Directory.Solution.props", "Directory.Solution.props")]
+    [InlineData("Directory.Solution.targets", "Directory.Solution.targets")]
+    [InlineData("nuget.config", "nuget.config")]
+    [InlineData("NuGet.Config", "nuget.config")]
+    [InlineData(".agents/skills/add-slice/SKILL.md", ".agents/")]
     public void A_protected_path_is_listed_with_its_entry_and_exits_1(string path, string entry)
     {
         var (exitCode, output, error) = Run($"src/Demo/Program.cs\n{path}\nREADME.md\n");
@@ -35,10 +44,11 @@ public sealed class ProtectedCommandTests : IDisposable
     {
         var (exitCode, output, error) = Run(
             "src/Demo/Program.cs\ntests/Demo.Tests/Features/Bookings/ConfirmBooking/ConfirmBookingTests.cs\n"
-            + ".github/workflows/deploy.yml\ndocs/hardslice.json.md\nsrc/Demo/scripts/Seed.cs\ntests/Demo.ArchitectureTestsHelpers/Helper.cs\n");
+            + ".github/workflows/deploy.yml\ndocs/hardslice.json.md\nsrc/Demo/scripts/Seed.cs\ntests/Demo.ArchitectureTestsHelpers/Helper.cs\n"
+            + "src/Demo/nuget.config\nsrc/Demo/.agents/notes.md\n");
 
         exitCode.ShouldBe(0);
-        output.ShouldBe($"HardSlice: none of the 6 paths read is protected.{Environment.NewLine}");
+        output.ShouldBe($"HardSlice: none of the 8 paths read is protected.{Environment.NewLine}");
         error.ShouldBeEmpty();
     }
 
@@ -72,6 +82,31 @@ public sealed class ProtectedCommandTests : IDisposable
 
         exitCode.ShouldBe(ProtectedCommand.Found);
         output.ShouldBe($"HardSlice: 'name/Directory.Build.targets' is protected (Directory.Build.targets).{Environment.NewLine}");
+    }
+
+    // Without -z, git quotes a name with a character other than printable ASCII and escapes it (core.quotePath): the name is no
+    // longer the one of the file, which could hide a protected one, so the line is refused rather than read as safe.
+    [Theory]
+    [InlineData("src/Demo/Program.cs\n\"src/Modul\\303\\251/Directory.Build.props\"\n")]
+    [InlineData("\"scripts/caf\\303\\251.sh\"\n")]
+    public void A_line_quoted_by_git_exits_2_and_recommends_z(string input)
+    {
+        var (exitCode, output, error) = Run(input);
+
+        exitCode.ShouldBe(Cli.UsageError);
+        output.ShouldBeEmpty();
+        error.ShouldStartWith($"error: {input.Split('\n').First(line => line.StartsWith('"'))} is quoted by git");
+        error.ShouldContain("git diff --name-only -z");
+    }
+
+    // With -z, git quotes no name: a name that starts with a quote is a real one, read as is.
+    [Fact]
+    public void With_NUL_separators_a_name_starting_with_a_quote_is_read_as_is()
+    {
+        var (exitCode, output, _) = Run("\"odd/Directory.Build.rsp\0src/Demo/Program.cs\0");
+
+        exitCode.ShouldBe(ProtectedCommand.Found);
+        output.ShouldBe($"HardSlice: '\"odd/Directory.Build.rsp' is protected (Directory.Build.rsp).{Environment.NewLine}");
     }
 
     // The CI reads code 1 as a protected file that a maintainer may approve: any other failure has another code.

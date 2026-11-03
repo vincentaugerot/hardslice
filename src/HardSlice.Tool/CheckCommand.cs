@@ -24,8 +24,8 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
 
     public const string ErrorsOnlyLogger = "-logger:Microsoft.Build.Logging.ConsoleLogger,Microsoft.Build;ErrorsOnly;NoSummary;Verbosity=minimal";
 
-    // Exit code when the solution cannot be verified: no solution, another analyzer version, no container runtime,
-    // or a TODO(hardslice): marker left.
+    // Exit code when the solution cannot be verified: no solution, another analyzer version, a test project left out of the
+    // .slnx, no container runtime, or a TODO(hardslice): marker left.
     public const int Failure = 1;
 
     public int Run(string currentDirectory, CheckMode mode)
@@ -41,8 +41,12 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
         };
     }
 
+    // The suffixes of the test projects that the full check runs with --no-build, after the build of the .slnx.
+    private static readonly string[] TestSuffixes = ["Tests", "ArchitectureTests", "IntegrationTests"];
+
     private int RunFull(Solution solution) =>
-        Step(solution, $"Building {solution.File}", "build", solution.File)
+        TestProjectsInSolution(solution)
+            ?? Step(solution, $"Building {solution.File}", "build", solution.File)
             ?? Step(solution, "Running unit tests", "test", "--project", solution.TestProject("Tests"), "--no-build")
             ?? Step(solution, "Running architecture tests", "test", "--project", solution.TestProject("ArchitectureTests"), "--no-build")
             ?? ContainerRuntime(solution)
@@ -69,6 +73,29 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
         output.WriteLine($"==> {title}");
         var exitCode = runner.Run("dotnet", arguments, solution.Root);
         return exitCode == 0 ? null : exitCode;
+    }
+
+    // dotnet test --no-build runs the binaries of the last build of a test project: one left out of the .slnx is no longer
+    // built, and its old binaries, with old copies of the assemblies of src/, would pass on code that they never saw.
+    private int? TestProjectsInSolution(Solution solution)
+    {
+        var projects = RestoreState.Projects(solution);
+        if (projects is null)
+        {
+            error.WriteLine($"error: {solution.File} is not valid XML: check cannot tell which projects it builds.");
+            return Failure;
+        }
+
+        var missing = TestSuffixes.Select(solution.TestProject)
+            .Where(project => !projects.Contains(project, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+        if (missing.Length == 0)
+            return null;
+
+        error.WriteLine(
+            $"error: {solution.File} does not build {string.Join(", ", missing)}: its tests would run on the binaries of an older build. "
+            + $"Add {(missing.Length == 1 ? "it" : "them")} back to {solution.File}, as the template generated it.");
+        return Failure;
     }
 
     private int? ContainerRuntime(Solution solution)

@@ -40,7 +40,7 @@ internal static class RestoreState
     }
 
     // The project paths of the .slnx, relative to its root, or null when it is not valid XML.
-    private static IReadOnlyList<string>? Projects(Solution solution)
+    public static IReadOnlyList<string>? Projects(Solution solution)
     {
         try
         {

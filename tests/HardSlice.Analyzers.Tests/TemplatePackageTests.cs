@@ -480,7 +480,9 @@ public sealed class TemplatePackageTests
         citedPaths.ShouldContain("scripts/check.sh");
         citedPaths.ShouldContain("scripts/check.ps1");
         citedPaths.ShouldContain("docs/rules/HS016.md");
+        // Forbidden names protected files that the template does not ship, so that an agent never creates one.
         citedPaths
+            .Except(["Directory.Solution.props"])
             .Where(path => !File.Exists(Path.Combine(templateRoot, path)) && !Directory.Exists(Path.Combine(templateRoot, path)))
             .ShouldBeEmpty("AGENTS.md cites paths that the generated solution does not contain.");
     }
@@ -501,6 +503,9 @@ public sealed class TemplatePackageTests
         preCommit.ShouldContain("if ! bash \"$check\"; then");
         Regex.Matches(workflow, @"^\s+run: (?<command>.+)$", RegexOptions.Multiline).Select(match => match.Groups["command"].Value.TrimEnd())
             .ShouldBe(["bash scripts/check.sh", "|"]);
+        // PB-053: without shell: bash, a runner runs bash -e without pipefail, and a failing git diff would feed protected nothing.
+        workflow.ShouldContain("\ndefaults:\n  run:\n    shell: bash\n");
+        Regex.Matches(workflow, @"^\s+shell:", RegexOptions.Multiline).Count.ShouldBe(1, "Every run step of the CI of the template runs with shell: bash.");
         var templatePins = ActionPins(workflow);
         templatePins.Length.ShouldBe(Regex.Matches(workflow, "uses:").Count, "Every action of the CI of the template is pinned by its full commit SHA.");
         templatePins.Select(pin => pin.Action).Distinct().ShouldBe(["actions/checkout", "actions/setup-dotnet"]);
@@ -604,12 +609,14 @@ public sealed class TemplatePackageTests
         return files;
     }
 
-    // The files that an agent never edits (PB-046, PB-048): a skill names them only to forbid them.
-    private static readonly string[] ProtectedPaths =
-    [
-        ".editorconfig", "hardslice.json", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props",
-        ".config/dotnet-tools.json", "scripts/", "tests/MyApp.ArchitectureTests/", ".claude/", ".agents/"
-    ];
+    // The files that an agent never edits (PB-046, PB-048, PB-053), as the list of "Forbidden" in AGENTS.md names them, the only
+    // one written for agents: ClaudeHookTests of HardSlice.Tool checks that it is exactly what the hooks and the CI protect.
+    private static string[] ProtectedPaths()
+    {
+        var agents = File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), "AGENTS.md"));
+        var list = agents.Where(line => line.StartsWith("Protected files: ", StringComparison.Ordinal)).ShouldHaveSingleItem();
+        return [.. Regex.Matches(list.Split(". ")[0], "`(?<path>[^`]+)`").Select(match => match.Groups["path"].Value)];
+    }
 
     // The Agent Skills format: a header with the name of the folder (lowercase words and hyphens, at most 64 characters) and a
     // description of at most 1024 characters, which says what the skill does and when to use it. The template holds the source
@@ -768,15 +775,16 @@ public sealed class TemplatePackageTests
             .ShouldBeEmpty($"{file} cites paths that only the Bookings sample holds.");
     }
 
-    // A skill recalls the forbidden workarounds in its own Never section, which links to Forbidden and names every protected file.
-    // Outside that section, it never names a protected file, except to run the check scripts.
+    // A skill recalls the forbidden workarounds in its own Never section, which links to Forbidden for the list of the protected
+    // files instead of copying it (PB-053: six copies had drifted from what the hooks protect). It never names a protected file,
+    // except to run the check scripts.
     [Theory]
     [MemberData(nameof(SkillFiles))]
     public void Skill_recalls_the_forbidden_workarounds_and_never_proposes_to_edit_a_protected_file(string file)
     {
         var lines = File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), file));
         var never = lines.SkipWhile(line => line != "## Never").ToArray();
-        var steps = string.Join('\n', lines.TakeWhile(line => line != "## Never"))
+        var steps = string.Join('\n', lines)
             .Replace("bash scripts/check.sh", "", StringComparison.Ordinal)
             .Replace("pwsh scripts/check.ps1", "", StringComparison.Ordinal);
         var neverText = string.Join('\n', never);
@@ -784,11 +792,11 @@ public sealed class TemplatePackageTests
         never.ShouldNotBeEmpty($"{file} has no Never section.");
         neverText.ShouldContain("](../../../AGENTS.md#forbidden)");
         neverText.ShouldContain("stop and explain the conflict");
-        foreach (var path in ProtectedPaths)
-        {
-            neverText.ShouldContain($"`{path}`", Case.Sensitive, $"The Never section of {file} does not name the protected {path}.");
-            steps.ShouldNotContain(path, Case.Sensitive, $"{file} names the protected {path} outside its Never section.");
-        }
+        neverText.ShouldContain("- Create, edit or delete a protected file: the list of [Forbidden](../../../AGENTS.md#forbidden) names them all.");
+        var protectedPaths = ProtectedPaths();
+        protectedPaths.ShouldContain(".agents/");
+        foreach (var path in protectedPaths)
+            steps.ShouldNotContain($"`{path}", Case.Sensitive, $"{file} names the protected {path}: link to the list of Forbidden instead.");
     }
 
     // GitHub anchors of the headings of a Markdown file: lowercase, punctuation removed, spaces as hyphens.

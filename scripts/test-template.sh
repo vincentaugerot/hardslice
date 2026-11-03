@@ -1615,6 +1615,42 @@ copilot_payload() {
     "$$" "$app" "$tool" "$file" "$active"
 }
 
+# PB-053: the files that would turn the rules off without touching a protected file of v0.2, a .globalconfig in a project folder,
+# which overrides HardSlice.All.globalconfig, a Directory.Build.rsp, whose properties are global, and a skill of .agents/, which
+# Codex, Gemini CLI and Copilot CLI read: the hook before an edit of Claude Code, Codex and Copilot CLI refuses to create each one.
+probe_analyzer_settings_hooks() {
+  local file entry
+  if [[ ! -f "$app/.agents/skills/add-slice/SKILL.md" ]]; then
+    echo "error: $app_name has no .agents/skills/add-slice/SKILL.md, the skill that Codex and Gemini CLI read." >&2
+    exit 1
+  fi
+  for file in "src/$app_name/.globalconfig|.globalconfig" "Directory.Build.rsp|Directory.Build.rsp" ".agents/skills/add-slice/SKILL.md|.agents/"; do
+    entry="${file#*|}"
+    file="${file%%|*}"
+    run_claude_hook PreToolUse "$(claude_payload PreToolUse "$app/$file")"
+    if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: '$file' is protected ($entry)"*"\"Forbidden\" of AGENTS.md"* ]]; then
+      printf '%s\n' "$hook_error" >&2
+      echo "error: the PreToolUse hook of Claude Code did not refuse to write $file with code 2 (code $hook_status)." >&2
+      exit 1
+    fi
+    run_hook codex PreToolUse "$(codex_payload PreToolUse "*** Begin Patch\\n*** Add File: $app/$file\\n+x\\n*** End Patch")"
+    if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: '$file' is protected ($entry)"*"\"Forbidden\" of AGENTS.md"* ]]; then
+      printf '%s\n' "$hook_error" >&2
+      echo "error: the PreToolUse hook of Codex did not refuse a patch that adds $file with code 2 (code $hook_status)." >&2
+      exit 1
+    fi
+    run_hook copilot preToolUse "$(copilot_payload create "$app/$file")"
+    if [[ "$hook_status" != 0 || -n "$hook_error" ]] ||
+      ! grep -Fq "\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HardSlice: \\u0027$file\\u0027 is protected ($entry)" "$work/hook-output"; then
+      printf '%s\n' "$hook_error" >&2
+      cat "$work/hook-output" >&2
+      echo "error: the preToolUse hook of Copilot CLI did not deny the creation of $file in JSON with code 0 (code $hook_status)." >&2
+      exit 1
+    fi
+  done
+  echo "    before an edit: Claude Code, Codex and Copilot CLI refuse src/$app_name/.globalconfig, Directory.Build.rsp and .agents/skills/add-slice/SKILL.md"
+}
+
 # Fails unless <file> of the solution runs dotnet hardslice hook <cli> <event> for each event.
 expect_hook_commands() {
   local file="$1" field="$2" cli="$3" event
@@ -1758,6 +1794,14 @@ probe_pre_commit_and_ci() {
     echo "error: the repository of $app_name runs the pre-commit hook before a human turns it on." >&2
     exit 1
   fi
+  # PB-053: the merge commit of a pull request always has a first parent. Without one, git diff fails: the job must fail with it,
+  # as shell: bash makes it with pipefail, instead of passing on the empty list that protected would read.
+  run_protected_files_job false
+  if [[ "$workflow_status" == 0 ]] || ! grep -Fq "HEAD^1" <<< "$workflow_output"; then
+    printf '%s\n' "$workflow_output" >&2
+    echo "error: the job protected-files of the workflow passed while git diff failed (code $workflow_status)." >&2
+    exit 1
+  fi
   (cd "$app" && chmod +x .githooks/pre-commit && git config core.hooksPath .githooks)
 
   domain_file="src/$app_name.Domain/$module/RoomOpening.cs"
@@ -1809,6 +1853,17 @@ CODE
     echo "error: the job protected-files of the workflow failed on a change of scripts/check.sh with the label hardslice-approved (code $workflow_status)." >&2
     exit 1
   fi
+  # PB-053: a .globalconfig of a project folder takes precedence over HardSlice.All.globalconfig and turns HS016 off in silence.
+  printf 'is_global = true\ndotnet_diagnostic.HS016.severity = none\n' > "$app/src/$app_name/.globalconfig"
+  app_git add "src/$app_name/.globalconfig"
+  app_git commit --quiet --no-verify --message "Turn HS016 off"
+  run_protected_files_job false
+  if [[ "$workflow_status" == 0 ]] || ! grep -Fq "HardSlice: 'src/$app_name/.globalconfig' is protected (.globalconfig)." <<< "$workflow_output" ||
+    ! grep -Fq "::error::This pull request changes protected files" <<< "$workflow_output"; then
+    printf '%s\n' "$workflow_output" >&2
+    echo "error: the job protected-files of the workflow did not fail on a .globalconfig that turns HS016 off (code $workflow_status)." >&2
+    exit 1
+  fi
   printf 'The rooms close on Sundays.\n' >> "$app/docs/decisions.md"
   app_git commit --quiet --no-verify --all --message "Change a decision"
   run_protected_files_job false
@@ -1817,7 +1872,7 @@ CODE
     echo "error: the job protected-files of the workflow failed on a change of documentation alone (code $workflow_status)." >&2
     exit 1
   fi
-  echo "    CI: protected-files fails on a change of scripts/check.sh, passes it with the label hardslice-approved, and passes a change of documentation"
+  echo "    CI: protected-files fails without a first parent, on a change of scripts/check.sh and on a .globalconfig that turns HS016 off, passes scripts/check.sh with the label hardslice-approved, and passes a change of documentation"
 
   app_git reset --quiet --hard "$baseline"
   rm -rf "${app:?}/.git"
@@ -2882,6 +2937,9 @@ probe_claude_hooks Bookings
 
 echo "==> Checking the hooks of Codex and Copilot CLI: protected files, the build after an edit and the check before handing back"
 probe_codex_and_copilot_hooks Bookings
+
+echo "==> Checking that the hooks of Claude Code, Codex and Copilot CLI refuse the files that would turn the analyzers off"
+probe_analyzer_settings_hooks
 
 echo "==> Checking the pre-commit hook and the CI of $app_name in a git repository: a commit that breaks a rule refused, a compliant one accepted, protected files"
 probe_pre_commit_and_ci Bookings

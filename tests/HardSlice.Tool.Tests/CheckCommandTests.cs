@@ -312,6 +312,54 @@ public sealed class CheckCommandTests
         error.ShouldContain("holds 2 .slnx solutions instead of one");
     }
 
+    // PB-053: dotnet test --no-build would run the old binaries of a test project that the build of the .slnx skips.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Check_fails_before_building_when_a_test_project_is_left_out_of_the_solution_and_names_it(int left)
+    {
+        using var solution = new TemporarySolution();
+        var kept = solution.TestProjects.Where((_, index) => index != left).ToArray();
+        solution.WriteProjects([("src/Demo/Demo.csproj", true), .. kept.Select(project => (project, true))]);
+        var runner = new FakeRunner();
+
+        var (exitCode, output, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(CheckCommand.Failure);
+        runner.Commands.ShouldBeEmpty();
+        output.ShouldBeEmpty();
+        error.ShouldBe(
+            $"error: Demo.slnx does not build {solution.TestProjects[left]}: its tests would run on the binaries of an older build. "
+            + $"Add it back to Demo.slnx, as the template generated it.{Environment.NewLine}");
+    }
+
+    [Fact]
+    public void Check_fails_when_the_solution_is_not_valid_XML()
+    {
+        using var solution = new TemporarySolution();
+        File.WriteAllText(Path.Combine(solution.Root, "Demo.slnx"), "<Solution>");
+        var runner = new FakeRunner();
+
+        var (exitCode, _, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(CheckCommand.Failure);
+        runner.Commands.ShouldBeEmpty();
+        error.ShouldStartWith("error: Demo.slnx is not valid XML");
+    }
+
+    // The incremental build after an edit runs no test: it never reads the test projects of the .slnx.
+    [Fact]
+    public void Check_build_does_not_require_the_test_projects_in_the_solution()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        var runner = new FakeRunner();
+
+        Check(runner, solution.Root, "--build").ExitCode.ShouldBe(0);
+
+        runner.Commands.ShouldBe([IncrementalBuild]);
+    }
+
     [Fact]
     public void Check_fails_outside_a_solution_with_a_tool_manifest()
     {

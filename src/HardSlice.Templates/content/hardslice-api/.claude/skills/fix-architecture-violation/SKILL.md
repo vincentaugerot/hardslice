@@ -42,4 +42,4 @@ These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the c
 - Delete, skip or weaken a test, or leave an empty validator, an empty test or a placeholder file, to satisfy a rule.
 - Use any workaround that the sheet of the rule forbids, such as reflection, `dynamic`, a public handler or moving a type of a slice into the namespace of its module.
 - Adapt the configuration or the contracts to the code.
-- Edit a protected file: `.editorconfig`, `hardslice.json`, `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `.config/dotnet-tools.json`, `scripts/`, `tests/MyApp.ArchitectureTests/`, `.claude/` and `.agents/`.
+- Create, edit or delete a protected file: the list of [Forbidden](../../../AGENTS.md#forbidden) names them all.

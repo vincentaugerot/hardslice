@@ -21,6 +21,11 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
+# bash -eo pipefail: a pipe fails with any of its commands, so that a failing git diff never feeds protected an empty list.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Integration tests start PostgreSQL with the Docker of the runner.
   check:

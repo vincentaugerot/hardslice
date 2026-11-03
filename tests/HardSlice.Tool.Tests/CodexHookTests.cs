@@ -77,6 +77,9 @@ public sealed class CodexHookTests : IDisposable
     [InlineData("*** Update File: {root}/.codex/hooks.json", ".codex/hooks.json", ".codex/")]
     [InlineData("*** Update File: {root}/.github/hooks/hardslice.json", ".github/hooks/hardslice.json", ".github/hooks/")]
     [InlineData("*** Update File: {root}/src/Demo/Program.cs\n*** Move to: {root}/hardslice.json", "hardslice.json", "hardslice.json")]
+    [InlineData("*** Add File: {root}/src/Demo/.globalconfig", "src/Demo/.globalconfig", ".globalconfig")]
+    [InlineData("*** Add File: {root}/Directory.Build.rsp", "Directory.Build.rsp", "Directory.Build.rsp")]
+    [InlineData("*** Add File: {root}/.agents/skills/add-slice/SKILL.md", ".agents/skills/add-slice/SKILL.md", ".agents/")]
     public void A_patch_that_touches_a_protected_file_is_refused_with_the_reason(string header, string file, string entry)
     {
         var runner = new FakeRunner();

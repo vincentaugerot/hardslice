@@ -81,6 +81,9 @@ public sealed class CopilotHookTests : IDisposable
     [InlineData("src/Demo/Directory.Build.props", "Directory.Build.props")]
     [InlineData(".github/hooks/hardslice.json", ".github/hooks/")]
     [InlineData(".claude/settings.json", ".claude/")]
+    [InlineData("src/Demo/.globalconfig", ".globalconfig")]
+    [InlineData("Directory.Build.rsp", "Directory.Build.rsp")]
+    [InlineData(".agents/skills/add-slice/SKILL.md", ".agents/")]
     public void The_edit_of_a_protected_file_is_denied_with_the_reason(string file, string entry)
     {
         var runner = new FakeRunner();
