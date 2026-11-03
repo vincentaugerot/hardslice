@@ -409,6 +409,12 @@ if ! printf '%s\n' "$check_output" | grep -Fq "$container_prerequisite"; then
 fi
 
 
+# dotnet test colors its report on a CI runner, even with its output captured: "failed <test>" there reads ESC[31mfailed ESC[m <test>.
+# The probes that read the names of the tests in its report remove the escape sequences first.
+strip_ansi() {
+  sed $'s/\e\\[[0-9;]*[A-Za-z]//g'
+}
+
 run_check() {
   case "$1" in
     check.sh) bash "$app/scripts/check.sh" ;;
@@ -1500,6 +1506,7 @@ $test_file:$(grep -c '' "$app/$test_file"): // TODO(hardslice): a marker left in
       status=0
       # shellcheck disable=SC2086 # No argument for the full check.
       check_output="$(run_check_mode "$script" $arguments 2>&1)" || status=$?
+      check_output="$(strip_ansi <<< "$check_output")"
       if [[ "$status" != 1 ]]; then
         printf '%s\n' "$check_output" >&2
         echo "error: scripts/$script $arguments exited with code $status instead of 1 despite TODO(hardslice): markers in $code_file and $test_file." >&2
@@ -2123,6 +2130,7 @@ expect_check_fails_on_todo_tests_only() {
     echo "error: scripts/check.sh passed on $description, whose tests are marked TODO(hardslice):." >&2
     exit 1
   fi
+  check_output="$(strip_ansi <<< "$check_output")"
   failures="$(sed -n 's/^failed \([^ ]*\) (.*/\1/p' <<< "$check_output" | LC_ALL=C sort -u)"
   if [[ "$failures" != "$expected_failures" || "$check_output" != *"TODO(hardslice): "* ]] ||
     grep -Eq '(error|warning) HS[0-9]{3}' <<< "$check_output"; then
@@ -2197,6 +2205,7 @@ probe_command_template() {
     echo "error: the integration tests of $app_name passed with a slice its module does not register." >&2
     exit 1
   fi
+  test_output="$(strip_ansi <<< "$test_output")"
   for expected in "failed $app_name.IntegrationTests.ProgramTests.Resolves_every_handler_and_validator_of_the_application_by_its_contract" \
     "'${name}Handler' as 'IRequestHandler<${name}Command, Guid>'" \
     "'${name}Validator' as 'IValidator<${name}Command>'" \
@@ -2347,6 +2356,7 @@ probe_query_template() {
     echo "error: the integration tests of $app_name passed with a query slice its module does not register." >&2
     exit 1
   fi
+  test_output="$(strip_ansi <<< "$test_output")"
   for expected in "failed $app_name.IntegrationTests.ProgramTests.Resolves_every_handler_and_validator_of_the_application_by_its_contract" \
     "'${name}Handler' as 'IRequestHandler<${name}Query, ${name}Dto>'" \
     "failed $app_name.IntegrationTests.Features.$module.$name.${name}Tests.Returns_404_for_an_unknown_aggregate"; do
@@ -2567,6 +2577,7 @@ probe_aggregate_template() {
     echo "error: scripts/check.sh passed on the aggregate $module/$name without its migration." >&2
     exit 1
   fi
+  check_output="$(strip_ansi <<< "$check_output")"
   failures="$(sed -n 's/^failed \([^ ]*\) (.*/\1/p' <<< "$check_output" | LC_ALL=C sort -u)"
   if [[ "$failures" != *"$app_name.IntegrationTests.Shared.Persistence.MigrationsTests.Model_has_no_changes_missing_from_the_migrations"* ]] ||
     grep -v "^$app_name\.IntegrationTests\." <<< "$failures" ||
@@ -2813,6 +2824,7 @@ probe_event_template() {
     echo "error: the integration tests of $app_name passed with reactions their modules do not register." >&2
     exit 1
   fi
+  test_output="$(strip_ansi <<< "$test_output")"
   for expected in "failed $app_name.IntegrationTests.ProgramTests.Resolves_every_handler_and_validator_of_the_application_by_its_contract" \
     "'RecordOn${event}Handler' as 'IDomainEventHandler<$event>'" \
     "'PrepareOn${other_event}Handler' as 'IDomainEventHandler<$other_event>'" \
