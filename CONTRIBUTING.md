@@ -1,6 +1,6 @@
 # Contributing to HardSlice
 
-HardSlice is in preview, with one maintainer. Issues and pull requests are welcome; for anything larger than a fix, open an issue first so that we agree on the change before you write it. A way around the protections of a generated solution is a security report: see [SECURITY.md](SECURITY.md).
+HardSlice is in preview, with one maintainer. Issues and pull requests are welcome. For anything larger than a fix, open an issue first so that we agree on the change before you write it. A way around the protections of a generated solution is a security report: see [SECURITY.md](SECURITY.md).
 
 ## Build and test
 
@@ -78,7 +78,7 @@ The mapping makes NuGet take `HardSlice.*` packages from your local folder only,
 
 ## Conventions
 
-- **Language.** Code, diagnostics, everything the packages ship and the user documentation (`README.md`, `docs/` outside `docs/design/`) are in English. The design documents of `docs/design/` are in French. No em dash anywhere, outside the raw traces of `demos/`: `git grep -nP '\x{2014}' -- . ':!demos'` must print nothing.
+- **Language.** Code, diagnostics, everything the packages ship and the user documentation (`README.md`, `docs/` outside `docs/design/`) are in English. The design documents of `docs/design/` are in French. No em dash anywhere, outside the raw traces of `demos/`: `git grep -nP '\x{2014}' -- . ':!demos'` must print nothing. No semicolon in the prose of this repository's documentation either (root guides, `docs/`, package and demonstration READMEs), checked by `ReadmeTests`: code keeps its own, and the files the template writes into a generated solution are not concerned.
 - **Tickets.** Work is planned in the [backlog](docs/design/product-backlog.md) as tickets `PB-xxx`, each with its observable result, its scope and an acceptance command. A finding that is fixed gets a test that failed before the fix: a unit test, a template test, or a probe of `scripts/test-template.sh`.
 - **Commits.** [Conventional Commits](https://www.conventionalcommits.org/), with the ticket at the end when there is one: `fix(analyzers): stay safe on code being typed (PB-054)`.
 - **A new rule** comes in one change with its descriptor in `AnalyzerReleases.Unshipped.md`, its sheet in `src/HardSlice.Templates/content/hardslice-api/docs/rules/`, its row in the rule table of `README.md` (checked by `ReadmeTests`) and in `AGENTS.md`, its analyzer tests (compliant, faulty and cross-assembly cases), a probe in `scripts/test-template.sh` with and without the sample, its line in the matrix of the analysis modes, and a performance measurement within the thresholds.

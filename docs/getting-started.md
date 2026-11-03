@@ -1,6 +1,6 @@
 # Getting started
 
-From nothing to a running API in five steps: install the templates, generate a solution, verify it, run it, then hand it to your agent. `scripts/test-template.sh` runs these commands in CI on every push, on the packages built from the commit, in temporary folders and on free ports, with and without the sample; each release runs steps 1 to 3 again from NuGet.org on a fresh runner.
+From nothing to a running API in five steps: install the templates, generate a solution, verify it, run it, then hand it to your agent. `scripts/test-template.sh` runs these commands in CI on every push, on the packages built from the commit, in temporary folders and on free ports, with and without the sample. Each release runs steps 1 to 3 again from NuGet.org on a fresh runner.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ In the folder of your choice:
 dotnet new hardslice-api --name Rooms
 ```
 
-The name becomes one safe .NET namespace that names every folder, project, assembly and namespace, `hardslice.json` included: `Acme.Rooms` stays `Acme.Rooms`, `my-app` becomes `my_app` and `1Rooms` becomes `_1Rooms`; only the output folder keeps the name as typed.
+The name becomes one safe .NET namespace that names every folder, project, assembly and namespace, `hardslice.json` included: `Acme.Rooms` stays `Acme.Rooms`, `my-app` becomes `my_app` and `1Rooms` becomes `_1Rooms`. Only the output folder keeps the name as typed.
 
 `Rooms` holds the `Bookings` sample: a `Booking` aggregate whose bookings of a room never overlap, guaranteed by PostgreSQL, and three slices, `ConfirmBooking`, `CancelBooking` and `GetBooking`, with their unit, integration and architecture tests. Its `AGENTS.md` maps the solution for an agent.
 

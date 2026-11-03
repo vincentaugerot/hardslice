@@ -46,12 +46,27 @@ public sealed partial class ReadmeTests
     {
         var repositoryRoot = FindRepositoryRoot();
 
-        Documentation(repositoryRoot)
+        ProseDocuments(repositoryRoot)
             .SelectMany(document => File.ReadAllLines(Path.Combine(repositoryRoot, document))
                 .Select((line, index) => (document, line, number: index + 1)))
             .Where(entry => entry.line.Contains('\u2014'))
             .Select(entry => $"{entry.document}:{entry.number}")
             .ShouldBeEmpty("The documentation must not contain an em dash.");
+    }
+
+    // No semicolon in prose either: code blocks, inline code, link targets, template comments and verbatim quotations
+    // in \u00ab \u00bb keep theirs.
+    [Fact]
+    public void Documentation_prose_has_no_semicolon()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        ProseDocuments(repositoryRoot)
+            .SelectMany(document => Prose(File.ReadAllText(Path.Combine(repositoryRoot, document))).Split('\n')
+                .Select((line, index) => (document, line, number: index + 1)))
+            .Where(entry => entry.line.Contains(';'))
+            .Select(entry => $"{entry.document}:{entry.number}")
+            .ShouldBeEmpty("The documentation must not contain a semicolon outside code.");
     }
 
     // PB-059: a package README is frozen on NuGet.org with its version, so it links to the tag of that version, where the path
@@ -164,6 +179,21 @@ public sealed partial class ReadmeTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
+    // The documentation of this repository: the root guides, docs/, the package READMEs and the READMEs of the demonstrations.
+    // Not what the template writes into a generated solution, nor the raw recordings of demos/.
+    private static string[] ProseDocuments(string repositoryRoot) =>
+        Documentation(repositoryRoot)
+            .Concat(PackageReadmes(repositoryRoot).Select(file => Path.GetRelativePath(repositoryRoot, file).Replace('\\', '/')))
+            .Concat(Directory.GetFiles(Path.Combine(repositoryRoot, "demos"), "README.md", SearchOption.AllDirectories)
+                .Select(file => Path.GetRelativePath(repositoryRoot, file).Replace('\\', '/'))
+                .Where(file => !file.Contains("/runs/", StringComparison.Ordinal)))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    // The prose of a Markdown page, lines kept: fenced and inline code, link targets, HTML comments and quotations in « » blanked out.
+    private static string Prose(string markdown) =>
+        NonProse().Replace(markdown, match => new string('\n', match.Value.Count(character => character == '\n')));
+
     private static IEnumerable<string> BrokenLinks(string repositoryRoot, string document)
     {
         var folder = Path.GetDirectoryName(document)!.Replace('\\', '/');
@@ -209,6 +239,9 @@ public sealed partial class ReadmeTests
 
     [GeneratedRegex(@"\]\((?<target>[^)#\s]*)(#(?<anchor>[^)\s]*))?\)")]
     private static partial Regex Link();
+
+    [GeneratedRegex(@"```.*?```|`[^`\n]*`|\]\([^)\s]*\)|<!--.*?-->|«[^»]*»", RegexOptions.Singleline)]
+    private static partial Regex NonProse();
 
     [GeneratedRegex(@"^#{1,6}\s+(?<title>.+?)\s*$", RegexOptions.Multiline)]
     private static partial Regex Heading();

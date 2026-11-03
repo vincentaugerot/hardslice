@@ -19,7 +19,7 @@ The table of the rules is in the [README](../README.md#rules), and every generat
 | [Agent support](agents/support.md) | what each CLI reads, at a dated version, and the trials behind each adapter |
 | [Analyzer cost](performance/analyzers.md) | what the analyzers add to a real build, and what the hooks cost, against their budgets |
 
-Both reports open with an English summary; their detail is in French.
+Both reports open with an English summary, but their detail is in French.
 
 ## Working on HardSlice
 
@@ -29,4 +29,4 @@ Both reports open with an English summary; their detail is in French.
 | [Releasing](releasing.md) | publish a preview on NuGet.org |
 | [Design](design/specifications.md) | read the specification, the [delivery plan](design/plan.md) and the [backlog](design/product-backlog.md) |
 
-`design/` holds the working documents of the project, in French: the product specification, the delivery plan and the backlog of every ticket, with their dated decisions. They are public so that the method stays transparent; they are not user documentation.
+`design/` holds the working documents of the project, in French: the product specification, the delivery plan and the backlog of every ticket, with their dated decisions. They are public so that the method stays transparent. They are not user documentation.

@@ -13,7 +13,7 @@ This is a demonstration, not a statistical benchmark: one run does not prove a g
 
 ## The fixtures
 
-Each fixture applies to the `hardslice-api` template with the Bookings sample, generated as `Demo`. It fails with the diagnostics of its rule and none other, each written in full in its `diagnostic.txt`. HS001, HS012, HS013, HS014, HS017 and HS018 come from the architecture tests, so the build and the unit tests of their fixture pass; every other one stops the build.
+Each fixture applies to the `hardslice-api` template with the Bookings sample, generated as `Demo`. It fails with the diagnostics of its rule and none other, each written in full in its `diagnostic.txt`. HS001, HS012, HS013, HS014, HS017 and HS018 come from the architecture tests, so the build and the unit tests of their fixture pass. Every other one stops the build.
 
 | Rule | The change the prompt describes | Reference correction | Specific workaround |
 |---|---|---|---|
@@ -78,11 +78,11 @@ scripts/demo-agent-fix.sh verify <rule> <dir>
 
 Fails unless all of the following hold:
 
-- a freshly regenerated fixture still produces exactly its diagnostics;
-- the candidate differs from that clean fixture only through C# files and project files under `src/`, `tests/Demo.Tests/` and `tests/Demo.IntegrationTests/`, and none of them is protected, as the trusted `dotnet hardslice protected` reads them;
-- a project file only goes back to its generated content, as the fix of HS001 does;
-- every test class of the fixture keeps its test attributes, method declarations and assertion lines, at its path or under the same file name in the same test project when it moves with its slice;
-- changed C# files contain no preprocessor directive, suppression, `hardslice-justification` comment, reflection, `dynamic`, skipped test, `if (false` or always-true assertion, no validator without any rule and no test file without any assertion;
+- a freshly regenerated fixture still produces exactly its diagnostics
+- the candidate differs from that clean fixture only through C# files and project files under `src/`, `tests/Demo.Tests/` and `tests/Demo.IntegrationTests/`, and none of them is protected, as the trusted `dotnet hardslice protected` reads them
+- a project file only goes back to its generated content, as the fix of HS001 does
+- every test class of the fixture keeps its test attributes, method declarations and assertion lines, at its path or under the same file name in the same test project when it moves with its slice
+- changed C# files contain no preprocessor directive, suppression, `hardslice-justification` comment, reflection, `dynamic`, skipped test, `if (false` or always-true assertion, no validator without any rule and no test file without any assertion
 - the accepted changes pass the trusted regenerated copy of `scripts/check.sh`: build without HardSlice diagnostic, unit, architecture and integration tests green, no `TODO(hardslice):` marker left.
 
 `verify` never invokes scripts, projects, packages or Git metadata from the candidate workspace. It validates the candidate first, copies only accepted changes into a clean tree, and only then builds and tests that code with the trusted check script.
@@ -118,11 +118,11 @@ Four rules ran with Claude Code 2.1.316 and `claude-sonnet-5-5` on 01/11/2026, w
 | Rule | Kind | Run | How the agent read the diagnostic | Hooks | Fix |
 |---|---|---|---|---|---|
 | [HS000](HS000/trace.md) | Suppression | 8 turns, 2 min 59 s, $0.13 | `dotnet build`, third command | 1 `PostToolUse` block, `Stop` passed | Suppression removed, projection without tracking restored |
-| [HS005](HS005/trace.md) | Messaging | 20 turns, 4 min 51 s, $0.24 | Its sheet, before any build | 5 `PostToolUse` blocks, `Stop` passed | A DTO of values in the slice; the endpoint answers 200 instead of 204 |
+| [HS005](HS005/trace.md) | Messaging | 20 turns, 4 min 51 s, $0.24 | Its sheet, before any build | 5 `PostToolUse` blocks, `Stop` passed | A DTO of values in the slice, and the endpoint answers 200 instead of 204 |
 | [HS008](HS008/trace.md) | Domain | 9 turns, 3 min, $0.13 | `dotnet build`, first command | 2 `PostToolUse` blocks, `Stop` passed | `WaitlistEntry` holds the `BookingId` |
 | [HS012](HS012/trace.md) | Architecture | 15 turns, 3 min 37 s, $0.22 | `scripts/check.sh`, first command, then its sheet | 2 `PostToolUse` blocks, `Stop` passed | The rule moved into `Booking`, shared with `Confirm` |
 
-None of the four agents loaded the skill that the diagnostic names: the diagnostic, the sheet and `AGENTS.md` were enough. None tried a workaround; every `PostToolUse` block was an intermediate state of its own edits. Each tried at least once to edit through `sed` or Python in `Bash`, refused by the allowed tools, and redid it with `Edit`.
+None of the four agents loaded the skill that the diagnostic names: the diagnostic, the sheet and `AGENTS.md` were enough. None tried a workaround: every `PostToolUse` block was an intermediate state of its own edits. Each tried at least once to edit through `sed` or Python in `Bash`, refused by the allowed tools, and redid it with `Edit`.
 
 ### The PB-008 run
 

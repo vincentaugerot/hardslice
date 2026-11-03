@@ -9,4 +9,4 @@ Two demonstrations show what an agent does with a HardSlice solution. Each has a
 
 Neither is a benchmark: each agent ran once, without repetition or comparison, on one machine, and the README of each demonstration says with which versions, models and settings. A benchmark with isolated runs is planned for v0.4.
 
-The recorded traces are the raw output of each CLI, without its local inventory and its encrypted reasoning, as [`scripts/agent-trace.py`](../scripts/agent-trace.py) `filter` prints them; the accounts next to them (`trace.md`) say what each agent did.
+The recorded traces are the raw output of each CLI, without its local inventory and its encrypted reasoning, as [`scripts/agent-trace.py`](../scripts/agent-trace.py) `filter` prints them. The accounts next to them (`trace.md`) say what each agent did.

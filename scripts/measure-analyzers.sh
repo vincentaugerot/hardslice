@@ -382,7 +382,7 @@ threshold_rows+="| C | Surcoût des analyseurs | $overhead_c % | ≤ $overhead_c
 
 case "$verdict" in
   pass) verdict_text="seuils respectés" ;;
-  arbitrage) verdict_text="seuils respectés par les analyseurs ; le build sans HardSlice ou un hook dépasse un budget, arbitrage à ouvrir" ;;
+  arbitrage) verdict_text="seuils respectés par les analyseurs, mais le build sans HardSlice ou un hook dépasse un budget : arbitrage à ouvrir" ;;
   unstable) verdict_text="seuil dépassé par une série instable : sans conclusion, à mesurer de nouveau sur un autre runner" ;;
   overhead) verdict_text="seuil dépassé par les analyseurs sur une série stable : une seconde exécution stable consécutive au-dessus du seuil confirme la régression" ;;
 esac
@@ -442,7 +442,7 @@ Seuils, sur la médiane :
 | Scénario | Mesure | Valeur | Seuil | Résultat |
 |---|---|---:|---:|---|
 ${threshold_rows}
-Vérifications des hooks des agents, une exécution de chauffe puis $runs exécutions mesurées, en secondes. D sur la fixture avec analyseurs ; E sur $app_name généré avec Bookings seul ($check_cs_files fichiers C# sous \`src/\` et \`tests/\`), conteneur PostgreSQL compris :
+Vérifications des hooks des agents, une exécution de chauffe puis $runs exécutions mesurées, en secondes. D sur la fixture avec analyseurs, E sur $app_name généré avec Bookings seul ($check_cs_files fichiers C# sous \`src/\` et \`tests/\`), conteneur PostgreSQL compris :
 
 | Scénario | Hook | Commande | Minimum | Médiane | Maximum | Dispersion | Budget | Résultat |
 |---|---|---|---:|---:|---:|---:|---:|---|

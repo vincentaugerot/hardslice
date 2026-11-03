@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-HardSlice is in preview: only the latest preview published on NuGet.org receives fixes. A fix ships in a new preview; a published version is never replaced.
+HardSlice is in preview: only the latest preview published on NuGet.org receives fixes. A fix ships in a new preview. A published version is never replaced.
 
 ## Reporting a vulnerability
 
@@ -12,4 +12,4 @@ What counts here includes a way for an agent to get around the protections of a 
 
 ## What the protections are not
 
-The hooks, the pre-commit hook and the generated CI stop accidental drift by coding agents; they are not a security boundary. An agent can write a file through the shell, and a human can turn the hooks off. Only a protected branch, with the check of `.github/workflows/hardslice.yml` required and the label `hardslice-approved` restricted to maintainers, makes them binding. A known gap of that kind is documented in the [agent loop](docs/agent-loop.md#limitations) rather than reported.
+The hooks, the pre-commit hook and the generated CI stop accidental drift by coding agents, but they are not a security boundary. An agent can write a file through the shell, and a human can turn the hooks off. Only a protected branch, with the check of `.github/workflows/hardslice.yml` required and the label `hardslice-approved` restricted to maintainers, makes them binding. A known gap of that kind is documented in the [agent loop](docs/agent-loop.md#limitations) rather than reported.

@@ -2,12 +2,12 @@
 
 ## Summary in English
 
-This report measures what the `HardSlice.Analyzers` rules add to a real build, and what the checks run by the hooks of the agents cost, against fixed thresholds and budgets. `scripts/measure-analyzers.sh` writes it: it replaces the latest measurement and adds a line to the history; the rest of the report, in French, is never rewritten. The `performance` job of the CI measures again on every push to `main` and on the pull requests that touch the analyzers, the template, the tool or the measurement.
+This report measures what the `HardSlice.Analyzers` rules add to a real build, and what the checks run by the hooks of the agents cost, against fixed thresholds and budgets. `scripts/measure-analyzers.sh` writes it: it replaces the latest measurement and adds a line to the history. The rest of the report, in French, is never rewritten. The `performance` job of the CI measures again on every push to `main` and on the pull requests that touch the analyzers, the template, the tool or the measurement.
 
 - **Fixture**: an application generated from the local packages with the Bookings sample, plus 20 synthetic modules of 10 slices each (about 360 C# files under `src/`).
-- **Scenarios**: A, an incremental build after a change inside a slice; B, after a change of the public API of an aggregate, which rebuilds the domain and its dependents; C, a full rebuild. Each is measured with and without the analyzers, five times after a warm-up, alternating. D is the check after an edit (`scripts/check.sh --build`) on the fixture; E the full check before an agent hands back (`scripts/check.sh`, integration tests included) on the application with Bookings alone.
-- **Thresholds**, on the median: A at most 10 s in total and 1 s of overhead; B at most 20 s and 2 s; C at most 15 % of overhead; D within the 10 s budget of the hook after an edit, E within the 60 s budget of the end hook.
-- **Latest verdict** (3 November 2026, 4 cores): every threshold holds. The analyzers add about 0.2 s to A and B, and about 11 % to the full rebuild C; D takes about 5 s and E about 20 s.
+- **Scenarios**: A (an incremental build after a change inside a slice), B (after a change of the public API of an aggregate, which rebuilds the domain and its dependents) and C (a full rebuild). Each is measured with and without the analyzers, five times after a warm-up, alternating. D is the check after an edit (`scripts/check.sh --build`) on the fixture, and E the full check before an agent hands back (`scripts/check.sh`, integration tests included) on the application with Bookings alone.
+- **Thresholds**, on the median: A at most 10 s in total and 1 s of overhead, B at most 20 s and 2 s, C at most 15 % of overhead, D within the 10 s budget of the hook after an edit, and E within the 60 s budget of the end hook.
+- **Latest verdict** (3 November 2026, 4 cores): every threshold holds. The analyzers add about 0.2 s to A and B, and about 11 % to the full rebuild C. D takes about 5 s and E about 20 s.
 - **Decision**: since the full check fits the 60 s budget, the end hook runs it as is, and no reduced check of the touched slices is shipped.
 
 Ce rapport mesure ce que les analyseurs de `HardSlice.Analyzers` ajoutent à un build réel, et fixe les seuils qu'ils doivent respecter (PB-019). Il mesure aussi les vérifications que lancent les hooks des agents, contre leurs budgets (PB-045). Chaque ticket de règle y enregistre sa mesure.
@@ -16,14 +16,14 @@ Ce rapport mesure ce que les analyseurs de `HardSlice.Analyzers` ajoutent à un 
 scripts/measure-analyzers.sh
 ```
 
-Le script remplace la dernière mesure ci-dessous et ajoute une ligne à l'historique ; le reste du rapport n'est jamais réécrit. `--report <fichier>` écrit dans un autre fichier, `--work-dir <dossier vide>` garde la fixture pour l'examiner. Le scénario E lance les tests d'intégration : le script exige un runtime de conteneurs compatible Docker. Compter quelques minutes (environ huit sur une machine de 4 cœurs).
+Le script remplace la dernière mesure ci-dessous et ajoute une ligne à l'historique. Le reste du rapport n'est jamais réécrit. `--report <fichier>` écrit dans un autre fichier, `--work-dir <dossier vide>` garde la fixture pour l'examiner. Le scénario E lance les tests d'intégration : le script exige un runtime de conteneurs compatible Docker. Compter quelques minutes (environ huit sur une machine de 4 cœurs).
 
 ## Fixture
 
 `PerfApp`, générée à chaque mesure depuis les paquets locaux, comme `scripts/test-template.sh` : `scripts/generate-app.sh` empaquette `HardSlice.Analyzers`, `HardSlice.Tool` et `HardSlice.Templates`, installe le template et génère la solution avec son exemple Bookings. `scripts/generate-perf-modules.sh` y ajoute ensuite 20 modules synthétiques, `Module01` à `Module20`, écrits comme Bookings et identiques d'une exécution à l'autre :
 
-- dans le Domain, un agrégat `Item` (`IAggregateRoot`), son identifiant, son statut et un événement `ItemCreated` ;
-- dans l'application, son mapping EF Core au niveau du module, la classe du module (enregistrements et routes) et 10 slices : 5 commandes (`CreateItem`, `RenameItem`, `AdjustQuantity`, `ArchiveItem`, `RestoreItem`), chacune avec son validateur, son handler et son endpoint, et 5 requêtes (`GetItem`, `ListItems`, `CountItems`, `FindItemsByName`, `ListArchivedItems`) ;
+- dans le Domain, un agrégat `Item` (`IAggregateRoot`), son identifiant, son statut et un événement `ItemCreated`.
+- dans l'application, son mapping EF Core au niveau du module, la classe du module (enregistrements et routes) et 10 slices : 5 commandes (`CreateItem`, `RenameItem`, `AdjustQuantity`, `ArchiveItem`, `RestoreItem`), chacune avec son validateur, son handler et son endpoint, et 5 requêtes (`GetItem`, `ListItems`, `CountItems`, `FindItemsByName`, `ListArchivedItems`).
 - `Program.cs` enregistre et expose chaque module après Bookings.
 
 Les modules synthétiques n'ont ni tests ni migration : la fixture sert au build, pas à la vérification complète. Le build porte sur toute la solution, projets de tests compris, comme celui d'un développeur.
@@ -38,9 +38,9 @@ Chacun est mesuré avec et sans analyseurs :
 
 | Scénario | Build | Modification avant chaque build |
 |---|---|---|
-| A | `dotnet build --no-restore` | corps de la méthode `Handle` de la slice `Module10/ListItems` (constante locale) ; l'assembly de référence ne change pas, seul `PerfApp` recompile |
-| B | `dotnet build --no-restore` | API publique de l'agrégat `Module10/Item` (méthode publique renommée) ; le Domain recompile, puis `PerfApp` et les projets de tests qui en dépendent |
-| C | `dotnet build --no-restore --no-incremental` | aucune ; build complet de référence |
+| A | `dotnet build --no-restore` | corps de la méthode `Handle` de la slice `Module10/ListItems` (constante locale). L'assembly de référence ne change pas, seul `PerfApp` recompile |
+| B | `dotnet build --no-restore` | API publique de l'agrégat `Module10/Item` (méthode publique renommée). Le Domain recompile, puis `PerfApp` et les projets de tests qui en dépendent |
+| C | `dotnet build --no-restore --no-incremental` | aucune : build complet de référence |
 
 Un build sans changement n'est pas mesuré : il peut ne rien analyser. Chaque build de A et B compile une valeur jamais écrite auparavant dans sa variante.
 
@@ -49,17 +49,17 @@ Les vérifications des hooks des agents sont mesurées par les scripts qu'appell
 | Scénario | Hook | Commande | Application | Modification avant chaque exécution |
 |---|---|---|---|---|
 | D | après chaque édition | `scripts/check.sh --build` | fixture avec analyseurs | celle de A |
-| E | avant que l'agent rende la main | `scripts/check.sh` | Bookings seul | commentaire ajouté à la fin du fichier de la slice `Bookings/GetBooking` ; `PerfApp` recompile, puis toute la vérification tourne, conteneur PostgreSQL des tests d'intégration compris |
+| E | avant que l'agent rende la main | `scripts/check.sh` | Bookings seul | commentaire ajouté à la fin du fichier de la slice `Bookings/GetBooking`. `PerfApp` recompile, puis toute la vérification tourne, conteneur PostgreSQL des tests d'intégration compris |
 
 Chaque exécution doit réussir : une vérification en échec arrête la mesure.
 
 ## Méthode
 
-- restauration et premier build de chaque variante avant toute mesure ; la restauration ne dépend pas des analyseurs et n'est pas mesurée (`--no-restore`) ;
-- serveur de compilation actif (comportement par défaut de `dotnet build`), partagé par les deux variantes ;
-- par scénario, un build de chauffe par variante, puis cinq builds mesurés par variante, en alternance avec puis sans analyseurs, pour que la dérive du runner touche les deux séries ; pour D et E, une exécution de chauffe puis cinq exécutions mesurées ;
-- durée totale de la commande `dotnet build`, ou du script pour D et E, horloge murale ; médiane des cinq mesures retenue, minimum et maximum publiés ;
-- un dernier build complet avec `-p:ReportAnalyzer=true` donne le temps cumulé de chaque analyseur HardSlice par projet. Il explique un surcoût ; seuls les seuils sur la durée totale font foi.
+- restauration et premier build de chaque variante avant toute mesure. La restauration ne dépend pas des analyseurs et n'est pas mesurée (`--no-restore`).
+- serveur de compilation actif (comportement par défaut de `dotnet build`), partagé par les deux variantes.
+- par scénario, un build de chauffe par variante, puis cinq builds mesurés par variante, en alternance avec puis sans analyseurs, pour que la dérive du runner touche les deux séries. Pour D et E, une exécution de chauffe puis cinq exécutions mesurées.
+- durée totale de la commande `dotnet build`, ou du script pour D et E, horloge murale. Médiane des cinq mesures retenue, minimum et maximum publiés.
+- un dernier build complet avec `-p:ReportAnalyzer=true` donne le temps cumulé de chaque analyseur HardSlice par projet. Il explique un surcoût, mais seuls les seuils sur la durée totale font foi.
 
 ## Seuils
 
@@ -71,7 +71,7 @@ Sur la médiane, pour la fixture, le SDK épinglé par `global.json` et le runne
 | B | ≤ 20 s | ≤ 2 s |
 | C | mesuré, sans seuil | ≤ 15 % |
 
-Le surcoût est la médiane avec analyseurs moins la médiane sans analyseurs ; pour C, rapporté à la médiane sans analyseurs. Un seuil ne change que par une décision du mainteneur consignée dans ce rapport, jamais automatiquement.
+Le surcoût est la médiane avec analyseurs moins la médiane sans analyseurs. Pour C, rapporté à la médiane sans analyseurs. Un seuil ne change que par une décision du mainteneur consignée dans ce rapport, jamais automatiquement.
 
 Les vérifications des hooks ont les budgets de la section 9 de la spécification, sur la médiane :
 
@@ -99,7 +99,7 @@ Un surcoût n'est une régression confirmée qu'après deux exécutions stables 
 
 Le workflow `.github/workflows/performance.yml` tourne sur `main` et sur les pull requests qui touchent les analyseurs, le template, les scripts de mesure ou le SDK épinglé :
 
-- le job `performance` mesure sur un runner `ubuntu-latest` neuf. Il échoue seulement si la mesure n'aboutit pas (build en échec, fixture invalide) ; une série instable ou un surcoût passe la main au job suivant ;
+- le job `performance` mesure sur un runner `ubuntu-latest` neuf. Il échoue seulement si la mesure n'aboutit pas (build en échec, fixture invalide). Une série instable ou un surcoût passe la main au job suivant.
 - le job `performance-rerun` ne tourne qu'après une série instable ou un surcoût, sur un autre runner neuf. Il réussit si la seconde mesure respecte les seuils (ou ne relève que le coût du build sans HardSlice). Il échoue si deux surcoûts stables se suivent, régression confirmée, et aussi si la seconde mesure reste instable ou ne donne qu'un surcoût non confirmé : relancer alors le workflow, aucune conclusion n'est possible sur ces exécutions.
 
 Chaque job publie la mesure dans son résumé GitHub Actions. Le rapport n'est pas commité par la CI : un ticket de règle enregistre sa mesure en lançant le script et en commitant ce fichier.
@@ -110,9 +110,9 @@ Les seuils des analyseurs sont ceux de PB-019.
 
 ### Vérification des hooks, 31/10/2026 (PB-045)
 
-Arbitrage de l'incrément v0.3 : la vérification complète, `dotnet hardslice check`, reste le seul verdict ; le hook après édition lance `scripts/check.sh --build` ; le hook avant de rendre la main lance `scripts/check.sh` tel quel si la mesure de `check` complet sur une application générée avec Bookings tient en 60 s, et sinon une vérification réduite aux slices touchées, `--affected`.
+Arbitrage de l'incrément v0.3 : la vérification complète, `dotnet hardslice check`, reste le seul verdict. Le hook après édition lance `scripts/check.sh --build`. Le hook avant de rendre la main lance `scripts/check.sh` tel quel si la mesure de `check` complet sur une application générée avec Bookings tient en 60 s, et sinon une vérification réduite aux slices touchées, `--affected`.
 
-Mesure du 31/10/2026 sur la machine locale (4 cœurs, voir la dernière mesure ci-dessous) : `scripts/check.sh` complet en 18,61 s de médiane (scénario E), `scripts/check.sh --build` en 4,86 s sur la fixture (scénario D), loin des budgets. Décision : le hook de fin lance `scripts/check.sh` ; `--affected` n'est pas livré, et `check.sh` refuse tout argument autre que `--build`. Le job `performance` mesure les deux sur `ubuntu-latest` à chaque exécution : un dépassement stable du budget de E rouvre la décision et le ticket qui livrerait `--affected`.
+Mesure du 31/10/2026 sur la machine locale (4 cœurs, voir la dernière mesure ci-dessous) : `scripts/check.sh` complet en 18,61 s de médiane (scénario E), `scripts/check.sh --build` en 4,86 s sur la fixture (scénario D), loin des budgets. Décision : le hook de fin lance `scripts/check.sh`. `--affected` n'est pas livré, et `check.sh` refuse tout argument autre que `--build`. Le job `performance` mesure les deux sur `ubuntu-latest` à chaque exécution : un dépassement stable du budget de E rouvre la décision et le ticket qui livrerait `--affected`.
 
 ## Dernière mesure
 
@@ -150,7 +150,7 @@ Seuils, sur la médiane :
 | B | Surcoût des analyseurs | 0.20 s | ≤ 2.00 s | respecté |
 | C | Surcoût des analyseurs | 10.9 % | ≤ 15 % | respecté |
 
-Vérifications des hooks des agents, une exécution de chauffe puis 5 exécutions mesurées, en secondes. D sur la fixture avec analyseurs ; E sur PerfApp généré avec Bookings seul (80 fichiers C# sous `src/` et `tests/`), conteneur PostgreSQL compris :
+Vérifications des hooks des agents, une exécution de chauffe puis 5 exécutions mesurées, en secondes. D sur la fixture avec analyseurs, E sur PerfApp généré avec Bookings seul (80 fichiers C# sous `src/` et `tests/`), conteneur PostgreSQL compris :
 
 | Scénario | Hook | Commande | Minimum | Médiane | Maximum | Dispersion | Budget | Résultat |
 |---|---|---|---:|---:|---:|---:|---:|---|
@@ -237,7 +237,7 @@ Ces temps se chevauchent (exécution concurrente) : ils expliquent un surcoût, 
 
 ## Historique
 
-Médianes en secondes, avec / sans analyseurs pour A, B et C ; avec analyseurs pour les hooks D et E, mesurés depuis PB-045 (« – » avant).
+Médianes en secondes, avec / sans analyseurs pour A, B et C. Avec analyseurs pour les hooks D et E, mesurés depuis PB-045 (« – » avant).
 
 | Date | Commit | Règles HardSlice | Runner | A | B | C | D | E | Verdict |
 |---|---|---|---|---:|---:|---:|---:|---:|---|

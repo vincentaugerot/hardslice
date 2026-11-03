@@ -15,7 +15,7 @@ HardSlice adds nothing to the runtime of your application: its analyzers run at 
 
 ## Status
 
-**Preview.** The first preview, `0.3.0-preview.1`, is being prepared for NuGet.org; until it is published, [try a local build of the packages](CONTRIBUTING.md#try-a-local-build-of-the-packages). The three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, share one version. A preview may change its rules, its template and its commands from one preview to the next; a generated solution keeps the template and the versions it was generated with. The [changelog](CHANGELOG.md) says what each version brings.
+**Preview.** The first preview, `0.3.0-preview.1`, is being prepared for NuGet.org. Until it is published, [try a local build of the packages](CONTRIBUTING.md#try-a-local-build-of-the-packages). The three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, share one version. A preview may change its rules, its template and its commands from one preview to the next, but a generated solution keeps the template and the versions it was generated with. The [changelog](CHANGELOG.md) says what each version brings.
 
 ## Getting started
 
@@ -28,13 +28,13 @@ cd Rooms
 bash scripts/check.sh     # or: pwsh scripts/check.ps1
 ```
 
-The check builds the solution and runs its unit, architecture and integration tests; it exits 0 when everything passes. `Rooms` holds a `Bookings` sample module (`--no-sample` leaves it out). Then ask your agent to read `AGENTS.md` and give it a feature: it generates each element with a template, completes it, and is not done until the check passes. For example, the command slice it would generate to extend a booking:
+The check builds the solution and runs its unit, architecture and integration tests. It exits 0 when everything passes. `Rooms` holds a `Bookings` sample module (`--no-sample` leaves it out). Then ask your agent to read `AGENTS.md` and give it a feature: it generates each element with a template, completes it, and is not done until the check passes. For example, the command slice it would generate to extend a booking:
 
 ```text
 dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
 ```
 
-[Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does; [Item templates](docs/item-templates.md) covers the five element templates.
+[Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the five element templates.
 
 ## What you get
 
@@ -65,7 +65,7 @@ A native adapter refuses an edit of the files that set the rules, hands the buil
 | [HS000](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS000.md) | Every suppression of a HardSlice rule in source, `#pragma warning disable` or `[SuppressMessage]`, carries a `// hardslice-justification: <reason>` comment of at least ten characters on its line or the line above. HS000 itself cannot be suppressed. | Analyzer at build time, test projects included |
 | [HS001](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS001.md) | The domain project depends on the base class library only: no EF Core, ASP.NET Core or dependency injection. | Architecture tests |
 | [HS003](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS003.md) | An endpoint never reaches the database: it sends a command or a query through `IMediator`. | Analyzer at build time |
-| [HS004](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS004.md) | A slice `Features/<Module>/<Slice>/` holds one request named after it (`<Slice>Command` or `<Slice>Query`), its handler `<Slice>Handler`, its static endpoint `<Slice>Endpoint` and, if any, its validator `<Slice>Validator`, or, for a reaction slice, one domain event handler `<Slice>Handler` without request nor endpoint; no request, handler or validator lives outside a slice, and the folder and the namespace of a slice hold the same types. | Analyzer at build time |
+| [HS004](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS004.md) | A slice `Features/<Module>/<Slice>/` holds one request named after it (`<Slice>Command` or `<Slice>Query`), its handler `<Slice>Handler`, its static endpoint `<Slice>Endpoint` and, if any, its validator `<Slice>Validator`, or, for a reaction slice, one domain event handler `<Slice>Handler` without request nor endpoint. No request, handler or validator lives outside a slice, and the folder and the namespace of a slice hold the same types. | Analyzer at build time |
 | [HS005](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS005.md) | A command handler returns an identifier, a DTO of values or nothing: never an entity, directly, in a collection, an array, a tuple, a generic envelope such as `Result<T>` or a DTO. | Analyzer at build time |
 | [HS006](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS006.md) | A query handler never writes through EF Core, never turns tracking back on nor reconfigures it, never calls `Find`, and starts each query that materializes an entity with `AsNoTracking()` in the handler itself. | Analyzer at build time |
 | [HS007](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS007.md) | An entity, root or child, has no `set` or `init` accessor reachable from outside its assembly, not even through a public interface, and no public field that is not `readonly`: its state changes through its methods. | Analyzer at build time |
@@ -89,7 +89,7 @@ Each generated solution carries these sheets in `docs/rules/`, and `dotnet hards
 
 ## Evidence
 
-- [Agent fix demonstrations](demos/agent-fix/README.md): for each blocking rule, a solution that breaks it fails with exactly the diagnostic of that rule, the reference fix passes, and every known workaround is rejected; Claude Code fixed four of them, guided by the diagnostic and its rule sheet. CI replays them on every push.
+- [Agent fix demonstrations](demos/agent-fix/README.md): for each blocking rule, a solution that breaks it fails with exactly the diagnostic of that rule, the reference fix passes, and every known workaround is rejected. Claude Code fixed four of them, guided by the diagnostic and its rule sheet. CI replays them on every push.
 - [Add-feature demonstration](demos/add-feature/README.md): Claude Code, Codex and Copilot CLI each delivered one business request (a module, two aggregates, a command, a query and a domain event with its reaction) through the templates, the check green and no protected file changed, as a verifier proves from their recorded traces.
 - [Analyzer cost](docs/performance/analyzers.md): on a solution of 21 modules, the analyzers add about 0.2 s to an incremental build after an edit, and the checks of the hooks hold their budgets of 10 s after an edit and 60 s before an agent hands back.
 
@@ -97,11 +97,11 @@ These are demonstrations, not a benchmark: each agent ran once. A benchmark with
 
 ## Known limitations
 
-- Only solutions generated by `hardslice-api` are supported; adding HardSlice to an existing solution is planned for v0.5.
-- PostgreSQL is the only database; SQL Server and Aspire are planned for v1.0.
+- Only solutions generated by `hardslice-api` are supported. Adding HardSlice to an existing solution is planned for v0.5.
+- PostgreSQL is the only database. SQL Server and Aspire are planned for v1.0.
 - Domain events are handled inside the transaction of the command: no outbox, no bus, no external effect in a handler.
 - Gemini CLI stays at the fallback level: it could not be tried, as it no longer serves personal Google accounts.
-- The hooks, the pre-commit hook and the generated CI stop accidental drift; they are not a security boundary until the branch is protected.
+- The hooks, the pre-commit hook and the generated CI stop accidental drift, but they are not a security boundary until the branch is protected.
 
 The limits of each rule, of the item templates and of the agent loop are in [Rules](docs/rules.md), [Item templates](docs/item-templates.md#limitations) and [Agent loop](docs/agent-loop.md#limitations).
 

@@ -28,12 +28,12 @@ This is a demonstration, not a statistical benchmark: no repetitions and no A/B 
 
 `verify` never runs anything from the agent's folder. It regenerates a trusted `Shop`, validates the candidate against it, copies only the accepted changes into a clean tree, and fails unless:
 
-- the candidate changes nothing but `AGENTS.md`, the C# files of `src/`, `tests/Shop.Tests/` and `tests/Shop.IntegrationTests/`, and the `.gitkeep` files of the module template: no project file, and no protected file as the trusted `dotnet hardslice protected` reads them;
-- no changed C# file holds a preprocessor directive (except those `dotnet ef` writes in a migration: `#nullable disable` and the `#pragma warning` of the obsolete warnings CS0612 and CS0618), a suppression, a `hardslice-justification` comment, reflection, `dynamic`, a skipped or always-true test, a validator without any rule or a test file without any assertion, as in [the fix demonstrations](../agent-fix/README.md);
-- every element is at the path where its template generates it: the module, both aggregates with their identifier, their mapping and their unit tests, both slices and their tests, the event, the reaction and its test, and the model snapshot of the migrations;
-- the module is registered in `Program.cs`, both endpoints and the reaction in `CatalogModule.cs`, `Product` raises `ProductRegistered`, the reaction handles it, the model snapshot maps `Product` and `Stock`, and the map of `AGENTS.md` names the module;
-- no `TODO(hardslice):` marker is left in `src/` or `tests/`;
-- the trusted `scripts/check.sh` passes: build without HardSlice diagnostic, unit, architecture and integration tests green;
+- the candidate changes nothing but `AGENTS.md`, the C# files of `src/`, `tests/Shop.Tests/` and `tests/Shop.IntegrationTests/`, and the `.gitkeep` files of the module template: no project file, and no protected file as the trusted `dotnet hardslice protected` reads them
+- no changed C# file holds a preprocessor directive (except those `dotnet ef` writes in a migration: `#nullable disable` and the `#pragma warning` of the obsolete warnings CS0612 and CS0618), a suppression, a `hardslice-justification` comment, reflection, `dynamic`, a skipped or always-true test, a validator without any rule or a test file without any assertion, as in [the fix demonstrations](../agent-fix/README.md)
+- every element is at the path where its template generates it: the module, both aggregates with their identifier, their mapping and their unit tests, both slices and their tests, the event, the reaction and its test, and the model snapshot of the migrations
+- the module is registered in `Program.cs`, both endpoints and the reaction in `CatalogModule.cs`, `Product` raises `ProductRegistered`, the reaction handles it, the model snapshot maps `Product` and `Stock`, and the map of `AGENTS.md` names the module
+- no `TODO(hardslice):` marker is left in `src/` or `tests/`
+- the trusted `scripts/check.sh` passes: build without HardSlice diagnostic, unit, architecture and integration tests green
 - the trace of the agent runs `dotnet new hardslice-module --name Catalog`, `hardslice-aggregate --name Product` and `--name Stock`, `hardslice-command --name RegisterProduct`, `hardslice-query --name GetProduct`, `hardslice-event --name ProductRegistered` and a `hardslice-event` with `--reaction Catalog/OpenStockOnProductRegistered`, whatever the order of their options.
 
 [`scripts/agent-trace.py`](../../scripts/agent-trace.py) reads the shell commands and the skills of a trace of Claude Code (`claude -p --output-format stream-json --verbose`), Codex (`codex exec --json`) or GitHub Copilot CLI (`copilot -p --output-format json`). The skills loaded through a skill tool are printed, not required: Codex reads a skill as a file, which the trace only shows as a command.
@@ -66,7 +66,7 @@ Each run below started from its own `prepare`, in its native mode: the hooks and
 
 | CLI | What it read outside the solution |
 |---|---|
-| Claude Code | No user setting, hook, skill, plugin or MCP server: `--setting-sources project` leaves out the user settings, with their hooks, skills and plugins, and `--strict-mcp-config` every MCP server. The CLI still offered the skills and plugins built into it; both runs loaded the four skills of the solution and no other. |
+| Claude Code | No user setting, hook, skill, plugin or MCP server: `--setting-sources project` leaves out the user settings, with their hooks, skills and plugins, and `--strict-mcp-config` every MCP server. The CLI still offered the skills and plugins built into it, but both runs loaded the four skills of the solution and no other. |
 | Codex | Its user configuration, `~/.codex/config.toml`, which sets the reasoning effort `xhigh`, and the user skills of `~/.agents/skills/`: its first command read `brainstorming`, a third-party skill of that folder, with the skills of the solution. Its trace keeps the text of that skill, as the output of the command. It calls no MCP tool. |
 | GitHub Copilot CLI | Its user configuration, `~/.copilot/`, without any MCP server of the user: the tools its usage checkpoint listed were those built into the CLI, its GitHub MCP server included. It loaded `add-module` and no other skill. |
 
@@ -114,16 +114,16 @@ GEMINI_CLI_TRUST_WORKSPACE=true gemini --approval-mode auto_edit --allowed-tools
 
 ## Runs
 
-Five runs on 01/11/2026, each from its own `prepare`, with the commands above. The four that ran pass `verify`, on their workspace then from their recording with `verify-recorded`; Gemini CLI could not run.
+Five runs on 01/11/2026, each from its own `prepare`, with the commands above. The four that ran pass `verify`, on their workspace then from their recording with `verify-recorded`. Gemini CLI could not run.
 
 | Run | Agent, model | Mode | Run | Skills loaded | Hooks | Verdict |
 |---|---|---|---|---|---|---|
 | [claude-sonnet-1](runs/claude-sonnet-1/trace.md) | Claude Code 2.1.316, `claude-sonnet-5-5` | native | 45 turns, 3 min 22 s, $0.53 | the four, at once | 14 `PostToolUse` blocks, `Stop` passed in 26 s | `pass` |
 | [claude-opus-2](runs/claude-opus-2/trace.md) | Claude Code 2.1.316, `claude-opus-5-5` | native | 81 turns, 6 min 26 s, $1.51 | the four, each at its step | 20 `PostToolUse` blocks, `Stop` passed in 18 s | `pass` |
-| [codex](runs/codex/trace.md) | Codex CLI 0.165.0, `gpt-6-astra` | native, hooks approved in `/hooks`, user configuration and skills | 6 min 37 s, 1.57 M tokens | the four, read with `cat`, and the user skill `brainstorming` | not reported by `codex exec --json`; `Stop` seen through its effects | `pass` |
+| [codex](runs/codex/trace.md) | Codex CLI 0.165.0, `gpt-6-astra` | native, hooks approved in `/hooks`, user configuration and skills | 6 min 37 s, 1.57 M tokens | the four, read with `cat`, and the user skill `brainstorming` | not reported by `codex exec --json`, `Stop` seen through its effects | `pass` |
 | [copilot](runs/copilot/trace.md) | Copilot CLI 1.0.105, `claude-sonnet-4.6` | native | 5 min 26 s, 9 premium requests | `add-module` only | 11 `postToolUse` answers, `agentStop` silent | `pass` |
 | [gemini](runs/gemini/trace.md) | Gemini CLI 0.64.0 | fallback | stopped at authentication (`UNSUPPORTED_CLIENT`) | | | not run |
 
-Every agent that ran generated the seven elements with their templates, in the order of the skills or of `AGENTS.md`, and none wrote the structure of an element by hand nor touched a protected file. Every `PostToolUse` block was an intermediate state of the agent's own edits, as the generated files are filled one after the other; none was a HardSlice rule left broken. All of them put the rules of the request in `Product` and `Stock` and opened the stock in the reaction, through `AppDbContext`, never in `RegisterProduct`. They differ where the request leaves room: the route and the status of `RegisterProduct` (the 200 of the template, or 201 on `/catalog/products`), a value object for the price (Codex), constraints of the database, and a rule of two decimals that Opus added and pointed out.
+Every agent that ran generated the seven elements with their templates, in the order of the skills or of `AGENTS.md`, and none wrote the structure of an element by hand nor touched a protected file. Every `PostToolUse` block was an intermediate state of the agent's own edits, as the generated files are filled one after the other. None was a HardSlice rule left broken. All of them put the rules of the request in `Product` and `Stock` and opened the stock in the reaction, through `AppDbContext`, never in `RegisterProduct`. They differ where the request leaves room: the route and the status of `RegisterProduct` (the 200 of the template, or 201 on `/catalog/products`), a value object for the price (Codex), constraints of the database, and a rule of two decimals that Opus added and pointed out.
 
-Each run of Claude Code was refused a few `Bash` commands by its allowed tools, a Python edit or a chain with a redirection, and redid them with `Edit`, `Write` or a plain command; Copilot was refused a check with a redirection and ran `dotnet hardslice check` instead.
+Each run of Claude Code was refused a few `Bash` commands by its allowed tools, a Python edit or a chain with a redirection, and redid them with `Edit`, `Write` or a plain command. Copilot was refused a check with a redirection and ran `dotnet hardslice check` instead.

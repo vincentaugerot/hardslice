@@ -42,7 +42,7 @@ It exits with an error and creates nothing without `--project`, before the first
 dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
 ```
 
-It creates `src/Rooms/Features/Bookings/ExtendBooking/ExtendBooking.cs`, with the command `ExtendBookingCommand`, its validator, its handler and its endpoint `POST /bookings/extend-booking`, the validator tests in `tests/Rooms.Tests/Features/Bookings/ExtendBooking/` and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/ExtendBooking/`. Then it prints the lines to add to `BookingsModule.cs`: the usings, the registrations of the handler and the validator, and the call of `Map`. `--response` sets what the command returns: `id`, a `Guid`, by default; `none`, a `bool` whose `false` is answered with 404; or the name of a DTO of values, which the slice declares.
+It creates `src/Rooms/Features/Bookings/ExtendBooking/ExtendBooking.cs`, with the command `ExtendBookingCommand`, its validator, its handler and its endpoint `POST /bookings/extend-booking`, the validator tests in `tests/Rooms.Tests/Features/Bookings/ExtendBooking/` and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/ExtendBooking/`. Then it prints the lines to add to `BookingsModule.cs`: the usings, the registrations of the handler and the validator, and the call of `Map`. `--response` sets what the command returns: `id` (a `Guid`) by default, `none` (a `bool` whose `false` is answered with 404), or the name of a DTO of values, which the slice declares.
 
 The validator tests pass. The handler throws `NotImplementedException` and the integration test ends with `TODO(hardslice):`. A slice its module does not register fails the check too: a test of the host resolves every request handler and validator of the application from the container, and names the ones that are missing.
 
@@ -54,7 +54,7 @@ Without `--project`, before the first restore, with a name that is not PascalCas
 dotnet new hardslice-query --project src/Rooms/Rooms.csproj --module Bookings --name GetBookingSummary --aggregate Booking
 ```
 
-It creates `src/Rooms/Features/Bookings/GetBookingSummary/GetBookingSummary.cs`, with the query `GetBookingSummaryQuery`, its DTO `GetBookingSummaryDto`, its handler and its endpoint `GET /bookings/get-booking-summary/{id}`, and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/GetBookingSummary/`, then prints the lines to add to `BookingsModule.cs`. The handler reads `Set<Booking>()` with `AsNoTracking()` and projects it into the DTO with `Select`, so HS006 has nothing to report. By default it reads one DTO by its id, an unknown id being answered with 404; `--result many` reads the list instead.
+It creates `src/Rooms/Features/Bookings/GetBookingSummary/GetBookingSummary.cs`, with the query `GetBookingSummaryQuery`, its DTO `GetBookingSummaryDto`, its handler and its endpoint `GET /bookings/get-booking-summary/{id}`, and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/GetBookingSummary/`, then prints the lines to add to `BookingsModule.cs`. The handler reads `Set<Booking>()` with `AsNoTracking()` and projects it into the DTO with `Select`, so HS006 has nothing to report. By default it reads one DTO by its id, an unknown id being answered with 404. `--result many` reads the list instead.
 
 `--aggregate` is required: it names a type of the namespace `Rooms.Domain.Bookings` whose `Id` is an `<Aggregate>Id` that wraps a `Guid Value`, as `Booking` and `BookingId` do. An aggregate that does not exist fails the build with a compiler error that names it.
 
@@ -78,8 +78,8 @@ Without `--project`, before the first restore, with a name or a module that is n
 
 - The item templates read the application and its modules through `--project` only, once the web project is restored: `dotnet new` evaluates no project from the root of a solution, and cannot read a file before it creates the others.
 - A refusal prints `The template ... was created successfully.` before `Post action failed.` and its error, and exits with code 105: nothing is created.
-- They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module; `hardslice-aggregate` prints the migration to add, and `hardslice-event` how to raise the event.
-- `hardslice-module` puts a `.gitkeep` in the folders it creates without file, as `dotnet new` creates no empty folder; with `--force`, it overwrites the contract of an existing module, its registrations included.
+- They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module. `hardslice-aggregate` prints the migration to add, and `hardslice-event` how to raise the event.
+- `hardslice-module` puts a `.gitkeep` in the folders it creates without file, as `dotnet new` creates no empty folder. With `--force`, it overwrites the contract of an existing module, its registrations included.
 - The tests that `hardslice-command` and `hardslice-query` generate call the route of the group in kebab-case: after `--route`, change theirs.
 - `hardslice-query` cannot check the aggregate: the compiler does. Its list result is `--result many`, not `list`, which `dotnet new` would read as its own `list` command.
 - `hardslice-event --reaction-only` cannot check that the event exists: the compiler does, and the test it generates leaves the building of the event to complete.

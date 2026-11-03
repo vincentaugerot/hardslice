@@ -37,18 +37,18 @@ Aucun composant HardSlice n'est requis au runtime de l'application générée.
 | Adoption de l'existant | Engagement de roadmap après la première boucle produit |
 | Premier garde-fou | **HS016** : aucune dépendance entre slices |
 | Architecture de référence | .NET 10, ASP.NET Core Minimal APIs, vertical slices, domaine séparé |
-| Distribution | Paquets NuGet et outil local épinglé ; aucune copie d'analyseurs dans les projets utilisateurs |
+| Distribution | Paquets NuGet et outil local épinglé. Aucune copie d'analyseurs dans les projets utilisateurs |
 | CLI canonique | `dotnet hardslice <commande>` |
-| Vérification | Build et tests comme autorité locale ; CI protégée comme autorité finale |
-| Langue publique | Code, diagnostics, contenu des paquets et documentation d'utilisation (README, `docs/`) en anglais ; les documents de conception de `docs/design/` restent en français, signalés comme documents de travail (03/11/2026) |
-| Classification des types | Contrats applicatifs `IEntity`, `IAggregateRoot`, `IDomainEvent` et contrats de messagerie, déclarés dans `hardslice.json` et reconnus par symbole ; aucune heuristique de forme (30/10/2026) |
+| Vérification | Build et tests comme autorité locale. CI protégée comme autorité finale |
+| Langue publique | Code, diagnostics, contenu des paquets et documentation d'utilisation (README, `docs/`) en anglais. Les documents de conception de `docs/design/` restent en français, signalés comme documents de travail (03/11/2026) |
+| Classification des types | Contrats applicatifs `IEntity`, `IAggregateRoot`, `IDomainEvent` et contrats de messagerie, déclarés dans `hardslice.json` et reconnus par symbole. Aucune heuristique de forme (30/10/2026) |
 | HS010 et HS011 | Analyseurs HardSlice ciblés avec leurs propres identifiants, au lieu de `BannedApiAnalyzers` qui les confondrait sous `RS0030` (30/10/2026) |
-| Vérification outillée | `dotnet hardslice check` dès v0.2 ; `scripts/check.sh` et `check.ps1` le lancent ; `dotnet build` seul produit toujours les diagnostics |
+| Vérification outillée | `dotnet hardslice check` dès v0.2. `scripts/check.sh` et `check.ps1` le lancent. `dotnet build` seul produit toujours les diagnostics |
 | Benchmark | Après une première boucle produit utilisable, jamais comme prérequis au premier code |
-| Templates d'éléments | Ils créent les fichiers de leur élément et affichent les enregistrements à ajouter, que la skill ajoute ; le code généré compile sans diagnostic HS, ses tests et la vérification échouent tant qu'un marqueur `TODO(hardslice):` reste (31/10/2026) |
-| Événements de domaine | Publiés à leurs gestionnaires dans la transaction de la commande ; un gestionnaire vit dans une slice de réaction, agit par `AppDbContext`, sans `IMediator` ni effet externe ; pas d'outbox (31/10/2026) |
-| Vérification des hooks | `check` complet reste le seul verdict ; `--build` après édition ; le hook de fin lance `check` s'il tient en 60 s, sinon un mode réduit aux slices touchées, selon la mesure de PB-045 (31/10/2026). Mesuré par PB-045 : `check` tient les 60 s, le hook de fin le lance, `--affected` n'est pas livré |
-| HS000 | Suppressions écrites dans le code source seulement ; les réglages globaux sont protégés par les hooks et la CI, puis repris en v0.5 avec la baseline (31/10/2026) |
+| Templates d'éléments | Ils créent les fichiers de leur élément et affichent les enregistrements à ajouter, que la skill ajoute. Le code généré compile sans diagnostic HS, ses tests et la vérification échouent tant qu'un marqueur `TODO(hardslice):` reste (31/10/2026) |
+| Événements de domaine | Publiés à leurs gestionnaires dans la transaction de la commande. Un gestionnaire vit dans une slice de réaction, agit par `AppDbContext`, sans `IMediator` ni effet externe. Pas d'outbox (31/10/2026) |
+| Vérification des hooks | `check` complet reste le seul verdict. `--build` après édition. Le hook de fin lance `check` s'il tient en 60 s, sinon un mode réduit aux slices touchées, selon la mesure de PB-045 (31/10/2026). Mesuré par PB-045 : `check` tient les 60 s, le hook de fin le lance, `--affected` n'est pas livré |
+| HS000 | Suppressions écrites dans le code source seulement. Les réglages globaux sont protégés par les hooks et la CI, puis repris en v0.5 avec la baseline (31/10/2026) |
 
 Les choix fonctionnels de la spécification restent engagés. Contraintes transverses retenues : niveaux d'analyse, baseline par occurrence, contrôle des faux positifs, budgets de performance et versions CLI/analyseurs identiques.
 
@@ -56,10 +56,10 @@ Les choix fonctionnels de la spécification restent engagés. Contraintes transv
 
 HardSlice est construit par tranches verticales utilisables. Chaque incrément doit :
 
-- produire un artefact compilable, installable ou générable ;
-- posséder une commande d'acceptation reproductible ;
-- démontrer une capacité visible pour l'utilisateur ou l'agent ;
-- inclure les tests de cette capacité ;
+- produire un artefact compilable, installable ou générable,
+- posséder une commande d'acceptation reproductible,
+- démontrer une capacité visible pour l'utilisateur ou l'agent,
+- inclure les tests de cette capacité,
 - ne pas dépendre d'un protocole futur qui n'est pas nécessaire à son fonctionnement.
 
 Un spike est autorisé uniquement lorsqu'une inconnue bloque le code en cours. Il reste borné et ne devient pas une phase de gouvernance autonome.
@@ -74,15 +74,15 @@ La recherche sur l'adoption est planifiée pour v0.5. Le mainteneur peut la repr
 
 ### Livrables
 
-- solution .NET compilable ;
-- `HardSlice.Analyzers` et ses tests ;
-- HS016 pour les références entre slices d'un même assembly, forme nécessaire au premier scénario ;
-- diagnostic indiquant le symbole fautif, les deux slices, la correction attendue et la documentation ;
-- application Bookings minimale avec domaine séparé et deux slices ;
-- package local du template `hardslice-api` ;
-- `AGENTS.md`, `scripts/check.sh` et `scripts/check.ps1` ;
-- fiche de règle HS016 ;
-- scénario de développement E2E : violation semée, correction par agent, retour au vert ;
+- solution .NET compilable,
+- `HardSlice.Analyzers` et ses tests,
+- HS016 pour les références entre slices d'un même assembly, forme nécessaire au premier scénario,
+- diagnostic indiquant le symbole fautif, les deux slices, la correction attendue et la documentation,
+- application Bookings minimale avec domaine séparé et deux slices,
+- package local du template `hardslice-api`,
+- `AGENTS.md`, `scripts/check.sh` et `scripts/check.ps1`,
+- fiche de règle HS016,
+- scénario de développement E2E : violation semée, correction par agent, retour au vert,
 - CI exécutant le build et les tests.
 
 ### Acceptation
@@ -103,70 +103,70 @@ Le benchmark statistique, la baseline complète, le runner isolé, le catalogue 
 
 ### v0.1 : Template utilisable et architecture de référence
 
-- compléter l'application Bookings avec l'invariant de chevauchement représentatif et son domaine complet ;
-- livrer commandes, requêtes, endpoints et tests ;
-- ajouter les tests d'architecture HS001, HS012 à HS014 et HS016 à HS018 ;
+- compléter l'application Bookings avec l'invariant de chevauchement représentatif et son domaine complet,
+- livrer commandes, requêtes, endpoints et tests,
+- ajouter les tests d'architecture HS001, HS012 à HS014 et HS016 à HS018,
 - fiabiliser le template de solution et documenter son utilisation.
 
 **Résultat visible** : un utilisateur génère une application cohérente et peut la modifier avec un agent.
 
 ### v0.2 : Analyseurs et diagnostics réparables
 
-- classer entités, agrégats, événements, commandes, requêtes et handlers par des contrats applicatifs (`IEntity`, `IAggregateRoot`), y compris depuis un projet référencé, avec les diagnostics de configuration HS900 à HS902 ;
-- livrer progressivement HS003 à HS011, HS015 et HS019 ; HS010 et HS011 sont des analyseurs HardSlice avec leurs propres identifiants, et non des listes `BannedApiAnalyzers` ;
-- fournir les fiches des règles, `dotnet hardslice check` et `explain` dans un outil local épinglé à la version des analyseurs ;
-- ajouter les niveaux d'analyse `Minimum`, `Recommended` et `All`, les tests de faux positifs, les cas inter-assemblies et la mesure de performance sur un build incrémental réel ;
-- préparer les paquets et le workflow de publication ; `0.2.0-preview.1` n'est jamais publiée : la première préversion publiée est `0.3.0-preview.1`, qui couvre v0.2 et v0.3 (décision du mainteneur du 03/11/2026).
+- classer entités, agrégats, événements, commandes, requêtes et handlers par des contrats applicatifs (`IEntity`, `IAggregateRoot`), y compris depuis un projet référencé, avec les diagnostics de configuration HS900 à HS902,
+- livrer progressivement HS003 à HS011, HS015 et HS019. HS010 et HS011 sont des analyseurs HardSlice avec leurs propres identifiants, et non des listes `BannedApiAnalyzers`,
+- fournir les fiches des règles, `dotnet hardslice check` et `explain` dans un outil local épinglé à la version des analyseurs,
+- ajouter les niveaux d'analyse `Minimum`, `Recommended` et `All`, les tests de faux positifs, les cas inter-assemblies et la mesure de performance sur un build incrémental réel,
+- préparer les paquets et le workflow de publication. `0.2.0-preview.1` n'est jamais publiée : la première préversion publiée est `0.3.0-preview.1`, qui couvre v0.2 et v0.3 (décision du mainteneur du 03/11/2026).
 
 **Résultat visible** : les dérives principales échouent avec des messages que l'agent peut corriger.
 
 ### v0.3 : Génération et boucle agent
 
-- livrer les templates `hardslice-command`, `hardslice-query`, `hardslice-module`, `hardslice-aggregate` et `hardslice-event` ;
-- publier les événements de domaine à leurs gestionnaires, prérequis de `hardslice-event` et de la skill `add-domain-event` ;
-- livrer les six skills de la spécification et HS000 ;
-- livrer `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md` ;
-- pour Claude Code, Codex et Copilot CLI, ajouter le build incrémental après édition et le hook de fin de tâche prévus par la spécification ;
-- cibler Claude Code, Codex, GitHub Copilot et Gemini CLI : adaptateur natif lorsqu'il existe, sinon fallback explicite par `AGENTS.md` et le script de vérification ;
-- faire des scripts de vérification le point unique appelé par les hooks, le pre-commit et la CI ;
+- livrer les templates `hardslice-command`, `hardslice-query`, `hardslice-module`, `hardslice-aggregate` et `hardslice-event`,
+- publier les événements de domaine à leurs gestionnaires, prérequis de `hardslice-event` et de la skill `add-domain-event`,
+- livrer les six skills de la spécification et HS000,
+- livrer `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` et `.github/copilot-instructions.md`,
+- pour Claude Code, Codex et Copilot CLI, ajouter le build incrémental après édition et le hook de fin de tâche prévus par la spécification,
+- cibler Claude Code, Codex, GitHub Copilot et Gemini CLI : adaptateur natif lorsqu'il existe, sinon fallback explicite par `AGENTS.md` et le script de vérification,
+- faire des scripts de vérification le point unique appelé par les hooks, le pre-commit et la CI,
 - tester la boucle E2E de chaque règle bloquante.
 
 **Résultat visible** : l'agent génère, complète, vérifie et corrige une fonctionnalité par les chemins officiels.
 
 ### v0.4 : Benchmark avec et sans HardSlice
 
-- exécuter le protocole A/B/C sur Bookings ;
-- utiliser un runner isolé et des tâches figées ;
-- mesurer réussite, violations, coût, durée, itérations, fichiers lus et tokens lorsque disponibles ;
+- exécuter le protocole A/B/C sur Bookings,
+- utiliser un runner isolé et des tâches figées,
+- mesurer réussite, violations, coût, durée, itérations, fichiers lus et tokens lorsque disponibles,
 - publier les prompts, les résultats bruts et les résultats défavorables.
 
 **Résultat visible** : une mesure publique et reproductible de l'effet de HardSlice.
 
 ### v0.5 : Adoption sur une solution existante
 
-- livrer `init`, `map`, `baseline`, `report` et `verify` ;
-- rendre les conventions configurables ;
-- identifier les occurrences de baseline et appliquer le cliquet localement et en CI ;
-- adopter progressivement sans déplacer automatiquement les fichiers ;
-- valider le parcours sur au moins une solution externe ;
+- livrer `init`, `map`, `baseline`, `report` et `verify`,
+- rendre les conventions configurables,
+- identifier les occurrences de baseline et appliquer le cliquet localement et en CI,
+- adopter progressivement sans déplacer automatiquement les fichiers,
+- valider le parcours sur au moins une solution externe,
 - couvrir les règles communes applicables aux architectures en couches.
 
 **Résultat visible** : une équipe bloque les nouvelles dérives sans corriger immédiatement toute sa dette.
 
 ### v0.6 : Benchmark couches contre slices
 
-- construire deux applications et ensembles de règles comparables ;
-- exécuter les mêmes tâches avec les mêmes agents, modèles et budgets ;
-- mesurer le contexte lu, les tokens, les violations, le coût et la durée ;
+- construire deux applications et ensembles de règles comparables,
+- exécuter les mêmes tâches avec les mêmes agents, modèles et budgets,
+- mesurer le contexte lu, les tokens, les violations, le coût et la durée,
 - publier les limites et les cas défavorables.
 
 **Résultat visible** : une comparaison publique et chiffrée des deux architectures pour les agents.
 
 ### v1.0 : Distribution stable
 
-- publier les packages NuGet stables des templates, analyseurs et outils ;
-- fournir la documentation complète et versionnée ;
-- tester les parcours greenfield et adoption de bout en bout ;
+- publier les packages NuGet stables des templates, analyseurs et outils,
+- fournir la documentation complète et versionnée,
+- tester les parcours greenfield et adoption de bout en bout,
 - fournir CI GitHub Actions et Azure Pipelines, politique de compatibilité, sécurité et contribution.
 
 ## 6. Traçabilité avec la spécification
@@ -202,7 +202,7 @@ Les analyseurs et l'outil utilisent la même version. L'outil est épinglé loca
 
 ### Adoption et autorité
 
-Les garde-fous locaux visent les dérives accidentelles ; ils ne constituent pas une frontière de sécurité. La branche protégée et les contrôles CI restent l'autorité finale sur les fichiers sensibles et la croissance de la baseline.
+Les garde-fous locaux visent les dérives accidentelles, mais ils ne constituent pas une frontière de sécurité. La branche protégée et les contrôles CI restent l'autorité finale sur les fichiers sensibles et la croissance de la baseline.
 
 ## 8. Validation future
 

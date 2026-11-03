@@ -12,7 +12,7 @@ dotnet build --no-restore
 dotnet test --no-build
 ```
 
-`dotnet test` needs a Docker-compatible container runtime. A change to the template, the item templates, the analyzers or the tool also runs the probes of its area from `scripts/test-template.sh`, on a solution generated from the local packages; the full scenario runs in CI.
+`dotnet test` needs a Docker-compatible container runtime. A change to the template, the item templates, the analyzers or the tool also runs the probes of its area from `scripts/test-template.sh`, on a solution generated from the local packages. The full scenario runs in CI.
 
 ## Do not break
 
@@ -24,7 +24,7 @@ dotnet test --no-build
 
 ## Write
 
-- English for code, diagnostics, shipped content and user documentation; French for `docs/design/`.
+- English for code, diagnostics, shipped content and user documentation. French for `docs/design/`.
 - No em dash anywhere outside the raw traces of `demos/`.
 - Conventional Commits, with the ticket of the [backlog](docs/design/product-backlog.md) at the end: `fix(tool): ... (PB-053)`.
 - A fixed finding gets a test that failed before the fix.
