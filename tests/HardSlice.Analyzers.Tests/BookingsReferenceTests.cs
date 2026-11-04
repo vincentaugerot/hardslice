@@ -80,7 +80,24 @@ public sealed class BookingsReferenceTests
         diagnostic.GetMessage().ShouldBe(
             "'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'. "
             + "HardSlice classifies domain types only through these contracts. "
-            + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.");
+            + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise, "
+            + "or, if 'Room' is a value object, remove 'RoomConfiguration' or map it with ComplexProperty in its entity. "
+            + "Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.");
+    }
+
+    // PB-075: the sheet of HS902, the same file in both variants of the template, fixes a type that became a value object while
+    // still mapped by removing its mapping, never by giving it a contract, and add-aggregate does not apply to it.
+    [Fact]
+    public void HS902_sheet_fixes_a_value_object_still_mapped_by_removing_its_mapping()
+    {
+        var doc = File.ReadAllText(Path.Combine(TemplateDocsDirectory, "rules", "HS902.md"));
+
+        var fix = MarkdownSection(doc, "## How to fix");
+        fix.ShouldContain("This is also the case of an entity turned into a value object, such as a `record` without `IEntity`, while its old mapping still exists.");
+        fix.ShouldContain("Remove the mapping the message names: the configuration class, the `DbSet` property or the call to `Entity<T>()`.");
+        fix.ShouldContain("map it in the configuration of the entity that holds it, with `ComplexProperty`");
+        fix.ShouldContain("Never add `IEntity` to a value object to silence HS902.");
+        MarkdownSection(doc, "## Skill").ShouldContain("The skill does not apply to a value object: follow step 2 of the fix instead.");
     }
 
     [Fact]

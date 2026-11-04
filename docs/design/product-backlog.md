@@ -1628,7 +1628,7 @@ L'incrément est terminé lorsque PB-018 à PB-033 sont satisfaits et que les jo
 
 ## 5. Incrément 4 terminé : Boucle agent v0.3
 
-Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-063) et les retours de Ghostline de la section 7 (PB-064 à PB-074) terminés.
+Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-063) et les retours de Ghostline de la section 7 (PB-064 à PB-075, et la revalidation des paquets qui les suit) terminés.
 
 ### Résultat attendu
 
@@ -1679,7 +1679,7 @@ Décisions du mainteneur du 31/10/2026, reportées dans la [spécification](spec
 | PB-048 (pre-commit et CI générée) | PB-045 | PB-042 à PB-047 |
 | PB-049 (boucles E2E par règle) | PB-041, PB-044, PB-046 | PB-047, PB-048 |
 | PB-050 (scénario agent complet) | PB-043, PB-044, PB-046 | PB-049 |
-| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-074 (sections 6 et 7) | aucun |
+| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-075 (sections 6 et 7) | aucun |
 
 ```text
 PB-034 état des CLI ────────────┬─ PB-042 instructions ──────────────┐
@@ -2386,7 +2386,7 @@ Le vérificateur passe sur les exécutions Claude Code consignées. Chaque exéc
 
 ### PB-051 : Publier la préversion `0.3.0-preview.1`
 
-Statut : prêt le 04/11/2026, en attente du feu vert du mainteneur. L'étiquette `v0.3.0-preview.1` vise le commit de `main` qui termine PB-074, celui dont le message finit par `(PB-074)`, sur lequel les paquets ont été revalidés.
+Statut : en attente du feu vert du mainteneur, et de la revalidation des paquets après PB-075 (les textes des diagnostics sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` du dernier ticket de revalidation des paquets, celui sur lequel ils ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
 
 **Résultat observable**
 
@@ -2394,13 +2394,13 @@ Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org,
 
 **Périmètre**
 
-- Étiquette `v0.3.0-preview.1` posée sur le commit de `main` qui termine PB-074, après le feu vert du mainteneur.
+- Étiquette `v0.3.0-preview.1` posée sur le commit de `main` du dernier ticket de revalidation des paquets, après le feu vert du mainteneur.
 - Workflow de publication de PB-033, avec le job de contrôle étendu par PB-059 aux templates d'éléments.
 - GitHub Release de la version, avec les notes de `CHANGELOG.md` (PB-058).
 
 **Dépendances**
 
-PB-034 à PB-050, PB-033, PB-052 à PB-074.
+PB-034 à PB-050, PB-033, PB-052 à PB-075.
 
 **Acceptation**
 
@@ -2423,7 +2423,7 @@ L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jo
 
 Statut : découpé le 03/11/2026 à partir d'une revue complète du dépôt avant publication (code, template, kit agents, outil, CI, documentation), arbitrages validés par le mainteneur le même jour. Une version publiée sur NuGet.org ne se remplace jamais : ce qui est figé dans les paquets (code généré, kit agents, liste des fichiers protégés, textes des diagnostics, README des paquets, format de `hardslice.json`, codes de sortie) est corrigé avant PB-051.
 
-Complété le 04/11/2026 par les frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : PB-060 à PB-063 ici, PB-064 à PB-073 dans la section 7, et PB-074 qui revalide les paquets après eux. Décision du mainteneur du 04/11/2026 : tout est fait avant PB-051, pour publier d'emblée la préversion la plus stable possible.
+Complété le 04/11/2026 par les frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : PB-060 à PB-063 ici, PB-064 à PB-073 dans la section 7, PB-074 qui revalide les paquets après eux, et PB-075, qui change un diagnostic après cette revalidation. Décision du mainteneur du 04/11/2026 : tout est fait avant PB-051, pour publier d'emblée la préversion la plus stable possible.
 
 ### Résultat attendu
 
@@ -2898,11 +2898,11 @@ sondes « instructions des agents » de scripts/test-template.sh
 
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. La publication attend la section 7 : PB-051 est lancé après PB-074, sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. La publication attend la section 7 : PB-051 est lancé après PB-075 et le dernier ticket de revalidation des paquets, sur le feu vert du mainteneur.
 
 ## 7. Incrément actif, suite : Retours de Ghostline avant la publication
 
-Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux.
+Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux. PB-075, ajouté le même jour à partir d'une entrée du 04/11/2026, change le texte d'un diagnostic après PB-074 : un ticket de revalidation le suit.
 
 ### Résultat attendu
 
@@ -2939,6 +2939,7 @@ Validés par le mainteneur le 04/11/2026 :
 | PB-072 (écritures en masse) | PB-066 | PB-071 |
 | PB-073 (`.gitkeep` des modules) | PB-066 | PB-072 |
 | PB-074 (paquets revalidés) | PB-060 à PB-073 | aucun |
+| PB-075 (HS902 et objets valeur) | PB-074 | aucun |
 
 Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
 
@@ -3286,9 +3287,34 @@ for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.
 scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/packages
 ```
 
+### PB-075 : Proposer dans HS902 de ne plus mapper un objet valeur
+
+Statut : terminé le 04/11/2026. Ferme l'entrée « HS902 on an entity turned into a value object points to the wrong fix » de `ghostline/docs/hardslice-friction.md`. Le correctif du message de HS902 se termine par « or, if '{0}' is a value object, remove '{4}' or map it with ComplexProperty in its entity », avant « Skill: add-aggregate ». '{4}' nomme le mapping à retirer : la classe de configuration et la propriété `DbSet` sont celles que nomme déjà '{1}', mais pour `modelBuilder.Entity<Room>()` c'est l'appel (`Entity<Room>`), jamais `OnModelCreating` entier que '{1}' nomme. `HS902.md`, le même fichier dans les deux variantes du template, cite le nouveau diagnostic, et son étape 2 décrit le cas d'une entité devenue objet valeur dont l'ancien mapping existe encore : retirer le mapping que nomme le message, mapper l'objet valeur dans la configuration de son entité avec `ComplexProperty` (ou `OwnsOne`), jamais lui ajouter `IEntity`, puis ajouter une migration. Sa section « Skill » dit que `add-aggregate` ne s'applique pas à un objet valeur. Tests qui échouaient avant : les messages attendus de `ClassificationAnalyzerTests` (les trois formes de mapping, et l'appel générique `Entity<Untagged<int>>`) et de `BookingsReferenceTests`, la fiche qui cite le diagnostic, et un test des correctifs de la fiche. La sonde HS902 de `scripts/test-template.sh` exige le nouveau correctif, et `demos/agent-fix/HS902/diagnostic.txt` le suit. `CHANGELOG.md` a sa ligne. Passages locaux : `dotnet test --no-build` (1207 tests verts) et la sonde HS902 lancée seule sur les deux variantes. Les paquets ne sont pas reconstruits : un ticket de revalidation suit, sur lequel l'étiquette de PB-051 sera posée. Contournement que Ghostline peut retirer : aucun, la configuration de `StopTime` est déjà remplacée par celle de `TripStopTimes`.
+
+**Résultat observable**
+
+Le message de HS902 propose aussi, pour un type devenu objet valeur, de retirer son mapping d'entité ou de le mapper en `ComplexProperty` dans son entité, et `HS902.md` décrit ce correctif.
+
+**Constat**
+
+Ghostline, entrée « HS902 on an entity turned into a value object points to the wrong fix » (04/11/2026, roadmap 2.3) : pendant que `StopTime` devenait un `record` sans `IEntity`, encore mappé par `StopTimeConfiguration`, HS902 a affiché « Fix: implement IAggregateRoot if 'StopTime' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. » Le bon correctif était l'inverse : ne plus mapper le type, ou le mapper en `ComplexProperty` de son entité. `add-aggregate` ne s'applique pas à un type qui n'est pas un agrégat.
+
+**Périmètre**
+
+- Message de HS902 (`ClassificationAnalyzer`) : il ajoute « or, if '{0}' is a value object, remove '{1}' or map it with ComplexProperty in its entity », où le mapping à retirer est la configuration, le `DbSet` ou l'appel à `Entity<T>()` (pas `OnModelCreating` entier).
+- `HS902.md` (le même fichier dans les deux variantes du template) : le diagnostic cité et un correctif pour ce cas.
+- Les textes des diagnostics sont figés par la publication : ce ticket passe avant PB-051, et un ticket de revalidation des paquets le suit.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sonde HS902 de scripts/test-template.sh
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-074 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-064 à PB-075 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur.
 
 ## 8. Incréments suivants
 

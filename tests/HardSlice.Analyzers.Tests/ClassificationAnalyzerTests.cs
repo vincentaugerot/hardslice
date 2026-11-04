@@ -219,6 +219,8 @@ public sealed class ClassificationAnalyzerTests
             + "The contracts of hardslice.json classify the types checked by HS004, HS005 and HS901.");
     }
 
+    // PB-075: the fix also covers a type that became a value object while still mapped, and names the mapping to remove: the
+    // configuration, the DbSet, or the call to Entity<T>, never the whole OnModelCreating.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -237,13 +239,19 @@ public sealed class ClassificationAnalyzerTests
             [
                 "'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'. "
                 + "HardSlice classifies domain types only through these contracts. "
-                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
+                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise, "
+                + "or, if 'Room' is a value object, remove 'RoomConfiguration' or map it with ComplexProperty in its entity. "
+                + "Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
                 "'Room' is mapped as an EF Core entity by 'RoomsContext.Rooms' but implements neither 'IEntity' nor 'IAggregateRoot'. "
                 + "HardSlice classifies domain types only through these contracts. "
-                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
+                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise, "
+                + "or, if 'Room' is a value object, remove 'RoomsContext.Rooms' or map it with ComplexProperty in its entity. "
+                + "Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
                 "'Room' is mapped as an EF Core entity by 'RoomsContext.OnModelCreating' but implements neither 'IEntity' nor 'IAggregateRoot'. "
                 + "HardSlice classifies domain types only through these contracts. "
-                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'."
+                + "Fix: implement IAggregateRoot if 'Room' is the root of its aggregate, IEntity otherwise, "
+                + "or, if 'Room' is a value object, remove 'Entity<Room>' or map it with ComplexProperty in its entity. "
+                + "Skill: add-aggregate. Doc: 'docs/rules/HS902.md'."
             ],
             ignoreOrder: true);
     }
@@ -370,6 +378,8 @@ public sealed class ClassificationAnalyzerTests
 
         Located(diagnostics).ShouldBe(["HS902 Entity<Untagged<int>>", "HS902 UntaggedConfiguration"], ignoreOrder: true);
         diagnostics.ShouldAllBe(diagnostic => diagnostic.GetMessage().StartsWith("'Untagged<T>' is mapped as an EF Core entity by '"));
+        diagnostics.Select(diagnostic => diagnostic.GetMessage()).ShouldContain(message => message.Contains(
+            "or, if 'Untagged<T>' is a value object, remove 'Entity<Untagged<int>>' or map it with ComplexProperty in its entity."));
     }
 
     // Only the contract hardslice.json names, in its declaring assembly, classifies: a lookalike never does.

@@ -70,7 +70,9 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
         title: "A domain type mapped as an EF Core entity implements no entity contract",
         messageFormat: "'{0}' is mapped as an EF Core entity by '{1}' but implements neither '{2}' nor '{3}'. "
             + "HardSlice classifies domain types only through these contracts. "
-            + "Fix: implement {3} if '{0}' is the root of its aggregate, {2} otherwise. Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
+            + "Fix: implement {3} if '{0}' is the root of its aggregate, {2} otherwise, "
+            + "or, if '{0}' is a value object, remove '{4}' or map it with ComplexProperty in its entity. "
+            + "Skill: add-aggregate. Doc: 'docs/rules/HS902.md'.",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -233,7 +235,10 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
         {
             var type = (INamedTypeSymbol)context.Symbol;
             foreach (var mapped in MappedTypes(type).Except(MappedTypes(type.BaseType?.OriginalDefinition), SymbolEqualityComparer.Default))
-                Check(context.ReportDiagnostic, (INamedTypeSymbol)mapped!, type, type.Locations.FirstOrDefault(location => location.IsInSource));
+            {
+                var mappedBy = type.ToDisplayString(DisplayFormat);
+                Check(context.ReportDiagnostic, (INamedTypeSymbol)mapped!, mappedBy, mappedBy, type.Locations.FirstOrDefault(location => location.IsInSource));
+            }
         }
 
         // 'public DbSet<Room> Rooms { get; }' in a type derived from DbContext.
@@ -245,7 +250,8 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
                 && set.TypeArguments[0] is INamedTypeSymbol mapped
                 && DerivesFrom(property.ContainingType, entityFramework.DbContext))
             {
-                Check(context.ReportDiagnostic, mapped, property, property.Locations.FirstOrDefault(location => location.IsInSource));
+                var mappedBy = property.ToDisplayString(DisplayFormat);
+                Check(context.ReportDiagnostic, mapped, mappedBy, mappedBy, property.Locations.FirstOrDefault(location => location.IsInSource));
             }
         }
 
@@ -258,10 +264,12 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
                 && method.TypeArguments[0] is INamedTypeSymbol mapped
                 && SymbolEqualityComparer.Default.Equals(method.ContainingType.OriginalDefinition, entityFramework.ModelBuilder))
             {
-                var location = invocation.Syntax is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess }
-                    ? memberAccess.Name.GetLocation()
-                    : invocation.Syntax.GetLocation();
-                Check(context.ReportDiagnostic, mapped, context.ContainingSymbol, location);
+                var call = invocation.Syntax is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess }
+                    ? memberAccess.Name
+                    : invocation.Syntax;
+
+                // The call is the mapping to remove, never the whole method that holds it, such as OnModelCreating.
+                Check(context.ReportDiagnostic, mapped, context.ContainingSymbol.ToDisplayString(DisplayFormat), call.ToString(), call.GetLocation());
             }
         }
 
@@ -273,7 +281,9 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
                     .Select(@interface => @interface.TypeArguments[0])
                     .Where(argument => argument is INamedTypeSymbol);
 
-        private void Check(Action<Diagnostic> report, INamedTypeSymbol mapped, ISymbol mappedBy, Location? location)
+        // <mappedBy> names the type or member that maps the type, <mapping> what a value object removes: the configuration, the DbSet
+        // or the call to Entity<T>.
+        private void Check(Action<Diagnostic> report, INamedTypeSymbol mapped, string mappedBy, string mapping, Location? location)
         {
             var definition = mapped.OriginalDefinition;
             if (!SymbolEqualityComparer.Default.Equals(definition.ContainingAssembly, entity.ContainingAssembly)
@@ -287,9 +297,10 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
                 UnclassifiedEntityRule,
                 location ?? Location.None,
                 definition.ToDisplayString(DisplayFormat),
-                mappedBy.ToDisplayString(DisplayFormat),
+                mappedBy,
                 entity.ToDisplayString(DisplayFormat),
-                aggregateRoot.ToDisplayString(DisplayFormat)));
+                aggregateRoot.ToDisplayString(DisplayFormat),
+                mapping));
         }
 
         private static bool DerivesFrom(INamedTypeSymbol? type, INamedTypeSymbol baseType)

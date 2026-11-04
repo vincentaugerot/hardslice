@@ -31,6 +31,7 @@ The first preview published on NuGet.org. No earlier version was published.
 - HS006 follows a rule of the domain that a query runs in the database, a method from `IQueryable<T>` to `IQueryable<TResult>` that receives the queries of the handler: it reports the composed query when its result holds an entity and a query passed to it has no `AsNoTracking()`. The sheet of HS006 and `extract-to-domain` say which forms such a rule takes, a predicate `Expression<Func<T, bool>>` or such a composition, and which helper is a forbidden workaround.
 - The agent kit says when a command writes the children of a root in bulk, outside the change tracker: it saves the root early, then writes the children through the connection of `AppDbContext`, in the transaction of the command, under immediate foreign keys and with a longer timeout for that command only (`add-aggregate`, "Children written in bulk"). No bulk helper is generated.
 - `hardslice-module` creates the contract of the module alone: the templates of its aggregates, entities, slices and events create the folder of its domain and its test folders, so no `.gitkeep` is left next to their files.
+- The fix of HS902 also covers a type that became a value object while still mapped as an entity: remove the mapping that the message names (the configuration, the `DbSet` or the call to `Entity<T>()`), or map the type with `ComplexProperty` in its entity, as its sheet details.
 
 ### Known limitations
 

@@ -1032,7 +1032,8 @@ internal sealed class RoomConfiguration : IEntityTypeConfiguration<Room>
     public void Configure(EntityTypeBuilder<Room> builder) => builder.HasKey(room => room.Id);
 }
 EOF
-  expect_failure "HS902: 'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'." "docs/rules/HS902.md" "a domain type of $app_name mapped without contract" check.sh check.ps1
+  # PB-075: the fix also offers to remove the mapping of a type that became a value object.
+  expect_failure "HS902: 'Room' is mapped as an EF Core entity by 'RoomConfiguration' but implements neither 'IEntity' nor 'IAggregateRoot'\. .* or, if 'Room' is a value object, remove 'RoomConfiguration' or map it with ComplexProperty in its entity\." "docs/rules/HS902.md" "a domain type of $app_name mapped without contract" check.sh check.ps1
   rm "$app/src/$app_name.Domain/$module/Room.cs" "$app_src/Features/$module/RoomConfiguration.cs"
 }
 
