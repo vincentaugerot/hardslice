@@ -32,6 +32,18 @@
     "Require": {
       "longName": "require",
       "shortName": ""
+    },
+    "DailyAt": {
+      "longName": "daily-at",
+      "shortName": ""
+    },
+    "TimeZone": {
+      "longName": "time-zone",
+      "shortName": ""
+    },
+    "Retry": {
+      "longName": "retry",
+      "shortName": ""
     }
   }
 }

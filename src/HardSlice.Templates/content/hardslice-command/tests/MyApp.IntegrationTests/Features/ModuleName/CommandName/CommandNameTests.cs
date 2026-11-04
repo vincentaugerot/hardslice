@@ -1,4 +1,7 @@
-#if (EveryIsGiven)
+#if (ScheduleIsGiven)
+#if (RetryIsGiven)
+using System.Globalization;
+#endif
 using MyApp.Features.ModuleName.CommandName;
 #elif (EndpointIsNone)
 #if (!ParametersIsNone)
@@ -19,7 +22,10 @@ using MyApp.Features.ModuleName.CommandName;
 
 namespace MyApp.IntegrationTests.Features.ModuleName.CommandName;
 
-#if (EveryIsGiven)
+#if (DailyAtIsGiven)
+// AddRecurringCommand sends the command every day at its local time: its tests run its cycles one at a time on a FakeTimeProvider, as
+// the application does, without any real wait. No other test starts the recurring command.
+#elif (EveryIsGiven)
 // AddRecurringCommand sends the command at each interval: its tests run its cycles one at a time on a FakeTimeProvider, as the
 // application does, without any real wait. No other test starts the recurring command.
 #elif (EndpointIsNone)
@@ -28,7 +34,30 @@ namespace MyApp.IntegrationTests.Features.ModuleName.CommandName;
 #endif
 public sealed class CommandNameTests(PostgresDatabase database)
 {
-#if (EveryIsGiven)
+#if (ScheduleIsGiven)
+#if (DailyAtIsGiven)
+    [Fact]
+    public async Task Runs_a_cycle_every_day_at_its_local_time()
+    {
+        await using var app = new AppFactory(database);
+#if (ResponseIsId)
+        var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app);
+#else
+        var cycles = new RecurringCommandCycles<CommandNameCommand, ResponseTypeName>(app);
+#endif
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("RecurringTimeZone");
+
+        for (var day = 1; day <= 2; day++)
+        {
+            var due = await cycles.NextDueAsync();
+            TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(due, zone).DateTime).ShouldBe(new TimeOnly(RecurringHour, RecurringMinute));
+            // CommandNameHandler throws its NotImplementedException until it is replaced by the use case.
+            var response = await cycles.RunNextAsync();
+        }
+
+        Assert.Fail("TODO(hardslice): assert the business outcome of two days of cycles of CommandName, such as the state stored in PostgreSQL, read with database.CreateDbContext().");
+    }
+#elif (EveryIsGiven)
     [Fact]
     public async Task Runs_a_cycle_at_each_interval()
     {
@@ -47,6 +76,44 @@ public sealed class CommandNameTests(PostgresDatabase database)
 
         Assert.Fail("TODO(hardslice): assert the business outcome of three cycles of CommandName, such as the state stored in PostgreSQL, read with database.CreateDbContext().");
     }
+#endif
+#if (RetryIsGiven)
+
+    // FailNext fails the cycle and each of its retries before the pipeline of the command: AddRecurringCommand sends it again
+    // RecurringCountOfRetries times, RecurringDelayOfRetries apart, then waits for the next instant of its schedule.
+    [Fact]
+    public async Task Sends_a_failed_cycle_again_at_each_retry_then_waits_for_its_next_instant()
+    {
+        await using var app = new AppFactory(database);
+#if (ResponseIsId)
+        var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app);
+#else
+        var cycles = new RecurringCommandCycles<CommandNameCommand, ResponseTypeName>(app);
+#endif
+        var retryDelay = TimeSpan.Parse("RecurringDelayOfRetries", CultureInfo.InvariantCulture);
+        cycles.FailNext(1 + RecurringCountOfRetries);
+
+        await Should.ThrowAsync<FailedCycleException>(() => cycles.RunNextAsync());
+        var failed = cycles.Clock.GetUtcNow();
+        for (var retry = 1; retry <= RecurringCountOfRetries; retry++)
+        {
+            await Should.ThrowAsync<FailedCycleException>(() => cycles.RunNextAsync());
+            cycles.Clock.GetUtcNow().ShouldBe(failed + retry * retryDelay);
+        }
+
+        var next = await cycles.NextDueAsync();
+        next.ShouldBeGreaterThan(cycles.Clock.GetUtcNow());
+#if (DailyAtIsGiven)
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("RecurringTimeZone");
+        TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(next, zone).DateTime).ShouldBe(new TimeOnly(RecurringHour, RecurringMinute));
+        (next - cycles.Clock.GetUtcNow()).ShouldBeLessThanOrEqualTo(TimeSpan.FromHours(25), "The next day comes after the last retry.");
+#else
+        var interval = TimeSpan.Parse("RecurringInterval", CultureInfo.InvariantCulture);
+        ((next - TestInstants.Start).Ticks % interval.Ticks).ShouldBe(0, "The next cycle comes at an instant of the interval from the start.");
+        (next - cycles.Clock.GetUtcNow()).ShouldBeLessThanOrEqualTo(interval, "The next interval comes after the last retry.");
+#endif
+    }
+#endif
 #elif (EndpointIsNone)
 #if (ParametersIsNone)
     // No parameter, so no invalid command: test its success here, and a failure of the domain when one can happen.

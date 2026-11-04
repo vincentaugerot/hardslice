@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval>, one that AddRecurringCommand sends at regular intervals. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval> or --daily-at <hh:mm> --time-zone <id>, one that AddRecurringCommand sends at regular intervals or every day, with --retry <delay>x<count> to send it again after a failed cycle. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -79,12 +79,27 @@
     "Every": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Sends the command at regular intervals, through AddRecurringCommand in the module: the interval as [d.]hh:mm:ss, longer than zero and under 49 days, such as 00:00:30 or 1.00:00:00, which the key <Module>:<Name>:Interval of the configuration replaces. Implies --endpoint none and --parameters none: a system command without parameter, whose integration test runs three cycles on a FakeTimeProvider."
+      "description": "Sends the command at regular intervals, through AddRecurringCommand in the module: the interval as [d.]hh:mm:ss, longer than zero and under 49 days, such as 00:00:30 or 1.00:00:00, which the key <Module>:<Name>:Interval of the configuration replaces. --retry sends it again after a failed cycle. Implies --endpoint none and --parameters none: a system command without parameter, whose integration test runs three cycles on a FakeTimeProvider."
     },
     "Require": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Protects the endpoint with the authorization policy of that name, which the application registers in Shared/Http with its authentication scheme, such as AdminKey: the endpoint chains .RequireAuthorization(\"<policy>\"), an integration test asserts its 401 without authentication, and the other tests send their requests through app.CreateAuthorizedClient(\"<policy>\"), the client of that policy that AppFactory.AuthorizedClients holds. A name of letters, digits, '.', '_', ':' and '-', starting with a letter. Refused with --endpoint none and --every: a system command has no endpoint."
+      "description": "Protects the endpoint with the authorization policy of that name, which the application registers in Shared/Http with its authentication scheme, such as AdminKey: the endpoint chains .RequireAuthorization(\"<policy>\"), an integration test asserts its 401 without authentication, and the other tests send their requests through app.CreateAuthorizedClient(\"<policy>\"), the client of that policy that AppFactory.AuthorizedClients holds. A name of letters, digits, '.', '_', ':' and '-', starting with a letter. Refused with --endpoint none, --every and --daily-at: a system command has no endpoint."
+    },
+    "DailyAt": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Sends the command every day at that local time, through AddRecurringCommand in the module: hh:mm on 24 hours, such as 04:30, in the time zone of --time-zone, which the keys <Module>:<Name>:DailyAt and <Module>:<Name>:TimeZone of the configuration replace. A time that a change of the clocks skips moves forward by the length of the change, and one that the clocks repeat is sent once. Implies --endpoint none and --parameters none, as --every does, and is refused with it: a system command without parameter, whose integration test runs two days of cycles on a FakeTimeProvider."
+    },
+    "TimeZone": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The time zone of --daily-at, by its IANA id, such as America/Toronto or Europe/Paris: UTC by default. Refused without --daily-at."
+    },
+    "Retry": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Sends the command again after a failed cycle of --every or --daily-at: <delay>x<count>, the delay as [d.]hh:mm:ss, longer than zero and under 49 days, and the count from 1 to 99, such as 01:00:00x3 for three retries an hour apart, which the keys <Module>:<Name>:RetryDelay and <Module>:<Name>:Retries of the configuration replace. A retry that succeeds ends them, and the next instant of the schedule comes after the last one. Its integration test fails a cycle and each retry. Refused without --every or --daily-at."
     },
     "AppName": {
       "type": "bind",
@@ -162,6 +177,111 @@
       "fileRename": "AuthorizationPolicyName",
       "replaces": "AuthorizationPolicyName"
     },
+    "DailyAtOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "DailyAt",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "RecurringDailyAt",
+      "replaces": "RecurringDailyAt"
+    },
+    "DailyAtHour": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "DailyAtOrUnbound",
+        "steps": [
+          {
+            "regex": "^0?([0-9]+):[0-9]{2}$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "RecurringHour",
+      "replaces": "RecurringHour"
+    },
+    "DailyAtMinute": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "DailyAtOrUnbound",
+        "steps": [
+          {
+            "regex": "^[0-9]{2}:0?([0-9]+)$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "RecurringMinute",
+      "replaces": "RecurringMinute"
+    },
+    "TimeZoneOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "TimeZone",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "DefaultTimeZone": {
+      "type": "generated",
+      "generator": "constant",
+      "parameters": {
+        "value": "UTC"
+      }
+    },
+    "TimeZoneOrDefault": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "TimeZone",
+        "fallbackVariableName": "DefaultTimeZone"
+      },
+      "fileRename": "RecurringTimeZone",
+      "replaces": "RecurringTimeZone"
+    },
+    "RetryOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Retry",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "RecurringRetry",
+      "replaces": "RecurringRetry"
+    },
+    "RetryDelay": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "RetryOrUnbound",
+        "steps": [
+          {
+            "regex": "^(.*)x[0-9]+$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "RecurringDelayOfRetries",
+      "replaces": "RecurringDelayOfRetries"
+    },
+    "RetryCount": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "RetryOrUnbound",
+        "steps": [
+          {
+            "regex": "^.*x([0-9]+)$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "RecurringCountOfRetries",
+      "replaces": "RecurringCountOfRetries"
+    },
     "RouteIsGiven": {
       "type": "generated",
       "generator": "regexMatch",
@@ -214,6 +334,60 @@
       "parameters": {
         "source": "RequireOrUnbound",
         "pattern": "^(?:|[A-Za-z][A-Za-z0-9_.:-]*)$"
+      }
+    },
+    "DailyAtIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "DailyAtOrUnbound",
+        "pattern": "."
+      }
+    },
+    "DailyAtIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "DailyAtOrUnbound",
+        "pattern": "^(?:|(?:[01][0-9]|2[0-3]):[0-5][0-9])$"
+      }
+    },
+    "TimeZoneIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "TimeZoneOrUnbound",
+        "pattern": "."
+      }
+    },
+    "TimeZoneIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "TimeZoneOrUnbound",
+        "pattern": "^(?:|UTC|[A-Z][A-Za-z]*(?:/[A-Za-z0-9_+-]+)+)$"
+      }
+    },
+    "RetryIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "RetryOrUnbound",
+        "pattern": "."
+      }
+    },
+    "RetryIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "RetryOrUnbound",
+        "pattern": "^(?:|(?!(?:0{1,2}\\.)?00:00:00x)(?:(?:[0-3]?[0-9]|4[0-8])\\.)?(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]x[1-9][0-9]?)$"
       }
     },
     "TestClient": {
@@ -592,13 +766,17 @@
       "type": "computed",
       "value": "(ResponseIsId || ResponseIsNone || (ResponseIsPascalCase && !ResponseIsReserved && !ResponseIsSliceType))"
     },
+    "ScheduleIsGiven": {
+      "type": "computed",
+      "value": "(EveryIsGiven || DailyAtIsGiven)"
+    },
     "ParametersIsNone": {
       "type": "computed",
-      "value": "(Parameters == \"none\" || EveryIsGiven)"
+      "value": "(Parameters == \"none\" || ScheduleIsGiven)"
     },
     "EndpointIsNone": {
       "type": "computed",
-      "value": "(Endpoint == \"none\" || EveryIsGiven)"
+      "value": "(Endpoint == \"none\" || ScheduleIsGiven)"
     },
     "EndpointOptionsWithoutEndpoint": {
       "type": "computed",
@@ -612,6 +790,22 @@
       "type": "computed",
       "value": "(EveryIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))"
     },
+    "DailyAtContradictsOptions": {
+      "type": "computed",
+      "value": "(DailyAtIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))"
+    },
+    "EveryWithDailyAt": {
+      "type": "computed",
+      "value": "(EveryIsGiven && DailyAtIsGiven)"
+    },
+    "TimeZoneWithoutDailyAt": {
+      "type": "computed",
+      "value": "(TimeZoneIsGiven && !DailyAtIsGiven)"
+    },
+    "RetryWithoutSchedule": {
+      "type": "computed",
+      "value": "(RetryIsGiven && !ScheduleIsGiven)"
+    },
     "CommandContract": {
       "type": "generated",
       "generator": "switch",
@@ -621,7 +815,7 @@
         "datatype": "string",
         "cases": [
           {
-            "condition": "(Endpoint == \"none\" || EveryIsGiven)",
+            "condition": "(Endpoint == \"none\" || ScheduleIsGiven)",
             "value": "ISystemCommand"
           },
           {
@@ -644,7 +838,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule)"
     }
   },
   "sources": [
@@ -829,7 +1023,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for, nor one with --every, which implies it. Pass --response id for the identifier of the aggregate it creates or changes, or the PascalCase name of a DTO of what it did, such as --response ImportResultDto, or keep the parameters with --parameters id. Nothing was created."
+          "text": "error: --response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for, nor one with --every or --daily-at, which imply it. Pass --response id for the identifier of the aggregate it creates or changes, or the PascalCase name of a DTO of what it did, such as --response ImportResultDto, or keep the parameters with --parameters id. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -966,6 +1160,134 @@
       "continueOnError": false
     },
     {
+      "id": "refuseInvalidDailyTime",
+      "condition": "(!DailyAtIsValid)",
+      "description": "Refuses a time of day that is not hh:mm.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --daily-at 'RecurringDailyAt' is not a time of day of the form hh:mm on 24 hours, such as --daily-at 04:30 or --daily-at 23:00. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidTimeZone",
+      "condition": "(!TimeZoneIsValid)",
+      "description": "Refuses a time zone that is not an IANA id.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --time-zone is not the IANA id of a time zone, an area and a location separated by a slash such as --time-zone America/Toronto or --time-zone Europe/Paris, or UTC. A Windows name such as Eastern Standard Time is refused. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidRetry",
+      "condition": "(!RetryIsValid)",
+      "description": "Refuses retries that are not a delay and a count.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --retry 'RecurringRetry' is not <delay>x<count>, the delay as [d.]hh:mm:ss, longer than zero and under 49 days, and the count from 1 to 99, such as --retry 01:00:00x3 for three retries an hour apart. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseEveryWithDailyTime",
+      "condition": "(EveryWithDailyAt)",
+      "description": "Refuses --every with --daily-at.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --every sends the command at regular intervals and --daily-at every day at a time: pass one of them. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseDailyTimeWithOptions",
+      "condition": "(DailyAtContradictsOptions)",
+      "description": "Refuses --daily-at with --parameters id or --endpoint http.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --daily-at sends a new command every day, built without parameter and sent by the application only, so it implies --parameters none and --endpoint none, while --parameters id or --endpoint http asks for the opposite. Remove them, or generate the slice without --daily-at. To send a command that keeps its endpoint every day too, generate it without --daily-at and register it with AddRecurringCommand, as the skill add-slice shows. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseTimeZoneWithoutDailyTime",
+      "condition": "(TimeZoneWithoutDailyAt)",
+      "description": "Refuses --time-zone without --daily-at.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --time-zone is the time zone of the time of day of --daily-at, which is missing. Pass --daily-at <hh:mm> with it, or remove it. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseRetryWithoutSchedule",
+      "condition": "(RetryWithoutSchedule)",
+      "description": "Refuses --retry without --every or --daily-at.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --retry sends a recurring command again after a failed cycle, while the slice has no schedule: pass --every <interval> or --daily-at <hh:mm> with it, or remove it. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "refuseInvalidPolicy",
       "condition": "(!RequireIsValid)",
       "description": "Refuses a policy name that the generated code could not hold.",
@@ -997,7 +1319,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --require protects the endpoint of the slice with an authorization policy, while --endpoint none and --every generate a system command, which only the application sends and which has no endpoint. Remove --require, or keep the endpoint with --endpoint http and without --every. Nothing was created."
+          "text": "error: --require protects the endpoint of the slice with an authorization policy, while --endpoint none, --every and --daily-at generate a system command, which only the application sends and which has no endpoint. Remove --require, or keep the endpoint with --endpoint http and without --every nor --daily-at. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1042,20 +1364,44 @@
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsId && !EveryIsGiven)",
+          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsId && !ScheduleIsGiven)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !EveryIsGiven)",
+          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !ScheduleIsGiven)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EveryIsGiven && ResponseIsId)",
+          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsId)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EveryIsGiven && ResponseIsDto)",
+          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsDto)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsId)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsDto)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\"))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\"))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsId)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

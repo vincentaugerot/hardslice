@@ -8,10 +8,23 @@ using MyApp.Shared.Messaging;
 
 namespace MyApp.Features.ModuleName.CommandName;
 
-#if (EveryIsGiven)
+#if (DailyAtIsGiven)
+// A scheduled system command: AddRecurringCommand, in ModuleNameModule, sends a new one every day at RecurringDailyAt in
+// RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration, each time in a
+// scope of its own. It has no endpoint (HS004), and goes through the pipeline of every command: a failed cycle rolls its
+// transaction back and is logged.
+#if (RetryIsGiven)
+// After a failed cycle, it is sent again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, then the next day
+// after the last one comes.
+#endif
+#elif (EveryIsGiven)
 // A recurring system command: AddRecurringCommand, in ModuleNameModule, sends a new one every RecurringInterval, or every
 // ModuleName:CommandName:Interval of the configuration, each time in a scope of its own. It has no endpoint (HS004), and goes
 // through the pipeline of every command: a failed cycle rolls its transaction back, is logged, and the next one runs.
+#if (RetryIsGiven)
+// After a failed cycle, it is sent again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, then the next interval
+// after the last one comes.
+#endif
 #elif (EndpointIsNone)
 // A system command: only the application sends it, never an HTTP request. A type of module ModuleName creates it and sends it
 // through IMediator in a scope of its own, such as a hosted service of this slice. It has no endpoint (HS004), and goes through

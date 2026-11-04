@@ -181,7 +181,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(18);
+        refusals.Length.ShouldBe(25);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -207,7 +207,7 @@ public sealed class TemplatePackageTests
         parameters.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["id", "none"]);
         // No default value: --every refuses an explicit --parameters id, which generates the same slice as no option at all.
         parameters.TryGetProperty("defaultValue", out _).ShouldBeFalse();
-        symbols.GetProperty("ParametersIsNone").GetProperty("value").GetString().ShouldBe("(Parameters == \"none\" || EveryIsGiven)");
+        symbols.GetProperty("ParametersIsNone").GetProperty("value").GetString().ShouldBe("(Parameters == \"none\" || ScheduleIsGiven)");
         host.RootElement.GetProperty("symbolInfo").GetProperty("Parameters").GetProperty("longName").GetString().ShouldBe("parameters");
         symbols.GetProperty("ResponseNeedsParameters").GetProperty("value").GetString().ShouldBe("(ParametersIsNone && ResponseIsNone)");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!ResponseNeedsParameters");
@@ -226,9 +226,13 @@ public sealed class TemplatePackageTests
             "(!EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
             "(!EndpointIsNone && ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && ParametersIsNone && ResponseIsDto)",
             "(EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
-            "(EndpointIsNone && ParametersIsNone && ResponseIsId && !EveryIsGiven)", "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !EveryIsGiven)",
-            "(EveryIsGiven && ResponseIsId)", "(EveryIsGiven && ResponseIsDto)"]);
-        registrations.Where(registration => registration.Key.Contains("&& ParametersIsNone", StringComparison.Ordinal) || registration.Key.StartsWith("(EveryIsGiven", StringComparison.Ordinal))
+            "(EndpointIsNone && ParametersIsNone && ResponseIsId && !ScheduleIsGiven)", "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !ScheduleIsGiven)",
+            "(EveryIsGiven && !RetryIsGiven && ResponseIsId)", "(EveryIsGiven && !RetryIsGiven && ResponseIsDto)",
+            "(EveryIsGiven && RetryIsGiven && ResponseIsId)", "(EveryIsGiven && RetryIsGiven && ResponseIsDto)",
+            "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)", "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto)",
+            "(DailyAtIsGiven && RetryIsGiven && ResponseIsId)", "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto)"]);
+        registrations.Where(registration => registration.Key.Contains("&& ParametersIsNone", StringComparison.Ordinal)
+                || registration.Key.StartsWith("(EveryIsGiven", StringComparison.Ordinal) || registration.Key.StartsWith("(DailyAtIsGiven", StringComparison.Ordinal))
             .ShouldAllBe(registration => !registration.Value.Contains("Validator") && !registration.Value.Contains("FluentValidation"));
 
         var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
@@ -255,7 +259,7 @@ public sealed class TemplatePackageTests
         endpoint.GetProperty("datatype").GetString().ShouldBe("choice");
         endpoint.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["http", "none"]);
         endpoint.TryGetProperty("defaultValue", out _).ShouldBeFalse();
-        symbols.GetProperty("EndpointIsNone").GetProperty("value").GetString().ShouldBe("(Endpoint == \"none\" || EveryIsGiven)");
+        symbols.GetProperty("EndpointIsNone").GetProperty("value").GetString().ShouldBe("(Endpoint == \"none\" || ScheduleIsGiven)");
         host.RootElement.GetProperty("symbolInfo").GetProperty("Endpoint").GetProperty("longName").GetString().ShouldBe("endpoint");
         symbols.GetProperty("EndpointOptionsWithoutEndpoint").GetProperty("value").GetString().ShouldBe("(EndpointIsNone && (RouteIsGiven || MethodIsGiven))");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!EndpointOptionsWithoutEndpoint");
@@ -329,13 +333,13 @@ public sealed class TemplatePackageTests
             .ShouldBe("(EveryIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!EveryContradictsOptions && EveryIsValid");
         symbols.GetProperty("CommandContract").GetProperty("parameters").GetProperty("cases")[0].GetProperty("condition").GetString()
-            .ShouldBe("(Endpoint == \"none\" || EveryIsGiven)");
+            .ShouldBe("(Endpoint == \"none\" || ScheduleIsGiven)");
         var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
         postActions.Single(action => action.GetProperty("id").GetString() == "refuseInvalidInterval").GetProperty("condition").GetString().ShouldBe("(!EveryIsValid)");
         postActions.Single(action => action.GetProperty("id").GetString() == "refuseEveryWithOptions").GetProperty("condition").GetString().ShouldBe("(EveryContradictsOptions)");
         var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
             .GetProperty("manualInstructions").EnumerateArray()
-            .Where(instruction => instruction.GetProperty("condition").GetString()!.StartsWith("(EveryIsGiven", StringComparison.Ordinal))
+            .Where(instruction => instruction.GetProperty("condition").GetString()!.StartsWith("(EveryIsGiven && !RetryIsGiven", StringComparison.Ordinal))
             .Select(instruction => instruction.GetProperty("text").GetString()!)
             .ToArray();
         registrations.Length.ShouldBe(2);
@@ -346,6 +350,146 @@ public sealed class TemplatePackageTests
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
         tests.ShouldContain("var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app);");
         tests.ShouldContain("for (var cycle = 1; cycle <= 3; cycle++)");
+    }
+
+    // PB-082: --daily-at takes a time of day on 24 hours, --time-zone an IANA id or UTC, never a Windows name, and --retry a delay that
+    // a timer can wait and a count from 1 to 99.
+    [Theory]
+    [InlineData("DailyAtIsValid", "04:30", true)]
+    [InlineData("DailyAtIsValid", "00:00", true)]
+    [InlineData("DailyAtIsValid", "23:59", true)]
+    [InlineData("DailyAtIsValid", "", true)]
+    [InlineData("DailyAtIsValid", "4:30", false)]
+    [InlineData("DailyAtIsValid", "24:00", false)]
+    [InlineData("DailyAtIsValid", "04:60", false)]
+    [InlineData("DailyAtIsValid", "04:30:00", false)]
+    [InlineData("TimeZoneIsValid", "America/Toronto", true)]
+    [InlineData("TimeZoneIsValid", "America/Argentina/Buenos_Aires", true)]
+    [InlineData("TimeZoneIsValid", "Etc/GMT+5", true)]
+    [InlineData("TimeZoneIsValid", "UTC", true)]
+    [InlineData("TimeZoneIsValid", "", true)]
+    [InlineData("TimeZoneIsValid", "Eastern Standard Time", false)]
+    [InlineData("TimeZoneIsValid", "Toronto", false)]
+    [InlineData("TimeZoneIsValid", "america/toronto", false)]
+    [InlineData("TimeZoneIsValid", "America/Toronto\"", false)]
+    [InlineData("RetryIsValid", "01:00:00x3", true)]
+    [InlineData("RetryIsValid", "00:00:05x99", true)]
+    [InlineData("RetryIsValid", "1.00:00:00x1", true)]
+    [InlineData("RetryIsValid", "", true)]
+    [InlineData("RetryIsValid", "01:00:00", false)]
+    [InlineData("RetryIsValid", "01:00:00x0", false)]
+    [InlineData("RetryIsValid", "01:00:00x100", false)]
+    [InlineData("RetryIsValid", "00:00:00x3", false)]
+    [InlineData("RetryIsValid", "49.00:00:00x3", false)]
+    [InlineData("RetryIsValid", "01:00:00:3", false)]
+    public void Command_item_template_accepts_a_daily_time_a_time_zone_and_retries_it_can_write(string symbol, string value, bool accepted)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(CommandTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+
+        Matches(template.RootElement.GetProperty("symbols"), symbol, value).ShouldBe(accepted);
+    }
+
+    // PB-082: --daily-at, --time-zone and --retry generate a system command without parameter that AddRecurringCommand sends every day
+    // at a local time, again after a failed cycle, with integration tests of two days of cycles and of the retries. They refuse the
+    // options they contradict. The hour and the minute of --daily-at are written as the arguments of new TimeOnly.
+    [Fact]
+    public void Command_item_template_generates_a_daily_command_with_retries_and_refuses_the_options_it_contradicts()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+
+        foreach (var (symbol, option) in new[] { ("DailyAt", "daily-at"), ("TimeZone", "time-zone"), ("Retry", "retry") })
+        {
+            symbols.GetProperty(symbol).GetProperty("datatype").GetString().ShouldBe("text");
+            host.RootElement.GetProperty("symbolInfo").GetProperty(symbol).GetProperty("longName").GetString().ShouldBe(option);
+        }
+        foreach (var (symbol, value, written) in new[]
+        {
+            ("DailyAtHour", "04:30", "4"), ("DailyAtMinute", "04:30", "30"), ("DailyAtHour", "00:05", "0"), ("DailyAtMinute", "00:05", "5"),
+            ("DailyAtHour", "23:00", "23"), ("DailyAtMinute", "23:00", "0"), ("RetryDelay", "01:00:00x3", "01:00:00"), ("RetryCount", "1.00:00:00x12", "12"),
+        })
+        {
+            var step = symbols.GetProperty(symbol).GetProperty("parameters").GetProperty("steps").EnumerateArray().ShouldHaveSingleItem();
+            Regex.Replace(value, step.GetProperty("regex").GetString()!, step.GetProperty("replacement").GetString()!).ShouldBe(written);
+        }
+        symbols.GetProperty("TimeZoneOrDefault").GetProperty("replaces").GetString().ShouldBe("RecurringTimeZone");
+        symbols.GetProperty("DefaultTimeZone").GetProperty("parameters").GetProperty("value").GetString().ShouldBe("UTC");
+        symbols.GetProperty("ScheduleIsGiven").GetProperty("value").GetString().ShouldBe("(EveryIsGiven || DailyAtIsGiven)");
+        symbols.GetProperty("DailyAtContradictsOptions").GetProperty("value").GetString()
+            .ShouldBe("(DailyAtIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain(
+            "DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule");
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        foreach (var (refusal, condition) in new[]
+        {
+            ("refuseInvalidDailyTime", "(!DailyAtIsValid)"), ("refuseInvalidTimeZone", "(!TimeZoneIsValid)"), ("refuseInvalidRetry", "(!RetryIsValid)"),
+            ("refuseEveryWithDailyTime", "(EveryWithDailyAt)"), ("refuseDailyTimeWithOptions", "(DailyAtContradictsOptions)"),
+            ("refuseTimeZoneWithoutDailyTime", "(TimeZoneWithoutDailyAt)"), ("refuseRetryWithoutSchedule", "(RetryWithoutSchedule)"),
+        })
+            postActions.Single(action => action.GetProperty("id").GetString() == refusal).GetProperty("condition").GetString().ShouldBe(condition);
+        var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        registrations["(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)"].ShouldContain(
+            "            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\"))\n");
+        registrations["(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)"].ShouldNotContain("using System.Globalization;");
+        registrations["(DailyAtIsGiven && RetryIsGiven && ResponseIsDto)"].ShouldContain(
+            "            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\")"
+            + ".WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\n");
+        registrations["(EveryIsGiven && RetryIsGiven && ResponseIsId)"].ShouldContain(
+            "            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))"
+            + ".WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\n");
+        registrations.Where(registration => registration.Key.Contains("RetryIsGiven && ", StringComparison.Ordinal) && !registration.Key.Contains("!RetryIsGiven", StringComparison.Ordinal))
+            .ShouldAllBe(registration => registration.Value.Contains("using System.Globalization;\n"));
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
+        slice.ShouldContain("sends a new one every day at RecurringDailyAt in\n// RecurringTimeZone");
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        tests.ShouldContain("    public async Task Runs_a_cycle_every_day_at_its_local_time()");
+        tests.ShouldContain("TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(due, zone).DateTime).ShouldBe(new TimeOnly(RecurringHour, RecurringMinute));");
+        tests.ShouldContain("    public async Task Sends_a_failed_cycle_again_at_each_retry_then_waits_for_its_next_instant()");
+        tests.ShouldContain("cycles.FailNext(1 + RecurringCountOfRetries);");
+    }
+
+    // PB-082: AddRecurringCommand sends any command without parameter on an interval or a daily schedule, with retries, and
+    // RecurringCommandCycles waits for the instant that the service waits for, fails cycles and configures its instance.
+    [Fact]
+    public void Recurring_commands_follow_a_daily_schedule_with_retries_and_their_cycles_configure_their_instance()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var service = File.ReadAllText(Path.Combine(template, "src", "MyApp", "Shared", "Messaging", "RecurringCommand.cs"));
+        var cycles = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "RecurringCommandCycles.cs"));
+
+        service.ShouldContain("public static IServiceCollection AddRecurringCommand<TCommand, TResponse>(this IServiceCollection services, string section, RecurringSchedule schedule)\n        where TCommand : ICommand<TResponse>, new()");
+        service.ShouldNotContain("where TCommand : ISystemCommand<TResponse>");
+        service.ShouldContain("public static RecurringSchedule DailyAt(TimeOnly time, string timeZone)");
+        service.ShouldContain("public RecurringSchedule WithRetries(TimeSpan delay, int retries)");
+        service.ShouldContain("Task.Delay(due - now, timeProvider, stoppingToken)");
+        cycles.ShouldContain("public RecurringCommandCycles(AppFactory app, Action<IWebHostBuilder>? configure = null)");
+        cycles.ShouldContain("public async Task<DateTimeOffset> NextDueAsync()");
+        cycles.ShouldContain("public void FailNext(int cycles)");
+        cycles.ShouldContain("where TCommand : ICommand<TResponse>, new()");
+    }
+
+    // PB-082: the agent kit says how to send a command every day or again after a failed cycle, and that a command with its endpoint
+    // is scheduled by the same line.
+    [Fact]
+    public void Agent_guidance_says_how_to_schedule_a_command_every_day_with_retries()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+
+        agents.ShouldContain("`--every <interval>` or `--daily-at <hh:mm> --time-zone <id>` for one sent at regular intervals or every day (`--retry <delay>x<count>` after a failed cycle)");
+        agents.ShouldContain("The same line schedules a command without parameter that keeps its endpoint.");
+        addSlice.ShouldContain("--name <Slice> --daily-at 04:30 --time-zone America/Toronto --retry 01:00:00x3");
+        addSlice.ShouldContain("its endpoint and its schedule both send it, and its endpoint stays (HS004)");
+        addSlice.ShouldContain("`FailNext(count)` fails the next cycles before the pipeline");
+        addSlice.ShouldContain("Its second argument configures the instance that runs the cycles");
     }
 
     // PB-081: --require <policy> protects the endpoint of a command or a query: it chains .RequireAuthorization("<policy>"), the tests
@@ -403,7 +547,7 @@ public sealed class TemplatePackageTests
         if (templateName != "hardslice-command")
             return;
         symbols.GetProperty("RequireWithoutEndpoint").GetProperty("value").GetString().ShouldBe("(RequireIsGiven && EndpointIsNone)");
-        symbols.GetProperty("EndpointIsNone").GetProperty("value").GetString().ShouldBe("(Endpoint == \"none\" || EveryIsGiven)");
+        symbols.GetProperty("EndpointIsNone").GetProperty("value").GetString().ShouldBe("(Endpoint == \"none\" || ScheduleIsGiven)");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!RequireWithoutEndpoint");
         postActions.Single(action => action.GetProperty("id").GetString() == "refuseRequireWithoutEndpoint").GetProperty("condition").GetString()
             .ShouldBe("(RequireWithoutEndpoint)");
@@ -462,7 +606,7 @@ public sealed class TemplatePackageTests
         section.ShouldContain("they live in `src/MyApp/Shared/Http/`, registered from `Program.cs` (HS017)");
         section.ShouldContain("on the group of the module, in `<Module>Module.cs`, when it covers every endpoint of the module, and on the endpoint, in its slice");
         section.ShouldContain("dotnet new hardslice-command --project src/MyApp/MyApp.csproj --module <Module> --name <Slice> --route <route> --require <policy>");
-        section.ShouldContain("`--require` is refused with `--endpoint none` and `--every`");
+        section.ShouldContain("`--require` is refused with `--endpoint none`, `--every` and `--daily-at`");
         section.ShouldContain("an entry of `AuthorizedClients` named after the policy");
         section.ShouldContain("`docs/rules/HS015.md`");
         addSlice.ShouldNotContain("add-authorization");
