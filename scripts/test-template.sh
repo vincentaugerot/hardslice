@@ -2,7 +2,7 @@
 # Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template, generates a solution in a temporary directory,
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable and the instruction file of each agent and the skills they read,
 # runs the "Run the API" path of docs/getting-started.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
-# checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
+# checks that commands go through its own mediator and pipeline, two concurrent creations under one unique key answered with a conflict, and that queries read without tracking, proves both scripts name the missing container runtime,
 # then proves a seeded violation of HS000 (test projects included), HS001, HS003, HS004 (a reaction slice included), HS005, HS006, HS007, HS008, HS009, HS010 (a delay without TimeProvider included), HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
 # that a missing or invalid hardslice.json, or one of a later version, fails them explicitly, with HS900 for its contracts and its version, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
@@ -376,6 +376,9 @@ echo "==> Checking that commands go through the generated solution's own mediato
     "Shared.Behaviors.TransactionBehaviorTests.Rolls_back_everything_a_command_saved_when_it_throws" \
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_never_commits_a_failed_commands_additions" \
     "Shared.Behaviors.TransactionBehaviorTests.A_later_command_reloads_the_state_before_a_failed_commands_changes" \
+    "Shared.Behaviors.TransactionBehaviorTests.Answers_a_conflict_to_the_second_of_two_concurrent_creations_under_the_same_key" \
+    "Shared.Behaviors.TransactionBehaviorTests.Keeps_the_exception_of_a_handler_that_translates_a_unique_violation_itself" \
+    "Shared.Behaviors.TransactionBehaviorTests.Answers_a_conflict_to_a_creation_that_EF_Core_saves_under_an_existing_key" \
     "Shared.Behaviors.DomainEventPublisherTests.Publishes_the_event_once_inside_the_transaction_before_anything_is_committed" \
     "Shared.Behaviors.DomainEventPublisherTests.A_failing_handler_saves_nothing_drops_the_pending_events_and_answers_with_its_exception" \
     "Shared.Behaviors.DomainEventPublisherTests.Calls_every_handler_of_the_event_in_registration_order" \
@@ -4225,6 +4228,8 @@ echo "==> Checking that each test project of $blank_name runs tests of the found
     "$blank_name.Tests:Shared.Messaging.MediatorTests.Runs_the_behaviors_in_registration_order_around_the_handler" \
     "$blank_name.Tests:Shared.Behaviors.BehaviorsServiceCollectionExtensionsTests.Commands_go_through_logging_then_validation_then_the_transaction" \
     "$blank_name.IntegrationTests:ProgramTests.Starts_and_answers_HTTP_requests_on_its_migrated_database" \
+    "$blank_name.IntegrationTests:Shared.Behaviors.TransactionBehaviorTests.Answers_a_conflict_to_the_second_of_two_concurrent_creations_under_the_same_key" \
+    "$blank_name.IntegrationTests:Shared.Behaviors.TransactionBehaviorTests.Keeps_the_exception_of_a_handler_that_translates_a_unique_violation_itself" \
     "$blank_name.IntegrationTests:Shared.Persistence.MigrationsTests.Model_has_no_changes_missing_from_the_migrations" \
     "$blank_name.ArchitectureTests:SliceTests.Slices_never_use_types_of_another_slice" \
     "$blank_name.ArchitectureTests:TestLayoutTests.Every_slice_has_tests_at_its_path"; do
