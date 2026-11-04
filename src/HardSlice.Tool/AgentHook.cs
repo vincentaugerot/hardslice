@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace HardSlice.Tool;
 
@@ -6,7 +7,7 @@ namespace HardSlice.Tool;
 // the CLI on its standard input (docs/agents/support.md). Each CLI hands the answer to its agent its own way (HookCli): before an
 // edit, the hook refuses a protected file; after the edit of a .cs file, the agent reads the errors of the build; before the agent
 // hands back, the full check runs and its failure keeps the agent working.
-internal sealed class AgentHook(HookCli cli, ICommandRunner runner, TextWriter output, TextWriter error, Func<string, string?> environment, string stateDirectory)
+internal sealed partial class AgentHook(HookCli cli, ICommandRunner runner, TextWriter output, TextWriter error, Func<string, string?> environment, string stateDirectory)
 {
     public int Run(string eventName, TextReader input, string currentDirectory)
     {
@@ -97,7 +98,7 @@ internal sealed class AgentHook(HookCli cli, ICommandRunner runner, TextWriter o
     // when the build passes.
     private int AfterEdit(JsonElement payload, string currentDirectory, string baseDirectory)
     {
-        if (EditedFiles(payload, currentDirectory, baseDirectory) is not var (_, paths))
+        if (EditedFiles(payload, currentDirectory, baseDirectory) is not var (solution, paths))
             return 0;
 
         var sources = paths.Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -121,9 +122,40 @@ internal sealed class AgentHook(HookCli cli, ICommandRunner runner, TextWriter o
 
         return cli.ReportAfterEdit(
             $"HardSlice: the build fails after your edit of {edited}. Fix these errors before going on; for a HardSlice rule, use the skill after Skill: and the sheet after Doc:."
-            + Environment.NewLine + failure,
+            + Environment.NewLine + EditedFilesFirst(failure, solution.Root, sources),
             output, error);
     }
+
+    // During a change of several files, most errors of the build are in files that the next edits will change: the errors of the
+    // edited files are kept in full, and the others are only counted. When no error is in an edited file, every error is kept,
+    // since the edit may have broken another file. A line that names no file, as an error of the tool, is always kept.
+    private static string EditedFilesFirst(string failure, string root, IReadOnlyCollection<string> edited)
+    {
+        var lines = failure.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n')
+            .Select(line => (Text: line, File: ErrorFile(line, root)))
+            .Select(line => (line.Text, line.File, Other: line.File is not null && !edited.Contains(line.File, StringComparer.OrdinalIgnoreCase)))
+            .ToArray();
+        var others = lines.Where(line => line.Other).ToArray();
+        if (others.Length == 0 || !lines.Any(line => line.File is not null && !line.Other))
+            return failure;
+
+        var files = others.Select(line => line.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        return string.Join(Environment.NewLine, lines.Where(line => !line.Other).Select(line => line.Text)) + Environment.NewLine
+            + $"HardSlice: {others.Length} more {(others.Length == 1 ? "error" : "errors")} in {files} other {(files == 1 ? "file" : "files")}, "
+            + "not shown here since the next edits of your change may fix them. Once the change is done, run scripts/check.sh --build to see those left: "
+            + "the full check before handing back lists every error." + Environment.NewLine;
+    }
+
+    // The file of an error that the compiler or MSBuild locates, relative to the root of the solution, or null for another line.
+    // A file outside the solution keeps its own path, never one of the edited files.
+    private static string? ErrorFile(string line, string root) =>
+        LocatedError().Match(line) is { Success: true } match
+            ? SolutionPath.Relative(root, match.Groups["file"].Value, root) ?? match.Groups["file"].Value
+            : null;
+
+    // 'src/Demo/Program.cs(12,5): error CS0103: ...', as the console logger of MSBuild prints an error, with a line and a column or a range.
+    [GeneratedRegex(@"^(?<file>.+?)\(\d+(?:,\d+){0,3}\): error ")]
+    private static partial Regex LocatedError();
 
     // Before the agent hands back, the full check runs, and its failure keeps the agent working: at most StopRetries.Max
     // relaunches for the same failure and StopRetries.SessionMax in the session, after which the agent tells the user that the

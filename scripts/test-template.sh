@@ -1659,13 +1659,32 @@ CODE
   fi
   echo "    PostToolUse: HS010 handed to the agent with code 2, nothing built for a file other than .cs"
 
-  run_claude_hook Stop "$(claude_payload Stop "" false)"
-  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the check fails, so the work is not done."*"(relaunch 1 of 3 for this failure)"* ||
-    "$hook_error" != *"error HS010: 'RoomOpening.IsOpenToday'"* ]]; then
+  # PB-077: after an edit, the errors of the edited file are shown and those of the other files only counted, while the Stop hook lists them all.
+  cat > "$app/src/$app_name.Domain/$module/RoomClosing.cs" <<CODE
+namespace $app_name.Domain.$module;
+
+public static class RoomClosing
+{
+    public static bool IsClosedToday() => DateTime.Today.DayOfWeek == DayOfWeek.Sunday;
+}
+CODE
+  run_claude_hook PostToolUse "$(claude_payload PostToolUse "$app/src/$app_name.Domain/$module/RoomOpening.cs")"
+  if [[ "$hook_status" != 2 || "$hook_error" != *"error HS010: 'RoomOpening.IsOpenToday'"* || "$hook_error" == *"RoomClosing.cs("* ]] ||
+    ! grep -Eq '^HardSlice: [0-9]+ more errors? in 1 other file, not shown here since the next edits of your change may fix them\.' <<< "$hook_error"; then
     printf '%s\n' "$hook_error" >&2
-    echo "error: the Stop hook did not block the end of the turn on HS010 with code 2 (code $hook_status)." >&2
+    echo "error: the PostToolUse hook did not show the errors of the edited file and only count those of src/$app_name.Domain/$module/RoomClosing.cs (code $hook_status)." >&2
     exit 1
   fi
+  echo "    PostToolUse: the HS010 of the edited file shown, the one of another file only counted"
+
+  run_claude_hook Stop "$(claude_payload Stop "" false)"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the check fails, so the work is not done."*"(relaunch 1 of 3 for this failure)"* ||
+    "$hook_error" != *"error HS010: 'RoomOpening.IsOpenToday'"* || "$hook_error" != *"error HS010: 'RoomClosing.IsClosedToday'"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the Stop hook did not block the end of the turn on HS010 with code 2, with the errors of every file (code $hook_status)." >&2
+    exit 1
+  fi
+  rm "$app/src/$app_name.Domain/$module/RoomClosing.cs"
   for event in PreToolUse PostToolUse Stop; do
     run_claude_hook "$event" "$(claude_payload "$event" "$app/src/$app_name.Domain/$module/RoomOpening.cs")" COPILOT_CLI=1
     if [[ "$hook_status" != 0 || -n "$hook_error" || -s "$work/hook-output" ]]; then
