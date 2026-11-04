@@ -1,7 +1,7 @@
 using System.Text.Json;
-using MyApp.Shared.Behaviors;
+using MyApp.Shared.Http;
 
-namespace MyApp.Tests.Shared.Behaviors;
+namespace MyApp.Tests.Shared.Http;
 
 public sealed class ExplicitOffsetJsonConverterTests
 {

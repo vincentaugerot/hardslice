@@ -137,7 +137,8 @@ src/
     Shared/                  # transverse seulement
       Messaging/             # médiateur maison (pas de MediatR)
       Persistence/           # AppDbContext, connexion et migrations
-      Behaviors/             # validation, transactions, logs
+      Behaviors/             # pipeline du médiateur : logs, validation, transaction
+      Http/                  # pipeline HTTP : réponses aux erreurs, authentification, politiques
     Program.cs
 tests/
   MyApp.Tests/               # unitaires, même chemin que la slice
@@ -220,7 +221,7 @@ Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modif
 | HS014 | Tout handler de commande et tout gestionnaire d'événement de domaine a des tests au chemin de sa slice | Test d'architecture | Les deux |
 | HS015 | L'endpoint d'une slice est dans la slice, s'enregistre dans le `MapGroup` du module et renvoie des `TypedResults` | Analyseur | Slices |
 | **HS016** | **Une slice n'utilise aucun type d'une autre slice** (ni son handler, ni sa commande, ni son DTO). Pour partager : le domaine, un événement ou le contrat du module. Les handlers, validateurs et endpoints sont `internal` | Test d'architecture et analyseur | Slices |
-| **HS017** | **`Shared` reste transverse** : il ne dépend jamais de `Features` ni d'un module, et ne contient que les dossiers autorisés dans `hardslice.json` (par défaut `Messaging`, `Persistence`, `Behaviors`) | Test d'architecture | Slices |
+| **HS017** | **`Shared` reste transverse** : il ne dépend jamais de `Features` ni d'un module, et ne contient que les dossiers autorisés dans `hardslice.json` (par défaut `Messaging`, `Persistence`, `Behaviors`, `Http`) | Test d'architecture | Slices |
 | **HS018** | **Les tests reflètent les slices** : les tests de `Features/<Module>/<Slice>/` sont au même chemin dans `tests/`. Une slice sans dossier de tests est signalée | Test d'architecture | Slices |
 | HS019 | Les événements de domaine sont nommés au passé (`BookingConfirmed`). Convention de nommage, jamais bloquante : suggestion | Analyseur | Les deux |
 
@@ -231,6 +232,7 @@ Les règles du domaine et de la messagerie ne devinent pas le rôle d'un type. L
 - Un type appartient à une catégorie s'il implémente le contrat, directement ou par héritage, y compris depuis un assembly référencé. Un type homonyme d'un autre espace de noms ou d'un autre assembly est ignoré.
 - Une propriété `Id` ne classe jamais un type.
 - Le format de `hardslice.json` est versionné (décision du 03/11/2026) : `"version": 1` est exigé, une version inconnue produit HS900 avec la mise à jour à faire de `HardSlice.Analyzers`, et `$schema` est accepté pour les éditeurs. Le reste reste strict : une clé inconnue est une faute de frappe qui désactiverait une règle sans le dire. Une version suivante du format porte un autre numéro.
+- `shared.allowedFolders` généré vaut `["Messaging", "Persistence", "Behaviors", "Http"]` (décision du 04/11/2026, PB-079), sans changement de format. `Behaviors` porte le pipeline du médiateur (les `IPipelineBehavior<,>`), `Http` le pipeline HTTP : les réponses aux requêtes illisibles et aux erreurs de validation et du domaine, et l'emplacement de l'authentification, des politiques d'autorisation, de la limitation de débit et de CORS. Une réponse du middleware (401, 403, 429) n'entre pas dans la signature de l'endpoint que HS015 exige : un test d'intégration la couvre.
 - La cartographie des slices (espaces de noms de la compilation analysée) et la classification des types (symboles, références comprises) sont deux mécanismes distincts. Une règle sur une déclaration s'exécute dans la compilation qui déclare le type. Une règle sur un usage lit les symboles des assemblies référencés. Aucun analyseur ne charge la solution entière.
 
 Diagnostics de configuration, émis seulement lorsqu'une règle active en dépend :

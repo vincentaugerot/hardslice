@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using MyApp.Domain;
 
-namespace MyApp.Shared.Behaviors;
+namespace MyApp.Shared.Http;
 
 internal sealed class DomainExceptionHandler(IProblemDetailsService problemDetails) : IExceptionHandler
 {

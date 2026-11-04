@@ -2,6 +2,7 @@
 using MyApp.Features.Bookings;
 #endif
 using MyApp.Shared.Behaviors;
+using MyApp.Shared.Http;
 using MyApp.Shared.Messaging;
 using MyApp.Shared.Persistence;
 

@@ -239,19 +239,31 @@ record() {
   echo "    Write its verdict (pass or fail) in $run_dir/verdict and its account in $run_dir/trace.md."
 }
 
-# The recorded changes stay as the agent wrote them, against the template of their run. <run>/changes.rename lists, one
-# "<old> <new>" pair of identifiers per line, the types of the generated solution that the template renamed since then: each is
-# renamed in the C# files of the changes, laid over <app>, before they are verified.
+# The recorded changes stay as the agent wrote them, against the template of their run. <run>/changes.rename lists, one per line,
+# what the template changed since then in the C# files of the changes, laid over <app>, before they are verified:
+# - "<old> <new>", a pair of identifiers: a type of the generated solution that the template renamed, renamed in them;
+# - "using <old> <new>", two namespaces: types that the template moved from <old> to <new>, so that each file with
+#   "using <old>;" gets "using <new>;" after it.
 apply_template_renames() {
   local run_dir="$1"
   local app="$2"
   local old
   local new
   local extra
+  local more
   local path
+  local namespace='^[A-Za-z_][A-Za-z0-9_]*([.][A-Za-z_][A-Za-z0-9_]*)*$'
   [[ -f "$run_dir/changes.rename" ]] || return 0
-  while read -r old new extra || [[ -n "$old" ]]; do
+  while read -r old new extra more || [[ -n "$old" ]]; do
     [[ -n "$old" && "$old" != \#* ]] || continue
+    if [[ "$old" == using ]]; then
+      [[ "$new" =~ $namespace && "$extra" =~ $namespace && -z "$more" ]] ||
+        fail "$run_dir/changes.rename: 'using $new $extra $more' is not a pair of namespaces."
+      while IFS= read -r path; do
+        OLD="$new" NEW="$extra" perl -0pi -e 's/^using \Q$ENV{OLD}\E;\n(?!(?s:.*)^using \Q$ENV{NEW}\E;$)/using $ENV{OLD};\nusing $ENV{NEW};\n/m' "$app/$path"
+      done < <(cd "$run_dir/changes" && find . -type f -name '*.cs' | sed 's|^[.]/||' | LC_ALL=C sort)
+      continue
+    fi
     [[ "$old" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && "$new" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -z "$extra" ]] ||
       fail "$run_dir/changes.rename: '$old $new $extra' is not a pair of identifiers."
     while IFS= read -r path; do

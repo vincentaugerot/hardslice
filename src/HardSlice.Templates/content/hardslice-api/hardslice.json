@@ -12,6 +12,6 @@
     "domainEventHandler": "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp"
   },
   "shared": {
-    "allowedFolders": ["Messaging", "Persistence", "Behaviors"]
+    "allowedFolders": ["Messaging", "Persistence", "Behaviors", "Http"]
   }
 }

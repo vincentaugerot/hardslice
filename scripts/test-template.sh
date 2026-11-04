@@ -692,19 +692,6 @@ EOF
 expect_failure "HS017: 'Hs017RootProbe' in 'Shared/Behaviors' uses 'Hs017RootFeature' in 'Features'" "docs/rules/HS017.md" "Shared depending on the Features root" check.sh check.ps1
 rm "$app_src/Features/Hs017RootFeature.cs" "$app_src/Shared/Behaviors/Hs017RootProbe.cs"
 
-echo "==> Checking that HS017 fails the check script on a folder of Shared that hardslice.json does not allow"
-mkdir -p "$app_src/Shared/Helpers"
-cat > "$app_src/Shared/Helpers/TextHelpers.cs" <<EOF
-namespace $app_name.Shared.Helpers;
-
-internal static class TextHelpers
-{
-    internal static string Normalize(string value) => value.Trim();
-}
-EOF
-expect_failure "HS017: 'TextHelpers' is in 'Shared/Helpers'" "docs/rules/HS017.md" "a Shared folder that hardslice.json does not allow" check.sh
-rm -r "$app_src/Shared/Helpers"
-
 echo "==> Checking that HS013 fails both check scripts on a command with parameters but no validator"
 mkdir -p "$app_src/Features/Bookings/Hs013Probe"
 cat > "$app_src/Features/Bookings/Hs013Probe/Hs013Probe.cs" <<EOF
@@ -2216,6 +2203,77 @@ CODE
 # each time it starts: after the whole integration test project, only the seeded test that keeps it with KeepHostedService started it,
 # while a user secret set for the application stays out of the configuration of AppFactory, whose test database stays in place.
 user_secrets_ids=()
+# PB-079: writes in Shared/<folder> the authentication scheme of an API key, its policy and the extension that registers them, as an
+# application whose endpoints of several modules share it writes them, and registers it in Program.cs.
+write_probe_key_scheme() {
+  local folder="$1"
+  mkdir -p "$app_src/Shared/$folder"
+  cat > "$app_src/Shared/$folder/ProbeKeyAuthentication.cs" <<EOF
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Options;
+
+namespace $app_name.Shared.$folder;
+
+internal sealed class ProbeKeyAuthenticationHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
+    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+{
+    public const string SchemeName = "ProbeKey";
+
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync() =>
+        Task.FromResult(Request.Headers["X-Probe-Key"] == "probe"
+            ? AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "probe")], SchemeName)), SchemeName))
+            : AuthenticateResult.NoResult());
+}
+
+public static class ProbeKeyAuthentication
+{
+    public const string Policy = "ProbeKey";
+
+    public static IServiceCollection AddProbeKeyAuthentication(this IServiceCollection services)
+    {
+        services.AddAuthentication(ProbeKeyAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, ProbeKeyAuthenticationHandler>(ProbeKeyAuthenticationHandler.SchemeName, null);
+        services.AddAuthorizationBuilder().AddPolicy(Policy, policy => policy.RequireAuthenticatedUser());
+        return services;
+    }
+}
+EOF
+  # Program.cs already imports Shared.Http: only another folder needs its using.
+  {
+    grep -Fxq "using $app_name.Shared.$folder;" "$work/program.backup" || printf 'using %s.Shared.%s;\n' "$app_name" "$folder"
+    perl -pe 's/^(builder\.Services\.AddProblemDetails\(\);)$/$1\nbuilder.Services.AddProbeKeyAuthentication();/' "$work/program.backup"
+  } > "$app_src/Program.cs"
+  grep -Fxq "builder.Services.AddProbeKeyAuthentication();" "$app_src/Program.cs" || {
+    echo "error: the Program.cs of $app_name no longer calls builder.Services.AddProblemDetails() on a line of its own." >&2
+    exit 1
+  }
+}
+
+# PB-079: the authentication scheme of the application is cross-cutting: in Shared/Http, the check passes. The same scheme in a
+# folder that hardslice.json does not allow fails HS017 on the given check scripts, and its message lists the four default folders.
+probe_shared_folders() {
+  local check_output
+
+  cp "$app_src/Program.cs" "$work/program.backup"
+  echo "==> Checking that the check script of $app_name passes with an authentication scheme in Shared/Http"
+  write_probe_key_scheme Http
+  if ! check_output="$(run_check check.sh 2>&1)"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh failed with an authentication scheme in Shared/Http, which hardslice.json allows." >&2
+    exit 1
+  fi
+  rm -r "$app_src/Shared/Http/ProbeKeyAuthentication.cs"
+
+  echo "==> Checking that HS017 fails the check scripts of $app_name on the same scheme in Shared/Security, and lists the allowed folders"
+  write_probe_key_scheme Security
+  expect_failure "HS017: '[A-Za-z]*' is in 'Shared/Security', a folder hardslice.json does not allow\. Shared holds only cross-cutting code, in the folders allowed by hardslice.json: Messaging, Persistence, Behaviors, Http\." \
+    "docs/rules/HS017.md" "an authentication scheme in Shared/Security, a folder of $app_name that hardslice.json does not allow" "$@"
+  rm -r "$app_src/Shared/Security"
+  mv "$work/program.backup" "$app_src/Program.cs"
+}
+
 probe_integration_isolation() {
   local project="src/$app_name/$app_name.csproj" service_file="$app_src/Shared/Behaviors/ProbeHostedService.cs"
   local test_file="$app/tests/$app_name.IntegrationTests/ProbeIsolationTests.cs" starts_file="$app/tests/$app_name.IntegrationTests/bin/Debug/net10.0/probe-hosted-service.log"
@@ -4276,6 +4334,7 @@ probe_hardslice_files() {
 probe_hardslice_files
 probe_application_packages
 probe_integration_isolation
+probe_shared_folders check.sh
 
 # A second module beside Bookings, generated by dotnet new hardslice-module and registered in Program.cs: the check passes.
 probe_module_template Rooms MeetingRooms meeting-rooms
@@ -4374,6 +4433,8 @@ echo "==> Checking that each test project of $blank_name runs tests of the found
   for expected in \
     "$blank_name.Tests:Shared.Messaging.MediatorTests.Runs_the_behaviors_in_registration_order_around_the_handler" \
     "$blank_name.Tests:Shared.Behaviors.BehaviorsServiceCollectionExtensionsTests.Commands_go_through_logging_then_validation_then_the_transaction" \
+    "$blank_name.Tests:Shared.Http.ExceptionHandlersTests.Answers_a_broken_rule_with_400_and_a_conflict_with_409" \
+    "$blank_name.Tests:Shared.Http.ExplicitOffsetJsonConverterTests.Refuses_a_date_without_offset_or_that_is_no_ISO_8601_string" \
     "$blank_name.IntegrationTests:ProgramTests.Starts_and_answers_HTTP_requests_on_its_migrated_database" \
     "$blank_name.IntegrationTests:Shared.Behaviors.TransactionBehaviorTests.Answers_a_conflict_to_the_second_of_two_concurrent_creations_under_the_same_key" \
     "$blank_name.IntegrationTests:Shared.Behaviors.TransactionBehaviorTests.Keeps_the_exception_of_a_handler_that_translates_a_unique_violation_itself" \
@@ -4492,18 +4553,7 @@ EOF
 expect_failure "HS014: command handler 'PlaceOrderHandler' in slice 'Orders/PlaceOrder' has no test" "docs/rules/HS014.md" "the first command handler of $app_name without tests" check.sh check.ps1
 rm -r "$app_src/Features/Orders" "$app/tests/$app_name.Tests/Features/Orders"
 
-echo "==> Checking that HS017 fails both check scripts on a folder of Shared in $app_name that hardslice.json does not allow"
-mkdir -p "$app_src/Shared/Helpers"
-cat > "$app_src/Shared/Helpers/TextHelpers.cs" <<EOF
-namespace $app_name.Shared.Helpers;
-
-internal static class TextHelpers
-{
-    internal static string Normalize(string value) => value.Trim();
-}
-EOF
-expect_failure "HS017: 'TextHelpers' is in 'Shared/Helpers'" "docs/rules/HS017.md" "a Shared folder of $app_name that hardslice.json does not allow" check.sh check.ps1
-rm -r "$app_src/Shared/Helpers"
+probe_shared_folders check.sh check.ps1
 
 echo "==> Checking that HS003 fails both check scripts on the first endpoint of $app_name that receives AppDbContext"
 probe_endpoint_database_access Rooms

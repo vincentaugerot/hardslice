@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace MyApp.Shared.Behaviors;
+namespace MyApp.Shared.Http;
 
 // Reads a DateTimeOffset of a request only when its JSON string states its offset, 'Z' or '+01:00' for example. Without one,
 // System.Text.Json would take the offset of the server, and the same request would store another instant on another machine.

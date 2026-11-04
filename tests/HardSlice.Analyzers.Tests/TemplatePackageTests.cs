@@ -1698,7 +1698,64 @@ public sealed class TemplatePackageTests
         configuration.RootElement.GetProperty("contracts").GetProperty("systemCommand").GetString().ShouldBe("MyApp.Shared.Messaging.ISystemCommand`1, MyApp");
         configuration.RootElement.GetProperty("shared").GetProperty("allowedFolders").EnumerateArray()
             .Select(folder => folder.GetString())
-            .ShouldBe(["Messaging", "Persistence", "Behaviors"]);
+            .ShouldBe(["Messaging", "Persistence", "Behaviors", "Http"]);
+    }
+
+    // PB-079: each folder that hardslice.json allows is in Shared, with its role in HS017.md and its row in AGENTS.md, with and without
+    // the sample. Behaviors keeps the mediator pipeline only: the answers of the HTTP pipeline live in Http.
+    [Fact]
+    public void Template_Shared_holds_the_allowed_folders_each_described_by_HS017_and_AGENTS_md()
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        using var configuration = JsonDocument.Parse(File.ReadAllText(Path.Combine(templateRoot, "hardslice.json")));
+        var folders = configuration.RootElement.GetProperty("shared").GetProperty("allowedFolders").EnumerateArray()
+            .Select(folder => folder.GetString()!)
+            .ToArray();
+        var shared = Path.Combine(templateRoot, "src", "MyApp", "Shared");
+        var sheet = File.ReadAllText(Path.Combine(templateRoot, "docs", "rules", "HS017.md"));
+        var agents = File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md"));
+
+        Directory.GetDirectories(shared).Select(Path.GetFileName).Order().ShouldBe(folders.Order());
+        sheet.ShouldContain($"by default {string.Join(", ", folders[..^1].Select(folder => $"`{folder}`"))} and `{folders[^1]}`.");
+        sheet.ShouldContain($"\"allowedFolders\": [{string.Join(", ", folders.Select(folder => $"\"{folder}\""))}]");
+        sheet.ShouldContain($"in the folders allowed by hardslice.json: {string.Join(", ", folders)}. Fix:");
+        foreach (var folder in folders)
+        {
+            sheet.ShouldContain($"| `{folder}` | ", customMessage: $"HS017.md gives no role to Shared/{folder}.");
+            foreach (var noSample in new[] { false, true })
+                AgentGuidance(agents, noSample).ShouldContain(
+                    line => line.StartsWith($"| `src/MyApp/Shared/{folder}/` | ", StringComparison.Ordinal),
+                    $"AGENTS.md (noSample: {noSample}) maps no Shared/{folder}.");
+        }
+
+        sheet.ShouldContain("An authentication scheme that protects the endpoints of several modules, its options, its policy and the extension that registers them go in `Http`");
+        Directory.GetFiles(Path.Combine(shared, "Http")).Select(Path.GetFileName).Order()
+            .ShouldBe(["BadRequestExceptionHandler.cs", "DomainExceptionHandler.cs", "ExplicitOffsetJsonConverter.cs", "ValidationExceptionHandler.cs"]);
+        Directory.GetFiles(Path.Combine(shared, "Behaviors")).Select(File.ReadAllText)
+            .ShouldAllBe(text => !text.Contains("IExceptionHandler") && !text.Contains("JsonConverter<"), "Behaviors holds an answer of the HTTP pipeline.");
+    }
+
+    // PB-079: a 401, a 403 or a 429 is written by the middleware before the delegate of the endpoint runs. HS015.md says that it is
+    // not in the signature, where the policy goes and which test covers it, instead of claiming that the signature holds every response.
+    [Fact]
+    public void HS015_sheet_says_what_it_expects_of_the_responses_of_the_middleware()
+    {
+        var sheet = File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), "docs", "rules", "HS015.md"));
+        var section = sheet.Split("## Responses of the middleware\n")[1].Split("\n## ")[0];
+
+        sheet.ShouldNotContain("`TypedResults` put every response of the endpoint in its signature");
+        sheet.ShouldContain("`TypedResults` put every response that the delegate of the endpoint returns in its signature");
+        foreach (var expected in new[]
+        {
+            "the 401 or the 403 of an authorization policy or the 429 of rate limiting, is not in the signature of the endpoint",
+            "`src/MyApp/Shared/Http/` (HS017)",
+            "goes on its group, in `<Module>Module.cs`",
+            "goes on the endpoint, in its slice",
+            "`FallbackPolicy`",
+            "`AllowAnonymous`",
+            "An integration test of the 401 stands for the signature",
+        })
+            section.ShouldContain(expected);
     }
 
     // Keeps the lines dotnet new keeps for the given --no-sample value: AGENTS.md branches only on NoSample, without nesting.

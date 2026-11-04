@@ -1,2 +1,4 @@
 # The template renamed <App>Factory AppFactory on 03/11/2026 (PB-052), after this run.
 ShopFactory AppFactory
+# The template moved the HTTP answers from Shared/Behaviors to Shared/Http on 04/11/2026 (PB-079), after this run.
+using Shop.Shared.Behaviors Shop.Shared.Http

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 
-namespace MyApp.Shared.Behaviors;
+namespace MyApp.Shared.Http;
 
 internal sealed class ValidationExceptionHandler(IProblemDetailsService problemDetails, IOptions<JsonOptions> json) : IExceptionHandler
 {

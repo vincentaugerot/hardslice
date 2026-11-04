@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 
-namespace MyApp.Shared.Behaviors;
+namespace MyApp.Shared.Http;
 
 // A request that ASP.NET Core cannot read, such as a malformed JSON body or a date without its offset, answered with its status,
 // 400 in general. In Development, minimal APIs throw it instead of answering: without this handler, it would become a 500.

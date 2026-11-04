@@ -63,7 +63,7 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
             ExpectObject(shared, "'shared'", "allowedFolders");
 
             if (!shared.TryGetProperty("allowedFolders", out var folders) || folders.ValueKind != JsonValueKind.Array || folders.GetArrayLength() == 0)
-                throw Invalid("'shared.allowedFolders' must be a non-empty array of folder names, such as [\"Messaging\", \"Persistence\", \"Behaviors\"].");
+                throw Invalid("'shared.allowedFolders' must be a non-empty array of folder names, such as [\"Messaging\", \"Persistence\", \"Behaviors\", \"Http\"].");
 
             var names = new List<string>();
             foreach (var folder in folders.EnumerateArray())
