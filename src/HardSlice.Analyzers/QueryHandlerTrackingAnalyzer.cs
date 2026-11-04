@@ -13,6 +13,11 @@ namespace HardSlice.Analyzers;
 // parameter constrained to one; all its code is examined: methods, lambdas, local functions, initializers and nested types. The global
 // UseQueryTrackingBehavior is not read: the guarantee is AsNoTracking in the handler. Generated code is analyzed. Not
 // applied to test projects.
+// The same checks apply to two other entry points of a slice, declared in a slice namespace: a hosted service, a type that
+// implements IHostedService directly or through BackgroundService, and a condition of a recurring command, a type that implements
+// IRecurringCommandCondition<TCommand>, the interface declared beside the requestHandler contract. Both run outside the mediator,
+// its pipeline and its transaction: their work is the command they send or let go. The hosted services of Shared, such as the
+// generic RecurringCommandService, are not examined.
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
 {
@@ -20,16 +25,15 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
 
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
-        title: "A query handler tracks or writes",
-        messageFormat: "query handler '{0}' {1}. Query handlers read without tracking and never write. Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.",
+        title: "A query handler, or a hosted service or a condition of a slice, tracks or writes",
+        messageFormat: "{0} {1}. {2}. Fix: {3}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.",
         category: "HardSlice.Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
-    private const string WriteFix = "move the write into a command slice";
-
-    private const string ReadFix = "add AsNoTracking() where the query starts, and project to a DTO";
+    // The metadata name of the contract of the conditions, in the namespace of the requestHandler contract: Shared/Messaging.
+    private const string ConditionName = "IRecurringCommandCondition`1";
 
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -59,18 +63,25 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
+            var entryPoints = new EntryPoints(
+                model,
+                query,
+                handler,
+                start.Compilation.GetTypeByMetadataName("Microsoft.Extensions.Hosting.IHostedService"),
+                handler.ContainingAssembly.GetTypeByMetadataName($"{handler.ContainingNamespace.ToDisplayString()}.{ConditionName}"),
+                new SliceMap(start.Compilation));
             start.RegisterSymbolStartAction(
                 symbolStart =>
                 {
-                    // A type nested in a query handler is part of its code.
+                    // A type nested in a query handler, a hosted service or a condition is part of its code.
                     var type = (INamedTypeSymbol)symbolStart.Symbol;
-                    while (type is not null && !IsQueryHandler(type, model, query, handler))
+                    Subject? subject = null;
+                    while (type is not null && (subject = entryPoints.Classify(type)) is null)
                         type = type.ContainingType;
-                    if (type is null)
+                    if (subject is null)
                         return;
 
-                    var name = type.ToDisplayString(DisplayFormat);
-                    var analysis = new HandlerAnalysis(name, entityFramework, containment);
+                    var analysis = new HandlerAnalysis(subject, entityFramework, containment);
                     symbolStart.RegisterOperationAction(analysis.AnalyzeInvocation, OperationKind.Invocation);
                     symbolStart.RegisterOperationAction(analysis.AnalyzeLoop, OperationKind.Loop);
                     symbolStart.RegisterOperationAction(analysis.AnalyzeAssignment, OperationKind.SimpleAssignment);
@@ -79,11 +90,79 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
         });
     }
 
+    // What HS006 examines, and how its message names it: the subject, the rule it breaks and the fixes of its writes and its reads.
+    private sealed class Subject(string name, string rule, string writeFix, string readFix, string findFix)
+    {
+        public string Name { get; } = name;
+
+        public string Rule { get; } = rule;
+
+        public string WriteFix { get; } = writeFix;
+
+        public string ReadFix { get; } = readFix;
+
+        public string FindFix { get; } = findFix;
+    }
+
+    // The query handlers, wherever they are declared, and the hosted services and conditions of the slices.
+    private sealed class EntryPoints(
+        DomainModel model,
+        INamedTypeSymbol query,
+        INamedTypeSymbol handler,
+        INamedTypeSymbol? hostedService,
+        INamedTypeSymbol? condition,
+        SliceMap slices)
+    {
+        private const string SliceReadFix = "add AsNoTracking() where the query starts, and project to the values it needs";
+
+        private const string SliceFindFix = "query the entity with AsNoTracking() and Where(), and project to the values it needs";
+
+        public Subject? Classify(INamedTypeSymbol type)
+        {
+            if (type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || type.IsStatic)
+                return null;
+
+            if (IsQueryHandler(type, model, query, handler))
+            {
+                return new Subject(
+                    $"query handler '{type.ToDisplayString(DisplayFormat)}'",
+                    "Query handlers read without tracking and never write",
+                    "move the write into a command slice",
+                    "add AsNoTracking() where the query starts, and project to a DTO",
+                    "query the entity with AsNoTracking() and Where(), and project to a DTO");
+            }
+
+            if (slices.SliceOf(type) is not { } slice)
+                return null;
+
+            if (hostedService is not null && type.AllInterfaces.Contains(hostedService, SymbolEqualityComparer.Default))
+            {
+                return new Subject(
+                    $"hosted service '{type.ToDisplayString(DisplayFormat)}' of slice '{slice}'",
+                    "The hosted services of a slice read without tracking and never write",
+                    "send a command through IMediator in a scope of its own, and move the write into its handler",
+                    SliceReadFix,
+                    SliceFindFix);
+            }
+
+            if (condition is not null
+                && DomainModel.Implementations(type, condition).FirstOrDefault()?.TypeArguments[0] is { } command)
+            {
+                return new Subject(
+                    $"condition '{type.ToDisplayString(DisplayFormat)}' of slice '{slice}'",
+                    "The conditions of a recurring command read without tracking and never write",
+                    $"move the write into the handler of '{command.ToDisplayString(DisplayFormat)}', the command that the condition lets go",
+                    SliceReadFix,
+                    SliceFindFix);
+            }
+
+            return null;
+        }
+    }
+
     // Abstract handlers included: their code runs in the query handlers derived from them.
     private static bool IsQueryHandler(INamedTypeSymbol type, DomainModel model, INamedTypeSymbol query, INamedTypeSymbol handler) =>
-        type.TypeKind is TypeKind.Class or TypeKind.Struct
-        && !type.IsStatic
-        && DomainModel.Implementations(type, handler).Any(implementation =>
+        DomainModel.Implementations(type, handler).Any(implementation =>
             implementation.TypeArguments.Length == 2 && IsQuery(implementation.TypeArguments[0], model, query));
 
     // A query, or a type parameter constrained to one: 'Handler<TQuery> : IRequestHandler<TQuery, BookingDto> where TQuery : IQuery<BookingDto>'.
@@ -92,8 +171,8 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
             ? parameter.ConstraintTypes.Any(constraint => model.IsQuery(constraint) || SymbolEqualityComparer.Default.Equals(constraint.OriginalDefinition, query))
             : model.IsQuery(request);
 
-    // The checks of one query handler, on each operation of its code.
-    private sealed class HandlerAnalysis(string handler, EntityFramework entityFramework, EntityContainment containment)
+    // The checks of one query handler, hosted service or condition, on each operation of its code.
+    private sealed class HandlerAnalysis(Subject subject, EntityFramework entityFramework, EntityContainment containment)
     {
         public void AnalyzeInvocation(OperationAnalysisContext context)
         {
@@ -101,7 +180,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
             var method = invocation.TargetMethod;
             if (entityFramework.IsWrite(method))
             {
-                Report(context, invocation.Syntax, $"writes through '{method.Name}'", WriteFix);
+                Report(context, invocation.Syntax, $"writes through '{method.Name}'", subject.WriteFix);
             }
             else if (entityFramework.IsTrackingOperator(method))
             {
@@ -113,7 +192,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                     context,
                     invocation.Syntax,
                     $"reads with '{method.Name}', which always tracks the entity it returns",
-                    "query the entity with AsNoTracking() and Where(), and project to a DTO");
+                    subject.FindFix);
             }
             else if (entityFramework.IsExecution(method) && Receiver(invocation) is { } source && !IsInExpressionTree(invocation))
             {
@@ -161,7 +240,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                 context,
                 execution,
                 $"reads '{entity.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(DisplayFormat)}' from '{query.Root}' without a local guarantee that it is not tracked",
-                ReadFix);
+                subject.ReadFix);
         }
 
         // A subquery of a projection, such as 'Select(b => new { Lines = db.Set<BookingLine>().ToList() })', is part of the
@@ -219,7 +298,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
             Report(context, OperationLocation(syntax), what, fix);
 
         private void Report(OperationAnalysisContext context, Location location, string what, string fix) =>
-            context.ReportDiagnostic(Diagnostic.Create(Rule, location, handler, what, fix));
+            context.ReportDiagnostic(Diagnostic.Create(Rule, location, subject.Name, what, subject.Rule, fix));
     }
 
     // A query EF Core runs: its root, the chain that guarantees its tracking behavior, its elements and its last projection.

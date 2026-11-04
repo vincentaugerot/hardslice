@@ -524,13 +524,31 @@ public sealed class TemplatePackageTests
         var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
         var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
 
-        agents.ShouldContain("A job decides whether to run through an `IRecurringCommandCondition<TCommand>` in the folder of its slice, checked before each send, which reads options or `AppDbContext` with `AsNoTracking()` and never writes: the setting a job needs is checked there, never by a hosted service that only logs it nor `ValidateOnStart`.");
+        agents.ShouldContain("A job decides whether to run through an `IRecurringCommandCondition<TCommand>` in the folder of its slice, checked before each send, which reads options or `AppDbContext` with `AsNoTracking()` and never writes (HS006): the setting a job needs is checked there, never by a hosted service that only logs it nor `ValidateOnStart`.");
         agents.ShouldContain("and the logs name each one removed.");
         addSlice.ShouldContain("registered after its handler with `.AddScoped<IRecurringCommandCondition<TCommand>, <Slice>Condition>()`");
         addSlice.ShouldContain("the cycle sends nothing and is not retried, the reason is logged once until it changes");
         addSlice.ShouldContain("`AlsoAtStart()` on the `RecurringSchedule`, or the key `<Module>:<Slice>:AtStart`");
         addSlice.ShouldContain("its condition holds it back when `cycle.AtStart` and a version covers the day, and lets the nightly cycles go");
         addSlice.ShouldContain("A cycle that a condition holds back throws `HeldCycleException`, whose message is the reason");
+    }
+
+    // PB-084: HS006 examines the hosted services and the conditions of a slice, and the agent kit and the sheet say so.
+    [Fact]
+    public void Agent_guidance_says_that_HS006_covers_the_hosted_services_and_conditions_of_a_slice()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+        var sheet = File.ReadAllText(Path.Combine(template, "docs", "rules", "HS006.md"));
+
+        agents.ShouldContain("Any other hosted service lives in the folder of the slice it triggers, sends each command through `IMediator` in a scope of its own, never writes nor tracks (HS006)");
+        addSlice.ShouldContain("HS006 reports a write or a tracked read in a condition");
+        addSlice.ShouldContain("never writes itself and reads, if it must, with `AsNoTracking()` (HS006)");
+        sheet.ShouldStartWith("# HS006: a query handler, a hosted service or a condition of a slice reads without tracking and never writes");
+        sheet.ShouldContain("- **A hosted service**: a class that implements `IHostedService`, directly or through `BackgroundService`");
+        sheet.ShouldContain("- **A condition of a recurring command**: a class that implements `IRecurringCommandCondition<TCommand>`");
+        sheet.ShouldContain("The hosted services of `Shared`, such as `RecurringCommandService<TCommand, TResponse>`, and those declared in the namespace of a module outside its slices, are not.");
     }
 
     // PB-081: --require <policy> protects the endpoint of a command or a query: it chains .RequireAuthorization("<policy>"), the tests

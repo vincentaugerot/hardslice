@@ -6,7 +6,8 @@ using static HardSlice.Analyzers.Tests.AnalyzerHarness;
 
 namespace HardSlice.Analyzers.Tests;
 
-// HS006: a query handler reads without tracking and never writes.
+// HS006: a query handler, and a hosted service or a condition of a recurring command declared in a slice, read without tracking
+// and never write.
 public sealed class QueryHandlerTrackingAnalyzerTests
 {
     private const string Rule = "Query handlers read without tracking and never write.";
@@ -117,6 +118,13 @@ public sealed class QueryHandlerTrackingAnalyzerTests
             }
 
             public sealed record Result<T>(T? Value, string? Error);
+
+            public interface IRecurringCommandCondition<TCommand>
+            {
+                Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken);
+            }
+
+            public sealed record RecurringCycle(DateTimeOffset Due, bool AtStart, int Retry);
         }
         """;
 
@@ -236,6 +244,198 @@ public sealed class QueryHandlerTrackingAnalyzerTests
         diagnostics[0].GetMessage().ShouldBe(
             "query handler 'ListBookingsHandler' writes through 'ExecuteDeleteAsync'. "
             + Rule + " Fix: move the write into a command slice. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
+    }
+
+    private const string ServiceRule = "The hosted services of a slice read without tracking and never write.";
+
+    private const string ConditionRule = "The conditions of a recurring command read without tracking and never write.";
+
+    private const string SliceReadFix =
+        "Fix: add AsNoTracking() where the query starts, and project to the values it needs. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.";
+
+    // A hosted service runs outside the mediator, its pipeline and its transaction: it writes nothing and reads without tracking.
+    [Fact]
+    public async Task Reports_a_hosted_service_of_a_slice_that_writes_or_reads_with_tracking()
+    {
+        var diagnostics = await VerifyAsync(
+            """
+            using Microsoft.Extensions.DependencyInjection;
+            using Microsoft.Extensions.Hosting;
+
+            namespace MyApp.Features.Bookings.PurgeBookings;
+
+            public sealed record PurgeBookingsCommand : ICommand<int>;
+
+            internal sealed class BookingPurger(IServiceScopeFactory scopes) : BackgroundService
+            {
+                protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+                {
+                    await using var scope = scopes.CreateAsyncScope();
+                    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    db.Bookings.[|Add|](new Booking());
+                    await db.[|SaveChangesAsync|](stoppingToken);
+                    var tracked = await db.Bookings.Where(booking => booking.IsCancelled).[|ToListAsync|](stoppingToken);
+                    var found = await db.Bookings.[|FindAsync|]([new BookingId(Guid.Empty)], stoppingToken);
+                    var untracked = await db.Bookings.AsNoTracking().Where(booking => booking.IsCancelled).ToListAsync(stoppingToken);
+                    var covered = await BookingRules.ActiveIn(db.Set<Booking>().AsNoTracking(), Guid.Empty).AnyAsync(stoppingToken);
+                    var rooms = await db.Bookings.Select(booking => booking.RoomId).ToListAsync(stoppingToken);
+                }
+            }
+            """);
+
+        Subjects(diagnostics).ShouldBe(
+        [
+            "hosted service 'BookingPurger' of slice 'Bookings/PurgeBookings' writes through 'Add'",
+            "hosted service 'BookingPurger' of slice 'Bookings/PurgeBookings' writes through 'SaveChangesAsync'",
+            "hosted service 'BookingPurger' of slice 'Bookings/PurgeBookings' reads 'Booking' from 'AppDbContext.Bookings' without a local guarantee that it is not tracked",
+            "hosted service 'BookingPurger' of slice 'Bookings/PurgeBookings' reads with 'FindAsync', which always tracks the entity it returns"
+        ]);
+        diagnostics[0].GetMessage().ShouldBe(
+            "hosted service 'BookingPurger' of slice 'Bookings/PurgeBookings' writes through 'Add'. " + ServiceRule
+            + " Fix: send a command through IMediator in a scope of its own, and move the write into its handler. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
+        diagnostics[2].GetMessage().ShouldEndWith(ServiceRule + " " + SliceReadFix);
+        diagnostics[3].GetMessage().ShouldEndWith(
+            "Fix: query the entity with AsNoTracking() and Where(), and project to the values it needs. Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
+    }
+
+    // IHostedService implemented directly, a base class, tracking turned back on, and the code of a nested type and a lambda.
+    [Fact]
+    public async Task Reports_every_hosted_service_of_a_slice_and_the_types_nested_in_it()
+    {
+        var diagnostics = await VerifyAsync(
+            """
+            using Microsoft.Extensions.Hosting;
+
+            namespace MyApp.Features.Bookings.ImportBookings;
+
+            internal sealed class BookingListener(AppDbContext db) : IHostedService
+            {
+                public Task StartAsync(CancellationToken cancellationToken) =>
+                    Task.Run(() => db.Bookings.AsNoTracking().[|AsTracking|]().ToList(), cancellationToken);
+
+                public Task StopAsync(CancellationToken cancellationToken)
+                {
+                    db.ChangeTracker.[|QueryTrackingBehavior|] = QueryTrackingBehavior.TrackAll;
+                    return Task.CompletedTask;
+                }
+
+                private sealed class Batch(AppDbContext db)
+                {
+                    public Task<int> RunAsync() => db.Bookings.[|ExecuteDeleteAsync|]();
+                }
+            }
+
+            internal abstract class ListenerBase(AppDbContext db) : BackgroundService
+            {
+                protected override Task ExecuteAsync(CancellationToken stoppingToken) => db.[|SaveChangesAsync|](stoppingToken);
+            }
+            """);
+
+        Subjects(diagnostics).ShouldBe(
+        [
+            "hosted service 'BookingListener' of slice 'Bookings/ImportBookings' turns tracking back on with 'AsTracking'",
+            "hosted service 'BookingListener' of slice 'Bookings/ImportBookings' reconfigures tracking through 'ChangeTracker.QueryTrackingBehavior'",
+            "hosted service 'BookingListener' of slice 'Bookings/ImportBookings' writes through 'ExecuteDeleteAsync'",
+            "hosted service 'ListenerBase' of slice 'Bookings/ImportBookings' writes through 'SaveChangesAsync'"
+        ]);
+    }
+
+    // A condition decides whether its command goes: it reads options or the database without tracking, and the work is the command's.
+    [Fact]
+    public async Task Reports_a_condition_of_a_recurring_command_that_reads_with_tracking_or_writes()
+    {
+        var diagnostics = await VerifyAsync(
+            """
+            namespace MyApp.Features.Bookings.PurgeBookings;
+
+            public sealed record PurgeBookingsCommand : ICommand<int>;
+
+            internal sealed class PurgeBookingsCondition(AppDbContext db) : IRecurringCommandCondition<PurgeBookingsCommand>
+            {
+                public async Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken)
+                {
+                    var cancelled = await db.Bookings.Where(booking => booking.IsCancelled).[|FirstOrDefaultAsync|](cancellationToken);
+                    db.[|Remove|](cancelled!);
+                    return cancelled is null ? "no booking is cancelled" : null;
+                }
+            }
+            """);
+
+        Subjects(diagnostics).ShouldBe(
+        [
+            "condition 'PurgeBookingsCondition' of slice 'Bookings/PurgeBookings' reads 'Booking' from 'AppDbContext.Bookings' without a local guarantee that it is not tracked",
+            "condition 'PurgeBookingsCondition' of slice 'Bookings/PurgeBookings' writes through 'Remove'"
+        ]);
+        diagnostics[0].GetMessage().ShouldEndWith(ConditionRule + " " + SliceReadFix);
+        diagnostics[1].GetMessage().ShouldEndWith(
+            ConditionRule + " Fix: move the write into the handler of 'PurgeBookingsCommand', the command that the condition lets go. "
+            + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS006.md'.");
+    }
+
+    // The sanctioned forms: a condition and a hosted service that read with AsNoTracking(), project to values, or send a command.
+    [Fact]
+    public async Task Accepts_a_condition_and_a_hosted_service_that_read_without_tracking()
+    {
+        await VerifyAsync(
+            """
+            using Microsoft.Extensions.DependencyInjection;
+            using Microsoft.Extensions.Hosting;
+
+            namespace MyApp.Features.Bookings.PurgeBookings;
+
+            public sealed record PurgeBookingsCommand : ICommand<int>;
+
+            internal sealed class PurgeBookingsCondition(AppDbContext db) : IRecurringCommandCondition<PurgeBookingsCommand>
+            {
+                public async Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken) =>
+                    !cycle.AtStart || await BookingRules.ActiveIn(db.Set<Booking>().AsNoTracking(), Guid.Empty).AnyAsync(cancellationToken)
+                        ? null
+                        : "no booking is active";
+            }
+
+            internal sealed class BookingWatcher(IServiceScopeFactory scopes) : BackgroundService
+            {
+                protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+                {
+                    await using var scope = scopes.CreateAsyncScope();
+                    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var cancelled = await db.Bookings.AsNoTracking().Where(BookingRules.IsActive).ToListAsync(stoppingToken);
+                    var rooms = await db.Bookings.Select(booking => booking.RoomId).ToListAsync(stoppingToken);
+                }
+            }
+            """);
+    }
+
+    // Shared, the root of a module and a test helper are not slices: their hosted services and conditions are not examined.
+    [Fact]
+    public async Task Does_not_examine_the_hosted_services_and_conditions_outside_the_slices()
+    {
+        await VerifyAsync(
+            """
+            using Microsoft.Extensions.Hosting;
+
+            namespace MyApp.Shared.Messaging
+            {
+                internal sealed class RecurringCommandService(AppDbContext db) : BackgroundService
+                {
+                    protected override Task ExecuteAsync(CancellationToken stoppingToken) => db.SaveChangesAsync(stoppingToken);
+                }
+            }
+
+            namespace MyApp.Features.Bookings
+            {
+                internal sealed class ModuleWarmUp(AppDbContext db) : BackgroundService
+                {
+                    protected override Task ExecuteAsync(CancellationToken stoppingToken) => db.Bookings.ToListAsync(stoppingToken);
+                }
+
+                internal sealed class ModuleCondition(AppDbContext db) : IRecurringCommandCondition<MyApp.Features.Bookings.ListBookings.ListBookingsCommand>
+                {
+                    public async Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken) =>
+                        (await db.Bookings.ToListAsync(cancellationToken)).Count > 0 ? null : "no booking";
+                }
+            }
+            """);
     }
 
     [Fact]

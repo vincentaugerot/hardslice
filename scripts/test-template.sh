@@ -1209,6 +1209,7 @@ EOF
 
 # Seeds an aggregate of module <module> and a complete slice whose query handler loads it without AsNoTracking: the
 # analyzer of the web project reports HS006, reading the aggregate from the domain it references and the context of Shared.
+# Then a slice whose hosted service writes and whose condition reads the aggregate with tracking: HS006 reports both.
 probe_query_tracking() {
   local module="$1"
   mkdir -p "$app/src/$app_name.Domain/$module" "$app_src/Features/$module/VisitProbes"
@@ -1242,6 +1243,46 @@ internal static class VisitProbesEndpoint;
 EOF
   expect_failure "HS006: query handler 'VisitProbesHandler' reads 'RoomVisit' from 'Set<RoomVisit>()' without a local guarantee that it is not tracked." "docs/rules/HS006.md" "a query handler of $app_name that loads its aggregate without AsNoTracking" check.sh check.ps1
   rm -r "$app_src/Features/$module/VisitProbes"
+
+  # PB-084: a hosted service of a slice that writes, and a condition of a recurring command that reads with tracking, also
+  # fail HS006, while the read with AsNoTracking() of the same service passes.
+  mkdir -p "$app_src/Features/$module/PurgeVisits"
+  cat > "$app_src/Features/$module/PurgeVisits/PurgeVisits.cs" <<EOF
+using Microsoft.EntityFrameworkCore;
+using $app_name.Domain.$module;
+using $app_name.Shared.Messaging;
+using $app_name.Shared.Persistence;
+
+namespace $app_name.Features.$module.PurgeVisits;
+
+public sealed record PurgeVisitsCommand : ISystemCommand<int>;
+
+internal sealed class PurgeVisitsHandler : IRequestHandler<PurgeVisitsCommand, int>
+{
+    public Task<int> Handle(PurgeVisitsCommand command, CancellationToken cancellationToken) => Task.FromResult(0);
+}
+
+internal sealed class VisitPurger(IServiceScopeFactory scopes) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (await db.Set<RoomVisit>().AsNoTracking().AnyAsync(stoppingToken))
+            await db.SaveChangesAsync(stoppingToken);
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new PurgeVisitsCommand(), stoppingToken);
+    }
+}
+
+internal sealed class PurgeVisitsCondition(AppDbContext db) : IRecurringCommandCondition<PurgeVisitsCommand>
+{
+    public async Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken) =>
+        (await db.Set<RoomVisit>().ToListAsync(cancellationToken)).Count > 0 ? null : "no visit to purge";
+}
+EOF
+  expect_failure "HS006: hosted service 'VisitPurger' of slice '$module/PurgeVisits' writes through 'SaveChangesAsync'. The hosted services of a slice read without tracking and never write." "docs/rules/HS006.md" "a hosted service of a slice of $app_name that writes outside its command" check.sh check.ps1
+  expect_failure "HS006: condition 'PurgeVisitsCondition' of slice '$module/PurgeVisits' reads 'RoomVisit' from 'Set<RoomVisit>()' without a local guarantee that it is not tracked." "docs/rules/HS006.md" "a condition of a recurring command of $app_name that reads its aggregate without AsNoTracking" check.sh check.ps1
+  rm -r "$app_src/Features/$module/PurgeVisits"
   rm "$app/src/$app_name.Domain/$module/RoomVisit.cs"
 }
 
@@ -4731,7 +4772,7 @@ probe_reaction_slice Bookings
 echo "==> Checking that HS005 fails both check scripts on a command handler that returns its aggregate in a DTO"
 probe_command_response Bookings
 
-echo "==> Checking that HS006 fails both check scripts on a query handler that loads its aggregate without AsNoTracking"
+echo "==> Checking that HS006 fails both check scripts on a query handler that loads its aggregate without AsNoTracking, a hosted service of a slice that writes and a condition that reads with tracking"
 probe_query_tracking Bookings
 
 echo "==> Checking that HS007 fails both check scripts on an aggregate whose state has a public setter"
