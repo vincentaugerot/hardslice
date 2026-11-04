@@ -7,7 +7,9 @@ namespace HardSlice.Tool;
 
 // How many times the end hook of a session has blocked the end of the agent for each failure of the check, and for all of them,
 // since the agent last finished on its own. One small file per CLI and session in the state directory, removed once the check
-// passes. The state is best effort: a file that cannot be read counts no relaunch, and Record says when it cannot be written.
+// passes. Beside it, the failures that only a maintainer can fix already reported in the session, whatever the turn, kept until
+// the check passes. The state is best effort: a file that cannot be read counts no relaunch and no report, and Record and Report
+// say when it cannot be written.
 internal sealed partial class StopRetries(string stateDirectory, string cli, string sessionId)
 {
     // The end hook relaunches the agent at most this many times for the same failure, then lets it hand back.
@@ -22,6 +24,8 @@ internal sealed partial class StopRetries(string stateDirectory, string cli, str
 
     private string File => Path.Combine(stateDirectory, $"{cli}-{SafeName().Replace(sessionId, "_")}.json");
 
+    private string ReportedFile => Path.Combine(stateDirectory, $"{cli}-{SafeName().Replace(sessionId, "_")}.reported.json");
+
     // The relaunches already made for the failure and in the session. A first end of turn, when no end hook is active, starts from none.
     public (int ForFailure, int InSession) Made(string failure, bool stopHookActive)
     {
@@ -31,21 +35,47 @@ internal sealed partial class StopRetries(string stateDirectory, string cli, str
             return (0, 0);
         }
 
-        var retries = Load();
+        var retries = Load<Dictionary<string, int>>(File);
         return (retries.GetValueOrDefault(Fingerprint(failure)), retries.GetValueOrDefault(SessionKey));
+    }
+
+    // Whether the failure was already reported to the agent in this session, in this turn or an earlier one.
+    public bool Reported(string failure) => Load<HashSet<string>>(ReportedFile).Contains(Fingerprint(failure));
+
+    // Keeps the failure as reported until the check passes. Null once kept, otherwise why the state directory refused it.
+    public string? Report(string failure)
+    {
+        var reported = Load<HashSet<string>>(ReportedFile);
+        reported.Add(Fingerprint(failure));
+        return Write(ReportedFile, reported);
     }
 
     // Counts one more relaunch for the failure. Null once recorded, otherwise why the state directory refused it.
     public string? Record(string failure)
     {
+        var retries = Load<Dictionary<string, int>>(File);
+        var key = Fingerprint(failure);
+        retries[key] = retries.GetValueOrDefault(key) + 1;
+        retries[SessionKey] = retries.GetValueOrDefault(SessionKey) + 1;
+        return Write(File, retries);
+    }
+
+    // Forgets the relaunches counted, not the failures reported.
+    public void Clear() => Delete(File);
+
+    // Forgets everything, once the check passes.
+    public void Forget()
+    {
+        Delete(File);
+        Delete(ReportedFile);
+    }
+
+    private string? Write<T>(string file, T state)
+    {
         try
         {
-            var retries = Load();
-            var key = Fingerprint(failure);
-            retries[key] = retries.GetValueOrDefault(key) + 1;
-            retries[SessionKey] = retries.GetValueOrDefault(SessionKey) + 1;
             Directory.CreateDirectory(stateDirectory);
-            System.IO.File.WriteAllText(File, JsonSerializer.Serialize(retries));
+            System.IO.File.WriteAllText(file, JsonSerializer.Serialize(state));
             return null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -54,16 +84,17 @@ internal sealed partial class StopRetries(string stateDirectory, string cli, str
         }
     }
 
-    public void Clear()
+    private static void Delete(string file)
     {
         try
         {
-            if (System.IO.File.Exists(File))
-                System.IO.File.Delete(File);
+            if (System.IO.File.Exists(file))
+                System.IO.File.Delete(file);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // A count that cannot be removed is reset by the next end of turn where no end hook is active.
+            // A count that cannot be removed is reset by the next end of turn where no end hook is active, and a report by the
+            // next passing check.
         }
     }
 
@@ -85,18 +116,19 @@ internal sealed partial class StopRetries(string stateDirectory, string cli, str
     private static string Normalize(string text) =>
         Number().Replace(HexIdentifier().Replace(Guid().Replace(text, "#"), "#"), "#");
 
-    private Dictionary<string, int> Load()
+    private static T Load<T>(string file)
+        where T : new()
     {
         try
         {
-            return System.IO.File.Exists(File)
-                ? JsonSerializer.Deserialize<Dictionary<string, int>>(System.IO.File.ReadAllText(File)) ?? []
-                : [];
+            return System.IO.File.Exists(file)
+                ? JsonSerializer.Deserialize<T>(System.IO.File.ReadAllText(file)) ?? new T()
+                : new T();
         }
         catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
-            // A file cut short by an interrupted hook, or that cannot be read, counts no relaunch.
-            return [];
+            // A file cut short by an interrupted hook, or that cannot be read, counts no relaunch and no report.
+            return new T();
         }
     }
 

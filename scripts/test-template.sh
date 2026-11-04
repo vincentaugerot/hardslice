@@ -4255,6 +4255,21 @@ probe_hardslice_files() {
     "==> Building" "no Directory.HardSlice.props" --build
   expect_check_message "$regenerate, or sets the 'hardslice.tool' entry of .config/dotnet-tools.json back to the version that generated the solution, then runs 'dotnet tool restore'. $doc" \
     "==> Building" "no Directory.HardSlice.props"
+  # PB-078: only a maintainer can fix it, so the Stop hook reports it once, then lets the agent hand back.
+  run_claude_hook Stop "$(claude_payload Stop "" false)"
+  if [[ "$hook_status" != 2 || "$hook_error" != "HardSlice: the check stops before the build on a protected HardSlice file of the solution"* ||
+    "$hook_error" != *"error: Directory.HardSlice.props was not found in"* || "$hook_error" == *"relaunch 1 of 3"* ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the Stop hook did not report the missing Directory.HardSlice.props once, as a failure for a maintainer, with code 2 (code $hook_status)." >&2
+    exit 1
+  fi
+  run_claude_hook Stop "$(claude_payload Stop "" true)"
+  if [[ "$hook_status" != 0 || -n "$hook_error" ]] || ! grep -Fq '"systemMessage":"HardSlice: the check stops on a protected HardSlice file of the solution' "$work/hook-output"; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the Stop hook relaunched the agent a second time on the missing Directory.HardSlice.props (code $hook_status)." >&2
+    exit 1
+  fi
+  echo "    Stop: the missing Directory.HardSlice.props reported once with code 2, then the agent hands back"
   restore_root_file Directory.HardSlice.props
 }
 

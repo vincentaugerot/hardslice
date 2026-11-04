@@ -25,7 +25,7 @@ Each hook runs `dotnet hardslice hook <cli> <event>`, which reads the payload of
 |---|---|---|---|
 | before an edit | the list of protected files | none | the edit is refused with the reason and a pointer to "Forbidden" of `AGENTS.md` |
 | after the edit of a `.cs` file | the check of `scripts/check.sh --build` | 10 s | the errors of the build reach the agent, which fixes them. Those of the edited files come in full, those of the other files only as a count, since the next edits of a change may fix them. When no error is in an edited file, every error comes in full |
-| the end of a turn | the check of `scripts/check.sh` | 60 s | the agent goes on with the failure. After three relaunches for the same failure, or eight in a session, it hands back and says that the check fails |
+| the end of a turn | the check of `scripts/check.sh` | 60 s | the agent goes on with the failure. After three relaunches for the same failure, or eight in a session, it hands back and says that the check fails. A missing or mismatched protected HardSlice file, which only a maintainer can fix, reaches the agent once in the session, which then hands back and tells the user what a maintainer must do |
 
 | CLI | Configuration | Before an edit | After an edit | End of a turn | Answer |
 |---|---|---|---|---|---|

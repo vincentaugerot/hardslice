@@ -168,6 +168,26 @@ public sealed class CopilotHookTests : IDisposable
         new[] { first.Error, second.Error, third.Error, fourth.Error }.ShouldAllBe(error => error.Length == 0);
     }
 
+    // Copilot shows nothing to the user when the agent finishes: the single block is what lets the agent tell the user what a
+    // maintainer must do.
+    [Fact]
+    public void Before_handing_back_a_missing_HardSlice_file_blocks_the_end_once()
+    {
+        File.Delete(Path.Combine(_hook.Root, "Directory.HardSlice.props"));
+        var runner = new FakeRunner();
+
+        var first = Hook("agentStop", _hook.Payload("copilot/agentStop.json"), runner);
+        var second = Hook("agentStop", _hook.Payload("copilot/agentStop.active.json"), runner);
+
+        first.ExitCode.ShouldBe(0);
+        Answer(first.Output, "decision").ShouldBe("block");
+        Answer(first.Output, "reason").ShouldStartWith("HardSlice: the check stops before the build on a protected HardSlice file of the solution");
+        Answer(first.Output, "reason").ShouldContain("error: Directory.HardSlice.props was not found in");
+        second.ExitCode.ShouldBe(0);
+        second.Output.ShouldBeEmpty();
+        runner.Commands.ShouldBeEmpty();
+    }
+
     // Copilot sets COPILOT_CLI for every hook it runs: the variable that turns the hooks of Claude Code off leaves its own on.
     [Fact]
     public void The_hooks_of_Copilot_run_with_the_variable_that_Copilot_sets()

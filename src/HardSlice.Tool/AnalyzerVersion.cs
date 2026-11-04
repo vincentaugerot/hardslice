@@ -28,8 +28,10 @@ internal static class AnalyzerVersion
     // The section, at the tag of this version of the tool: the one that describes the files it expects.
     public static string Doc(string toolVersion) => $"Doc: {Repository}/blob/v{toolVersion}/{DocSection}";
 
-    // Writes why the solution cannot be verified by this version of the tool, or returns true. Reads the files alone, before the build.
-    public static bool Matches(Solution solution, string toolVersion, TextWriter error)
+    // Whether this version of the tool can verify the solution, read from its files alone before the build: References first,
+    // then Imports, each of which writes why not or returns true. Here, Directory.HardSlice.props, a protected file, references the
+    // analyzers of this version: only a maintainer can fix what this one writes.
+    public static bool References(Solution solution, string toolVersion, TextWriter error)
     {
         var referenceFix = $"a maintainer, since {ReferenceFile} and {Solution.ToolManifest} are protected, copies {ReferenceFile} from {NewSolution(solution, toolVersion)}, "
             + $"or sets the 'hardslice.tool' entry of {Solution.ToolManifest} back to the version that generated the solution, then runs 'dotnet tool restore'";
@@ -61,6 +63,12 @@ internal static class AnalyzerVersion
             return false;
         }
 
+        return true;
+    }
+
+    // Writes why Directory.Packages.props, which the application owns, does not import Directory.HardSlice.props, or returns true.
+    public static bool Imports(Solution solution, string toolVersion, TextWriter error)
+    {
         var packagesFix = $"copy {PackagesFile} from {NewSolution(solution, toolVersion)}, then add back the versions of the packages of the application";
         if (Load(solution, PackagesFile, $"it holds the versions of the packages and imports {ReferenceFile}", packagesFix, toolVersion, error) is not { } packages)
             return false;

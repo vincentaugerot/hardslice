@@ -83,6 +83,8 @@ Each error that `check` prints on one of these files ends with `Fix:` and `Doc:`
   Copy from it the file that the error names. For `Directory.Packages.props`, keep the import of `Directory.HardSlice.props` from the new file and add back the versions of the packages of the application. The other files of the new solution show what else this version of the template generates: compare them with the solution before taking any of them.
 - Bring the tool back to the solution. Set the `hardslice.tool` entry of `.config/dotnet-tools.json` to the version that generated the solution, the one that `Directory.HardSlice.props` references, then run `dotnet tool restore`.
 
+An agent can make neither fix when the file is protected. When the check stops on `.config/dotnet-tools.json` or `Directory.HardSlice.props`, the hook at the end of its turn hands it the error once in the session, then lets it hand back, so that it tells the user what a maintainer must do instead of trying again. An error on `Directory.Packages.props`, which the agent may fix, keeps the relaunches of any other failure.
+
 After a build, `check` also fails when a project did not receive `HardSlice.Analyzers` at its restore: keep the import in `Directory.Packages.props`, and remove what removes or changes the reference, such as a `Remove`, an `Update`, a `Version` or an `ExcludeAssets` of it, or another `Directory.Packages.props` in a folder of the project.
 
 ## 4. Run the API

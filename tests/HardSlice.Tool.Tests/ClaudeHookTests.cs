@@ -262,6 +262,81 @@ public sealed class ClaudeHookTests : IDisposable
         Hook("Stop", Payload("claude/Stop.active.json"), runner).Error.ShouldContain("(relaunch 1 of 3 for this failure)");
     }
 
+    // A failure that only a maintainer can fix, on a protected HardSlice file, reaches the agent once in the session, so that it
+    // hands back and tells the user what to do: the next ends let it finish, in this turn and the next ones while it waits for the
+    // maintainer, without the three relaunches of a failure of the build. A passing check forgets it.
+    [Fact]
+    public void Before_handing_back_a_missing_HardSlice_file_is_reported_once_then_the_agent_hands_back()
+    {
+        File.Delete(Path.Combine(_solution.Root, "Directory.HardSlice.props"));
+        var runner = new FakeRunner();
+
+        var first = Hook("Stop", Payload("claude/Stop.json"), runner);
+        var second = Hook("Stop", Payload("claude/Stop.active.json"), runner);
+        var nextTurn = Hook("Stop", Payload("claude/Stop.json"), runner);
+
+        first.ExitCode.ShouldBe(2);
+        first.Error.ShouldStartWith("HardSlice: the check stops before the build on a protected HardSlice file of the solution, so the work is not verified. "
+            + "Only a maintainer can fix it, as the error below says: do not try to fix it.");
+        first.Error.ShouldContain("Finish now by telling the user that the check fails on this file and what a maintainer must do");
+        first.Error.ShouldContain("error: Directory.HardSlice.props was not found in");
+        first.Error.ShouldContain("Fix: a maintainer, since Directory.HardSlice.props and .config/dotnet-tools.json are protected");
+        first.Error.ShouldContain(AnalyzerVersion.Doc(ToolVersion.Current));
+        first.Error.ShouldNotContain("relaunch 1 of 3");
+        second.ExitCode.ShouldBe(0);
+        second.Error.ShouldBeEmpty();
+        JsonNode.Parse(second.Output)!["systemMessage"]!.GetValue<string>()
+            .ShouldBe("HardSlice: the check stops on a protected HardSlice file of the solution, so the work is not verified. "
+                + "Only a maintainer can fix it: run scripts/check.sh to see the error, its Fix: and its Doc:.");
+        nextTurn.ExitCode.ShouldBe(0);
+        nextTurn.Output.ShouldBe(second.Output);
+        runner.Commands.ShouldBeEmpty();
+
+        _solution.WriteReference($"""<GlobalPackageReference Include="HardSlice.Analyzers" Version="{ToolVersion.Current}" />""");
+        Hook("Stop", Payload("claude/Stop.json"), runner).ExitCode.ShouldBe(0);
+        Directory.EnumerateFiles(_state).ShouldBeEmpty();
+        File.Delete(Path.Combine(_solution.Root, "Directory.HardSlice.props"));
+        Hook("Stop", Payload("claude/Stop.json"), runner).ExitCode.ShouldBe(2);
+    }
+
+    // The end hook may already be active, after a relaunch for a failure of the build: the failure for a maintainer still reaches
+    // the agent once.
+    [Fact]
+    public void Before_handing_back_a_HardSlice_file_at_another_version_is_reported_once_even_after_a_relaunch()
+    {
+        var runner = new FakeRunner().Failing(FullBuild, 1, Hs010);
+        Hook("Stop", Payload("claude/Stop.json"), runner).Error.ShouldContain("(relaunch 1 of 3 for this failure)");
+        _solution.WriteReference("""<GlobalPackageReference Include="HardSlice.Analyzers" Version="0.1.0" />""");
+
+        var reported = Hook("Stop", Payload("claude/Stop.active.json"), runner);
+        var handedBack = Hook("Stop", Payload("claude/Stop.active.json"), runner);
+
+        reported.ExitCode.ShouldBe(2);
+        reported.Error.ShouldContain("This hook lets you finish: it does not relaunch you for this failure.");
+        reported.Error.ShouldContain($"error: Directory.HardSlice.props references HardSlice.Analyzers 0.1.0, but dotnet hardslice is version {ToolVersion.Current}");
+        handedBack.ExitCode.ShouldBe(0);
+        JsonNode.Parse(handedBack.Output)!["systemMessage"]!.GetValue<string>().ShouldStartWith("HardSlice: the check stops on a protected HardSlice file");
+    }
+
+    // Directory.Packages.props belongs to the application: an agent can add the import back, and keeps its relaunches.
+    [Fact]
+    public void Before_handing_back_a_missing_import_of_Directory_HardSlice_props_keeps_the_three_relaunches()
+    {
+        _solution.WritePackages("");
+        var runner = new FakeRunner();
+
+        var results = Enumerable.Range(0, 4)
+            .Select(index => Hook("Stop", Payload(index == 0 ? "claude/Stop.json" : "claude/Stop.active.json"), runner))
+            .ToArray();
+
+        results[0].Error.ShouldContain("(relaunch 1 of 3 for this failure)");
+        results[0].Error.ShouldContain("error: Directory.Packages.props does not import Directory.HardSlice.props");
+        results[2].Error.ShouldContain("(relaunch 3 of 3 for this failure)");
+        results[3].ExitCode.ShouldBe(0);
+        JsonNode.Parse(results[3].Output)!["systemMessage"]!.GetValue<string>()
+            .ShouldStartWith("HardSlice: the check still fails after 3 relaunches for the same failure");
+    }
+
     [Fact]
     public void Before_handing_back_the_failures_of_the_check_steps_reach_the_agent()
     {

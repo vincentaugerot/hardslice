@@ -1628,7 +1628,7 @@ L'incrément est terminé lorsque PB-018 à PB-033 sont satisfaits et que les jo
 
 ## 5. Incrément 4 terminé : Boucle agent v0.3
 
-Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-063) et les retours de Ghostline de la section 7 (PB-064 à PB-077, et la revalidation des paquets qui les suit) terminés.
+Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-063) et les retours de Ghostline de la section 7 (PB-064 à PB-078, et la revalidation des paquets qui les suit) terminés.
 
 ### Résultat attendu
 
@@ -1679,7 +1679,7 @@ Décisions du mainteneur du 31/10/2026, reportées dans la [spécification](spec
 | PB-048 (pre-commit et CI générée) | PB-045 | PB-042 à PB-047 |
 | PB-049 (boucles E2E par règle) | PB-041, PB-044, PB-046 | PB-047, PB-048 |
 | PB-050 (scénario agent complet) | PB-043, PB-044, PB-046 | PB-049 |
-| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-077 (sections 6 et 7) | aucun |
+| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-078 (sections 6 et 7) | aucun |
 
 ```text
 PB-034 état des CLI ────────────┬─ PB-042 instructions ──────────────┐
@@ -2386,7 +2386,7 @@ Le vérificateur passe sur les exécutions Claude Code consignées. Chaque exéc
 
 ### PB-051 : Publier la préversion `0.3.0-preview.1`
 
-Statut : en attente du feu vert du mainteneur, et de la revalidation des paquets après PB-075 à PB-077 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` du dernier ticket de revalidation des paquets, celui sur lequel ils ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
+Statut : en attente du feu vert du mainteneur, et de la revalidation des paquets après PB-075 à PB-078 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` du dernier ticket de revalidation des paquets, celui sur lequel ils ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
 
 **Résultat observable**
 
@@ -2400,7 +2400,7 @@ Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org,
 
 **Dépendances**
 
-PB-034 à PB-050, PB-033, PB-052 à PB-077.
+PB-034 à PB-050, PB-033, PB-052 à PB-078.
 
 **Acceptation**
 
@@ -2423,7 +2423,7 @@ L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jo
 
 Statut : découpé le 03/11/2026 à partir d'une revue complète du dépôt avant publication (code, template, kit agents, outil, CI, documentation), arbitrages validés par le mainteneur le même jour. Une version publiée sur NuGet.org ne se remplace jamais : ce qui est figé dans les paquets (code généré, kit agents, liste des fichiers protégés, textes des diagnostics, README des paquets, format de `hardslice.json`, codes de sortie) est corrigé avant PB-051.
 
-Complété le 04/11/2026 par les frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : PB-060 à PB-063 ici, PB-064 à PB-073 dans la section 7, PB-074 qui revalide les paquets après eux, PB-075, qui change un diagnostic après cette revalidation, PB-076, qui change les erreurs de l'outil sur les fichiers HardSlice, et PB-077, qui change la réponse du hook après une édition. Décision du mainteneur du 04/11/2026 : tout est fait avant PB-051, pour publier d'emblée la préversion la plus stable possible.
+Complété le 04/11/2026 par les frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : PB-060 à PB-063 ici, PB-064 à PB-073 dans la section 7, PB-074 qui revalide les paquets après eux, PB-075, qui change un diagnostic après cette revalidation, PB-076, qui change les erreurs de l'outil sur les fichiers HardSlice, PB-077, qui change la réponse du hook après une édition, et PB-078, qui change la réponse du hook de fin de tour sur un fichier HardSlice protégé. Décision du mainteneur du 04/11/2026 : tout est fait avant PB-051, pour publier d'emblée la préversion la plus stable possible.
 
 ### Résultat attendu
 
@@ -2898,11 +2898,11 @@ sondes « instructions des agents » de scripts/test-template.sh
 
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. La publication attend la section 7 : PB-051 est lancé après PB-077 et le dernier ticket de revalidation des paquets, sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. La publication attend la section 7 : PB-051 est lancé après PB-078 et le dernier ticket de revalidation des paquets, sur le feu vert du mainteneur.
 
 ## 7. Incrément actif, suite : Retours de Ghostline avant la publication
 
-Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux. PB-075, ajouté le même jour à partir d'une entrée du 04/11/2026, change le texte d'un diagnostic après PB-074. PB-076, ajouté le même jour à partir de l'entrée « no path to bring a generated solution to a newer template », change le texte des erreurs de l'outil sur les fichiers HardSlice. PB-077, ajouté le même jour à partir de l'entrée « the build hook reports the files not yet edited of a planned change », change la réponse du hook après une édition. Un ticket de revalidation des paquets les suit.
+Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux. PB-075, ajouté le même jour à partir d'une entrée du 04/11/2026, change le texte d'un diagnostic après PB-074. PB-076, ajouté le même jour à partir de l'entrée « no path to bring a generated solution to a newer template », change le texte des erreurs de l'outil sur les fichiers HardSlice. PB-077, ajouté le même jour à partir de l'entrée « the build hook reports the files not yet edited of a planned change », change la réponse du hook après une édition. PB-078, ajouté le même jour à partir de l'entrée « the Stop hook relaunches the agent on a failure only a protected file can fix », change la réponse du hook de fin de tour quand la vérification s'arrête sur un fichier HardSlice protégé. Un ticket de revalidation des paquets les suit.
 
 ### Résultat attendu
 
@@ -2942,6 +2942,7 @@ Validés par le mainteneur le 04/11/2026 :
 | PB-075 (HS902 et objets valeur) | PB-074 | aucun |
 | PB-076 (`Fix:` et `Doc:` des erreurs de l'outil) | PB-075 | aucun |
 | PB-077 (erreurs des fichiers édités d'abord) | PB-076 | aucun |
+| PB-078 (fin de tour sur un fichier HardSlice protégé) | PB-076, PB-077 | aucun |
 
 Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
 
@@ -3364,9 +3365,34 @@ dotnet build --no-restore && dotnet test --no-build
 sonde probe_claude_hooks de scripts/test-template.sh
 ```
 
+### PB-078 : Laisser rendre la main dès le premier échec de l'outil lui-même au hook de fin de tour
+
+Statut : terminé le 04/11/2026. Ferme l'entrée « the Stop hook relaunches the agent on a failure only a protected file can fix » de `ghostline/docs/hardslice-friction.md`. `CheckCommand.StoppedOnProtectedFile` dit que la vérification s'est arrêtée avant le build sur ce que seul un mainteneur corrige : aucune solution (manifeste de l'outil absent) ou une erreur de `Directory.HardSlice.props` (absent, XML invalide, sans version ou à une autre version), séparées des erreurs de `Directory.Packages.props` (`AnalyzerVersion.References` puis `AnalyzerVersion.Imports`). Sur un tel échec, `AgentHook.BeforeHandingBack` ne compte aucune relance : il remet l'erreur à l'agent une fois, « HardSlice: the check stops before the build on a protected HardSlice file of the solution, so the work is not verified. Only a maintainer can fix it, as the error below says: do not try to fix it. Finish now by telling the user that the check fails on this file and what a maintainer must do, with the Fix: and the Doc: of the error. This hook lets you finish: it does not relaunch you for this failure. », suivie de l'erreur de PB-076. Les fins suivantes le laissent finir, avec un `systemMessage` pour l'utilisateur sous Claude Code et Codex, dans ce tour et les suivants : `StopRetries` garde les échecs rapportés de la session dans un second fichier, `<cli>-<session>.reported.json`, que les nouveaux tours ne vident pas et qu'une vérification réussie efface. Le compte de relances de la constatation de Ghostline, qui repartait à chaque message de l'utilisateur, ne s'applique donc plus. Un état qui ne peut s'écrire rapporte l'échec à la première fin du tour seulement. Les relances des autres échecs (build, tests, marqueurs, import absent de `Directory.Packages.props`) ne changent pas. Tests qui échouaient avant, nourris des charges utiles enregistrées : `Directory.HardSlice.props` absent sous Claude Code (rapporté une fois, fin laissée, nouveau tour laissé, oublié après une vérification réussie) et sous Copilot CLI (un seul `decision: "block"`), autre version après une relance pour un échec du build. Un test garde les trois relances de l'import absent. La sonde `probe_hardslice_files` de `scripts/test-template.sh` lance le vrai hook `Stop` sans `Directory.HardSlice.props` : code 2 avec l'erreur, puis fin laissée. `docs/agent-loop.md`, `docs/getting-started.md`, `docs/agents/support.md` et le README de `HardSlice.Tool` le disent, `CHANGELOG.md` a sa ligne. `AGENTS.md` généré n'est pas modifié (142 et 149 lignes). Passages locaux : `dotnet build --no-restore`, `dotnet test --no-build` (1226 tests verts), les sondes `probe_hardslice_files`, `probe_claude_hooks` et `probe_codex_and_copilot_hooks` lancées seules. Les paquets ne sont pas reconstruits : un ticket de revalidation suit, sur lequel l'étiquette de PB-051 sera posée. Contournement que Ghostline peut retirer : aucun, son agent expliquait le conflit à chaque relance, ce que le hook ne lui demande plus qu'une fois.
+
+**Résultat observable**
+
+Quand la vérification s'arrête avant le build sur un fichier HardSlice protégé (`.config/dotnet-tools.json` absent, `Directory.HardSlice.props` absent, en XML invalide, sans version ou à une autre version : les erreurs de PB-076), le hook de fin de tour de Claude Code, Codex et Copilot CLI remet l'erreur à l'agent une seule fois dans la session, avec la consigne de ne pas chercher à la corriger et de rendre la main en disant à l'utilisateur ce qu'un mainteneur doit faire, puis le laisse finir, comme après le refus d'une édition d'un fichier protégé. Un échec du build, des tests, des marqueurs ou de `Directory.Packages.props`, que l'agent peut corriger, garde ses trois relances.
+
+**Constat**
+
+Ghostline, entrée « the Stop hook relaunches the agent on a failure only a protected file can fix » (04/11/2026) : le hook de fin de tour (`AgentHook.BeforeHandingBack`, `StopRetries`, `src/HardSlice.Tool/`) a relancé l'agent deux fois sur « Directory.HardSlice.props was not found », qu'on ne corrige qu'en créant un fichier protégé et en éditant `Directory.Packages.props`, protégé lui aussi à ce moment-là. Chaque relance coûte un tour à répéter la même explication, jusqu'à la limite de trois, et le compte repart à chaque message de l'utilisateur : tant que l'agent attend que l'utilisateur copie les fichiers, chaque échange coûte jusqu'à trois tours de plus sur le même échec.
+
+**Périmètre**
+
+- `check` dit quand il s'arrête sur ce que seul un mainteneur corrige : aucune solution trouvée (manifeste de l'outil absent) ou une erreur de `Directory.HardSlice.props`. Les erreurs de `Directory.Packages.props`, que l'application possède, n'en font pas partie.
+- Le hook de fin de tour rapporte un tel échec une fois par session et par échec, dans ce tour ou un précédent, et l'oublie quand la vérification passe. Le nombre de relances de `StopRetries` ne change pas pour les autres échecs.
+- Le texte de cette réponse est lu par les agents et figé par la publication : ce ticket passe avant PB-051, et un ticket de revalidation des paquets le suit.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes probe_hardslice_files, probe_claude_hooks et probe_codex_and_copilot_hooks de scripts/test-template.sh
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-077 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-064 à PB-078 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur.
 
 ## 8. Incréments suivants
 

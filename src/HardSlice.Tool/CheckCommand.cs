@@ -32,10 +32,21 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
     // Set when the only failure is the TODO(hardslice): markers left, after every other step passed: their count.
     public int? MarkersLeft { get; private set; }
 
+    // Set when the check stops before the build on what only a maintainer can fix: no solution, whose tool manifest is protected,
+    // or a Directory.HardSlice.props, protected too, that is missing, not valid XML or at another version. The end hook relaunches
+    // the agent for it once only.
+    public bool StoppedOnProtectedFile { get; private set; }
+
     public int Run(string currentDirectory, CheckMode mode)
     {
         var solution = Solution.Find(currentDirectory, error);
-        if (solution is null || !AnalyzerVersion.Matches(solution, ToolVersion.Current, error))
+        if (solution is null || !AnalyzerVersion.References(solution, ToolVersion.Current, error))
+        {
+            StoppedOnProtectedFile = true;
+            return Failure;
+        }
+
+        if (!AnalyzerVersion.Imports(solution, ToolVersion.Current, error))
             return Failure;
 
         return mode switch
