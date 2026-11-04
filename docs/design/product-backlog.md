@@ -2900,12 +2900,13 @@ Statut : découpé le 04/11/2026 à partir des frictions relevées en construisa
 
 ### Arbitrages de l'incrément
 
-Proposés le 04/11/2026, à valider par le mainteneur avant PB-067 :
+Validés par le mainteneur le 04/11/2026 :
 
-- **Une commande interne n'a pas d'endpoint HTTP.** Un contrat de messagerie dédié (par exemple `IInternalCommand<TResponse>`) marque une commande envoyée seulement depuis l'application (tâche de fond, réaction à un événement externe). HS004 l'accepte sans endpoint et signale à la place une commande interne que rien n'envoie dans son module. Une commande ordinaire garde l'endpoint obligatoire.
-- **Le travail en arrière-plan passe par un service hébergé généré**, dans le dossier de la slice qu'il déclenche, qui envoie la commande par `IMediator` dans un scope par cycle, sur un `PeriodicTimer` construit avec `TimeProvider`. Aucun planificateur générique n'entre dans `Shared/`.
-- **Aucune aide d'écriture en masse ni de verrou consultatif n'entre dans `Shared/Persistence`.** Ces besoins sont documentés, pas générés.
-- **Les routes par défaut ne changent pas.** Les options de PB-065 s'ajoutent sans modifier ce que génèrent les commandes sans option.
+- **Une commande système n'a pas d'endpoint HTTP.** Un contrat de messagerie dédié, `ISystemCommand<TResponse>`, qui dérive de `ICommand<TResponse>`, marque une commande envoyée seulement par l'application (commande récurrente, service hébergé). Elle traverse le même pipeline qu'une commande. Sa clé `systemCommand` dans `hardslice.json` est facultative : une application sans travail en arrière-plan n'a rien à déclarer. HS004 n'exige pas d'endpoint pour elle, signale un endpoint qui la mappe, et signale une commande système qu'aucun type de son module ne référence hors de son handler et de son validateur (construction ou argument générique). Une commande ordinaire garde l'endpoint obligatoire. Le nom évite `Internal`, que les messages confondraient avec le mot-clé `internal` des handlers. La reconnaissance reste par symbole, jamais par attribut ni par forme.
+- **Le travail périodique passe par un seul service générique de `Shared/Messaging`,** enregistré par le module avec `services.AddRecurringCommand<TCommand>(interval)` (forme exacte libre), pour une commande système sans paramètre (`TCommand : ISystemCommand<TResponse>, new()`). Il porte une seule fois le comportement délicat : un scope et un envoi par `IMediator` par cycle, une exception d'un cycle journalisée sans arrêter l'hôte, un `PeriodicTimer` construit avec `TimeProvider`. `hardslice-command --every <interval>` génère la commande et son enregistrement. Pas de template `hardslice-job` : un service hébergé non périodique (consommer une file, par exemple) est seulement documenté, et son template est différé.
+- **Aucune aide d'écriture en masse ni de verrou consultatif n'entre dans `Shared/Persistence`.** L'écriture en masse devrait suivre les convertisseurs, les types Npgsql et les propriétés cachées du mapping, pour un cas rare. Le verrou tient en une ligne de SQL, et le 409 de PB-069 couvre le cas courant. Ces besoins sont documentés, pas générés.
+- **La route par défaut reste tirée du nom de la slice.** Elle ne peut pas entrer en collision avec celle d'une autre slice du module, alors qu'un défaut à la REST donnerait le même `GET /{id:guid}` à deux requêtes par identifiant, une ambiguïté visible seulement à l'exécution. La skill `add-slice` demande de toujours passer `--route`, choisie d'après la ressource.
+- **Aucune compatibilité à garder.** Rien n'est publié avant ces tickets : un nom ou une forme générée peut changer sans précaution pour des solutions existantes (noms des DTO de PB-070 compris).
 
 ### Critères communs à tous les tickets de l'incrément
 
@@ -2920,8 +2921,8 @@ Proposés le 04/11/2026, à valider par le mainteneur avant PB-067 :
 | PB-064 (commande sans paramètre) | PB-063 | PB-066, PB-069, PB-071 |
 | PB-065 (route et verbe) | PB-064 | PB-066, PB-069, PB-071 |
 | PB-066 (entités enfants) | PB-063 | PB-064, PB-065, PB-069 |
-| PB-067 (commande interne) | PB-064, arbitrage validé | PB-066, PB-069 |
-| PB-068 (tâche de fond) | PB-060, PB-062, PB-067 | PB-069 à PB-071 |
+| PB-067 (commande système) | PB-064 | PB-066, PB-069 |
+| PB-068 (commande récurrente) | PB-060, PB-062, PB-067 | PB-069 à PB-071 |
 | PB-069 (unicité sous concurrence) | PB-063 | PB-064 à PB-068 |
 | PB-070 (requête filtrée) | PB-065 | PB-068, PB-069 |
 | PB-071 (HS006 et règles du domaine) | PB-063 | PB-064 à PB-070 |
@@ -2974,8 +2975,8 @@ Ghostline, entrées « hardslice-command and hardslice-query, routes named after
 
 - `--route` : chemin relatif au groupe du module, validé comme le `--route` de `hardslice-module` (segments, paramètres de route acceptés par ASP.NET Core).
 - `--method` : `POST`, `PUT`, `PATCH` ou `DELETE` pour une commande, `GET` seul pour une requête (refus explicite sinon).
-- Valeurs par défaut inchangées (arbitrage de l'incrément).
-- Endpoint, constante de route du test et `add-slice` suivent. `docs/item-templates.md` : les deux options, et le conseil de nommer la route d'après la ressource.
+- Valeurs par défaut inchangées : la route tirée du nom de la slice ne peut pas entrer en collision (arbitrage de l'incrément).
+- Endpoint et constante de route du test suivent. `add-slice` demande de toujours passer `--route`, choisie d'après la ressource. `docs/item-templates.md` : les deux options et ce conseil.
 
 **Cas vérifiés**
 
@@ -3030,11 +3031,11 @@ dotnet build --no-restore && dotnet test --no-build
 sondes des templates d'éléments de scripts/test-template.sh
 ```
 
-### PB-067 : Accepter une commande interne sans endpoint HTTP
+### PB-067 : Accepter une commande système sans endpoint HTTP
 
 **Résultat observable**
 
-Une commande envoyée seulement par l'application n'a pas d'endpoint, et HS004 l'accepte. Une commande interne que rien n'envoie dans son module produit un diagnostic.
+Une commande envoyée seulement par l'application implémente `ISystemCommand<TResponse>`, n'a pas d'endpoint, et HS004 l'accepte. Une commande système mappée en HTTP, ou que rien ne référence dans son module, produit un diagnostic.
 
 **Constat**
 
@@ -3042,17 +3043,19 @@ Ghostline, entrée « HS004 requires an HTTP endpoint for a command only a timer
 
 **Périmètre**
 
-- Contrat de messagerie de la commande interne dans `Shared/Messaging`, selon l'arbitrage de l'incrément. Sa clé dans `hardslice.json` est facultative : un fichier `"version": 1` sans elle reste valide (PB-055).
-- HS004 : pas d'endpoint exigé pour une commande interne. Un endpoint qui la mappe produit un diagnostic. Une commande interne qu'aucun type de son module n'envoie par `IMediator` produit un diagnostic (HS004 ou nouvelle règle, avec sa fiche).
-- `hardslice-command --endpoint none` génère la commande interne, sans endpoint ni test HTTP, avec un test d'intégration qui l'envoie par `IMediator`.
-- Fiches, `AGENTS.md`, `add-slice`, `fix-architecture-violation`, `docs/rules.md` et tests d'architecture alignés.
+- `ISystemCommand<TResponse> : ICommand<TResponse>` dans `Shared/Messaging/Requests.cs`, dans les deux variantes. Clé facultative `systemCommand` dans `hardslice.json`, écrite par le template. Un fichier `"version": 1` sans elle reste valide (PB-055). HS900 signale une clé `systemCommand` dont le type ne dérive pas du contrat `command`.
+- HS004 : pas d'endpoint exigé pour une commande système. Un endpoint qui la mappe produit un diagnostic. Une commande système qu'aucun type de son module ne référence, hors de son handler et de son validateur, produit un diagnostic (analyse de fin de compilation, comme les appels de module de HS015).
+- Pipeline : `LoggingBehavior`, `ValidationBehavior` et `TransactionBehavior` s'appliquent sans changement. Les tests d'architecture (`CommandTests`, `RequestTypes`) reconnaissent la commande système comme une commande.
+- `hardslice-command --endpoint none` génère une commande système, sans endpoint ni test HTTP, avec un test d'intégration qui l'envoie par `IMediator`.
+- Fiches HS004 et HS900, `AGENTS.md`, `add-slice`, `fix-architecture-violation`, `docs/rules.md`, `docs/item-templates.md` et spécification (contrats de `hardslice.json`) alignés.
 
 **Cas vérifiés**
 
-- Commande interne envoyée par un service du module : aucun diagnostic.
-- Commande interne mappée par un endpoint : diagnostic.
-- Commande interne jamais envoyée : diagnostic.
-- `hardslice.json` sans la nouvelle clé : aucun HS900.
+- Commande système référencée par un type de son module : aucun diagnostic.
+- Commande système mappée par un endpoint : diagnostic.
+- Commande système jamais référencée : diagnostic.
+- `hardslice.json` sans `systemCommand` : aucun HS900, et une commande qui n'implémente que `ICommand` garde l'endpoint obligatoire.
+- Clé `systemCommand` vers un type qui ne dérive pas de `ICommand` : HS900.
 - Référence Bookings : diagnostics inchangés. Seuils de `scripts/measure-analyzers.sh` tenus.
 
 **Acceptation**
@@ -3063,29 +3066,31 @@ scripts/measure-analyzers.sh
 sondes des templates d'éléments et des règles de scripts/test-template.sh
 ```
 
-### PB-068 : Générer une tâche de fond avec `dotnet new hardslice-job`
+### PB-068 : Envoyer une commande système à intervalle régulier avec `AddRecurringCommand`
 
 **Résultat observable**
 
-`dotnet new hardslice-job --module Realtime --name RealtimeCollector --command CollectRealtimeFeedsCommand --every 00:00:30` génère un service hébergé testable avec une horloge simulée, et `AGENTS.md` dit où vit le travail en arrière-plan. HS010 signale un timer construit sans `TimeProvider` dans une slice.
+`dotnet new hardslice-command --module Realtime --name CollectRealtimeFeedsCommand --every 00:00:30` génère une commande système sans paramètre, son handler et son enregistrement périodique dans le module, avec un test qui fait passer trois cycles sans attente réelle. `AGENTS.md` dit où vit le travail en arrière-plan. HS010 signale un timer construit sans `TimeProvider` dans une slice.
 
 **Constat**
 
-Ghostline, entrée « no template nor documentation for a background service » : un service hébergé n'est ni une slice ni un endpoint, et rien ne dit où il va, comment il envoie ses commandes ni comment il se teste. Chaque choix a été deviné : `BackgroundService` dans le dossier de la slice qu'il déclenche, enregistré par le module avec `AddHostedService`, un scope `IServiceScopeFactory` et un `IMediator.Send` par cycle, toute exception attrapée et journalisée (depuis .NET 8, une exception qui sort de `ExecuteAsync` arrête l'hôte), `new PeriodicTimer(interval, TimeProvider)`, options dans l'espace de noms du module, clé manquante journalisée en critique sans arrêter l'API. HS010 ne signale que les lectures de l'horloge (`DateTime.UtcNow`) : `new PeriodicTimer(interval)` et `Task.Delay(interval)` passent, et rendent le service impossible à tester avec une horloge simulée.
+Ghostline, entrée « no template nor documentation for a background service » : un service hébergé n'est ni une slice ni un endpoint, et rien ne dit où il va, comment il envoie ses commandes ni comment il se teste. Chaque choix a été deviné : `BackgroundService` dans le dossier de la slice qu'il déclenche, enregistré par le module avec `AddHostedService`, un scope `IServiceScopeFactory` et un `IMediator.Send` par cycle, toute exception attrapée et journalisée (depuis .NET 8, une exception qui sort de `ExecuteAsync` arrête l'hôte), `new PeriodicTimer(interval, TimeProvider)`, options dans l'espace de noms du module, clé manquante journalisée en critique sans arrêter l'API. L'entrée suggérait déjà un envoi récurrent générique dans `Shared/Messaging`. HS010 ne signale que les lectures de l'horloge (`DateTime.UtcNow`) : `new PeriodicTimer(interval)` et `Task.Delay(interval)` passent, et rendent le service impossible à tester avec une horloge simulée.
 
 **Périmètre**
 
-- Template `hardslice-job` : `--module`, `--name`, `--command` (une commande interne de PB-067 ou ordinaire du même module), `--every`. Le service, ses options liées par le module, son enregistrement, et un test d'intégration qui le garde (PB-062) et avance un `FakeTimeProvider` (PB-060).
-- Comportement généré : un scope et un envoi par cycle, exception d'un cycle journalisée sans arrêter l'hôte, configuration manquante journalisée en critique.
-- `AGENTS.md` : un paragraphe « Background work », sous 150 lignes en `--no-sample`, ou un renvoi vers la skill qui le porte.
+- `Shared/Messaging` : un service hébergé générique et son extension d'enregistrement (`services.AddRecurringCommand<TCommand>(interval)`, forme exacte libre), pour `TCommand : ISystemCommand<TResponse>, new()` (PB-067). Un scope et un envoi par `IMediator` par cycle, une exception d'un cycle journalisée sans arrêter l'hôte, un `PeriodicTimer` construit avec le `TimeProvider` du conteneur, un arrêt propre avec l'hôte. Livré dans les deux variantes, avec ses tests.
+- `hardslice-command --every <interval>` : implique `--endpoint none` (PB-067) et `--parameters none` (PB-064), refuse une combinaison contraire ou un intervalle invalide (code 105). Il génère l'enregistrement dans le module, l'intervalle lu dans les options du module avec la valeur passée par défaut, et un test d'intégration qui garde le service (PB-062) et avance un `FakeTimeProvider` (PB-060).
+- `AGENTS.md` : un paragraphe « Background work », sous 150 lignes en `--no-sample`, ou un renvoi vers `add-slice` qui le porte. Une tâche périodique passe par `AddRecurringCommand`. Un service hébergé non périodique vit dans le dossier de la slice qu'il déclenche, envoie ses commandes dans un scope par message et reçoit `TimeProvider`.
 - HS010 : dans les espaces de noms de slice, `new PeriodicTimer(TimeSpan)` et `Task.Delay(TimeSpan)` sans `TimeProvider` produisent le diagnostic. Fiche, cas positifs et négatifs, seuils de `scripts/measure-analyzers.sh` tenus.
+- `docs/item-templates.md` et `add-slice` : l'option `--every`.
 
 **Cas vérifiés**
 
-- Job généré : vérification verte, son test fait passer trois cycles sans attente réelle.
-- Commande du job qui lève une exception : le cycle suivant s'exécute.
+- Commande générée avec `--every` : vérification verte, son test fait passer trois cycles sans attente réelle.
+- Handler qui lève une exception : le cycle suivant s'exécute, l'hôte continue.
+- Les autres tests d'intégration ne démarrent pas le service (PB-062).
+- `--every` avec `--parameters id`, ou un intervalle invalide : code 105, rien de créé.
 - `Task.Delay(TimeSpan.FromSeconds(1))` dans un handler : HS010. `Task.Delay(interval, timeProvider)` : aucun diagnostic.
-- Refus : commande inconnue ou d'un autre module, intervalle invalide, code 105.
 
 **Acceptation**
 
@@ -3136,7 +3141,7 @@ Ghostline, entrée « hardslice-query covers reads by id and lists of one aggreg
 **Périmètre**
 
 - `--result filtered` et `--parameter <Name>:<Type>` (formes libres) : requête avec son paramètre, validateur et ses tests, réponse en liste, paramètre lu dans la chaîne de requête, tests d'intégration du filtre et de la requête invalide.
-- Nom du DTO : le nom de la slice sans le verbe initial (`GetBooking` donne `BookingDto`), pour toutes les formes de `--result`. Les solutions existantes ne changent pas.
+- Nom du DTO : le nom de la slice sans le verbe initial (`GetBooking` donne `BookingDto`), pour toutes les formes de `--result`.
 - Types de paramètre acceptés listés et refusés sinon (code 105).
 - `add-slice` et `docs/item-templates.md` suivent.
 
@@ -3235,7 +3240,7 @@ Le parcours de PB-059 passe à nouveau sur les paquets construits après PB-060 
 
 **Périmètre**
 
-- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-060 à PB-073 ont changé (paquets de l'application, restauration, secrets et tests d'intégration, kit agents, options de `hardslice-command` et `hardslice-query`, `hardslice-entity`, `hardslice-job`, commande interne, HS004 et HS010 étendues, 409 sur une clé unique, consignes des cas avancés). `docs/item-templates.md`, `README.md` et les README des paquets listent les nouveaux templates.
+- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-060 à PB-073 ont changé (paquets de l'application, restauration, secrets et tests d'intégration, kit agents, options de `hardslice-command` et `hardslice-query`, `hardslice-entity`, commande système et `AddRecurringCommand`, HS004 et HS010 étendues, 409 sur une clé unique, consignes des cas avancés). `docs/item-templates.md`, `README.md` et les README des paquets listent le nouveau template et les nouvelles options.
 - `CONTRIBUTING.md` : le symptôme d'un cache des outils locaux qui vise un dossier supprimé (`Run "dotnet tool restore"` juste après une restauration réussie) et sa correction (supprimer l'entrée concernée de `~/.dotnet/toolResolverCache/1/`). Ghostline l'a rencontré le 03/11/2026 (entrée « dotnet ef unusable after generating the solution ») : `scripts/test-template.sh` isole ce cache depuis PB-021, l'entrée venait d'une sonde lancée hors de `isolate_dotnet_cli_home` sur la machine du mainteneur. Un utilisateur des paquets publiés n'est pas concerné.
 - Passage complet de `scripts/test-template.sh` et de `scripts/verify-published.sh --source artifacts/packages`.
 - Statut de PB-051 : le commit que vise l'étiquette.
@@ -3279,6 +3284,7 @@ L'incrément est terminé lorsque PB-064 à PB-074 sont satisfaits, que les jobs
 | SQL Server en option et orchestration Aspire (`--aspire`) | 8 |
 | Contrat de données de référence immuables hors `IEntity` (HS902), vu par Ghostline | à arbitrer après PB-066 |
 | Effet externe d'une commande après la validation de sa transaction (boîte d'envoi), vu par Ghostline | à arbitrer après PB-063 |
+| Template d'un service hébergé non périodique (consommer une file, par exemple) | à arbitrer après PB-068 |
 | Aide d'écriture en masse et verrou consultatif dans `Shared/Persistence` | écarté par l'arbitrage de la section 7, documenté par PB-069 et PB-072 |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
