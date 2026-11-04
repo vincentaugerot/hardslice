@@ -24,6 +24,10 @@
     "Parameter": {
       "longName": "parameter",
       "shortName": ""
+    },
+    "Require": {
+      "longName": "require",
+      "shortName": ""
     }
   }
 }

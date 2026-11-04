@@ -45,6 +45,21 @@ public sealed class QueryNameTests(PostgresDatabase database)
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
+#if (RequireIsGiven)
+
+    // The policy AuthorizationPolicyName refuses a request without authentication before the endpoint: its 401 is not in the signature
+    // of the endpoint (HS015), this test stands for it. The other tests send the client of the policy, which AppFactory holds.
+    [Fact]
+    public async Task Rejects_a_request_without_authentication_before_its_handler()
+    {
+        await using var app = new AppFactory(database);
+        var anonymous = app.CreateClient();
+
+        var response = await anonymous.GetAsync($"{Route}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+#endif
 #elif (ResultIsFiltered)
     [Fact]
     public async Task Lists_the_stored_aggregates_that_its_filter_selects()
@@ -73,6 +88,21 @@ public sealed class QueryNameTests(PostgresDatabase database)
         problem.ShouldNotBeNull();
         problem.Errors.Keys.ShouldBe(["filterName"]);
     }
+#if (RequireIsGiven)
+
+    // The policy AuthorizationPolicyName refuses a request without authentication before the endpoint: its 401 is not in the signature
+    // of the endpoint (HS015), this test stands for it. The other tests send the client of the policy, which AppFactory holds.
+    [Fact]
+    public async Task Rejects_a_request_without_authentication_before_its_handler()
+    {
+        await using var app = new AppFactory(database);
+        var anonymous = app.CreateClient();
+
+        var response = await anonymous.GetAsync($"{Route}?filterName=filter-query-value", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+#endif
 #else
     [Fact]
     public async Task Lists_a_stored_aggregate_as_its_dto()
@@ -88,6 +118,21 @@ public sealed class QueryNameTests(PostgresDatabase database)
         dtos.Select(dto => dto.Id).ShouldContain(id);
         Assert.Fail("TODO(hardslice): assert the values of ResultDtoName that the use case reads, and its filter and order if any.");
     }
+#if (RequireIsGiven)
+
+    // The policy AuthorizationPolicyName refuses a request without authentication before the endpoint: its 401 is not in the signature
+    // of the endpoint (HS015), this test stands for it. The other tests send the client of the policy, which AppFactory holds.
+    [Fact]
+    public async Task Rejects_a_request_without_authentication_before_its_handler()
+    {
+        await using var app = new AppFactory(database);
+        var anonymous = app.CreateClient();
+
+        var response = await anonymous.GetAsync(Route, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+#endif
 #endif
 
     // Stores, outside the application, the AggregateName that the query reads, and returns its identifier.

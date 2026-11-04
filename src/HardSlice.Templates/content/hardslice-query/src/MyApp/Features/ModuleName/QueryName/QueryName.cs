@@ -74,8 +74,24 @@ internal static class QueryNameEndpoint
 #if (ResultIsFiltered)
     // [AsParameters] binds each parameter of the query from the query string, such as ?filterName=filter-query-value.
 #endif
+#if (RequireIsGiven)
+    // The policy AuthorizationPolicyName answers 401 or 403 before the delegate runs: those responses are not in its signature (HS015),
+    // and an integration test asserts the 401.
+#endif
     public static void Map(RouteGroupBuilder group) =>
-#if (ResultIsSingle)
+#if (RequireIsGiven && ResultIsSingle)
+        group.MapGet("/query-id-route", async Task<Results<Ok<ResultDtoName>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+                await mediator.Send(new QueryNameQuery(id), cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound())
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven && ResultIsFiltered)
+        group.MapGet("/query-route", async ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await mediator.Send(query, cancellationToken)))
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven)
+        group.MapGet("/query-route", async (IMediator mediator, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await mediator.Send(new QueryNameQuery(), cancellationToken)))
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (ResultIsSingle)
         group.MapGet("/query-id-route", async Task<Results<Ok<ResultDtoName>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(new QueryNameQuery(id), cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound());
 #elif (ResultIsFiltered)

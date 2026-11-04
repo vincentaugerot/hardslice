@@ -23,6 +23,9 @@
 # filtered query without its filter, and proves that an unknown aggregate fails the build with a compiler error that names it.
 # It generates slices with the route and the method of --route and --method, a PUT and a DELETE in a module created with its own
 # --route and a query on a route of its own, through the refusals of a route or a method they cannot map, and their tests pass on these routes.
+# It generates a command, a command without parameters and a query protected by --require, on a key scheme in Shared/Http, through the
+# refusals of --require: their tests of the 401 pass, and those that send the client of the policy fail with the message of AppFactory
+# until it holds that client, then pass after their reference completion.
 # It generates an aggregate with dotnet new hardslice-aggregate through each of its refusals, proves it builds without HardSlice diagnostic,
 # that the check fails on its TODO(hardslice): test, then on its missing migration, and passes once the printed migration is added.
 # It generates two child entities of an aggregate with dotnet new hardslice-entity through each of its refusals, one held in a
@@ -3449,6 +3452,161 @@ probe_slice_routes() {
   mv "$work/Program-routes.cs.backup" "$app_src/Program.cs"
 }
 
+# PB-081: --require <policy> protects the endpoint of a slice. In module <module>, the command <name>, the command without parameters
+# <parameterless-name> and the query <query-name> of <aggregate> are generated with --require ProbeKey, the policy of the key scheme
+# that write_probe_key_scheme writes in Shared/Http: each endpoint chains .RequireAuthorization("ProbeKey"), each test sends the
+# client of app.CreateAuthorizedClient("ProbeKey") but the test of the 401, which sends none. Before, --require is refused
+# with exit 105 with --endpoint none, --every and a name that the code could not hold. While AppFactory has no client for the policy,
+# the tests that send it fail with the message that says where to add it, and the tests of the 401 pass. Once the client is in
+# AppFactory, the check fails on the TODO(hardslice): tests only, then passes after the reference completion, in which <create>
+# creates the aggregate to store, with a test that sends the client from an instance derived with WithWebHostBuilder. Program.cs, AppFactory and the module are restored and everything else removed at the end.
+probe_protected_endpoints() {
+  local module="$1"
+  local name="$2"
+  local parameterless_name="$3"
+  local query_name="$4"
+  local aggregate="$5"
+  local create="$6"
+  local project="src/$app_name/$app_name.csproj"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local app_factory="$app/tests/$app_name.IntegrationTests/AppFactory.cs"
+  local tests="$app/tests/$app_name.IntegrationTests/Features/$module"
+  local missing_client="AppFactory has no client for the authorization policy 'ProbeKey'. Add one to AuthorizedClients, in AppFactory.cs of the integration tests"
+  local refusal
+  local slice
+  local check_output
+  local failures
+  local expected_failures
+  local -a fields
+
+  cp "$app_src/Program.cs" "$work/program.backup"
+  cp "$module_file" "$work/module-protected.backup"
+  cp "$app_factory" "$work/app-factory.backup"
+
+  echo "==> Checking that dotnet new hardslice-command and hardslice-query refuse --require without an endpoint to protect, or with a name the code could not hold, in $app_name"
+  for refusal in "hardslice-command|a policy for a system command|--require protects the endpoint of the slice with an authorization policy, while --endpoint none and --every generate a system command|--require|ProbeKey|--endpoint|none" \
+    "hardslice-command|a policy for a recurring command|--require protects the endpoint of the slice with an authorization policy, while --endpoint none and --every generate a system command|--require|ProbeKey|--every|00:00:30" \
+    "hardslice-command|a policy name with a space|--require 'probe key' is not the name of an authorization policy that the template can write|--require|probe key" \
+    "hardslice-query|a policy name with a quote|--require 'probe\"key' is not the name of an authorization policy that the template can write|--require|probe\"key|--aggregate|$aggregate"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    if [[ "${fields[0]}" == hardslice-command ]]; then
+      expect_item_refused "${fields[0]}" "${fields[1]}" "${fields[2]}" --project "$project" --module "$module" --name "$name" "${fields[@]:3}"
+    else
+      expect_item_refused "${fields[0]}" "${fields[1]}" "${fields[2]}" --project "$project" --module "$module" --name "$query_name" "${fields[@]:3}"
+    fi
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new ${fields[0]} refused ${fields[1]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+
+  echo "==> Generating $module/$name, $module/$parameterless_name (--parameters none) and $module/$query_name with --require ProbeKey in $app_name, whose key scheme is in Shared/Http"
+  write_probe_key_scheme Http
+  generate_command "$module" "$name" --route protections --require ProbeKey
+  register_slice hardslice-command "$command_output"
+  generate_command "$module" "$parameterless_name" --route protected-imports --parameters none --require ProbeKey
+  register_slice hardslice-command "$command_output"
+  generate_query "$module" "$query_name" --aggregate "$aggregate" --route protected-readings --require ProbeKey
+  register_slice hardslice-query "$query_output"
+  for slice in "$name|$command_output" "$parameterless_name|$command_output" "$query_name|$query_output"; do
+    if [[ "${slice#*|}" != *"The endpoint requires the authorization policy ProbeKey, which the application registers in src/$app_name/Shared/Http/ with its authentication scheme (docs/rules/HS015.md). Its integration tests send their requests through app.CreateAuthorizedClient(\"ProbeKey\"), which fails until AuthorizedClients, in tests/$app_name.IntegrationTests/AppFactory.cs, holds the client of that policy"* ]]; then
+      printf '%s\n' "${slice#*|}" >&2
+      echo "error: dotnet new did not say what the policy ProbeKey of $module/${slice%%|*} asks of AppFactory." >&2
+      exit 1
+    fi
+    slice="${slice%%|*}"
+    if ! grep -Fxq '            .RequireAuthorization("ProbeKey");' "$app_src/Features/$module/$slice/$slice.cs"; then
+      cat "$app_src/Features/$module/$slice/$slice.cs" >&2
+      echo "error: the endpoint of $module/$slice generated with --require ProbeKey does not chain .RequireAuthorization(\"ProbeKey\")." >&2
+      exit 1
+    fi
+    if ! grep -Fq 'app.CreateAuthorizedClient("ProbeKey").' "$tests/$slice/${slice}Tests.cs" || grep -Fq 'app.CreateClient().' "$tests/$slice/${slice}Tests.cs" ||
+      ! grep -Fxq '    public async Task Rejects_a_request_without_authentication_before_its_handler()' "$tests/$slice/${slice}Tests.cs" ||
+      ! grep -Fxq '        var anonymous = app.CreateClient();' "$tests/$slice/${slice}Tests.cs"; then
+      cat "$tests/$slice/${slice}Tests.cs" >&2
+      echo "error: the tests of $module/$slice generated with --require ProbeKey do not send the client of the policy, or have no test of the 401 without it." >&2
+      exit 1
+    fi
+  done
+  echo "    .RequireAuthorization(\"ProbeKey\"), CreateAuthorizedClient(\"ProbeKey\") and the test of the 401"
+
+  # AppFactory as generated: no client for ProbeKey. The tests that send it fail with its message, the tests of the 401 pass.
+  echo "==> Checking that the tests that send the client of ProbeKey fail with the message of AppFactory while it has none, and that the tests of the 401 pass"
+  if check_output="$(run_check check.sh 2>&1)"; then
+    echo "error: scripts/check.sh passed with protected slices whose policy has no client in AppFactory." >&2
+    exit 1
+  fi
+  check_output="$(strip_ansi <<< "$check_output")"
+  failures="$(sed -n 's/^failed \([^ ]*\) (.*/\1/p' <<< "$check_output" | LC_ALL=C sort -u)"
+  expected_failures="$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Handles_a_valid_command" \
+    "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Rejects_an_invalid_command_with_a_validation_problem_before_its_handler" \
+    "$app_name.IntegrationTests.Features.$module.$parameterless_name.${parameterless_name}Tests.Handles_the_command" \
+    "$app_name.IntegrationTests.Features.$module.$query_name.${query_name}Tests.Reads_a_stored_aggregate_as_its_dto" \
+    "$app_name.IntegrationTests.Features.$module.$query_name.${query_name}Tests.Returns_404_for_an_unknown_aggregate" | LC_ALL=C sort)"
+  if [[ "$failures" != "$expected_failures" || "$check_output" != *"$missing_client"* ]] || grep -Eq '(error|warning) HS[0-9]{3}' <<< "$check_output"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh did not fail on the tests that send the client of ProbeKey alone (${expected_failures//$'\n'/, }), with: $missing_client" >&2
+    exit 1
+  fi
+  echo "    ${failures//$'\n'/, }: $missing_client"
+
+  # The client of the policy, added to AppFactory as the application does: the header that the key scheme reads.
+  echo "==> Checking that, with the client of ProbeKey in AppFactory, $app_name fails the check on the TODO(hardslice): tests of the protected slices only"
+  if ! { printf 'using %s.Shared.Http;\n' "$app_name"; awk '
+      /^    internal static readonly Dictionary<string, Action<HttpClient>> AuthorizedClients = / { declared = 1 }
+      { print }
+      declared && /^    \{$/ && !added { print "        [ProbeKeyAuthentication.Policy] = client => client.DefaultRequestHeaders.Add(\"X-Probe-Key\", \"probe\"),"; added = 1 }
+      END { if (!added) exit 1 }' "$work/app-factory.backup"; } > "$app_factory"; then
+    echo "error: the AppFactory of $app_name has no AuthorizedClients to hold the client of ProbeKey." >&2
+    exit 1
+  fi
+  expect_check_fails_on_todo_tests_only "the protected slices $module/$name, $module/$parameterless_name and $module/$query_name" \
+    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Handles_a_valid_command" \
+      "$app_name.IntegrationTests.Features.$module.$parameterless_name.${parameterless_name}Tests.Handles_the_command" \
+      "$app_name.IntegrationTests.Features.$module.$query_name.${query_name}Tests.Reads_a_stored_aggregate_as_its_dto" | LC_ALL=C sort)"
+
+  echo "==> Checking that the reference completion of the protected slices passes the check of $app_name"
+  complete_command "$module" "$name"
+  complete_parameterless_command "$module" "$parameterless_name" id
+  complete_query_tests "$aggregate" "$create" "$tests/$query_name/${query_name}Tests.cs"
+  # The client of the policy also serves an instance derived with WithWebHostBuilder, as tests that replace a service build them.
+  if ! awk '
+      { lines[NR] = $0 }
+      END {
+        for (i = 1; i < NR; i++) print lines[i]
+        print ""
+        print "    [Fact]"
+        print "    public async Task Handles_the_command_on_an_instance_derived_with_WithWebHostBuilder()"
+        print "    {"
+        print "        await using var app = new AppFactory(database);"
+        print "        await using var derived = app.WithWebHostBuilder(_ => { });"
+        print ""
+        print "        var response = await derived.CreateAuthorizedClient(\"ProbeKey\").PostAsync(Route, content: null, TestContext.Current.CancellationToken);"
+        print ""
+        print "        response.StatusCode.ShouldBe(HttpStatusCode.OK);"
+        print "    }"
+        print lines[NR]
+        if (lines[NR] != "}") exit 1
+      }' "$tests/$parameterless_name/${parameterless_name}Tests.cs" > "$work/test.cs"; then
+    echo "error: the integration test of $module/$parameterless_name does not end with the closing brace of its class." >&2
+    exit 1
+  fi
+  mv "$work/test.cs" "$tests/$parameterless_name/${parameterless_name}Tests.cs"
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of the protected slices leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+
+  for slice in "$name" "$parameterless_name" "$query_name"; do
+    rm -r "$app_src/Features/$module/${slice:?}" "$tests/${slice:?}"
+  done
+  rm -r "$app/tests/$app_name.Tests/Features/$module/${name:?}" "$app_src/Shared/Http/ProbeKeyAuthentication.cs"
+  mv "$work/module-protected.backup" "$module_file"
+  mv "$work/app-factory.backup" "$app_factory"
+  mv "$work/program.backup" "$app_src/Program.cs"
+}
+
 # The files that dotnet new hardslice-aggregate creates for the aggregate <name> of module <module>: its root, its identifier,
 # its mapping in the module and its unit tests.
 aggregate_files() {
@@ -4480,6 +4638,8 @@ probe_query_template Bookings GetBookingSummary ListBookingSummaries GetBookings
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetBookingTrip Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
+probe_protected_endpoints Bookings ProtectBooking ImportProtectedBookings GetProtectedBooking Booking \
+  "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories
 probe_entity_template Bookings Booking BookingNote BookingAuditEntry BookingAudit
 probe_private_fields Bookings
@@ -4765,6 +4925,7 @@ probe_aggregate_template Rooms Room Rooms keep
 probe_entity_template Rooms Room RoomSeat RoomVisit RoomVisitLog
 probe_query_template Rooms GetRoomSummary ListRoomSummaries GetRoomsOnDate Room 'Room.Create()'
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoomTrip Room 'Room.Create()'
+probe_protected_endpoints Rooms ProtectRoom ImportProtectedRooms GetProtectedRoom Room 'Room.Create()'
 # The events of Rooms are generated by dotnet new hardslice-event, with a reaction in Rooms and one in a second module, both
 # completed with the aggregate Room.
 probe_event_template Rooms RoomRenamed RoomClosed Housekeeping Room 'Room.Create()'

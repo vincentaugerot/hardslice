@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Query",
   "name": "HardSlice query slice",
-  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests, and with --result filtered the validator of its filter and its tests. --route chooses the route of its endpoint, which answers GET. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests, and with --result filtered the validator of its filter and its tests. --route chooses the route of its endpoint, which answers GET, and --require <policy> protects it with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-query",
   "sourceName": "QueryName",
   "preferNameDirectory": false,
@@ -77,6 +77,11 @@
       "defaultValue": "GET",
       "description": "The HTTP method of the endpoint: GET, the only method of a query, which only reads."
     },
+    "Require": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Protects the endpoint with the authorization policy of that name, which the application registers in Shared/Http with its authentication scheme, such as AdminKey: the endpoint chains .RequireAuthorization(\"<policy>\"), an integration test asserts its 401 without authentication, and the other tests send their requests through app.CreateAuthorizedClient(\"<policy>\"), the client of that policy that AppFactory.AuthorizedClients holds. A name of letters, digits, '.', '_', ':' and '-', starting with a letter."
+    },
     "AppName": {
       "type": "bind",
       "binding": "msbuild:RootNamespace",
@@ -100,6 +105,52 @@
       "parameters": {
         "sourceVariableName": "AppName",
         "fallbackVariableName": "Unbound"
+      }
+    },
+    "RequireOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Require",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "AuthorizationPolicyName",
+      "replaces": "AuthorizationPolicyName"
+    },
+    "RequireIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "RequireOrUnbound",
+        "pattern": "."
+      }
+    },
+    "RequireIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "RequireOrUnbound",
+        "pattern": "^(?:|[A-Za-z][A-Za-z0-9_.:-]*)$"
+      }
+    },
+    "TestClient": {
+      "type": "generated",
+      "generator": "regex",
+      "replaces": "app.CreateClient().",
+      "parameters": {
+        "source": "RequireOrUnbound",
+        "steps": [
+          {
+            "regex": "^(.+)$",
+            "replacement": "app.CreateAuthorizedClient(\"$1\")."
+          },
+          {
+            "regex": "^$",
+            "replacement": "app.CreateClient()."
+          }
+        ]
       }
     },
     "ParameterText": {
@@ -558,7 +609,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown && RequireIsValid)"
     }
   },
   "sources": [
@@ -845,6 +896,25 @@
       "continueOnError": false
     },
     {
+      "id": "refuseInvalidPolicy",
+      "condition": "(!RequireIsValid)",
+      "description": "Refuses a policy name that the generated code could not hold.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --require 'AuthorizationPolicyName' is not the name of an authorization policy that the template can write: letters, digits, '.', '_', ':' and '-', starting with a letter, such as --require AdminKey. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "registerSlice",
       "condition": "(Accepted)",
       "description": "Lines to add to the module of the slice.",
@@ -862,6 +932,19 @@
         {
           "condition": "(ResultIsFiltered)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        }
+      ],
+      "continueOnError": true
+    },
+    {
+      "id": "requirePolicy",
+      "condition": "(Accepted && RequireIsGiven)",
+      "description": "What the policy of the endpoint asks of the application and of its tests.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "text": "The endpoint requires the authorization policy AuthorizationPolicyName, which the application registers in src/MyApp/Shared/Http/ with its authentication scheme (docs/rules/HS015.md). Its integration tests send their requests through app.CreateAuthorizedClient(\"AuthorizationPolicyName\"), which fails until AuthorizedClients, in tests/MyApp.IntegrationTests/AppFactory.cs, holds the client of that policy, and assert its 401 without authentication."
         }
       ],
       "continueOnError": true

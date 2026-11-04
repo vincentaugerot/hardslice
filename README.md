@@ -34,7 +34,7 @@ The check builds the solution and runs its unit, architecture and integration te
 dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking --route extensions
 ```
 
-`--route` and `--method` choose the endpoint of a slice, `--parameters none` makes a command without parameters, `--endpoint none` and `--every` a system command that only the application sends, once or at regular intervals, and `hardslice-query --result filtered` a list that a filter of the query string selects. [Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the six element templates.
+`--route` and `--method` choose the endpoint of a slice, `--parameters none` makes a command without parameters, `--endpoint none` and `--every` a system command that only the application sends, once or at regular intervals, `hardslice-query --result filtered` a list that a filter of the query string selects, and `--require <policy>` an endpoint protected by an authorization policy, with the test of its 401. [Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the six element templates.
 
 ## What you get
 

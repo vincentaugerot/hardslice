@@ -181,12 +181,14 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(16);
+        refusals.Length.ShouldBe(18);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
         template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
-        postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+        // The lines to add, then, with --require, what its policy asks (PB-081): nothing else is printed.
+        postActions.Where(action => !action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal))
+            .Select(action => action.GetProperty("condition").GetString()).ShouldBe(["(Accepted)", "(Accepted && RequireIsGiven)"]);
     }
 
     // PB-064: --parameters none generates an empty command without validator nor validator tests, and refuses --response none, whose
@@ -344,6 +346,126 @@ public sealed class TemplatePackageTests
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
         tests.ShouldContain("var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app);");
         tests.ShouldContain("for (var cycle = 1; cycle <= 3; cycle++)");
+    }
+
+    // PB-081: --require <policy> protects the endpoint of a command or a query: it chains .RequireAuthorization("<policy>"), the tests
+    // send the client of the policy that AppFactory holds, except a test of the 401 that sends none. Without the option, the tests keep
+    // app.CreateClient(), and a command refuses it with --endpoint none or --every, which have no endpoint.
+    [Theory]
+    [InlineData("hardslice-command", 5, 2)]
+    [InlineData("hardslice-query", 3, 3)]
+    public void Slice_item_templates_protect_their_endpoint_with_the_policy_of_require(string templateName, int endpoints, int unauthorizedTests)
+    {
+        var repository = FindRepositoryRoot();
+        var root = templateName == "hardslice-command" ? CommandTemplateRoot(repository) : QueryTemplateRoot(repository);
+        var name = templateName == "hardslice-command" ? "CommandName" : "QueryName";
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+
+        symbols.GetProperty("Require").GetProperty("datatype").GetString().ShouldBe("text");
+        symbols.GetProperty("Require").TryGetProperty("defaultValue", out _).ShouldBeFalse();
+        host.RootElement.GetProperty("symbolInfo").GetProperty("Require").GetProperty("longName").GetString().ShouldBe("require");
+        symbols.GetProperty("RequireOrUnbound").GetProperty("replaces").GetString().ShouldBe("AuthorizationPolicyName");
+        symbols.GetProperty("RequireOrUnbound").GetProperty("fileRename").GetString().ShouldBe("AuthorizationPolicyName");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("RequireIsValid");
+        foreach (var (given, value, matches) in new[] { ("RequireIsGiven", "", false), ("RequireIsGiven", "AdminKey", true) })
+            Matches(symbols, given, value).ShouldBe(matches);
+
+        // The client of the tests: the policy's own with --require, the anonymous one without, at the same call sites.
+        var client = symbols.GetProperty("TestClient");
+        client.GetProperty("replaces").GetString().ShouldBe("app.CreateClient().");
+        client.GetProperty("parameters").GetProperty("source").GetString().ShouldBe("RequireOrUnbound");
+        var steps = client.GetProperty("parameters").GetProperty("steps").EnumerateArray()
+            .Select(step => (Regex: step.GetProperty("regex").GetString()!, Replacement: step.GetProperty("replacement").GetString()!))
+            .ToArray();
+        string Client(string policy) => steps.Aggregate(policy, (value, step) => Regex.Replace(value, step.Regex, step.Replacement));
+        Client("AdminKey").ShouldBe("app.CreateAuthorizedClient(\"AdminKey\").");
+        Client("").ShouldBe("app.CreateClient().");
+
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        postActions.Single(action => action.GetProperty("id").GetString() == "refuseInvalidPolicy").GetProperty("condition").GetString().ShouldBe("(!RequireIsValid)");
+        var instruction = postActions.Single(action => action.GetProperty("id").GetString() == "requirePolicy");
+        instruction.GetProperty("condition").GetString().ShouldBe("(Accepted && RequireIsGiven)");
+        instruction.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldContain(
+            "Its integration tests send their requests through app.CreateAuthorizedClient(\"AuthorizationPolicyName\"), which fails until AuthorizedClients, in tests/MyApp.IntegrationTests/AppFactory.cs, holds the client of that policy");
+        Array.IndexOf(postActions, instruction).ShouldBe(postActions.Length - 1);
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", name, $"{name}.cs"));
+        Regex.Matches(slice, "\n            \\.RequireAuthorization\\(\"AuthorizationPolicyName\"\\);\n").Count.ShouldBe(endpoints);
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", name, $"{name}Tests.cs"));
+        Regex.Matches(tests, "public async Task Rejects_a_request_without_authentication_before_its_handler\\(\\)").Count.ShouldBe(unauthorizedTests);
+        Regex.Matches(tests, "var anonymous = app\\.CreateClient\\(\\);").Count.ShouldBe(unauthorizedTests);
+        tests.ShouldContain("response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);");
+        tests.ShouldNotContain("CreateAuthorizedClient");
+
+        if (templateName != "hardslice-command")
+            return;
+        symbols.GetProperty("RequireWithoutEndpoint").GetProperty("value").GetString().ShouldBe("(RequireIsGiven && EndpointIsNone)");
+        symbols.GetProperty("EndpointIsNone").GetProperty("value").GetString().ShouldBe("(Endpoint == \"none\" || EveryIsGiven)");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!RequireWithoutEndpoint");
+        postActions.Single(action => action.GetProperty("id").GetString() == "refuseRequireWithoutEndpoint").GetProperty("condition").GetString()
+            .ShouldBe("(RequireWithoutEndpoint)");
+    }
+
+    // PB-081: the policy is written in a string of the endpoint and in the printed lines: a name the code could not hold is refused.
+    [Theory]
+    [InlineData("AdminKey", true)]
+    [InlineData("admin-key", true)]
+    [InlineData("Admin.Key", true)]
+    [InlineData("scope:write", true)]
+    [InlineData("Admin_Key2", true)]
+    [InlineData("", true)]
+    [InlineData("admin key", false)]
+    [InlineData("admin\"key", false)]
+    [InlineData("admin\\key", false)]
+    [InlineData("2fa", false)]
+    [InlineData("-admin", false)]
+    [InlineData("{admin}", false)]
+    public void Slice_item_templates_accept_a_policy_name_that_a_string_of_the_endpoint_can_hold(string policy, bool accepted)
+    {
+        var repository = FindRepositoryRoot();
+        foreach (var root in new[] { CommandTemplateRoot(repository), QueryTemplateRoot(repository) })
+        {
+            using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+
+            Matches(template.RootElement.GetProperty("symbols"), "RequireIsValid", policy).ShouldBe(accepted);
+        }
+    }
+
+    // PB-081: AppFactory, which the application owns, holds the client of each authorization policy, filled once, and names where to
+    // add a missing one.
+    [Fact]
+    public void AppFactory_holds_the_client_of_each_authorization_policy()
+    {
+        var appFactory = File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), "tests", "MyApp.IntegrationTests", "AppFactory.cs"));
+
+        appFactory.ShouldContain("internal static readonly Dictionary<string, Action<HttpClient>> AuthorizedClients = new(StringComparer.OrdinalIgnoreCase)\n    {\n    };");
+        // An extension of WebApplicationFactory<Program>: an instance derived with WithWebHostBuilder, as Ghostline's tests use, has it too.
+        appFactory.ShouldContain("public static HttpClient CreateAuthorizedClient(this WebApplicationFactory<Program> app, string policy)");
+        appFactory.ShouldContain("$\"AppFactory has no client for the authorization policy '{policy}'. Add one to AuthorizedClients, in AppFactory.cs of the \"");
+        appFactory.ShouldNotContain("#if");
+    }
+
+    // PB-081: add-slice says how to protect an endpoint, where the scheme and the policy go, and how its tests authenticate.
+    [Fact]
+    public void Add_slice_says_how_to_protect_an_endpoint()
+    {
+        var addSlice = File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".claude", "skills", "add-slice", "SKILL.md"));
+
+        addSlice.ShouldContain("its endpoint protected by an authorization policy when only some callers may call it");
+        addSlice.ShouldContain("see [Protected endpoints](#protected-endpoints)");
+        var start = addSlice.IndexOf("\n## Protected endpoints\n", StringComparison.Ordinal);
+        start.ShouldBeGreaterThan(0);
+        var section = addSlice[start..addSlice.IndexOf("\n## Never\n", start, StringComparison.Ordinal)];
+        section.ShouldContain("they live in `src/MyApp/Shared/Http/`, registered from `Program.cs` (HS017)");
+        section.ShouldContain("on the group of the module, in `<Module>Module.cs`, when it covers every endpoint of the module, and on the endpoint, in its slice");
+        section.ShouldContain("dotnet new hardslice-command --project src/MyApp/MyApp.csproj --module <Module> --name <Slice> --route <route> --require <policy>");
+        section.ShouldContain("`--require` is refused with `--endpoint none` and `--every`");
+        section.ShouldContain("an entry of `AuthorizedClients` named after the policy");
+        section.ShouldContain("`docs/rules/HS015.md`");
+        addSlice.ShouldNotContain("add-authorization");
     }
 
     // PB-056: a DTO named Guid, or after a type of the slice, would hide that type and break the build of the slice (CS0118, CS0102).
@@ -622,12 +744,14 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(14);
+        refusals.Length.ShouldBe(15);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
         template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
-        postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+        // The lines to add, then, with --require, what its policy asks (PB-081): nothing else is printed.
+        postActions.Where(action => !action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal))
+            .Select(action => action.GetProperty("condition").GetString()).ShouldBe(["(Accepted)", "(Accepted && RequireIsGiven)"]);
     }
 
     // hardslice-module generates the contract of the module alone. dotnet new creates no empty folder and never deletes a file: a

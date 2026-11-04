@@ -28,6 +28,10 @@
     "Every": {
       "longName": "every",
       "shortName": ""
+    },
+    "Require": {
+      "longName": "require",
+      "shortName": ""
     }
   }
 }

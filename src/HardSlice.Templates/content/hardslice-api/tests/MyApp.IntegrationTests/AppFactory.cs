@@ -13,9 +13,17 @@ namespace MyApp.IntegrationTests;
 // test. It keeps what Development changes for the tests: every service registration is validated when the host starts, and a request
 // that cannot be read is thrown to the exception handlers. No hosted service that the application registers starts, those of its
 // packages included, unless the test keeps it with KeepHostedService. ASP.NET Core registers its own after them: they always run.
+// An endpoint that requires an authorization policy is called with app.CreateAuthorizedClient(policy), from AuthorizedClients.
 public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactory<Program>
 {
     public const string TestEnvironment = "IntegrationTests";
+
+    // The client of each authorization policy of the application, by the name of the policy, filled once here: it makes a client of
+    // this instance satisfy the policy, such as one that sends the test key that ConfigureWebHost gives the application with
+    // builder.UseSetting, as in [AdminKey.Policy] = client => client.DefaultRequestHeaders.Add(AdminKey.Header, AdminApiKey).
+    internal static readonly Dictionary<string, Action<HttpClient>> AuthorizedClients = new(StringComparer.OrdinalIgnoreCase)
+    {
+    };
 
     private readonly HashSet<Type> _keptHostedServices = [];
 
@@ -64,4 +72,23 @@ public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactor
     // A hosted service registered with a factory is known by the type its factory returns.
     private static Type ImplementationOf(ServiceDescriptor service) =>
         service.ImplementationType ?? service.ImplementationInstance?.GetType() ?? service.ImplementationFactory!.Method.ReturnType;
+}
+
+public static class AppFactoryClients
+{
+    // A client of the application that satisfies the authorization policy <policy>, from AppFactory.AuthorizedClients, for the tests
+    // of an endpoint that requires it: on an AppFactory, or on an instance derived from it with WithWebHostBuilder. A request without
+    // authentication goes through CreateClient(), as the test of its 401 does.
+    public static HttpClient CreateAuthorizedClient(this WebApplicationFactory<Program> app, string policy)
+    {
+        if (!AppFactory.AuthorizedClients.TryGetValue(policy, out var authorize))
+            throw new InvalidOperationException(
+                $"AppFactory has no client for the authorization policy '{policy}'. Add one to AuthorizedClients, in AppFactory.cs of the "
+                + "integration tests: an entry named after the policy that makes a client satisfy it, such as one that sends the test key "
+                + "that ConfigureWebHost gives the application with builder.UseSetting.");
+
+        var client = app.CreateClient();
+        authorize(client);
+        return client;
+    }
 }

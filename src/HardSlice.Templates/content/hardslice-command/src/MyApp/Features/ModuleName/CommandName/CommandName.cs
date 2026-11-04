@@ -91,8 +91,32 @@ internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, R
 
 internal static class CommandNameEndpoint
 {
+#if (RequireIsGiven)
+    // The policy AuthorizationPolicyName answers 401 or 403 before the delegate runs: those responses are not in its signature (HS015),
+    // and an integration test asserts the 401.
+#endif
     public static void Map(RouteGroupBuilder group) =>
-#if (ParametersIsNone)
+#if (RequireIsGiven && ParametersIsNone)
+        group.MapPost("/command-route", async (IMediator mediator, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await mediator.Send(new CommandNameCommand(), cancellationToken)))
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven && ReadsIdFromRoute && ResponseIsNone)
+        group.MapPost("/command-id-route", async Task<Results<NoContent, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+                await mediator.Send(new CommandNameCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound())
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven && ReadsIdFromRoute)
+        group.MapPost("/command-id-route", async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await mediator.Send(new CommandNameCommand(id), cancellationToken)))
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven && ResponseIsNone)
+        group.MapPost("/command-route", async Task<Results<NoContent, NotFound>> (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
+                await mediator.Send(command, cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound())
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven)
+        group.MapPost("/command-route", async (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await mediator.Send(command, cancellationToken)))
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (ParametersIsNone)
         group.MapPost("/command-route", async (IMediator mediator, CancellationToken cancellationToken) =>
             TypedResults.Ok(await mediator.Send(new CommandNameCommand(), cancellationToken)));
 #elif (ReadsIdFromRoute && ResponseIsNone)

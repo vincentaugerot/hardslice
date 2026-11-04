@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval>, one that AddRecurringCommand sends at regular intervals. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval>, one that AddRecurringCommand sends at regular intervals. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -81,6 +81,11 @@
       "datatype": "text",
       "description": "Sends the command at regular intervals, through AddRecurringCommand in the module: the interval as [d.]hh:mm:ss, longer than zero and under 49 days, such as 00:00:30 or 1.00:00:00, which the key <Module>:<Name>:Interval of the configuration replaces. Implies --endpoint none and --parameters none: a system command without parameter, whose integration test runs three cycles on a FakeTimeProvider."
     },
+    "Require": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Protects the endpoint with the authorization policy of that name, which the application registers in Shared/Http with its authentication scheme, such as AdminKey: the endpoint chains .RequireAuthorization(\"<policy>\"), an integration test asserts its 401 without authentication, and the other tests send their requests through app.CreateAuthorizedClient(\"<policy>\"), the client of that policy that AppFactory.AuthorizedClients holds. A name of letters, digits, '.', '_', ':' and '-', starting with a letter. Refused with --endpoint none and --every: a system command has no endpoint."
+    },
     "AppName": {
       "type": "bind",
       "binding": "msbuild:RootNamespace",
@@ -147,6 +152,16 @@
       "fileRename": "RecurringInterval",
       "replaces": "RecurringInterval"
     },
+    "RequireOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Require",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "AuthorizationPolicyName",
+      "replaces": "AuthorizationPolicyName"
+    },
     "RouteIsGiven": {
       "type": "generated",
       "generator": "regexMatch",
@@ -181,6 +196,42 @@
       "parameters": {
         "source": "EveryOrUnbound",
         "pattern": "^(?:|(?!(?:0{1,2}\\.)?00:00:00$)(?:(?:[0-3]?[0-9]|4[0-8])\\.)?(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"
+      }
+    },
+    "RequireIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "RequireOrUnbound",
+        "pattern": "."
+      }
+    },
+    "RequireIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "RequireOrUnbound",
+        "pattern": "^(?:|[A-Za-z][A-Za-z0-9_.:-]*)$"
+      }
+    },
+    "TestClient": {
+      "type": "generated",
+      "generator": "regex",
+      "replaces": "app.CreateClient().",
+      "parameters": {
+        "source": "RequireOrUnbound",
+        "steps": [
+          {
+            "regex": "^(.+)$",
+            "replacement": "app.CreateAuthorizedClient(\"$1\")."
+          },
+          {
+            "regex": "^$",
+            "replacement": "app.CreateClient()."
+          }
+        ]
       }
     },
     "CommandRouteWords": {
@@ -553,6 +604,10 @@
       "type": "computed",
       "value": "(EndpointIsNone && (RouteIsGiven || MethodIsGiven))"
     },
+    "RequireWithoutEndpoint": {
+      "type": "computed",
+      "value": "(RequireIsGiven && EndpointIsNone)"
+    },
     "EveryContradictsOptions": {
       "type": "computed",
       "value": "(EveryIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))"
@@ -589,7 +644,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint)"
     }
   },
   "sources": [
@@ -911,6 +966,43 @@
       "continueOnError": false
     },
     {
+      "id": "refuseInvalidPolicy",
+      "condition": "(!RequireIsValid)",
+      "description": "Refuses a policy name that the generated code could not hold.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --require 'AuthorizationPolicyName' is not the name of an authorization policy that the template can write: letters, digits, '.', '_', ':' and '-', starting with a letter, such as --require AdminKey. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseRequireWithoutEndpoint",
+      "condition": "(RequireWithoutEndpoint)",
+      "description": "Refuses --require for a system command, which has no endpoint to protect.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --require protects the endpoint of the slice with an authorization policy, while --endpoint none and --every generate a system command, which only the application sends and which has no endpoint. Remove --require, or keep the endpoint with --endpoint http and without --every. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "registerSlice",
       "condition": "(Accepted)",
       "description": "Lines to add to the module of the slice.",
@@ -964,6 +1056,19 @@
         {
           "condition": "(EveryIsGiven && ResponseIsDto)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        }
+      ],
+      "continueOnError": true
+    },
+    {
+      "id": "requirePolicy",
+      "condition": "(Accepted && RequireIsGiven)",
+      "description": "What the policy of the endpoint asks of the application and of its tests.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "text": "The endpoint requires the authorization policy AuthorizationPolicyName, which the application registers in src/MyApp/Shared/Http/ with its authentication scheme (docs/rules/HS015.md). Its integration tests send their requests through app.CreateAuthorizedClient(\"AuthorizationPolicyName\"), which fails until AuthorizedClients, in tests/MyApp.IntegrationTests/AppFactory.cs, holds the client of that policy, and assert its 401 without authentication."
         }
       ],
       "continueOnError": true

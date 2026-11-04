@@ -117,6 +117,25 @@ public sealed class CommandNameTests(PostgresDatabase database)
             "CommandNameHandler answers 500 until its NotImplementedException is replaced by the use case.");
         Assert.Fail("TODO(hardslice): assert the business outcome of CommandName, such as the state stored in PostgreSQL, read with database.CreateDbContext().");
     }
+#if (RequireIsGiven)
+
+    // The policy AuthorizationPolicyName refuses a request without authentication before the endpoint: its 401 is not in the signature
+    // of the endpoint (HS015), this test stands for it. The other tests send the client of the policy, which AppFactory holds.
+    [Fact]
+    public async Task Rejects_a_request_without_authentication_before_its_handler()
+    {
+        await using var app = new AppFactory(database);
+        var anonymous = app.CreateClient();
+
+#if (MethodIsDelete)
+        var response = await anonymous.DeleteAsync(Route, TestContext.Current.CancellationToken);
+#else
+        var response = await anonymous.PostAsync(Route, content: null, TestContext.Current.CancellationToken);
+#endif
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+#endif
 #else
 
     [Fact]
@@ -158,6 +177,25 @@ public sealed class CommandNameTests(PostgresDatabase database)
         problem.ShouldNotBeNull();
         problem.Errors.Keys.ShouldBe(["id"]);
     }
+#if (RequireIsGiven)
+
+    // The policy AuthorizationPolicyName refuses a request without authentication before the endpoint: its 401 is not in the signature
+    // of the endpoint (HS015), this test stands for it. The other tests send the client of the policy, which AppFactory holds.
+    [Fact]
+    public async Task Rejects_a_request_without_authentication_before_its_handler()
+    {
+        await using var app = new AppFactory(database);
+        var anonymous = app.CreateClient();
+
+#if (ReadsIdFromRoute)
+        var response = await anonymous.DeleteAsync($"{Route}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+#else
+        var response = await anonymous.PostAsJsonAsync(Route, new CommandNameCommand(Guid.NewGuid()), TestContext.Current.CancellationToken);
+#endif
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+#endif
 #endif
 #endif
 }
