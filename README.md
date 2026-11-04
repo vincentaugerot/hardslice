@@ -44,7 +44,7 @@ dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings 
 | Six item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-entity`, `hardslice-command`, `hardslice-query` and `hardslice-event` generate an element in its place with its tests, which fail until the element is completed. |
 | `HardSlice.Analyzers` | Roslyn analyzers that report the rules at build time and in the IDE. |
 | Architecture tests | The rules that span projects, modules and test folders, in every generated solution. |
-| `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files. |
+| `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification and gives a `Fix:` to each error on a HardSlice file, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files. |
 | Agent kit | `AGENTS.md` and the instruction file of each agent, six skills, the hooks of Claude Code, Codex and Copilot CLI, a pre-commit hook and a GitHub Actions workflow. |
 
 ## Supported agents
@@ -56,7 +56,7 @@ dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings 
 | GitHub Copilot CLI | `AGENTS.md`, `.github/copilot-instructions.md` and `GEMINI.md` | native: the hooks of `.github/hooks/hardslice.json` |
 | Gemini CLI | `GEMINI.md`, which imports `AGENTS.md` | fallback |
 
-A native adapter refuses an edit of the files that set the rules, hands the build errors back to the agent after each edit, and keeps it working while the check fails at the end of its turn. With the fallback, the agent follows `AGENTS.md`, which tells it to run the check before it finishes. Codex skips the hooks of a project until a human approves each one in `/hooks`. [Agent loop](docs/agent-loop.md) details the hooks, the protected files and the skills.
+A native adapter refuses an edit of the files that set the rules, hands the build errors back to the agent after each edit (the errors of the edited files in full, a count of the others), and keeps it working while the check fails at the end of its turn. A failure that only a maintainer can fix, a protected HardSlice file that is missing or holds another version, is handed to the agent once, and it then hands back saying what a maintainer must do. With the fallback, the agent follows `AGENTS.md`, which tells it to run the check before it finishes. Codex skips the hooks of a project until a human approves each one in `/hooks`. [Agent loop](docs/agent-loop.md) details the hooks, the protected files and the skills.
 
 ## Rules
 

@@ -2386,7 +2386,7 @@ Le vérificateur passe sur les exécutions Claude Code consignées. Chaque exéc
 
 ### PB-051 : Publier la préversion `0.3.0-preview.1`
 
-Statut : en attente du feu vert du mainteneur, et de PB-080, qui revalide les paquets après PB-075 à PB-079 et PB-085 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` de PB-080, sur lequel les paquets ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
+Statut : en attente du feu vert du mainteneur. PB-080, terminé, a revalidé les paquets après PB-075 à PB-079 et PB-085 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` de PB-080 (« revalidate the 0.3.0-preview.1 packages after PB-075 to PB-079 and PB-085 »), sur lequel les paquets ont été revalidés en dernier le 04/11/2026. PB-074 les avait revalidés après PB-060 à PB-073.
 
 **Résultat observable**
 
@@ -3501,7 +3501,7 @@ sondes du template d'application et des règles de scripts/test-template.sh, dan
 
 ### PB-080 : Revalider les paquets 0.3.0-preview.1 après PB-075 à PB-079 et PB-085
 
-Statut : prêt. Dernier ticket avant PB-051, dont l'étiquette vise son commit. Il passe après PB-079 et PB-085 : PB-075 à PB-079 et PB-085 n'ont pas reconstruit les paquets.
+Statut : terminé le 04/11/2026. Dernier ticket avant PB-051, dont l'étiquette vise son commit. Ferme l'entrée « a rebuild under the same version stays invisible to the NuGet cache » de `ghostline/docs/hardslice-friction.md`. `CHANGELOG.md` dit déjà ce que livrent PB-075 à PB-079 et PB-085 : chaque ticket y avait écrit sa ligne, rien n'y manque. `HS001.md` disait encore que `Shared/Behaviors` traduit une `DomainException` ou une `ConflictException` : depuis PB-079, c'est `Shared/Http`, en 400 ou 409. Le README racine dit que le hook rend après une édition les erreurs des fichiers édités en entier et le compte des autres (PB-077), qu'un échec sur un fichier HardSlice protégé n'est rendu à l'agent qu'une fois, qui rend alors la main en disant ce qu'un mainteneur doit faire (PB-078), et que `check` donne un `Fix:` à chaque erreur sur un fichier HardSlice (PB-076). Le README du paquet de templates dit la même chose de ses hooks. Les README ne présentent pas les dossiers de `Shared` ni HS902 au-delà de ce qui reste juste, et celui de l'outil suivait déjà PB-076 à PB-078. `CONTRIBUTING.md` dit qu'une reconstruction sous la même version laisse deux caches servir l'ancienne en silence, et qu'il faut purger les deux : le dossier global des paquets NuGet (`dotnet nuget locals global-packages --clear`, ou les seuls dossiers `hardslice.*` de `~/.nuget/packages/`) et le fichier `hardslice.tool` de `~/.dotnet/toolResolverCache/1/`. Paquets reconstruits dans `artifacts/packages` sur ce commit. Passages locaux : `dotnet build --no-restore`, `dotnet test --no-build` (1234 tests verts), `scripts/test-template.sh` complet (environ 1 h) et `scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages` sur les paquets reconstruits, tous verts. Contournement que Ghostline peut retirer : aucun dans le code. Sa purge à la main est désormais la procédure écrite : à faire une fois sur ce commit, avant d'y refaire sa migration. C'est la dernière reconstruction avant la publication.
 
 **Résultat observable**
 
