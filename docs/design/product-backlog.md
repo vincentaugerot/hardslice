@@ -2,7 +2,7 @@
 
 # HardSlice : backlog produit
 
-Statut : backlog actif, 03/11/2026.
+Statut : backlog actif, 04/11/2026.
 
 Source de vérité produit : [specifications.md](specifications.md).
 
@@ -2421,6 +2421,8 @@ L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jo
 
 Statut : découpé le 03/11/2026 à partir d'une revue complète du dépôt avant publication (code, template, kit agents, outil, CI, documentation), arbitrages validés par le mainteneur le même jour. Une version publiée sur NuGet.org ne se remplace jamais : ce qui est figé dans les paquets (code généré, kit agents, liste des fichiers protégés, textes des diagnostics, README des paquets, format de `hardslice.json`, codes de sortie) est corrigé avant PB-051.
 
+Complété le 04/11/2026 par PB-060 à PB-064, tirés des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : ce sont les défauts qui seraient figés dans les paquets. Les autres frictions vont à l'incrément suivant (section 7).
+
 ### Résultat attendu
 
 > `dotnet new hardslice-api` génère une solution qui compile et passe la vérification quel que soit le nom accepté par `dotnet new`, `Acme.Rooms` et `my-app` compris. Aucun fichier qui règle les analyseurs ne peut être modifié par un agent sans être refusé par les hooks et par la CI. Les analyseurs ne font jamais tomber le compilateur ni l'IDE sur du code en cours d'écriture, et ne se taisent jamais sans HS900 sur une configuration incomplète. Les contrats publics figés par la préversion (`hardslice.json`, codes de sortie de `check`, liste des fichiers protégés) laissent évoluer les versions suivantes. La documentation publique est exacte, en anglais, sans information personnelle, et un visiteur venu de NuGet.org trouve en moins d'une page ce qu'il obtient et comment l'essayer. Les trois paquets sont prêts à être publiés en `0.3.0-preview.1`.
@@ -2458,6 +2460,11 @@ Décisions du mainteneur du 03/11/2026 :
 | PB-057 (démonstrations) | incrément 4 | PB-052 à PB-056 |
 | PB-058 (documentation) | PB-052 à PB-057 | aucun |
 | PB-059 (paquets prêts à publier) | PB-058 | aucun |
+| PB-060 (paquets de l'application) | PB-059 | PB-061 à PB-063 |
+| PB-061 (restauration avant build) | PB-059 | PB-060, PB-062, PB-063 |
+| PB-062 (secrets et tests d'intégration) | PB-059 | PB-060, PB-061, PB-063 |
+| PB-063 (kit agents, commandes) | PB-059 | PB-060 à PB-062 |
+| PB-064 (paquets revalidés) | PB-060 à PB-063 | aucun |
 
 Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
 
@@ -2749,11 +2756,504 @@ for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.
 scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/packages
 ```
 
+### PB-060 : Laisser l'application gérer ses propres paquets
+
+**Résultat observable**
+
+Un agent ajoute `CsvHelper` ou `Google.Protobuf` à une solution générée sans toucher un fichier protégé, et la vérification reste verte. Retirer ou modifier la référence à `HardSlice.Analyzers` reste refusé par les hooks et fait échouer `check` et la CI. Les tests d'une solution générée peuvent utiliser `FakeTimeProvider`.
+
+**Constat**
+
+Ghostline, 03/11/2026 (entrées « adding a package needs the protected Directory.Packages.props », « HS010 recommends FakeTimeProvider, which no project can add » et « the frictions of roadmap 1.1 came back ») :
+
+- `Directory.Packages.props` est protégé en entier (`ProtectedFiles.cs`), alors qu'`AGENTS.md` n'interdit que de retirer, modifier ou rétrograder `HardSlice.Analyzers` et sa référence. Toute dépendance de l'application oblige à arrêter la tâche et à expliquer le conflit.
+- L'agent a donc écrit à la main un lecteur CSV (RFC 4180) et un lecteur du format binaire de protobuf (environ 200 lignes), avec leurs tests : du code moins sûr que les paquets qu'il remplace.
+- `HS010.md` recommande `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`), absent des paquets de la solution et impossible à ajouter. Les tests du collecteur de Ghostline attendent un vrai intervalle de 100 ms, avec une boucle d'attente bornée à 15 secondes.
+
+**Périmètre**
+
+- La `GlobalPackageReference` de `HardSlice.Analyzers` quitte `Directory.Packages.props` pour un fichier protégé (par exemple `Directory.HardSlice.props`) que `Directory.Packages.props` importe. Le mécanisme exact est libre s'il garde la gestion centrale des versions et `CentralPackageTransitivePinningEnabled`.
+- `Directory.Packages.props` sort de la liste protégée : `ProtectedFiles`, `AGENTS.md`, spécification, `docs/agent-loop.md`, `README.md`. Le nouveau fichier y entre.
+- `check` échoue (code `1`, message qui nomme le fichier) quand l'import a disparu ou qu'un projet de la solution ne reçoit plus `HardSlice.Analyzers` : sans analyseur, aucun HS900 ne peut le dire.
+- Le job `protected-files` de la CI générée suit la nouvelle liste.
+- `Microsoft.Extensions.TimeProvider.Testing` dans les paquets de la solution, référencé par `<App>.Tests` et `<App>.IntegrationTests`.
+- `AGENTS.md` dit en une ligne qu'une dépendance de l'application s'ajoute dans `Directory.Packages.props`, et reste sous 150 lignes en `--no-sample`.
+
+**Cas vérifiés**
+
+- `CsvHelper` ajouté à `Directory.Packages.props` et à `<App>.csproj` : hook accepté, vérification verte.
+- Édition du fichier qui porte `HardSlice.Analyzers` : refusée par le hook de chaque CLI, job `protected-files` en échec.
+- Import retiré de `Directory.Packages.props` : `check` en échec avec le nom du fichier.
+- Un test qui avance un `FakeTimeProvider` compile et passe dans `<App>.Tests`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes « fichiers protégés », « hooks » et « workflow généré » de scripts/test-template.sh
+```
+
+### PB-061 : Ne restaurer avant le build que lorsqu'un fichier lu par la restauration a changé
+
+**Résultat observable**
+
+Après une modification d'un `.csproj` qui ne change aucun paquet, le hook après édition restaure une fois, puis plus du tout tant qu'aucun fichier lu par la restauration ne change.
+
+**Constat**
+
+Ghostline, 03/11/2026 (entrée « the build hook restores after every edit ») : le hook affiche `Restoring Ghostline.slnx: src/Ghostline/Ghostline.csproj changed since the last restore` après chaque édition d'un `.cs`. `RestoreState.Outdated` compare la date du projet à celle de `obj/project.assets.json`. `dotnet user-secrets init` a modifié le `.csproj` à 18:22, `project.assets.json` date de 17:51, et une restauration qui ne change aucun paquet ne réécrit pas ce fichier : chaque build restaure, sur le budget de 10 secondes du hook. Le commentaire de `RestoreState.cs` présente la limite comme un coût passager, mais elle ne cesse jamais d'elle-même. L'hypothèse de l'entrée (une restauration lancée à la main) n'est pas la cause.
+
+**Périmètre**
+
+- Après une restauration réussie lancée par `check`, une trace propre à HardSlice est écrite pour chaque projet (par exemple `obj/hardslice.restore`), et `Outdated` compare les fichiers lus par la restauration à la plus récente de cette trace et de `project.assets.json`. Le mécanisme est libre, à condition de ne jamais conclure « à jour » quand un fichier lu a changé après la dernière restauration.
+- Fichiers lus : ceux de la racine déjà listés, le fichier qui porte `HardSlice.Analyzers` depuis PB-060, et le projet.
+- Commentaire de `RestoreState.cs` à jour.
+
+**Cas vérifiés**
+
+- `.csproj` modifié sans changement de paquet : une restauration au premier build après édition, aucune au second.
+- Paquet ajouté au `.csproj` : restauration, puis build qui voit le paquet.
+- Dossier `obj` supprimé : « has never been restored ».
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes « modes de check » et « hooks » de scripts/test-template.sh
+```
+
+### PB-062 : Isoler les tests d'intégration des secrets et des services du développeur
+
+**Résultat observable**
+
+Une solution générée accepte `dotnet user-secrets set` sans préparation. Ses tests d'intégration ne démarrent aucun service hébergé de l'application et ne lisent aucun secret du développeur, sauf un test qui garde explicitement un service.
+
+**Constat**
+
+Ghostline, 03/11/2026 (entrées « hardslice-api template, no UserSecretsId » et « integration tests run every hosted service of the application ») :
+
+- `hardslice-api` ne génère pas de `UserSecretsId` : `dotnet user-secrets set` échoue avec « Could not find the global property 'UserSecretsId' ». `dotnet user-secrets init` écrit la propriété en première ligne du `.csproj`, avec un BOM, et déclenche le défaut de PB-061.
+- `AppFactory` démarre l'hôte complet en environnement Development, où les secrets utilisateur sont chargés, services hébergés compris. Dès l'enregistrement du collecteur de Ghostline, chaque test d'intégration aurait lu les vrais flux NextRip avec la clé du développeur et écrit leurs courses dans la base de test, sans rien signaler. Contournement : un réglage `Realtime:CollectorEnabled`, faux dans `AppFactory`.
+
+**Périmètre**
+
+- `UserSecretsId` dans `<App>.csproj`, un GUID neuf par solution générée.
+- `AppFactory` : aucun `IHostedService` enregistré par l'application ne démarre par défaut, et un moyen documenté d'en garder un pour son propre test (méthode ou paramètre de la fabrique, forme libre). Les services d'hébergement qu'ASP.NET Core exige restent.
+- Les secrets utilisateur ne sont pas chargés dans les tests d'intégration (environnement dédié ou source de configuration retirée, mécanisme libre), sans perdre la chaîne de connexion de la base de test.
+- `docs/getting-started.md` : les secrets locaux en une ligne.
+- `AGENTS.md` ou `add-slice` : un service hébergé ne tourne dans les tests d'intégration que si le test le garde.
+
+**Cas vérifiés**
+
+- Solution générée : `dotnet user-secrets set Key value` réussit sans `init`, deux solutions générées ont deux identifiants différents.
+- Un `BackgroundService` semé dans la solution : il ne démarre pas dans les tests d'intégration existants, et démarre dans un test qui le garde.
+- Un secret utilisateur défini : absent de la configuration vue par un test d'intégration.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes du template d'application de scripts/test-template.sh, dans les deux variantes
+```
+
+### PB-063 : Dire dans le kit agents ce que fait une commande sans paramètre et ce qu'un command handler peut faire au dehors
+
+**Résultat observable**
+
+Le kit agents ne demande plus ce qu'une règle interdit, et dit ce qu'un command handler peut faire hors de sa transaction.
+
+**Constat**
+
+Ghostline, 03/11/2026 (entrées « hardslice-command, no option for a command without parameters » et « external effects of a command handler are not documented ») :
+
+- `AGENTS.md` demande pour chaque slice des tests « an invalid request included ». Une commande sans paramètre n'a pas de requête invalide, et HS013 interdit un validateur vide. L'agent a dû trancher seul entre deux consignes, deux fois (`ImportSchedule`, `CollectRealtimeFeeds`).
+- `AGENTS.md` interdit les effets externes dans une réaction, parce qu'ils survivent à un rollback, mais ne dit rien d'un command handler. `ImportSchedule` télécharge une archive et l'écrit sur disque : l'agent n'a pas pu savoir si c'était permis, ni où placer le client HTTP et l'accès aux fichiers.
+
+**Périmètre**
+
+- `AGENTS.md` et `add-slice` : une commande sans paramètre n'a pas de validateur, et ses tests couvrent un échec du domaine (ou son succès) à la place de la requête invalide.
+- `AGENTS.md` : un command handler peut lire au dehors (téléchargement, fichier) par des services injectés, comme `IHttpClientFactory` et les options de son module. Un effet qu'il produit au dehors doit rester sans conséquence si la transaction est annulée (idempotent, comme un fichier nommé par son empreinte). Un effet qui ne le peut pas (un e-mail, un paiement) n'a pas encore de mécanisme dans le template : l'agent le signale à l'utilisateur au lieu de l'écrire.
+- `AGENTS.md` reste sous 150 lignes en `--no-sample`. Si la place manque, le détail va dans `add-slice` et `AGENTS.md` y renvoie.
+
+**Cas vérifiés**
+
+- `AGENTS.md` des deux variantes : les deux consignes présentes, sous la limite de lignes.
+- Aucune consigne du kit agents (`AGENTS.md`, skills, fiches HS013 et HS014) n'exige de validateur ni de test de requête invalide pour une commande sans paramètre.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes « instructions des agents » de scripts/test-template.sh
+```
+
+### PB-064 : Revalider les paquets 0.3.0-preview.1 après les retours de Ghostline
+
+**Résultat observable**
+
+Le parcours de PB-059 passe à nouveau sur les paquets construits après PB-060 à PB-063, et l'étiquette de PB-051 peut viser ce commit.
+
+**Périmètre**
+
+- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-060 à PB-063 ont changé (paquets de l'application, restauration, secrets et tests d'intégration, kit agents).
+- `CONTRIBUTING.md` : le symptôme d'un cache des outils locaux qui vise un dossier supprimé (`Run "dotnet tool restore"` juste après une restauration réussie) et sa correction (supprimer l'entrée concernée de `~/.dotnet/toolResolverCache/1/`). Ghostline l'a rencontré le 03/11/2026 (entrée « dotnet ef unusable after generating the solution ») : `scripts/test-template.sh` isole ce cache depuis PB-021, l'entrée venait d'une sonde lancée hors de `isolate_dotnet_cli_home` sur la machine du mainteneur. Un utilisateur des paquets publiés n'est pas concerné.
+- Passage complet de `scripts/test-template.sh` et de `scripts/verify-published.sh --source artifacts/packages`.
+- Statut de PB-051 : le commit que vise l'étiquette.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o artifacts/packages; done
+scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/packages
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-052 à PB-059 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. PB-051 peut alors être lancé sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-052 à PB-064 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. PB-051 peut alors être lancé sur le feu vert du mainteneur.
 
-## 7. Incréments suivants
+## 7. Incrément suivant : Retours de Ghostline, 0.3.0-preview.2
+
+Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Les défauts qui seraient figés dans les paquets sont traités avant la publication, par PB-060 à PB-064. Les tickets de cet incrément commencent après PB-064 et ne changent pas les paquets `0.3.0-preview.1` : l'étiquette de PB-051 vise le commit de PB-064.
+
+### Résultat attendu
+
+> Les deux modules de Ghostline se construisent avec les templates et les skills, sans réécrire de code généré ni écrire à la main ce qu'un template devrait produire : commande sans paramètre, route choisie, entité enfant, commande lancée par une tâche de fond, requête filtrée. Les cas avancés rencontrés (unicité sous concurrence, règle du domaine dans une requête, grandes collections, écritures en masse) ont une consigne écrite.
+
+### Arbitrages de l'incrément
+
+Proposés le 04/11/2026, à valider par le mainteneur avant PB-068 :
+
+- **Une commande interne n'a pas d'endpoint HTTP.** Un contrat de messagerie dédié (par exemple `IInternalCommand<TResponse>`) marque une commande envoyée seulement depuis l'application (tâche de fond, réaction à un événement externe). HS004 l'accepte sans endpoint et signale à la place une commande interne que rien n'envoie dans son module. Une commande ordinaire garde l'endpoint obligatoire.
+- **Le travail en arrière-plan passe par un service hébergé généré**, dans le dossier de la slice qu'il déclenche, qui envoie la commande par `IMediator` dans un scope par cycle, sur un `PeriodicTimer` construit avec `TimeProvider`. Aucun planificateur générique n'entre dans `Shared/`.
+- **Aucune aide d'écriture en masse ni de verrou consultatif n'entre dans `Shared/Persistence`.** Ces besoins sont documentés, pas générés.
+- **Les routes par défaut ne changent pas.** Les options de PB-066 s'ajoutent sans modifier ce que génèrent les commandes sans option.
+
+### Critères communs à tous les tickets de l'incrément
+
+- Les critères communs des sections 5 et 6 restent applicables.
+- Chaque template ou option ajouté a sa sonde dans `scripts/test-template.sh` (génération, complétion de référence, vérification verte, refus des combinaisons invalides avec le code 105), son entrée dans `docs/item-templates.md` et sa consigne dans la skill qui le concerne.
+- Chaque ticket cite l'entrée de `ghostline/docs/hardslice-friction.md` qu'il ferme, et dit dans son résumé le contournement que Ghostline peut retirer.
+
+### Graphe des dépendances
+
+| Ticket | Dépend de | Peut avancer en parallèle de |
+|---|---|---|
+| PB-065 (commande sans paramètre) | PB-064 | PB-067, PB-070, PB-072 |
+| PB-066 (route et verbe) | PB-065 | PB-067, PB-070, PB-072 |
+| PB-067 (entités enfants) | PB-064 | PB-065, PB-066, PB-070 |
+| PB-068 (commande interne) | PB-065, arbitrage validé | PB-067, PB-070 |
+| PB-069 (tâche de fond) | PB-060, PB-062, PB-068 | PB-070 à PB-072 |
+| PB-070 (unicité sous concurrence) | PB-064 | PB-065 à PB-069 |
+| PB-071 (requête filtrée) | PB-066 | PB-069, PB-070 |
+| PB-072 (HS006 et règles du domaine) | PB-064 | PB-065 à PB-071 |
+| PB-073 (écritures en masse) | PB-067 | PB-072 |
+| PB-074 (`.gitkeep` des modules) | PB-067 | PB-073 |
+
+Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
+
+### PB-065 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
+
+**Résultat observable**
+
+`dotnet new hardslice-command --module Schedule --name ImportScheduleCommand --parameters none` génère une commande sans paramètre, sans validateur ni tests de validation, un endpoint qui ne lit pas de corps, et un test d'intégration qui ne vérifie pas de 400. La vérification est verte après complétion de référence.
+
+**Constat**
+
+Ghostline, entrées « hardslice-command, no option for a command without parameters » et « the frictions of roadmap 1.1 came back » : pour `ImportSchedule` puis `CollectRealtimeFeeds`, le template a généré un paramètre `Guid Id`, un validateur, ses tests unitaires, un endpoint qui lit la commande dans le corps et un test d'intégration du 400. Tout a été supprimé ou réécrit. Tant que ce n'était pas fait, chaque édition faisait échouer le build du hook sur les tests générés, qui ne compilaient plus.
+
+**Périmètre**
+
+- `hardslice-command` : option `--parameters` (`id` par défaut, comportement actuel, et `none`), combinable avec `--response`. Une combinaison sans sens est refusée avant de créer un fichier, comme les refus de PB-056 (par exemple `--response none`, qui répond 404 à un agrégat inconnu, sans identifiant pour le chercher), ou reçoit un sens documenté.
+- Avec `none` : la commande est un record vide, l'endpoint n'a pas de corps, aucun validateur ni test de validation, et le test d'intégration généré couvre le succès ou un échec du domaine.
+- `add-slice`, `docs/item-templates.md` et `AGENTS.md` (sous 150 lignes) : l'option, et la consigne de PB-063 qui renvoie vers elle.
+
+**Cas vérifiés**
+
+- `--parameters none` avec chaque valeur acceptée de `--response` : vérification verte après complétion de référence, aucun validateur généré.
+- Combinaison refusée : code 105, rien de créé.
+- Sans l'option : fichiers identiques à ceux d'aujourd'hui.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes des templates d'éléments de scripts/test-template.sh
+```
+
+### PB-066 : Choisir la route et le verbe d'une slice à la génération
+
+**Résultat observable**
+
+`hardslice-command` et `hardslice-query` acceptent `--route` et `--method`, et le test d'intégration généré appelle la route choisie.
+
+**Constat**
+
+Ghostline, entrées « hardslice-command and hardslice-query, routes named after the slice » et « the frictions of roadmap 1.1 came back » : les templates ont mappé `POST /import-schedule`, `GET /get-scheduled-trips/{id:guid}` et `POST /collect-realtime-feeds`. Le verbe du nom de la slice finit dans l'URL. Les trois routes ont été réécrites (`POST /schedule/versions`, `GET /schedule/trips?date=`, `POST /realtime/collections`), puis la constante `Route` de chaque test généré.
+
+**Périmètre**
+
+- `--route` : chemin relatif au groupe du module, validé comme le `--route` de `hardslice-module` (segments, paramètres de route acceptés par ASP.NET Core).
+- `--method` : `POST`, `PUT`, `PATCH` ou `DELETE` pour une commande, `GET` seul pour une requête (refus explicite sinon).
+- Valeurs par défaut inchangées (arbitrage de l'incrément).
+- Endpoint, constante de route du test et `add-slice` suivent. `docs/item-templates.md` : les deux options, et le conseil de nommer la route d'après la ressource.
+
+**Cas vérifiés**
+
+- Commande `--route versions --method PUT` et requête `--route trips` : vérification verte, tests générés verts sur la route choisie.
+- Route invalide, verbe refusé : code 105, rien de créé.
+- Module créé avec son propre `--route` : la route de la slice s'y ajoute.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes des templates d'éléments de scripts/test-template.sh
+```
+
+### PB-067 : Générer une entité enfant avec `dotnet new hardslice-entity`
+
+**Résultat observable**
+
+`dotnet new hardslice-entity --module Schedule --aggregate ScheduleVersion --name StopTime` génère l'entité enfant, son identifiant, son mapping et ses tests unitaires. La skill `add-aggregate` dit où vit le mapping d'un enfant, et quand un enfant porte l'identifiant de sa racine au lieu d'être tenu par elle.
+
+**Constat**
+
+Ghostline, entrées « no template nor skill for the child entities of an aggregate », « HS008 and an aggregate with millions of child rows » et « the frictions of roadmap 1.1 came back » :
+
+- `hardslice-aggregate` crée une racine, son identifiant et son mapping, rien ne crée d'entité enfant. Sept entités (`Route`, `Trip`, `Stop`, `StopTime`, `Calendar`, `CalendarDate`, `TripObservation`), leurs `IEntityTypeConfiguration` et leurs tests ont été écrits à la main, contre la consigne « never by hand » faute de template.
+- Rien ne dit où va le mapping d'un enfant (un fichier par entité à côté de `<Aggregate>Configuration.cs` a été choisi), ni comment partager la conversion de l'identifiant de la racine (un `ValueConverter` dans l'espace de noms du module, `ObservedTripIdConverter`).
+- Une racine ne peut pas tenir 3,8 millions d'horaires. Les enfants portent alors le `ScheduleVersionId`, sans navigation, et HS008 ne connaît pas de propriétaire (comportement prévu par sa fiche). Rien ne dit que c'est la forme voulue.
+
+**Périmètre**
+
+- Template `hardslice-entity` : `--module`, `--aggregate`, `--name`, et une option qui choisit entre l'enfant tenu par sa racine (collection de la racine, forme par défaut) et l'enfant qui porte l'identifiant de sa racine, sans navigation, pour les grandes collections. Noms d'option libres.
+- Fichiers : l'entité (`IEntity`) dans `<App>.Domain/<Module>/`, son identifiant, `<Entity>Configuration.cs` à côté du mapping de la racine, ses tests unitaires.
+- Conversion de l'identifiant de la racine partagée par un `ValueConverter` du module, créé au premier enfant et réutilisé ensuite. Si `hardslice-aggregate` doit le générer d'emblée, le changement est fait ici.
+- Refus comme `hardslice-aggregate` : module ou agrégat inconnu, nom réservé ou déjà pris, nom du module.
+- `add-aggregate` : où vit le mapping d'un enfant, le choix entre les deux formes. `HS008.md` : un paragraphe « large child collections ».
+
+**Limites**
+
+Un contrat de données de référence immuables hors `IEntity` (HS902 l'exige aujourd'hui de tout type du domaine mappé) reste différé : voir la section 9.
+
+**Cas vérifiés**
+
+- Les deux formes : vérification verte, migration générée, tests unitaires verts.
+- Deux enfants du même agrégat : un seul `ValueConverter`.
+- Refus : code 105, rien de créé.
+- HS008 : l'enfant qui porte l'identifiant de sa racine ne produit pas de diagnostic.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes des templates d'éléments de scripts/test-template.sh
+```
+
+### PB-068 : Accepter une commande interne sans endpoint HTTP
+
+**Résultat observable**
+
+Une commande envoyée seulement par l'application n'a pas d'endpoint, et HS004 l'accepte. Une commande interne que rien n'envoie dans son module produit un diagnostic.
+
+**Constat**
+
+Ghostline, entrée « HS004 requires an HTTP endpoint for a command only a timer sends » : HS004 exige `<Slice>Endpoint` dans chaque slice de requête et interdit un endpoint vide ou jamais mappé. `CollectRealtimeFeeds`, envoyée toutes les 30 secondes par le collecteur, a donc reçu `POST /realtime/collections`, public et sans authentification : n'importe qui peut consommer le quota de la clé NextRip.
+
+**Périmètre**
+
+- Contrat de messagerie de la commande interne dans `Shared/Messaging`, selon l'arbitrage de l'incrément. Sa clé dans `hardslice.json` est facultative : un fichier `"version": 1` sans elle reste valide (PB-055).
+- HS004 : pas d'endpoint exigé pour une commande interne. Un endpoint qui la mappe produit un diagnostic. Une commande interne qu'aucun type de son module n'envoie par `IMediator` produit un diagnostic (HS004 ou nouvelle règle, avec sa fiche).
+- `hardslice-command --endpoint none` génère la commande interne, sans endpoint ni test HTTP, avec un test d'intégration qui l'envoie par `IMediator`.
+- Fiches, `AGENTS.md`, `add-slice`, `fix-architecture-violation`, `docs/rules.md` et tests d'architecture alignés.
+
+**Cas vérifiés**
+
+- Commande interne envoyée par un service du module : aucun diagnostic.
+- Commande interne mappée par un endpoint : diagnostic.
+- Commande interne jamais envoyée : diagnostic.
+- `hardslice.json` sans la nouvelle clé : aucun HS900.
+- Référence Bookings : diagnostics inchangés. Seuils de `scripts/measure-analyzers.sh` tenus.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/measure-analyzers.sh
+sondes des templates d'éléments et des règles de scripts/test-template.sh
+```
+
+### PB-069 : Générer une tâche de fond avec `dotnet new hardslice-job`
+
+**Résultat observable**
+
+`dotnet new hardslice-job --module Realtime --name RealtimeCollector --command CollectRealtimeFeedsCommand --every 00:00:30` génère un service hébergé testable avec une horloge simulée, et `AGENTS.md` dit où vit le travail en arrière-plan. HS010 signale un timer construit sans `TimeProvider` dans une slice.
+
+**Constat**
+
+Ghostline, entrée « no template nor documentation for a background service » : un service hébergé n'est ni une slice ni un endpoint, et rien ne dit où il va, comment il envoie ses commandes ni comment il se teste. Chaque choix a été deviné : `BackgroundService` dans le dossier de la slice qu'il déclenche, enregistré par le module avec `AddHostedService`, un scope `IServiceScopeFactory` et un `IMediator.Send` par cycle, toute exception attrapée et journalisée (depuis .NET 8, une exception qui sort de `ExecuteAsync` arrête l'hôte), `new PeriodicTimer(interval, TimeProvider)`, options dans l'espace de noms du module, clé manquante journalisée en critique sans arrêter l'API. HS010 ne signale que les lectures de l'horloge (`DateTime.UtcNow`) : `new PeriodicTimer(interval)` et `Task.Delay(interval)` passent, et rendent le service impossible à tester avec une horloge simulée.
+
+**Périmètre**
+
+- Template `hardslice-job` : `--module`, `--name`, `--command` (une commande interne de PB-068 ou ordinaire du même module), `--every`. Le service, ses options liées par le module, son enregistrement, et un test d'intégration qui le garde (PB-062) et avance un `FakeTimeProvider` (PB-060).
+- Comportement généré : un scope et un envoi par cycle, exception d'un cycle journalisée sans arrêter l'hôte, configuration manquante journalisée en critique.
+- `AGENTS.md` : un paragraphe « Background work », sous 150 lignes en `--no-sample`, ou un renvoi vers la skill qui le porte.
+- HS010 : dans les espaces de noms de slice, `new PeriodicTimer(TimeSpan)` et `Task.Delay(TimeSpan)` sans `TimeProvider` produisent le diagnostic. Fiche, cas positifs et négatifs, seuils de `scripts/measure-analyzers.sh` tenus.
+
+**Cas vérifiés**
+
+- Job généré : vérification verte, son test fait passer trois cycles sans attente réelle.
+- Commande du job qui lève une exception : le cycle suivant s'exécute.
+- `Task.Delay(TimeSpan.FromSeconds(1))` dans un handler : HS010. `Task.Delay(interval, timeProvider)` : aucun diagnostic.
+- Refus : commande inconnue ou d'un autre module, intervalle invalide, code 105.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/measure-analyzers.sh
+sondes des templates d'éléments et des règles de scripts/test-template.sh
+```
+
+### PB-070 : Répondre 409 à deux commandes qui créent le même agrégat
+
+**Résultat observable**
+
+Deux commandes concurrentes qui créent un agrégat sous la même clé unique répondent l'une 201 (ou 204), l'autre 409, et jamais 500.
+
+**Constat**
+
+Ghostline, entrée « nothing says how two commands that create the same aggregate are serialized » : `CollectRealtimeFeeds` crée un `ObservedTrip` par course et jour de service, sous un index unique. Le collecteur, une seconde instance de l'API ou l'endpoint peuvent lancer la commande en même temps, et le second commit échoue sur l'index avec une `DbUpdateException`, répondue 500. `TransactionBehavior` traduit un conflit de concurrence (`DbUpdateConcurrencyException`) en `ConflictException`, pas une violation d'unicité. Contournement : un verrou consultatif de transaction (`pg_advisory_xact_lock`) pris avant la lecture, comme dans `ImportSchedule`.
+
+**Périmètre**
+
+- `TransactionBehavior` traduit une violation d'unicité de PostgreSQL (`PostgresException`, `SqlState` `23505`) en `ConflictException`, répondue 409 sans exposer les valeurs de la contrainte. Une traduction propre au domaine faite par le handler (comme `ConfirmBooking` pour sa contrainte d'exclusion) l'emporte toujours.
+- `AGENTS.md` (ou `add-slice`) : une commande qui crée sous une clé unique s'appuie sur l'index et le 409. Un handler qui doit lire puis créer sans conflit peut prendre un verrou de transaction, documenté, non généré (arbitrage de l'incrément).
+- Test de `TransactionBehavior` dans les deux variantes.
+
+**Cas vérifiés**
+
+- Deux créations concurrentes sous la même clé : 201 puis 409.
+- Contrainte d'exclusion de Bookings : toujours `BookingConflictException`, réponse inchangée.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes du template d'application de scripts/test-template.sh, dans les deux variantes
+```
+
+### PB-071 : Générer une requête filtrée et des DTO nommés sans le verbe
+
+**Résultat observable**
+
+`hardslice-query` génère une requête qui prend un paramètre de filtre et répond une liste, avec son validateur. Les DTO générés ne portent plus le verbe de la slice.
+
+**Constat**
+
+Ghostline, entrée « hardslice-query covers reads by id and lists of one aggregate only » : `--aggregate` est exigé, et le template génère soit un DTO lu par son `Id`, soit la liste de tous les agrégats. `GetScheduledTrips`, filtrée par une date sur cinq tables, n'a gardé que l'espace de noms et la classe d'endpoint : requête, DTO, handler, route et tests ont été réécrits. Le DTO s'appelait `GetScheduledTripsDto`, renommé `ScheduledTripsDto`. HS006 a fonctionné comme prévu sur la jointure.
+
+**Périmètre**
+
+- `--result filtered` et `--parameter <Name>:<Type>` (formes libres) : requête avec son paramètre, validateur et ses tests, réponse en liste, paramètre lu dans la chaîne de requête, tests d'intégration du filtre et de la requête invalide.
+- Nom du DTO : le nom de la slice sans le verbe initial (`GetBooking` donne `BookingDto`), pour toutes les formes de `--result`. Les solutions existantes ne changent pas.
+- Types de paramètre acceptés listés et refusés sinon (code 105).
+- `add-slice` et `docs/item-templates.md` suivent.
+
+**Cas vérifiés**
+
+- `--result filtered --parameter Date:DateOnly` : vérification verte, 400 sur une date absente.
+- Noms de DTO des trois formes sans verbe.
+- Type de paramètre refusé : code 105, rien de créé.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes des templates d'éléments de scripts/test-template.sh
+```
+
+### PB-072 : Dire quand une règle du domaine peut composer une requête (HS006)
+
+**Résultat observable**
+
+`HS006.md` et `extract-to-domain` disent quelles formes d'une règle du domaine utilisée par une requête sont légitimes, et HS006 se comporte comme la fiche le dit sur chacune.
+
+**Constat**
+
+Ghostline, entrée « HS006 and a rule of the domain that a query needs as SQL » : deux règles de GTFS doivent tourner dans la base (les services qui roulent un jour donné, la version en vigueur à une date). Elles sont dans le domaine en méthodes statiques qui composent un `IQueryable` (`ServiceCalendar.ServicesRunningOn`, `ScheduleVersion.InForceOn`), testées sur des listes, et le handler leur passe `Set<T>().AsNoTracking()`. HS006 ne suit pas une requête à travers une méthode qui n'est pas un opérateur LINQ, et sa fiche interdit de « get the query from a helper only because HS006 cannot analyze those forms ». Elle ne dit pas si une règle du domaine composée ainsi est légitime.
+
+**Périmètre**
+
+- `HS006.md` : une section sur les règles du domaine dont une requête a besoin. Formes légitimes : `Expression<Func<T, bool>>` du domaine, et composition `IQueryable<T>` vers `IQueryable<T>` qui reçoit sa source du handler, lequel garde `AsNoTracking()` sur chaque racine et projette en scalaires. Forme interdite : une aide qui crée elle-même la source ou rend des entités, pour échapper à l'analyse.
+- `extract-to-domain` : la même consigne, du côté du domaine.
+- Tests de l'analyseur sur les deux formes légitimes et sur la forme interdite, et `docs/rules.md` (limites de HS006) aligné sur ce qu'ils montrent.
+
+**Cas vérifiés**
+
+- Handler qui passe `Set<T>().AsNoTracking()` à une composition du domaine et projette : aucun diagnostic.
+- Prédicat `Expression<Func<T, bool>>` du domaine dans un `Where` : aucun diagnostic.
+- Forme interdite : le comportement de HS006 est celui que dit la fiche.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+```
+
+### PB-073 : Documenter les écritures en masse d'une commande
+
+**Résultat observable**
+
+Le kit agents dit quand une commande peut écrire hors du suivi des modifications, dans quel ordre, et ce que cela demande des clés étrangères.
+
+**Constat**
+
+Ghostline, entrée « bulk import against "one transaction per command, never SaveChangesAsync" » : `ImportSchedule` écrit 3,8 millions d'horaires par un `COPY` binaire dans la transaction ouverte par `TransactionBehavior` (17 secondes pour l'import réel). La version, ajoutée par le suivi des modifications, est enregistrée après le handler, donc après ses enfants. Une clé étrangère vers elle doit alors être `DEFERRABLE INITIALLY DEFERRED`, vérifiée ligne à ligne au commit : 2 minutes, et le commit de Npgsql expire après 30 secondes. Enregistrer la version plus tôt l'éviterait, mais `AGENTS.md` ne permet un enregistrement anticipé que pour traduire une erreur de la base. Contournement : aucune clé étrangère depuis les tables enfants.
+
+**Périmètre**
+
+- `AGENTS.md` : l'exception « save early » couvre aussi l'enregistrement de la racine avant une écriture en masse de ses enfants, dans la même transaction. Le reste de la règle ne change pas.
+- `add-aggregate` (ou la skill qui porte PB-067) : une écriture en masse passe par la connexion et la transaction du `AppDbContext`, après l'enregistrement de la racine, avec des clés étrangères immédiates. Le délai de commande s'ajuste pour la commande concernée.
+- Aucune aide générée (arbitrage de l'incrément). Une vérification par les analyseurs ou les tests d'architecture que l'exception reste admise, si l'une d'elles interdit aujourd'hui `SaveChangesAsync` dans un command handler.
+- `AGENTS.md` sous 150 lignes en `--no-sample`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes « instructions des agents » de scripts/test-template.sh
+```
+
+### PB-074 : Ne pas laisser les `.gitkeep` d'un module derrière ses premiers fichiers
+
+**Résultat observable**
+
+Après la génération d'un module puis de son agrégat, de son entité et de ses slices, aucun `.gitkeep` ne reste dans un dossier qui contient un fichier, ou la sortie de `hardslice-module` dit qu'ils peuvent partir.
+
+**Constat**
+
+Ghostline, entrées « hardslice-module leaves its .gitkeep files behind » et « the frictions of roadmap 1.1 came back » : `hardslice-module` crée un `.gitkeep` dans `src/<App>.Domain/<Module>/` et dans les trois dossiers de tests du module, parce que `dotnet new` ne crée pas de dossier vide (`TemplatePackageTests`). Les templates suivants y ajoutent des fichiers sans les retirer, et aucune consigne ne dit de le faire. Ils ont été supprimés à la main dans les deux modules.
+
+**Périmètre**
+
+- Mécanisme libre : `dotnet new` ne supprime pas de fichier existant. Par exemple, `hardslice-module` ne crée plus que les dossiers qu'un test ou une règle exige (vérifier `TestLayoutTests`, HS018 et les sondes), ou `check` signale un `.gitkeep` à côté d'un autre fichier, ou la sortie du template et `add-module` le disent.
+- `TemplatePackageTests` et les démonstrations suivent si la liste des fichiers générés change.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes des templates d'éléments de scripts/test-template.sh
+```
+
+### Définition de fini
+
+L'incrément est terminé lorsque PB-065 à PB-074 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que Ghostline a retiré les contournements que ces tickets rendent inutiles. La préversion `0.3.0-preview.2` est alors préparée et publiée sur le feu vert du mainteneur.
+
+## 8. Incréments suivants
 
 | Incrément | Résultat produit | Contenu principal | Acceptation globale |
 |---|---|---|---|
@@ -2764,7 +3264,7 @@ L'incrément est terminé lorsque PB-052 à PB-059 sont satisfaits et que les jo
 | **7, Comparaison v0.6** | Les architectures couches et slices sont comparées | Applications équivalentes, mêmes tâches, agents, modèles et budgets | Les conclusions distinguent l'effet de l'architecture de celui des garde-fous |
 | **8, Distribution v1.0** | HardSlice devient un produit open source installable et maintenable | Paquets stables, documentation, site, CI de publication, compatibilité, sécurité et contribution, options de template `--aspire` et SQL Server | Un utilisateur externe réussit les parcours greenfield et adoption depuis la documentation publique |
 
-## 8. Différé, mais non abandonné
+## 9. Différé, mais non abandonné
 
 | Élément | Incrément prévu |
 |---|---:|
@@ -2777,5 +3277,8 @@ L'incrément est terminé lorsque PB-052 à PB-059 sont satisfaits et que les jo
 | Benchmark couches contre slices | 7 |
 | Paquets stables et site public | 8 |
 | SQL Server en option et orchestration Aspire (`--aspire`) | 8 |
+| Contrat de données de référence immuables hors `IEntity` (HS902), vu par Ghostline | à arbitrer après PB-067 |
+| Effet externe d'une commande après la validation de sa transaction (boîte d'envoi), vu par Ghostline | à arbitrer après PB-063 |
+| Aide d'écriture en masse et verrou consultatif dans `Shared/Persistence` | écarté par l'arbitrage de la section 7, documenté par PB-070 et PB-073 |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
