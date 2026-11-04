@@ -3984,6 +3984,7 @@ probe_aggregate_template() {
   local migrations="$app_src/Shared/Persistence/Migrations"
   local unit_test="$app/tests/$app_name.Tests/Domain/$module/${name}Tests.cs"
   local migration
+  local migration_file
   local build_output
   local check_output
   local failures
@@ -4043,6 +4044,13 @@ probe_aggregate_template() {
     echo "error: dotnet new hardslice-aggregate did not declare ${name}Id as a record struct, or did not map $name to the table $table in an internal configuration." >&2
     exit 1
   fi
+  # PB-087: the concurrency token of the aggregate, on xmin as for Booking, in its mapping only.
+  if ! grep -Fxq '        builder.Property<uint>("Version").IsRowVersion();' "$app_src/Features/$module/${name}Configuration.cs" ||
+    grep -q 'Version' "$app/src/$app_name.Domain/$module/$name.cs"; then
+    cat "$app_src/Features/$module/${name}Configuration.cs" >&2
+    echo "error: dotnet new hardslice-aggregate did not map the concurrency token Version of $name on xmin, or declared it in the domain." >&2
+    exit 1
+  fi
   expect_item_refused hardslice-aggregate "an aggregate that exists" "--force" --project "$project" --module "$module" --name "$name"
 
   # The analyzers of the domain and of the web project see the aggregate and its mapping: HS007, HS008, HS901 and HS902 stay silent.
@@ -4092,6 +4100,20 @@ probe_aggregate_template() {
     dotnet tool restore > /dev/null
     $migration
   )
+  # PB-087: the migration records the token in the model, as a column that Npgsql never creates, xmin being a system column.
+  migration_file="$(find "$migrations" -name "*_Add$table.cs" -not -name '*.Designer.cs')"
+  if ! grep -Fq 'xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)' "$migration_file" ||
+    ! grep -Fq "modelBuilder.Entity(\"$app_name.Domain.$module.$name\"" "$migrations/AppDbContextModelSnapshot.cs" ||
+    ! awk -v entity="modelBuilder.Entity(\"$app_name.Domain.$module.$name\"" '
+        index($0, entity) { inside = 1 }
+        inside && /^                }\);$/ { inside = 0 }
+        inside && /b\.Property<uint>\("Version"\)/ { version = 1 }
+        inside && version && /\.HasColumnName\("xmin"\);/ { found = 1 }
+        END { exit !found }' "$migrations/AppDbContextModelSnapshot.cs"; then
+    cat "$migration_file" >&2
+    echo "error: the migration of $module/$name does not record its concurrency token Version on xmin in the model snapshot." >&2
+    exit 1
+  fi
   bash "$app/scripts/check.sh"
 
   if [[ "$keep" == remove ]]; then
@@ -4496,6 +4518,245 @@ EOF
   rm "$value_object" "$integration_test"
   rm -r "${migrations:?}"
   [[ ! -d "$work/private-fields-migrations.backup" ]] || mv "$work/private-fields-migrations.backup" "$migrations"
+}
+
+# PB-087: the concurrency token that dotnet new hardslice-aggregate maps on xmin, on an aggregate Inventory of module <module>
+# with a child entity InventoryItem held in its collection, both given a state as the add-aggregate skill says. Two commands
+# that change the same inventory at the same time, through its root, by adding a child or by changing a child only, commit
+# once, and the second answers a ConflictException (409): AppDbContext saves the root of a changed child, so that its xmin is
+# checked. A root Shelf without a column of its own, whose child ShelfSlot changes, is refused with the fix. The migration
+# records both tokens in the model and creates no column. Everything is removed afterwards.
+probe_aggregate_concurrency() {
+  local module="$1"
+  local migrations="$app_src/Shared/Persistence/Migrations"
+  local domain="$app/src/$app_name.Domain/$module"
+  local integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/InventoryConfigurationTests.cs"
+  local migration_file
+  local created_folder=""
+  local generated
+
+  [[ ! -d "$migrations" ]] || cp -r "$migrations" "$work/concurrency-migrations.backup"
+
+  echo "==> Generating the aggregates $module/Inventory and $module/Shelf of $app_name, each with a child entity held in its collection"
+  generate_aggregate "$module" Inventory --table Inventories
+  generate_entity "$module" Inventory InventoryItem
+  generate_aggregate "$module" Shelf --table Shelves
+  generate_entity "$module" Shelf ShelfSlot
+
+  # The state of each root and child, and the methods of the root that change its children, as add-aggregate says.
+  CHILD=InventoryItem MEMBERS='    private readonly List<InventoryItem> _inventoryItems = [];
+
+    public IReadOnlyList<InventoryItem> InventoryItems => _inventoryItems.AsReadOnly();
+
+    public string Label { get; private set; } = string.Empty;
+
+    public void Relabel(string label) => Label = label;
+
+    public void Stock(int quantity)
+    {
+        if (_inventoryItems.Count > 0)
+            throw new ConflictException("An inventory holds one item.");
+        _inventoryItems.Add(InventoryItem.Create(quantity));
+    }
+
+    public void Recount(int quantity) => _inventoryItems[0].Recount(quantity);' \
+    awk '{ print } /^    private readonly List<IDomainEvent> _domainEvents = \[\];$/ { print ""; print ENVIRON["MEMBERS"] }' \
+    "$domain/Inventory.cs" > "$work/Inventory.cs"
+  mv "$work/Inventory.cs" "$domain/Inventory.cs"
+  MEMBERS='    private readonly List<ShelfSlot> _shelfSlots = [];
+
+    public IReadOnlyList<ShelfSlot> ShelfSlots => _shelfSlots.AsReadOnly();
+
+    public void Fill() => _shelfSlots.Add(ShelfSlot.Create());' \
+    awk '{ print } /^    private readonly List<IDomainEvent> _domainEvents = \[\];$/ { print ""; print ENVIRON["MEMBERS"] }' \
+    "$domain/Shelf.cs" > "$work/Shelf.cs"
+  mv "$work/Shelf.cs" "$domain/Shelf.cs"
+  sed -e 's/^    public static InventoryItem Create() => new(InventoryItemId.New());$/    public static InventoryItem Create(int quantity) => new(InventoryItemId.New()) { Quantity = quantity };\
+\
+    public int Quantity { get; private set; }\
+\
+    public void Recount(int quantity) => Quantity = quantity;/' "$domain/InventoryItem.cs" > "$work/InventoryItem.cs"
+  mv "$work/InventoryItem.cs" "$domain/InventoryItem.cs"
+  if ! grep -Fq 'public void Recount(int quantity) => Quantity = quantity;' "$domain/InventoryItem.cs" ||
+    ! grep -Fq 'public void Recount(int quantity) => _inventoryItems[0].Recount(quantity);' "$domain/Inventory.cs" ||
+    ! grep -Fq 'public void Fill() => _shelfSlots.Add(ShelfSlot.Create());' "$domain/Shelf.cs"; then
+    echo "error: the generated Inventory, InventoryItem or Shelf of $app_name has no place for the state the probe gives it." >&2
+    exit 1
+  fi
+  for generated in Inventory InventoryItem Shelf ShelfSlot; do
+    sed '/^        Assert\.Fail("TODO(hardslice): /,/");$/d' "$app/tests/$app_name.Tests/Domain/$module/${generated}Tests.cs" > "$work/test.cs"
+    mv "$work/test.cs" "$app/tests/$app_name.Tests/Domain/$module/${generated}Tests.cs"
+  done
+  sed -i 's/InventoryItem\.Create()/InventoryItem.Create(1)/g' "$app/tests/$app_name.Tests/Domain/$module/InventoryItemTests.cs"
+
+  # A module without slice has no integration test folder yet.
+  [[ -d "$(dirname "$integration_test")" ]] || created_folder="$(dirname "$integration_test")"
+  mkdir -p "$(dirname "$integration_test")"
+  cat > "$integration_test" <<EOF
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using $app_name.Domain;
+using $app_name.Domain.$module;
+using $app_name.Shared.Messaging;
+using $app_name.Shared.Persistence;
+
+namespace $app_name.IntegrationTests.Features.$module;
+
+// Two commands that load the same inventory, wait until both have loaded it, then change it and commit.
+public sealed class InventoryConfigurationTests(PostgresDatabase database)
+{
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+
+    [Fact]
+    public async Task Answers_409_to_the_second_of_two_concurrent_changes_of_the_root()
+    {
+        var id = await StoreAsync(stocked: false);
+
+        await RaceAsync(id, inventory => inventory.Relabel(Guid.NewGuid().ToString()));
+    }
+
+    [Fact]
+    public async Task Answers_409_to_the_second_of_two_concurrent_additions_of_a_child()
+    {
+        var id = await StoreAsync(stocked: false);
+
+        await RaceAsync(id, inventory => inventory.Stock(3));
+
+        await using var db = database.CreateDbContext();
+        (await db.Set<Inventory>().AsNoTracking().Where(inventory => inventory.Id == id).SelectMany(inventory => inventory.InventoryItems)
+            .CountAsync(TestContext.Current.CancellationToken)).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Answers_409_to_the_second_of_two_concurrent_changes_of_a_child_only()
+    {
+        var id = await StoreAsync(stocked: true);
+
+        await RaceAsync(id, inventory => inventory.Recount(inventory.InventoryItems[0].Quantity + 1));
+
+        await using var db = database.CreateDbContext();
+        (await db.Set<Inventory>().AsNoTracking().Where(inventory => inventory.Id == id).SelectMany(inventory => inventory.InventoryItems)
+            .Select(item => item.Quantity).SingleAsync(TestContext.Current.CancellationToken)).ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Refuses_to_save_a_changed_child_of_a_root_without_a_column_to_update()
+    {
+        var shelf = Shelf.Create();
+        await using (var db = database.CreateDbContext())
+        {
+            db.Set<Shelf>().Add(shelf);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var changing = database.CreateDbContext();
+        var stored = await changing.Set<Shelf>().Include(candidate => candidate.ShelfSlots)
+            .SingleAsync(candidate => candidate.Id == shelf.Id, TestContext.Current.CancellationToken);
+        stored.Fill();
+
+        var exception = await Should.ThrowAsync<InvalidOperationException>(() => changing.SaveChangesAsync(TestContext.Current.CancellationToken));
+        exception.Message.ShouldStartWith("The children of the aggregate Shelf changed, but its mapping has no column besides its key and its concurrency token");
+    }
+
+    [Fact]
+    public async Task Creates_no_column_for_the_concurrency_token()
+    {
+        await using var db = database.CreateDbContext();
+
+        (await db.Database
+            .SqlQuery<int>(\$"SELECT count(*)::int AS \"Value\" FROM information_schema.columns WHERE table_name IN ('Inventories', 'Shelves') AND column_name IN ('xmin', 'Version')")
+            .SingleAsync(TestContext.Current.CancellationToken)).ShouldBe(0);
+    }
+
+    private async Task<InventoryId> StoreAsync(bool stocked)
+    {
+        var inventory = Inventory.Create();
+        if (stocked)
+            inventory.Stock(1);
+        await using var db = database.CreateDbContext();
+        db.Set<Inventory>().Add(inventory);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return inventory.Id;
+    }
+
+    private async Task RaceAsync(InventoryId id, Action<Inventory> change)
+    {
+        await using var factory = new AppFactory(database);
+        await using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services
+            .AddScoped<IRequestHandler<ChangeInventory, bool>, ChangeInventoryHandler>()));
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var commands = new[]
+        {
+            new ChangeInventory(id, change, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), release.Task),
+            new ChangeInventory(id, change, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), release.Task),
+        };
+
+        var outcomes = commands.Select(command => OutcomeAsync(app.Services, command)).ToArray();
+        await Task.WhenAll(commands.Select(command => command.Loaded.Task)).WaitAsync(Timeout, TestContext.Current.CancellationToken);
+        release.SetResult();
+        var exceptions = await Task.WhenAll(outcomes).WaitAsync(Timeout, TestContext.Current.CancellationToken);
+
+        exceptions.Count(exception => exception is null).ShouldBe(1);
+        exceptions.OfType<ConflictException>().ShouldHaveSingleItem();
+    }
+
+    // Each command in a scope of its own, as two concurrent requests: null when it commits, its exception otherwise.
+    private static async Task<Exception?> OutcomeAsync(IServiceProvider services, ChangeInventory command)
+    {
+        await using var scope = services.CreateAsyncScope();
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<IMediator>().Send(command, TestContext.Current.CancellationToken);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            command.Loaded.TrySetResult();
+            return exception;
+        }
+    }
+
+    public sealed record ChangeInventory(InventoryId Id, Action<Inventory> Change, TaskCompletionSource Loaded, Task Release) : ICommand<bool>;
+
+    private sealed class ChangeInventoryHandler(AppDbContext db) : IRequestHandler<ChangeInventory, bool>
+    {
+        public async Task<bool> Handle(ChangeInventory command, CancellationToken cancellationToken)
+        {
+            var inventory = await db.Set<Inventory>().Include(candidate => candidate.InventoryItems)
+                .SingleAsync(candidate => candidate.Id == command.Id, cancellationToken);
+            command.Loaded.SetResult();
+            await command.Release.WaitAsync(cancellationToken);
+            command.Change(inventory);
+            return true;
+        }
+    }
+}
+EOF
+
+  echo "==> Checking that the migration of $module/Inventory and $module/Shelf records both concurrency tokens, and that $app_name passes the check"
+  (
+    cd "$app"
+    dotnet tool restore > /dev/null
+    dotnet ef migrations add AddInventories --project "src/$app_name" --output-dir Shared/Persistence/Migrations
+  )
+  migration_file="$(find "$migrations" -name '*_AddInventories.cs' -not -name '*.Designer.cs')"
+  if [[ "$(grep -Fc 'xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)' "$migration_file")" != 2 ]] ||
+    grep -Eq '"(xmin|Version)"' "$migration_file"; then
+    cat "$migration_file" >&2
+    echo "error: the migration of $module/Inventory and $module/Shelf does not record the token of each root on xmin only." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+  echo "    Inventory: a second concurrent change of the root, an added child or a changed child answers 409; Shelf refused without a column"
+
+  while read -r generated; do
+    rm "${app:?}/${generated:?}"
+  done < <(aggregate_files "$module" Inventory; aggregate_files "$module" Shelf; entity_files "$module" InventoryItem; entity_files "$module" ShelfSlot)
+  rm "$app_src/Features/$module/InventoryIdConverter.cs" "$app_src/Features/$module/ShelfIdConverter.cs" "$integration_test"
+  [[ -z "$created_folder" ]] || rmdir "$created_folder"
+  rm -r "${migrations:?}"
+  [[ ! -d "$work/concurrency-migrations.backup" ]] || mv "$work/concurrency-migrations.backup" "$migrations"
 }
 
 # The files that dotnet new hardslice-event creates for the event <name> of module <module>, then, with <reaction>
@@ -4975,6 +5236,7 @@ probe_protected_endpoints Bookings ProtectBooking ImportProtectedBookings GetPro
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories
 probe_entity_template Bookings Booking BookingNote BookingAuditEntry BookingAudit
 probe_private_fields Bookings
+probe_aggregate_concurrency Bookings
 probe_event_template Bookings BookingExtended BookingArchived Housekeeping Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 
@@ -5257,6 +5519,8 @@ probe_recurring_condition Rooms CollectGuardedRoomFeeds
 probe_aggregate_template Rooms Room Rooms keep
 # Its child entities, generated by dotnet new hardslice-entity in both forms, then removed with their migration.
 probe_entity_template Rooms Room RoomSeat RoomVisit RoomVisitLog
+# PB-087: the concurrency token of a generated aggregate, through its root and its children.
+probe_aggregate_concurrency Rooms
 probe_query_template Rooms GetRoomSummary ListRoomSummaries GetRoomsOnDate Room 'Room.Create()'
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoomTrip Room 'Room.Create()'
 probe_protected_endpoints Rooms ProtectRoom ImportProtectedRooms GetProtectedRoom Room 'Room.Create()'

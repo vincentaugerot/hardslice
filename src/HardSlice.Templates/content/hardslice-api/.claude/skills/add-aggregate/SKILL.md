@@ -1,6 +1,6 @@
 ---
 name: add-aggregate
-description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, or a child entity of an aggregate with dotnet new hardslice-entity, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, or when an entity stores its state in another shape than the one it shows, in private fields.
+description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, or a child entity of an aggregate with dotnet new hardslice-entity, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape than the one it shows, in private fields, or when two commands may change the same aggregate at the same time.
 ---
 
 # Add an aggregate
@@ -28,7 +28,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    - keep every property without public setter nor `init` accessor: add a method for each change of state, which checks the same invariants;
    - an instant comes as a parameter, never from the system clock.
 5. Replace the `TODO(hardslice):` marker of `tests/MyApp.Tests/Domain/<Module>/<Aggregate>Tests.cs` with real assertions: the state given by the factory method, then one test per invariant it refuses (`Should.Throw<DomainException>`), and the same for each method you added.
-6. Map the state in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`, in fluent API: column types, lengths and required values that match the invariants. A state that the table stores in another shape than the one the aggregate shows lives in private fields, as [Mapping private fields](#mapping-private-fields) says. `AppDbContext` applies the mapping by itself: there is nothing to register. Never add EF Core attributes or references to the domain.
+6. Map the state in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`, in fluent API: column types, lengths and required values that match the invariants. A state that the table stores in another shape than the one the aggregate shows lives in private fields, as [Mapping private fields](#mapping-private-fields) says. Keep the line `builder.Property<uint>("Version").IsRowVersion();`: it is the concurrency token of the aggregate, as [Concurrent changes](#concurrent-changes) says. `AppDbContext` applies the mapping by itself: there is nothing to register. Never add EF Core attributes or references to the domain.
 7. Add the migration that the template printed, once the mapping is complete:
 
    ```text
@@ -36,7 +36,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    dotnet ef migrations add Add<Table> --project src/MyApp --output-dir Shared/Persistence/Migrations
    ```
 
-   Read the generated migration: it must create the table of the aggregate and nothing else. A change of a table that already holds rows follows [Changing the shape of stored rows](#changing-the-shape-of-stored-rows). A constraint EF Core cannot model goes in it through `migrationBuilder.Sql`. If you change the mapping again before committing, remove the migration with `dotnet ef migrations remove --project src/MyApp` and add it again; never edit a migration that may already be applied.
+   Read the generated migration: it must create the table of the aggregate and nothing else. Its column `xmin` is the concurrency token, which Npgsql never creates: PostgreSQL gives that system column to every table, and the migration only records the token in the model snapshot. A change of a table that already holds rows follows [Changing the shape of stored rows](#changing-the-shape-of-stored-rows). A constraint EF Core cannot model goes in it through `migrationBuilder.Sql`. If you change the mapping again before committing, remove the migration with `dotnet ef migrations remove --project src/MyApp` and add it again; never edit a migration that may already be applied.
 8. Add the aggregate to the entry of its module in the "Modules and slices" map of `AGENTS.md`, as `Mapping: <Aggregate>Configuration`.
 9. Run the check, and fix the code until it exits 0:
 
@@ -64,6 +64,18 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
 4. For a child held by its root, add to the root the private list and its read-only view that the template prints, under these names: until the root declares them, EF Core cannot build the model and the check fails. Then add a method of the root for each change of the collection, such as `AddLine`, which builds the child with its factory method and checks the rules of the whole aggregate, and test these methods in the tests of the root. Never add, change nor remove a child from outside its root.
 5. Complete the child as steps 4 to 6 complete a root: its factory method named after the business fact, its rules, the `TODO(hardslice):` marker of `tests/MyApp.Tests/Domain/<Module>/<Entity>Tests.cs`, and the mapping of its state.
 6. Add the migration that the template printed, as step 7 says: it must create the table of the child, with its foreign key to the table of the root, and nothing else. Add the mapping of the child to the entry of its module in `AGENTS.md`, then run the check.
+
+## Concurrent changes
+
+Two commands that change the same aggregate at the same time, from two requests, a recurring command and its endpoint, or two instances of the application, each load it, change their copy and save it. Without a check, the last commit overwrites the first without error. The concurrency token of the mapping is that check:
+
+- `builder.Property<uint>("Version").IsRowVersion();`, generated in `<Aggregate>Configuration.cs`, maps a shadow property on `xmin`, the system column that PostgreSQL changes at each update of a row. The domain knows nothing of it. EF Core updates the row of the root only while its `xmin` is the one it loaded: a command that changes an aggregate that another request changed since it loaded it saves nothing, and `TransactionBehavior` turns the `DbUpdateConcurrencyException` into a `ConflictException`, answered with 409, after rolling the whole command back. The caller reads the aggregate again and retries, and a recurring command retries at its next cycle, or at its next retry when its schedule has some.
+- The token of the root covers its children held in its collection. A command that adds or changes only a child leaves the row of the root as it is, and EF Core would check no token: `AppDbContext` saves the tracked root of each child added, changed or removed, so that two commands that each add a line to the same order, each checking a maximum of lines, never both commit. The root must be loaded with its children, as a change of a child always is, through a method of the root. It also needs a column of its own besides its identifier: EF Core sends no update for a row without one, and the save of a root whose only state is its children fails with `The children of the aggregate <Aggregate> changed, but its mapping has no column besides its key and its concurrency token` until its mapping holds a state of the root.
+- Children that hold the identifier of their root (`--link id`), and those written in bulk, are written apart from the root, which they leave as it is: its token does not cover them.
+- The token never covers a creation: two commands that create the same aggregate rely on its unique index and the 409 of its violation. A merge that must never fail, such as a collection that enriches what a concurrent run stored and would lose its work on a 409, takes a transaction lock instead. `add-slice` details both.
+- An aggregate mapped before its token gets it with a migration of its own, whose `AddColumn` of `xmin` creates nothing either.
+
+The integration test of a command that changes the aggregate lets two commands load it before either saves, then asserts that one commits and the other throws `ConflictException`.
 
 ## Children written in bulk
 
@@ -149,6 +161,7 @@ These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the c
 - Write the aggregate, a child entity, their identifiers or their mappings yourself, or remove `IAggregateRoot` or `IEntity`.
 - Give the aggregate a public setter, an `init` accessor or a public field to make a slice or a test simpler.
 - Put an invariant in a handler, a validator or an endpoint instead of the aggregate.
+- Remove the concurrency token `Version` from a mapping, or add, change or remove a child from outside its root, which its token would then not cover.
 - Write children in bulk before their root, through a connection or a transaction of your own, or under a deferred or a missing foreign key.
 - Apply a migration that drops or changes a table holding rows without converting them, in both directions, or raise the command timeout in the connection string of the application.
 - Make a mapped private field public, or show the array it holds, so that a slice or a test reaches it.

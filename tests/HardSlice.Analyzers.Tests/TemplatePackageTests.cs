@@ -551,6 +551,45 @@ public sealed class TemplatePackageTests
         sheet.ShouldContain("The hosted services of `Shared`, such as `RecurringCommandService<TCommand, TResponse>`, and those declared in the namespace of a module outside its slices, are not.");
     }
 
+    // PB-087: hardslice-aggregate maps a concurrency token on xmin, AppDbContext saves the root of a changed child so that the
+    // token of the root covers it, and the agent kit tells a creation under a unique key, a concurrent change and a merge apart.
+    [Fact]
+    public void Aggregates_get_a_concurrency_token_and_the_agent_kit_tells_the_three_concurrent_cases_apart()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var template = TemplateRoot(repositoryRoot);
+        var mapping = File.ReadAllText(Path.Combine(AggregateTemplateRoot(repositoryRoot), "src", "MyApp", "Features", "ModuleName", "AggregateNameConfiguration.cs"));
+        var aggregate = File.ReadAllText(Path.Combine(AggregateTemplateRoot(repositoryRoot), "src", "MyApp.Domain", "ModuleName", "AggregateName.cs"));
+        var context = File.ReadAllText(Path.Combine(template, "src", "MyApp", "Shared", "Persistence", "AppDbContext.cs"));
+        var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+        var addAggregate = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-aggregate", "SKILL.md"));
+
+        mapping.ShouldContain("        builder.Property<uint>(\"Version\").IsRowVersion();\n");
+        mapping.ShouldContain("TransactionBehavior answers it with 409");
+        aggregate.ShouldNotContain("Version");
+        context.ShouldContain("SaveRootsOfChangedChildren();\n        return base.SaveChanges(acceptAllChangesOnSuccess);");
+        context.ShouldContain("SaveRootsOfChangedChildren();\n        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);");
+        context.ShouldContain("foreignKey.PrincipalToDependent is not null");
+        context.ShouldContain("root.State = EntityState.Modified;");
+        context.ShouldContain("but its mapping has no column besides its key and its concurrency token");
+
+        agents.ShouldContain("Concurrent commands fall in three cases, as `add-slice` details: one that creates an aggregate under a unique key relies on its unique index, whose violation the pipeline answers with 409; one that changes a stored aggregate, its root or only a child, relies on the concurrency token `Version` on `xmin` that `hardslice-aggregate` maps, and a change saved by another request since the load is answered with 409 too, for the caller or the next cycle to retry; a merge that must never fail takes a transaction lock.");
+        addSlice.ShouldNotContain("the index and the 409 cover the others");
+        addSlice.ShouldContain("keep it for a merge that must never fail, as the next item says;");
+        addSlice.ShouldContain("three cases, each with its own protection. A creation under a unique key relies on the unique index and its 409");
+        addSlice.ShouldContain("A change of a stored aggregate relies on its concurrency token, the shadow property `Version` on `xmin` that `dotnet new hardslice-aggregate` maps");
+        addSlice.ShouldContain("A merge that must never fail, such as a collection that enriches what a concurrent run stored and would lose an observation on a 409, takes the transaction lock");
+        addSlice.ShouldContain("[Concurrent changes](../add-aggregate/SKILL.md#concurrent-changes)");
+        addAggregate.ShouldContain("## Concurrent changes\n");
+        addAggregate.ShouldContain("Keep the line `builder.Property<uint>(\"Version\").IsRowVersion();`");
+        addAggregate.ShouldContain("Its column `xmin` is the concurrency token, which Npgsql never creates");
+        addAggregate.ShouldContain("`TransactionBehavior` turns the `DbUpdateConcurrencyException` into a `ConflictException`, answered with 409");
+        addAggregate.ShouldContain("The token of the root covers its children held in its collection.");
+        addAggregate.ShouldContain("The token never covers a creation");
+        addAggregate.ShouldContain("- Remove the concurrency token `Version` from a mapping");
+    }
+
     // PB-081: --require <policy> protects the endpoint of a command or a query: it chains .RequireAuthorization("<policy>"), the tests
     // send the client of the policy that AppFactory holds, except a test of the 401 that sends none. Without the option, the tests keep
     // app.CreateClient(), and a command refuses it with --endpoint none or --every, which have no endpoint.
@@ -1678,7 +1717,7 @@ public sealed class TemplatePackageTests
                 + "private fields, as `add-aggregate` details.");
         agents.Length.ShouldBeLessThan(150);
 
-        addAggregate.ShouldContain("Also use when a mapping changes a table that already holds rows, or when an entity stores its state in another shape");
+        addAggregate.ShouldContain("Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape");
         addAggregate.ShouldContain("A change of a table that already holds rows follows [Changing the shape of stored rows](#changing-the-shape-of-stored-rows).");
         addAggregate.ShouldContain("lives in private fields, as [Mapping private fields](#mapping-private-fields) says.");
 
