@@ -22,7 +22,7 @@ public sealed class ClassificationAnalyzer : DiagnosticAnalyzer
     // A rule of another analyzer that reads the DomainModel adds its line here.
     private static readonly ImmutableArray<(string RuleId, ImmutableArray<string> Contracts)> ContractsByRule =
     [
-        (SliceStructureAnalyzer.DiagnosticId, [ContractKeys.Command, ContractKeys.Query, ContractKeys.RequestHandler, ContractKeys.DomainEventHandler]),
+        (SliceStructureAnalyzer.DiagnosticId, [ContractKeys.Command, ContractKeys.SystemCommand, ContractKeys.Query, ContractKeys.RequestHandler, ContractKeys.DomainEventHandler]),
         (CommandResponseAnalyzer.DiagnosticId, [ContractKeys.Entity, ContractKeys.Command, ContractKeys.RequestHandler]),
         (QueryHandlerTrackingAnalyzer.DiagnosticId, [ContractKeys.Entity, ContractKeys.Query, ContractKeys.RequestHandler]),
         (EntityStateAnalyzer.DiagnosticId, [ContractKeys.Entity]),

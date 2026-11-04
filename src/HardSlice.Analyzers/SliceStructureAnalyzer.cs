@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using HardSlice.Analyzers.Configuration;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
+using static HardSlice.Analyzers.EndpointMapping;
 
 namespace HardSlice.Analyzers;
 
@@ -12,7 +15,10 @@ namespace HardSlice.Analyzers;
 // that handles one event, without request nor endpoint. No request, handler or request validator lives outside a slice,
 // and the folder 'Features/<Module>/<Slice>/' of the project and the namespace of the slice hold the same types. Requests
 // and handlers are recognized by the contracts of hardslice.json, validators by IValidator<T> of FluentValidation. A handler
-// or a validator of another slice is left to HS016. Generated code is not checked. Not applied to test projects.
+// or a validator of another slice is left to HS016. A system command, declared by the optional contract 'systemCommand', is
+// sent by the application only: its slice has no endpoint, no HTTP mapping sends it, and a type of its module other than its
+// handler and its validator creates it or names it as a generic argument, which is known at the end of the compilation only.
+// Generated code is not checked. Not applied to test projects.
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 {
@@ -30,6 +36,8 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
     private const string FolderRule = "The folder and the namespace of a slice hold the same types.";
 
+    private const string SystemRule = "A system command is sent by the application only: its slice has no endpoint, and a type of its module sends it.";
+
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         title: "A slice is not shaped as one entry named after it",
@@ -39,13 +47,25 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
+    // Whether a type of its module sends a system command is known at the end of the compilation only: in the IDE, this part of
+    // the rule is reported by full solution analysis.
+    private static readonly DiagnosticDescriptor UnsentRule = new(
+        DiagnosticId,
+        title: "A slice is not shaped as one entry named after it",
+        messageFormat: "{0}. {1} Fix: {2}. Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
+        category: "HardSlice.Architecture",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId),
+        customTags: WellKnownDiagnosticTags.CompilationEnd);
+
     private static readonly SymbolDisplayFormat DisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
         genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
         miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes
             | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule, UnsentRule);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -66,6 +86,35 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
 
             start.RegisterSymbolAction(symbolContext => AnalyzeSlice(symbolContext, slices, messaging, files), SymbolKind.Namespace);
             start.RegisterSymbolAction(symbolContext => AnalyzeType(symbolContext, slices, messaging, files), SymbolKind.NamedType);
+
+            // Only an application that declares the systemCommand contract pays for the analysis of its senders.
+            if (messaging?.SystemCommand is null)
+                return;
+
+            var senders = new SystemCommandSenders(slices, messaging);
+            var routing = Routing.Create(compilation);
+            start.RegisterSymbolAction(
+                symbolContext =>
+                {
+                    var type = (INamedTypeSymbol)symbolContext.Symbol;
+                    senders.RecordDeclaration(type);
+                    if (messaging.IsSystemCommand(type) && slices.SliceOf(type) is { } slice && files.FirstLocation(type) is { } location)
+                        senders.Expect(type, slice, location);
+                },
+                SymbolKind.NamedType);
+            start.RegisterOperationAction(
+                operationContext => senders.RecordType(operationContext.ContainingSymbol, operationContext.Operation.Type),
+                OperationKind.ObjectCreation);
+            start.RegisterOperationAction(
+                operationContext =>
+                {
+                    var invocation = (IInvocationOperation)operationContext.Operation;
+                    senders.RecordTypeArguments(operationContext.ContainingSymbol, invocation.TargetMethod.TypeArguments);
+                    if (routing is not null && routing.IsMapping(invocation.TargetMethod))
+                        AnalyzeMapping(operationContext, invocation, routing, slices, messaging);
+                },
+                OperationKind.Invocation);
+            start.RegisterCompilationEndAction(senders.ReportUnsent);
         });
     }
 
@@ -175,6 +224,23 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
             }
         }
 
+        // A system command has no HTTP entry point: a type of its module sends it.
+        if (request is not null && messaging!.IsSystemCommand(request))
+        {
+            foreach (var endpoint in checkedTypes.Where(type => type.Name.EndsWith("Endpoint", StringComparison.Ordinal)))
+            {
+                Report(
+                    context,
+                    files.FirstLocation(endpoint),
+                    $"slice '{slice}' of system command '{request.Name}' declares endpoint '{endpoint.Name}'",
+                    SystemRule,
+                    $"remove '{endpoint.Name}' and its call from '{module}Module': the application sends '{request.Name}'; "
+                        + $"an HTTP entry point is a command slice of its own, whose command implements '{messaging.Command.ToDisplayString(DisplayFormat)}'");
+            }
+
+            return;
+        }
+
         var endpointName = sliceName + "Endpoint";
         var endpoints = types.Where(type => type.Name == endpointName).ToArray();
         var endpointLocation = request is null ? sliceLocation : files.FirstLocation(request);
@@ -184,6 +250,8 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
             var fix = lookalikes.Length == 1
                 ? $"rename '{lookalikes[0].Name}' to '{endpointName}'{(lookalikes[0].IsStatic ? "" : " and declare it static")}"
                 : $"declare the internal static class '{endpointName}' in the slice: its Map(RouteGroupBuilder group) method maps the endpoint, and '{module}Module' calls it";
+            if (lookalikes.Length != 1 && request is not null && messaging.RequestKind(request) == "command" && messaging.SystemCommand is { } systemCommand)
+                fix += $"; a command that only the application sends, such as a job, implements '{systemCommand.ToDisplayString(DisplayFormat)}' instead and has no endpoint";
             if (endpointLocation is not null)
                 Report(context, endpointLocation, $"slice '{slice}' declares no endpoint '{endpointName}'", StructureRule, fix);
         }
@@ -321,6 +389,49 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
                         + (namespaceFolder is null ? "or move its file out of the folder of the slice" : $"or move its file to {namespaceFolder}"));
             }
         }
+    }
+
+    // An HTTP mapping whose endpoint creates a system command, or takes one as a parameter. The endpoint class of its own slice
+    // is reported with the slice.
+    private static void AnalyzeMapping(OperationAnalysisContext context, IInvocationOperation mapping, Routing routing, SliceMap slices, Messaging messaging)
+    {
+        if (HandlerArgument(mapping)?.Value is not { } handler || SentSystemCommand(handler, messaging) is not { } command)
+            return;
+
+        var container = context.ContainingSymbol;
+        var commandSlice = slices.SliceOf(command);
+        for (var type = container as INamedTypeSymbol ?? container.ContainingType; type is not null; type = type.ContainingType)
+        {
+            if (commandSlice is not null && slices.SliceOf(type) == commandSlice && type.Name.EndsWith("Endpoint", StringComparison.Ordinal))
+                return;
+        }
+
+        var module = commandSlice is null ? "<Module>" : SliceMap.ModuleOf(commandSlice);
+        context.ReportDiagnostic(Diagnostic.Create(
+            Rule,
+            OperationLocation(mapping.Syntax),
+            $"endpoint '{Describe(mapping, routing, context.CancellationToken)}' in {PlaceOf(container, slices)} sends system command '{command.Name}'",
+            SystemRule,
+            $"remove the endpoint: a type of module '{module}' sends '{command.Name}'; "
+                + $"an HTTP entry point is a command slice of its own, whose command implements '{messaging.Command.ToDisplayString(DisplayFormat)}'"));
+    }
+
+    // The system command an endpoint sends: a parameter of its delegate, or a type its body creates or reads.
+    private static INamedTypeSymbol? SentSystemCommand(IOperation handler, Messaging messaging)
+    {
+        var parameters = WithoutConversions(handler) switch
+        {
+            IDelegateCreationOperation { Target: IAnonymousFunctionOperation function } => function.Symbol.Parameters,
+            IDelegateCreationOperation { Target: IMethodReferenceOperation reference } => reference.Method.Parameters,
+            IAnonymousFunctionOperation function => function.Symbol.Parameters,
+            _ => ImmutableArray<IParameterSymbol>.Empty
+        };
+
+        return parameters.Select(parameter => parameter.Type)
+            .Concat(handler.DescendantsAndSelf().Select(operation => operation.Type))
+            .OfType<INamedTypeSymbol>()
+            .FirstOrDefault(messaging.IsSystemCommand)
+            ?.OriginalDefinition;
     }
 
     // A slice without request whose entry is a domain event handler: one handler named after the slice, for one event,
@@ -474,6 +585,7 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         {
             _model = model;
             Command = command;
+            SystemCommand = model.Contract(ContractKeys.SystemCommand);
             Query = query;
             _handler = handler;
             EventHandler = eventHandler;
@@ -486,6 +598,13 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         public INamedTypeSymbol Command { get; }
 
         public INamedTypeSymbol Query { get; }
+
+        // The optional contract of the commands that only the application sends.
+        public INamedTypeSymbol? SystemCommand { get; }
+
+        public INamedTypeSymbol RequestHandler => _handler;
+
+        public INamedTypeSymbol? Validator => _validator;
 
         public INamedTypeSymbol EventHandler { get; }
 
@@ -509,6 +628,10 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
         // The requests a concrete handler handles, by their definition: 'ArchiveBookingCommand<T>' for
         // 'IRequestHandler<ArchiveBookingCommand<T>, bool>', directly or through a base class. A request that is a
         // type parameter is not a request of a slice.
+        // A concrete command that implements the systemCommand contract.
+        public bool IsSystemCommand(INamedTypeSymbol type) =>
+            SystemCommand is not null && RequestKind(type) == "command" && _model.IsSystemCommand(type);
+
         public ImmutableArray<INamedTypeSymbol> HandledRequests(INamedTypeSymbol type) => Arguments(type, _handler, request => true);
 
         // The requests a concrete validator validates; a validator of another type, such as a DTO, is not a request validator.
@@ -572,6 +695,103 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
                 requests.UnionWith(HandledRequests(type));
 
             return requests.ToImmutable();
+        }
+    }
+
+    // The system commands of the slices, and the types of their modules that send them: a type that creates one, or names it as
+    // a generic argument of a method it calls or of a type it derives from, such as 'AddRecurringCommand<TCommand>' or
+    // 'RecurringCommandService<TCommand>'. Its handler and its validator do not send it, nor do the contracts that name it to
+    // register them, such as 'IRequestHandler<TCommand, TResponse>'.
+    private sealed class SystemCommandSenders(SliceMap slices, Messaging messaging)
+    {
+        private readonly ConcurrentDictionary<ISymbol, byte> _sent = new(SymbolEqualityComparer.Default);
+        private readonly ConcurrentQueue<(INamedTypeSymbol Command, string Slice, Location Location)> _expected = new();
+
+        public void Expect(INamedTypeSymbol command, string slice, Location location) => _expected.Enqueue((command.OriginalDefinition, slice, location));
+
+        public void RecordDeclaration(INamedTypeSymbol type)
+        {
+            if (type.BaseType is { } baseType)
+                RecordTypeArguments(type, baseType.TypeArguments);
+            foreach (var @interface in type.Interfaces)
+                RecordTypeArguments(type, @interface.TypeArguments);
+        }
+
+        public void RecordType(ISymbol? sender, ITypeSymbol? type)
+        {
+            if (type is INamedTypeSymbol named)
+                Record(sender, named, depth: 0);
+        }
+
+        public void RecordTypeArguments(ISymbol? sender, ImmutableArray<ITypeSymbol> arguments)
+        {
+            foreach (var argument in arguments)
+                RecordType(sender, argument);
+        }
+
+        public void ReportUnsent(CompilationAnalysisContext context)
+        {
+            foreach (var (command, slice, location) in _expected)
+            {
+                if (_sent.ContainsKey(command))
+                    continue;
+
+                var module = SliceMap.ModuleOf(slice);
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UnsentRule,
+                    location,
+                    $"system command '{command.Name}' of slice '{slice}' is sent by no type of module '{module}'",
+                    SystemRule,
+                    $"send '{command.Name}' through IMediator from a type of module '{module}' other than its handler and its validator, "
+                        + $"such as a hosted service in 'Features/{slice}/' that creates it in a scope of its own, registered by '{module}Module'; "
+                        + $"a command sent over HTTP implements '{messaging.Command.ToDisplayString(DisplayFormat)}' instead, with its endpoint, "
+                        + "and a command that nothing sends is removed with its slice"));
+            }
+        }
+
+        private void Record(ISymbol? sender, INamedTypeSymbol type, int depth)
+        {
+            if (type.TypeKind == TypeKind.Error || depth > 8)
+                return;
+
+            if (messaging.IsSystemCommand(type))
+            {
+                if (IsSenderOf(sender, type.OriginalDefinition))
+                    _sent.TryAdd(type.OriginalDefinition, 0);
+                return;
+            }
+
+            var definition = type.OriginalDefinition;
+            if (SymbolEqualityComparer.Default.Equals(definition, messaging.RequestHandler) || SymbolEqualityComparer.Default.Equals(definition, messaging.Validator))
+                return;
+
+            foreach (var argument in type.TypeArguments.OfType<INamedTypeSymbol>())
+                Record(sender, argument, depth + 1);
+        }
+
+        // A type of the module of the command, outside the command, its handler and its validator, and the types they contain.
+        private bool IsSenderOf(ISymbol? sender, INamedTypeSymbol command)
+        {
+            if (slices.SliceOf(command) is not { } slice)
+                return false;
+
+            var outermost = sender as INamedTypeSymbol ?? sender?.ContainingType;
+            if (outermost is null)
+                return false;
+
+            for (var type = outermost; type is not null; type = type.ContainingType)
+            {
+                if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, command)
+                    || messaging.HandledRequests(type).Contains(command, SymbolEqualityComparer.Default)
+                    || messaging.ValidatedRequests(type).Contains(command, SymbolEqualityComparer.Default))
+                {
+                    return false;
+                }
+
+                outermost = type;
+            }
+
+            return slices.FeaturesPathOf(outermost) is { Length: >= 1 } path && path[0] == SliceMap.ModuleOf(slice);
         }
     }
 

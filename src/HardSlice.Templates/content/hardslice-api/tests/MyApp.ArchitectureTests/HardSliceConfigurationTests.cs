@@ -25,7 +25,9 @@ public sealed class HardSliceConfigurationTests : IDisposable
         var configuration = HardSliceConfiguration.Current;
 
         configuration.Style.ShouldBe("slices");
-        configuration.Contracts.Keys.ShouldBe(["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler", "domainEventHandler"], ignoreOrder: true);
+        // systemCommand is optional: a file that leaves it out declares no system command.
+        configuration.Contracts.Keys.Where(key => key != "systemCommand")
+            .ShouldBe(["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler", "domainEventHandler"], ignoreOrder: true);
         configuration.SharedFolders.ShouldNotBeEmpty();
     }
 
@@ -98,6 +100,23 @@ public sealed class HardSliceConfigurationTests : IDisposable
         File.WriteAllText(path, $$"""{ "$schema": "https://example.invalid/hardslice.schema.json", "version": 1, "style": "slices", {{Contracts}}, "shared": { "allowedFolders": ["Messaging"] } }""");
 
         HardSliceConfiguration.Load(path).Style.ShouldBe("slices");
+    }
+
+    // An application without work in the background declares no system command.
+    [Fact]
+    public void The_system_command_contract_is_optional_and_checked_when_present()
+    {
+        var path = Path.Combine(_directory, "hardslice.json");
+        File.WriteAllText(path, $$"""{ "version": 1, "style": "slices", {{Contracts}}, "shared": { "allowedFolders": ["Messaging"] } }""");
+        HardSliceConfiguration.Load(path).Contracts.ShouldNotContainKey("systemCommand");
+
+        var withSystemCommand = Contracts.Replace("\"query\":", "\"systemCommand\": \"MyApp.Shared.Messaging.ISystemCommand`1, MyApp\",\n    \"query\":");
+        File.WriteAllText(path, $$"""{ "version": 1, "style": "slices", {{withSystemCommand}}, "shared": { "allowedFolders": ["Messaging"] } }""");
+        HardSliceConfiguration.Load(path).Contracts["systemCommand"].ShouldBe("MyApp.Shared.Messaging.ISystemCommand`1, MyApp");
+
+        File.WriteAllText(path, $$"""{ "version": 1, "style": "slices", {{withSystemCommand.Replace("ISystemCommand`1, MyApp", "ISystemCommand`1")}}, "shared": { "allowedFolders": ["Messaging"] } }""");
+        Should.Throw<InvalidOperationException>(() => HardSliceConfiguration.Load(path)).Message
+            .ShouldContain("'contracts.systemCommand' is \"MyApp.Shared.Messaging.ISystemCommand`1\", not \"<metadata name>, <assembly>\"");
     }
 
     [Theory]

@@ -16,6 +16,7 @@
 # checks that the check passes on it and that HS012 fails both scripts when it reaches into a slice of Bookings.
 # It generates command slices with dotnet new hardslice-command through each of its refusals, registers them with the lines it prints, checks that the test of the host names a forgotten registration,
 # that only the TODO(hardslice): test fails, that the none and DTO responses build without HardSlice diagnostic, and that a reference completion passes the check.
+# Its system commands, generated with --endpoint none, have no endpoint, fail HS004 while no type of their module sends them, and pass once a hosted service does.
 # It generates query slices with dotnet new hardslice-query the same way, both results, single and many, without HardSlice diagnostic, HS006 included,
 # and proves that an unknown aggregate fails the build with a compiler error that names it.
 # It generates slices with the route and the method of --route and --method, a PUT and a DELETE in a module created with its own
@@ -2515,7 +2516,8 @@ expect_check_fails_on_todo_tests_only() {
 # Generates a command slice of module <module>, which must exist, through every path of dotnet new hardslice-command: refusals,
 # instructions, a forgotten registration, the TODO(hardslice): tests, the other responses, then the reference completion.
 # Then the commands without parameters <parameterless-name> and <parameterless-dto-name>, through their TODO(hardslice): tests
-# and their reference completion. The module file is restored and the slices removed at the end.
+# and their reference completion, and the system commands <system-name> and <system-parameterless-name>, through HS004 and
+# their reference completion. The module file is restored and the slices removed at the end.
 probe_command_template() {
   local module="$1"
   local name="$2"
@@ -2523,6 +2525,8 @@ probe_command_template() {
   local dto_name="$4"
   local parameterless_name="$5"
   local parameterless_dto_name="$6"
+  local system_name="$7"
+  local system_parameterless_name="$8"
   local module_file="$app_src/Features/$module/${module}Module.cs"
   local slice="$app_src/Features/$module/$name/$name.cs"
   local integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
@@ -2641,6 +2645,7 @@ probe_command_template() {
   bash "$app/scripts/check.sh"
 
   probe_parameterless_commands "$module" "$parameterless_name" "$parameterless_dto_name"
+  probe_system_commands "$module" "$system_name" "$system_parameterless_name"
 
   rm -r "$app_src/Features/$module/$name" "$app/tests/$app_name.Tests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$name"
   mv "$work/module.backup" "$module_file"
@@ -2745,6 +2750,134 @@ probe_parameterless_commands() {
   rm -r "$app_src/Features/$module/$name" "$app_src/Features/$module/$dto_name" \
     "$app/tests/$app_name.IntegrationTests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name"
   mv "$work/module-parameterless.backup" "$module_file"
+}
+
+# The system commands <module>/<name> and <module>/<parameterless-name> generated with --endpoint none, the first with its
+# identifier and its validator, the second with --parameters none and the DTO <parameterless-name>Result: commands that implement
+# ISystemCommand<TResponse>, without endpoint, registered without the call of Map, with integration tests that send them through
+# IMediator. The check fails with HS004 while no type of the module sends them, then passes after their reference completion,
+# whose hosted service sends each one. --route and --method are refused with them. The module is left as it was and the slices removed.
+probe_system_commands() {
+  local module="$1"
+  local name="$2"
+  local parameterless_name="$3"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local project="src/$app_name/$app_name.csproj"
+  local refusal
+  local generated
+  local slice
+  local integration_test
+  local check_output
+
+  echo "==> Checking that dotnet new hardslice-command --endpoint none refuses the options of an endpoint in $app_name"
+  for refusal in "a system command with a route|--route|versions" "a system command with a method|--method|PUT"; do
+    expect_item_refused hardslice-command "${refusal%%|*}" "--endpoint none generates a system command, which only the application sends and which has no endpoint, while --route and --method choose its endpoint" \
+      --project "$project" --module "$module" --name "$name" --endpoint none "$(cut -d'|' -f2 <<< "$refusal")" "$(cut -d'|' -f3 <<< "$refusal")"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-command refused ${refusal%%|*} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+  expect_item_refused hardslice-command "an unknown endpoint" "'grpc' is not a valid value for --endpoint" --project "$project" --module "$module" --name "$name" --endpoint grpc
+
+  echo "==> Generating the system commands $module/$name and $module/$parameterless_name of $app_name with dotnet new hardslice-command --endpoint none"
+  cp "$module_file" "$work/module-system.backup"
+  generate_command "$module" "$name" --endpoint none
+  if [[ "$command_output" == *"Endpoint.Map(group);"* || "$command_output" != *"HS004 fails the build until a type of the module sends it."* ]] ||
+    ! grep -Fxq "            .AddScoped<IValidator<${name}Command>, ${name}Validator>()" <<< "$command_output"; then
+    printf '%s\n' "$command_output" >&2
+    echo "error: dotnet new hardslice-command --endpoint none did not print the registrations without the call of Map, and how HS004 expects the command to be sent." >&2
+    exit 1
+  fi
+  register_slice hardslice-command "$command_output"
+  generate_command "$module" "$parameterless_name" --endpoint none --parameters none --response "${parameterless_name}Result"
+  register_slice hardslice-command "$command_output"
+  for generated in "$name|public sealed record ${name}Command(Guid Id) : ISystemCommand<Guid>;" \
+    "$parameterless_name|public sealed record ${parameterless_name}Command : ISystemCommand<${parameterless_name}Result>;"; do
+    slice="$app_src/Features/$module/${generated%%|*}/${generated%%|*}.cs"
+    integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/${generated%%|*}/${generated%%|*}Tests.cs"
+    if ! grep -Fxq "${generated#*|}" "$slice" || grep -q 'Endpoint\|Map[A-Z][a-z]*(\|HttpResults' "$slice"; then
+      cat "$slice" >&2
+      echo "error: dotnet new hardslice-command --endpoint none did not generate a system command without endpoint: ${generated#*|}" >&2
+      exit 1
+    fi
+    if ! grep -Fq "await scope.ServiceProvider.GetRequiredService<IMediator>().Send(" "$integration_test" || grep -q 'CreateClient\|Route\|HttpStatusCode' "$integration_test"; then
+      cat "$integration_test" >&2
+      echo "error: the integration test of $module/${generated%%|*} generated with --endpoint none does not send the command through IMediator, or sends an HTTP request." >&2
+      exit 1
+    fi
+  done
+  if ! grep -Fq "await Should.ThrowAsync<ValidationException>(" "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"; then
+    echo "error: the integration test of the system command $module/$name does not check that an invalid one throws ValidationException." >&2
+    exit 1
+  fi
+  if grep -q 'MyApp\|ModuleName\|CommandName\|ResponseTypeName\|command-route\|ISystemCommandX' \
+    "$app_src/Features/$module/$name/$name.cs" "$app_src/Features/$module/$parameterless_name/$parameterless_name.cs" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs" "$app/tests/$app_name.IntegrationTests/Features/$module/$parameterless_name/${parameterless_name}Tests.cs"; then
+    echo "error: a system command generated in $app_name keeps a placeholder of the template." >&2
+    exit 1
+  fi
+
+  # PB-067: nothing sends them yet, so HS004 fails the build on each, at the end of the compilation.
+  echo "==> Checking that HS004 fails the check of $app_name while no type of module $module sends the system commands"
+  if check_output="$(run_check check.sh 2>&1)"; then
+    echo "error: scripts/check.sh passed with system commands that no type of module $module sends." >&2
+    exit 1
+  fi
+  check_output="$(strip_ansi <<< "$check_output")"
+  for generated in "$name" "$parameterless_name"; do
+    if [[ "$check_output" != *"HS004: system command '${generated}Command' of slice '$module/$generated' is sent by no type of module '$module'."* ]]; then
+      printf '%s\n' "$check_output" >&2
+      echo "error: scripts/check.sh did not report HS004 on the system command $module/$generated that nothing sends." >&2
+      exit 1
+    fi
+  done
+  echo "    HS004: ${name}Command and ${parameterless_name}Command are sent by no type of module $module"
+
+  echo "==> Checking that the reference completion of the system commands $module/$name and $module/$parameterless_name, sent by hosted services of their slices, passes the check of $app_name"
+  complete_system_command "$module" "$name" id id
+  complete_system_command "$module" "$parameterless_name" none "${parameterless_name}Result"
+  bash "$app/scripts/check.sh"
+
+  rm -r "$app_src/Features/$module/$name" "$app_src/Features/$module/$parameterless_name" \
+    "$app/tests/$app_name.Tests/Features/$module/$name" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$parameterless_name"
+  mv "$work/module-system.backup" "$module_file"
+}
+
+# Seeds a system command of module <module> that nothing sends, then one with an endpoint sent by a type of its slice: the analyzer
+# of the web project reports HS004 on each.
+probe_system_command_rule() {
+  local module="$1"
+  local slice="$app_src/Features/$module/RefreshProbes/RefreshProbes.cs"
+  mkdir -p "$app_src/Features/$module/RefreshProbes"
+  cat > "$slice" <<PROBE
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.$module.RefreshProbes;
+
+public sealed record RefreshProbesCommand : ISystemCommand<int>;
+
+internal sealed class RefreshProbesHandler : IRequestHandler<RefreshProbesCommand, int>
+{
+    public Task<int> Handle(RefreshProbesCommand command, CancellationToken cancellationToken) => Task.FromResult(0);
+}
+PROBE
+  expect_failure "HS004: system command 'RefreshProbesCommand' of slice '$module/RefreshProbes' is sent by no type of module '$module'." "docs/rules/HS004.md" "a system command of $app_name that nothing sends" check.sh check.ps1
+  cat >> "$slice" <<PROBE
+
+internal sealed class RefreshProbesRunner(IMediator mediator)
+{
+    public Task<int> RunAsync(CancellationToken cancellationToken) => mediator.Send(new RefreshProbesCommand(), cancellationToken);
+}
+
+internal static class RefreshProbesEndpoint
+{
+    public static void Map(RouteGroupBuilder group) => group.MapPost("/refresh", () => TypedResults.NoContent());
+}
+PROBE
+  expect_failure "HS004: slice '$module/RefreshProbes' of system command 'RefreshProbesCommand' declares endpoint 'RefreshProbesEndpoint'." "docs/rules/HS004.md" "a system command of $app_name with an endpoint" check.sh check.ps1
+  rm -r "$app_src/Features/$module/RefreshProbes"
 }
 
 # Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and leaves the
@@ -3746,6 +3879,7 @@ probe_unmapped_endpoint Bookings
 
 echo "==> Checking that HS004 fails both check scripts on a slice whose command is not named after it"
 probe_slice_structure Bookings
+probe_system_command_rule Bookings
 
 echo "==> Checking that HS004, HS014, HS016 and HS018 accept a reaction slice and fail both check scripts on a faulty one"
 probe_reaction_slice Bookings
@@ -3809,6 +3943,16 @@ expect_failure "HS900: contract 'contracts.command' of hardslice.json, '$app_nam
 # HS004 to HS006 need the handler contract: the build rejects its malformed value before the architecture tests run.
 sed 's/IRequestHandler`2, /IRequestHandler`2 /' "$work/hardslice.json.backup" > "$app/hardslice.json"
 expect_failure "HS900: 'contracts.requestHandler' in hardslice.json is not '<metadata name>, <assembly>'." "docs/rules/HS900.md" "a malformed handler contract" check.sh check.ps1
+# PB-067: the system command contract derives from the command contract, and a file may leave it out.
+sed 's/ISystemCommand`1, /IRequest`1, /' "$work/hardslice.json.backup" > "$app/hardslice.json"
+expect_failure "HS900: contract 'contracts.systemCommand', 'IRequest', does not derive from contract 'contracts.command', 'ICommand'." "docs/rules/HS900.md" "a system command contract that is no command" check.sh
+grep -v '"systemCommand": ' "$work/hardslice.json.backup" > "$app/hardslice.json"
+if ! check_output="$(run_check check.sh 2>&1)"; then
+  printf '%s\n' "$check_output" >&2
+  echo "error: scripts/check.sh failed on a hardslice.json without the optional systemCommand contract." >&2
+  exit 1
+fi
+echo "    a hardslice.json without systemCommand passes the check"
 # The analyzers read the contracts only: the architecture tests reject the style.
 # PB-055: a later format of hardslice.json is reported with the update to make, before its keys are read.
 sed 's/"version": 1,/"version": 2, "baseline": {},/' "$work/hardslice.json.backup" > "$app/hardslice.json"
@@ -3896,7 +4040,7 @@ rm "$work/RoomsModule.cs.backup"
 remove_module Rooms
 mv "$work/Program.cs.backup" "$app_src/Program.cs"
 
-probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings
+probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings RemindBookings CollectBookingFeeds
 probe_query_template Bookings GetBookingSummary ListBookingSummaries Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetBookingTrip Booking \
@@ -4109,6 +4253,7 @@ probe_unmapped_endpoint Rooms
 
 echo "==> Checking that HS004 fails both check scripts on the first slice of $app_name whose command is not named after it"
 probe_slice_structure Rooms
+probe_system_command_rule Rooms
 
 echo "==> Checking that HS004, HS014, HS016 and HS018 accept the first reaction slice of $app_name and fail both check scripts on a faulty one"
 probe_reaction_slice Rooms
@@ -4181,7 +4326,7 @@ rm "$app/src/$app_name.Domain/Hs001Probe.cs"
 # hardslice-query its first query slices.
 probe_module_template Rooms MeetingRooms meeting-rooms
 
-probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRooms
+probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRooms RemindRooms CollectRoomFeeds
 
 # The aggregate that the query slices read is generated by dotnet new hardslice-aggregate in the domain of Rooms, mapped by the
 # module and migrated with the command it prints, as "Adding a first module" of AGENTS.md says.

@@ -37,6 +37,9 @@ internal sealed class DomainModel
 
     public bool IsCommand(ITypeSymbol? type) => Implements(type, ContractKeys.Command);
 
+    // A command that only the application sends, such as a job: a command too, since its contract derives from the command contract.
+    public bool IsSystemCommand(ITypeSymbol? type) => Implements(type, ContractKeys.SystemCommand);
+
     public bool IsQuery(ITypeSymbol? type) => Implements(type, ContractKeys.Query);
 
     public bool IsRequestHandler(ITypeSymbol? type) => Implements(type, ContractKeys.RequestHandler);
@@ -101,6 +104,9 @@ internal sealed class DomainModel
         {
             if (!configuration.Contracts.TryGetValue(key, out var entry))
             {
+                if (ContractKeys.Optional.Contains(key))
+                    continue;
+
                 problems.Add(new ContractProblem(
                     new ConfigurationProblem(
                         $"{HardSliceConfiguration.FileName} declares no contract 'contracts.{key}'",
@@ -203,6 +209,20 @@ internal sealed class DomainModel
                     $"declare '{aggregateRoot.Name}' as deriving from '{entity.Name}': an aggregate root is an entity",
                     configuration.Contracts[ContractKeys.AggregateRoot].Location),
                 [ContractKeys.Entity, ContractKeys.AggregateRoot]));
+        }
+
+        // Only the system command contract is unusable then: the commands keep their rules, endpoint included.
+        if (contracts.TryGetValue(ContractKeys.Command, out var command)
+            && contracts.TryGetValue(ContractKeys.SystemCommand, out var systemCommand)
+            && !SymbolEqualityComparer.Default.Equals(command, systemCommand)
+            && !Implements(systemCommand, command))
+        {
+            problems.Add(new ContractProblem(
+                new ConfigurationProblem(
+                    $"contract 'contracts.systemCommand', '{systemCommand.Name}', does not derive from contract 'contracts.command', '{command.Name}'",
+                    $"declare '{systemCommand.Name}' as deriving from '{command.Name}': a system command is a command, which goes through the same pipeline",
+                    configuration.Contracts[ContractKeys.SystemCommand].Location),
+                [ContractKeys.SystemCommand]));
         }
     }
 }

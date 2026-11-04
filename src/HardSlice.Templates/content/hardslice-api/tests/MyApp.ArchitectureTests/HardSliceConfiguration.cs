@@ -19,7 +19,10 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
     // The only version of the format these tests read, as the analyzers of the same version.
     public const int Version = 1;
 
-    private static readonly string[] ContractKeys = ["entity", "aggregateRoot", "domainEvent", "command", "query", "requestHandler", "domainEventHandler"];
+    private static readonly string[] ContractKeys = ["entity", "aggregateRoot", "domainEvent", "command", "systemCommand", "query", "requestHandler", "domainEventHandler"];
+
+    // Keys a file may leave out: an application without work in the background declares no system command.
+    private static readonly string[] OptionalContractKeys = ["systemCommand"];
 
     private static readonly Lazy<HardSliceConfiguration> Solution =
         new(() => Load(Path.Combine(Application.SolutionRoot, FileName)));
@@ -95,14 +98,19 @@ internal sealed partial record HardSliceConfiguration(string Style, IReadOnlyDic
     private static Dictionary<string, string> ReadContracts(JsonElement root)
     {
         if (!root.TryGetProperty("contracts", out var contracts))
-            throw Invalid("'contracts' is missing: it declares the types that classify entities, aggregate roots, domain events, commands, queries, request handlers and domain event handlers.", ContractsRule);
+            throw Invalid("'contracts' is missing: it declares the types that classify entities, aggregate roots, domain events, commands, system commands, queries, request handlers and domain event handlers.", ContractsRule);
         ExpectObjectWithKeys(contracts, "'contracts'", ContractKeys, ContractsRule);
 
         var values = new Dictionary<string, string>();
         foreach (var key in ContractKeys)
         {
             if (!contracts.TryGetProperty(key, out var contract))
+            {
+                if (OptionalContractKeys.Contains(key))
+                    continue;
+
                 throw Invalid($"'contracts.{key}' is missing.", ContractsRule);
+            }
             if (contract.ValueKind != JsonValueKind.String || !ContractName().IsMatch(contract.GetString()!))
                 throw Invalid($"'contracts.{key}' is {contract.GetRawText()}, not \"<metadata name>, <assembly>\" such as \"MyApp.Domain.IEntity, MyApp.Domain\".", ContractsRule);
             values.Add(key, contract.GetString()!);

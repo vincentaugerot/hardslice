@@ -7,7 +7,7 @@
 | [`hardslice-module`](#a-module) | the public contract of a module, the folders of its domain and of its tests | `add-module` |
 | [`hardslice-aggregate`](#an-aggregate) | an aggregate root, its identifier, its EF Core mapping and its unit tests | `add-aggregate` |
 | [`hardslice-entity`](#a-child-entity) | a child entity of an aggregate, its identifier, its EF Core mapping and its unit tests | `add-aggregate` |
-| [`hardslice-command`](#a-command-slice) | a command slice: command, validator, handler, endpoint and tests | `add-slice` |
+| [`hardslice-command`](#a-command-slice) | a command slice: command, validator, handler, endpoint and tests, or a system command without endpoint | `add-slice` |
 | [`hardslice-query`](#a-query-slice) | a query slice that reads an aggregate: query, DTO, handler, endpoint and tests | `add-slice` |
 | [`hardslice-event`](#a-domain-event-and-its-reaction) | a domain event and, on request, the reaction slice that handles it, with its tests | `add-domain-event` |
 
@@ -66,9 +66,11 @@ It creates `src/Rooms/Features/Bookings/ExtendBooking/ExtendBooking.cs`, with th
 
 `--parameters` sets what the command takes from the request: `id` by default, a `Guid Id` to replace with the fields of the use case, checked by its validator. `none` generates a command without parameters, such as an import that reads its source from the configuration: an empty record, an endpoint that reads no body, no validator nor validator tests, and an integration test that posts without body and checks its success instead of a 400. The template then prints the registration of the handler alone. It combines with `--response id` and with a DTO, never with `--response none`, whose 404 answers an unknown aggregate that such a command has no identifier to look for.
 
+`--endpoint` sets how the command is sent: `http` by default, an endpoint of the module. `none` generates a system command, which only the application sends, such as a job or a hosted service that reacts to an outside event: it implements `ISystemCommand<TResponse>`, has no endpoint, and its integration tests send it through `IMediator` in a scope of their own, an invalid one throwing `ValidationException` instead of a 400. The template then prints the registrations without the call of `Map`, and says that HS004 fails the build until a type of the module sends the command, such as a hosted service in the folder of the slice. It combines with `--parameters` and `--response`, never with `--route` nor `--method`, which choose an endpoint.
+
 The validator tests pass. The handler throws `NotImplementedException` and the integration test ends with `TODO(hardslice):`. A slice its module does not register fails the check too: a test of the host resolves every request handler and validator of the application from the container, and names the ones that are missing.
 
-Without `--project`, before the first restore, with a name that is not PascalCase or ends with `Command`, for a module without `Features/<Module>/<Module>Module.cs`, with a `--response` DTO named `Guid` or as a type of the slice, with `--parameters none --response none`, with a `--route` that is not made of words and route parameters, or that names a parameter `id` with `--method DELETE`, or with a method other than `POST`, `PUT`, `PATCH` and `DELETE`, `GET` included, it exits with an error that says what to do and creates nothing. It refuses to overwrite an existing slice without `--force`.
+Without `--project`, before the first restore, with a name that is not PascalCase or ends with `Command`, for a module without `Features/<Module>/<Module>Module.cs`, with a `--response` DTO named `Guid` or as a type of the slice, with `--parameters none --response none`, with a `--route` that is not made of words and route parameters, or that names a parameter `id` with `--method DELETE`, with a method other than `POST`, `PUT`, `PATCH` and `DELETE`, `GET` included, or with `--endpoint none` and `--route` or `--method`, it exits with an error that says what to do and creates nothing. It refuses to overwrite an existing slice without `--force`.
 
 ## A query slice
 

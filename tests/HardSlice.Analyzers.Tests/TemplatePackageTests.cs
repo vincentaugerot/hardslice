@@ -181,7 +181,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(13);
+        refusals.Length.ShouldBe(14);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -219,9 +219,11 @@ public sealed class TemplatePackageTests
             .GetProperty("manualInstructions").EnumerateArray()
             .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
         registrations.Keys.ShouldBe([
-            "(!ParametersIsNone && ResponseIsId)", "(!ParametersIsNone && ResponseIsNone)", "(!ParametersIsNone && ResponseIsDto)",
-            "(ParametersIsNone && ResponseIsId)", "(ParametersIsNone && ResponseIsDto)"]);
-        registrations.Where(registration => registration.Key.StartsWith("(ParametersIsNone", StringComparison.Ordinal))
+            "(!EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
+            "(!EndpointIsNone && ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && ParametersIsNone && ResponseIsDto)",
+            "(EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
+            "(EndpointIsNone && ParametersIsNone && ResponseIsId)", "(EndpointIsNone && ParametersIsNone && ResponseIsDto)"]);
+        registrations.Where(registration => registration.Key.Contains("&& ParametersIsNone", StringComparison.Ordinal))
             .ShouldAllBe(registration => !registration.Value.Contains("Validator") && !registration.Value.Contains("FluentValidation"));
 
         var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
@@ -231,6 +233,48 @@ public sealed class TemplatePackageTests
         slice.ShouldContain("#if (!ParametersIsNone)\n\n// Checks the shape of the input only");
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
         tests.ShouldContain("PostAsync(Route, content: null, TestContext.Current.CancellationToken)");
+    }
+
+    // PB-067: --endpoint none generates a system command, which implements ISystemCommand<TResponse>, without endpoint: its integration
+    // tests send it through IMediator, and --route or --method, which choose an endpoint, are refused. Without the option, the slice is unchanged.
+    [Fact]
+    public void Command_item_template_generates_a_system_command_without_endpoint_and_refuses_the_options_of_an_endpoint()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+        var endpoint = symbols.GetProperty("Endpoint");
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+
+        endpoint.GetProperty("datatype").GetString().ShouldBe("choice");
+        endpoint.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["http", "none"]);
+        endpoint.GetProperty("defaultValue").GetString().ShouldBe("http");
+        host.RootElement.GetProperty("symbolInfo").GetProperty("Endpoint").GetProperty("longName").GetString().ShouldBe("endpoint");
+        symbols.GetProperty("EndpointOptionsWithoutEndpoint").GetProperty("value").GetString().ShouldBe("(EndpointIsNone && (RouteIsGiven || MethodIsGiven))");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!EndpointOptionsWithoutEndpoint");
+        var contract = symbols.GetProperty("CommandContract");
+        contract.GetProperty("replaces").GetString().ShouldBe("ICommand");
+        contract.GetProperty("parameters").GetProperty("cases").EnumerateArray().Select(@case => @case.GetProperty("value").GetString()).ShouldBe(["ISystemCommand", "ICommand"]);
+        foreach (var (given, value, matches) in new[] { ("RouteIsGiven", "", false), ("RouteIsGiven", "/", true), ("MethodIsGiven", "", false), ("MethodIsGiven", "POST", true) })
+            Matches(symbols, given, value).ShouldBe(matches);
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        postActions.Single(action => action.GetProperty("id").GetString() == "refuseEndpointOptionsWithoutEndpoint")
+            .GetProperty("condition").GetString().ShouldBe("(EndpointOptionsWithoutEndpoint)");
+        var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        registrations.Where(registration => registration.Key.StartsWith("(EndpointIsNone", StringComparison.Ordinal)).ShouldAllBe(registration =>
+            !registration.Value.Contains("Endpoint.Map(group)") && registration.Value.Contains("HS004 fails the build until a type of the module sends it."));
+        registrations.Where(registration => registration.Key.StartsWith("(!EndpointIsNone", StringComparison.Ordinal))
+            .ShouldAllBe(registration => registration.Value.Contains("        CommandNameEndpoint.Map(group);\n"));
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
+        slice.ShouldContain("}\n#if (!EndpointIsNone)\n\ninternal static class CommandNameEndpoint\n");
+        slice.ShouldContain("#if (ResponseIsNone && !EndpointIsNone)\nusing Microsoft.AspNetCore.Http.HttpResults;");
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        tests.ShouldContain("await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new CommandNameCommand(), TestContext.Current.CancellationToken);");
+        tests.ShouldContain("await Should.ThrowAsync<ValidationException>(");
     }
 
     // PB-056: a DTO named Guid, or after a type of the slice, would hide that type and break the build of the slice (CS0118, CS0102).
@@ -328,7 +372,10 @@ public sealed class TemplatePackageTests
             symbols.GetProperty("HttpMethod").GetProperty("generator").GetString().ShouldBe("casing");
             symbols.GetProperty("HttpMethod").GetProperty("parameters").GetProperty("toLower").GetBoolean().ShouldBeFalse();
         }
-        commandSymbols.GetProperty("Method").GetProperty("defaultValue").GetString().ShouldBe("POST");
+        // POST by default, without defaultValue: --endpoint none refuses a --method that was passed (PB-067).
+        commandSymbols.GetProperty("Method").TryGetProperty("defaultValue", out _).ShouldBeFalse();
+        commandSymbols.GetProperty("DefaultMethod").GetProperty("parameters").GetProperty("value").GetString().ShouldBe("POST");
+        commandSymbols.GetProperty("HttpMethod").GetProperty("parameters").GetProperty("source").GetString().ShouldBe("MethodOrDefault");
         commandSymbols.GetProperty("MethodIsAccepted").GetProperty("value").GetString().ShouldBe("(MethodIsPost || MethodIsPut || MethodIsPatch || MethodIsDelete)");
         commandSymbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("MethodIsAccepted");
         querySymbols.GetProperty("Method").GetProperty("defaultValue").GetString().ShouldBe("GET");
@@ -1040,7 +1087,7 @@ public sealed class TemplatePackageTests
         var addModule = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-module", "SKILL.md"));
 
         agents.ShouldContain("Always pass `--route`, named after the resource rather than the use case");
-        addSlice.ShouldContain("Always pass `--route`, the route of the endpoint under the group of the module, named after the resource");
+        addSlice.ShouldContain("Always pass `--route` to a slice with an endpoint, the route of the endpoint under the group of the module, named after the resource");
         addSlice.ShouldContain("--module <Module> --name <Slice> --route <route>");
         addSlice.ShouldContain("--aggregate <Aggregate> --route <route>");
         addSlice.ShouldContain("The generated tests call the route of the slice under `<Module>Module.Route`, the group of the module.");
@@ -1438,6 +1485,7 @@ public sealed class TemplatePackageTests
         using var configuration = JsonDocument.Parse(File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), "hardslice.json")));
 
         configuration.RootElement.GetProperty("style").GetString().ShouldBe("slices");
+        configuration.RootElement.GetProperty("contracts").GetProperty("systemCommand").GetString().ShouldBe("MyApp.Shared.Messaging.ISystemCommand`1, MyApp");
         configuration.RootElement.GetProperty("shared").GetProperty("allowedFolders").EnumerateArray()
             .Select(folder => folder.GetString())
             .ShouldBe(["Messaging", "Persistence", "Behaviors"]);

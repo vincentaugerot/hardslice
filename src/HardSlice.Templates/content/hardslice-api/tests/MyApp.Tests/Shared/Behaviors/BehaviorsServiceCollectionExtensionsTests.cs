@@ -19,6 +19,15 @@ public sealed class BehaviorsServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void System_commands_go_through_the_pipeline_of_every_command()
+    {
+        using var services = Services();
+
+        BehaviorsOf<SampleSystemCommand, int>(services).ShouldBe(
+            [typeof(LoggingBehavior<,>), typeof(ValidationBehavior<,>), typeof(TransactionBehavior<,>)]);
+    }
+
+    [Fact]
     public void Queries_go_through_logging_then_validation_without_a_transaction()
     {
         using var services = Services();
@@ -42,6 +51,8 @@ public sealed class BehaviorsServiceCollectionExtensionsTests
             .BuildServiceProvider();
 
     public sealed record SampleCommand : ICommand<int>;
+
+    public sealed record SampleSystemCommand : ISystemCommand<int>;
 
     public sealed record SampleQuery : IQuery<int>;
 }

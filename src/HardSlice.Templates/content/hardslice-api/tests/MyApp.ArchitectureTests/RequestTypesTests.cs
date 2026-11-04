@@ -15,6 +15,15 @@ public sealed class RequestTypesTests
         RequestTypes.IsCommand(typeof(AbstractProbeCommand)).ShouldBeFalse();
     }
 
+    // HS013 and HS014 apply to a system command as to any command.
+    [Fact]
+    public void A_system_command_is_a_command()
+    {
+        RequestTypes.IsCommand(typeof(ProbeSystemCommand)).ShouldBeTrue();
+        RequestTypes.ParametersOf(typeof(ProbeSystemCommand)).ShouldBe(["Batch"]);
+        RequestTypes.CommandHandledBy(typeof(ProbeSystemCommandHandler)).ShouldBe(typeof(ProbeSystemCommand));
+    }
+
     [Fact]
     public void The_parameters_of_a_command_are_its_public_instance_properties_and_fields()
     {
@@ -163,6 +172,13 @@ public sealed class RequestTypesTests
     private sealed record GenericProbeCommand<T>(T Value) : ICommand<T>;
 
     private sealed record ProbeQuery(Guid Id) : IQuery<bool>;
+
+    private sealed record ProbeSystemCommand(int Batch) : ISystemCommand<int>;
+
+    private sealed class ProbeSystemCommandHandler : IRequestHandler<ProbeSystemCommand, int>
+    {
+        public Task<int> Handle(ProbeSystemCommand command, CancellationToken cancellationToken) => Task.FromResult(command.Batch);
+    }
 
     private sealed class ProbeCommandHandler : IRequestHandler<ProbeCommand, bool>
     {

@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -52,6 +52,22 @@
         }
       ]
     },
+    "Endpoint": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "http",
+      "description": "How the command is sent: http (an endpoint of the module, by default) or none (a system command, which implements ISystemCommand<TResponse>: only a type of its module sends it, such as a hosted service, and HS004 refuses an endpoint for it).",
+      "choices": [
+        {
+          "choice": "http",
+          "description": "An endpoint, mapped on the group of the module, and integration tests that send HTTP requests."
+        },
+        {
+          "choice": "none",
+          "description": "A system command, without endpoint: its integration tests send it through IMediator."
+        }
+      ]
+    },
     "Route": {
       "type": "parameter",
       "datatype": "text",
@@ -60,7 +76,6 @@
     "Method": {
       "type": "parameter",
       "datatype": "text",
-      "defaultValue": "POST",
       "description": "The HTTP method of the endpoint: POST (by default), PUT, PATCH or DELETE, in any case. A DELETE has no body: with --parameters id, it reads the Id of the command from its route, /{id:guid} after --route."
     },
     "AppName": {
@@ -86,6 +101,55 @@
       "parameters": {
         "sourceVariableName": "AppName",
         "fallbackVariableName": "Unbound"
+      }
+    },
+    "DefaultMethod": {
+      "type": "generated",
+      "generator": "constant",
+      "parameters": {
+        "value": "POST"
+      }
+    },
+    "MethodOrDefault": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Method",
+        "fallbackVariableName": "DefaultMethod"
+      }
+    },
+    "RouteOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Route",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "MethodOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Method",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "RouteIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "RouteOrUnbound",
+        "pattern": "."
+      }
+    },
+    "MethodIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "MethodOrUnbound",
+        "pattern": "."
       }
     },
     "CommandRouteWords": {
@@ -215,7 +279,7 @@
       "type": "generated",
       "generator": "casing",
       "parameters": {
-        "source": "Method",
+        "source": "MethodOrDefault",
         "toLower": false
       },
       "fileRename": "HttpMethodName"
@@ -450,6 +514,32 @@
       "type": "computed",
       "value": "(Parameters == \"none\")"
     },
+    "EndpointIsNone": {
+      "type": "computed",
+      "value": "(Endpoint == \"none\")"
+    },
+    "EndpointOptionsWithoutEndpoint": {
+      "type": "computed",
+      "value": "(EndpointIsNone && (RouteIsGiven || MethodIsGiven))"
+    },
+    "CommandContract": {
+      "type": "generated",
+      "generator": "switch",
+      "replaces": "ICommand",
+      "parameters": {
+        "evaluator": "C++",
+        "datatype": "string",
+        "cases": [
+          {
+            "condition": "(Endpoint == \"none\")",
+            "value": "ISystemCommand"
+          },
+          {
+            "value": "ICommand"
+          }
+        ]
+      }
+    },
     "ResponseNeedsParameters": {
       "type": "computed",
       "value": "(ParametersIsNone && ResponseIsNone)"
@@ -464,7 +554,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint)"
     }
   },
   "sources": [
@@ -731,6 +821,24 @@
       "continueOnError": false
     },
     {
+      "id": "refuseEndpointOptionsWithoutEndpoint",
+      "condition": "(EndpointOptionsWithoutEndpoint)",
+      "description": "Refuses --route or --method for a system command, which has no endpoint.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --endpoint none generates a system command, which only the application sends and which has no endpoint, while --route and --method choose its endpoint. Remove them, or keep the endpoint with --endpoint http. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "registerSlice",
       "condition": "(Accepted)",
       "description": "Lines to add to the module of the slice.",
@@ -738,24 +846,44 @@
       "applyFileRenamesToManualInstructions": true,
       "manualInstructions": [
         {
-          "condition": "(!ParametersIsNone && ResponseIsId)",
+          "condition": "(!EndpointIsNone && !ParametersIsNone && ResponseIsId)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(!ParametersIsNone && ResponseIsNone)",
+          "condition": "(!EndpointIsNone && !ParametersIsNone && ResponseIsNone)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, bool>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(!ParametersIsNone && ResponseIsDto)",
+          "condition": "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(ParametersIsNone && ResponseIsId)",
+          "condition": "(!EndpointIsNone && ParametersIsNone && ResponseIsId)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(ParametersIsNone && ResponseIsDto)",
+          "condition": "(!EndpointIsNone && ParametersIsNone && ResponseIsDto)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EndpointIsNone && !ParametersIsNone && ResponseIsId)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EndpointIsNone && !ParametersIsNone && ResponseIsNone)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, bool>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsId)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsDto)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

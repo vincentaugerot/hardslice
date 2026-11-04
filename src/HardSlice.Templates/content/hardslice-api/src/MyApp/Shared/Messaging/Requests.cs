@@ -7,6 +7,10 @@ public interface IRequest<TResponse>;
 
 public interface ICommand<TResponse> : IRequest<TResponse>;
 
+// A command that only the application sends, such as a job or a hosted service: it has no endpoint, and a type of its module
+// sends it (HS004). It goes through the pipeline of every command, validation and transaction included.
+public interface ISystemCommand<TResponse> : ICommand<TResponse>;
+
 public interface IQuery<TResponse> : IRequest<TResponse>;
 
 public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse>

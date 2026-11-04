@@ -662,6 +662,43 @@ public sealed class ClassificationAnalyzerTests
             + "Fix: declare 'IAggregateRoot' as deriving from 'IEntity': an aggregate root is an entity. Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
     }
 
+    // PB-067: the optional contract of the commands that only the application sends is a command contract.
+    private const string SystemCommandKey = ",\n    \"systemCommand\": \"MyApp.Shared.Messaging.ISystemCommand`1, MyApp\"";
+
+    [Fact]
+    public async Task Accepts_a_system_command_contract_that_derives_from_the_command_contract_and_a_file_without_it()
+    {
+        var configuration = Configuration.Replace("\"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\"", "\"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\"" + SystemCommandKey);
+        configuration.ShouldContain("\"systemCommand\"");
+        var domain = CompileDomain();
+        var application = CompileApplication(
+            domain.ToMetadataReference(),
+            "namespace MyApp.Shared.Messaging; public interface ISystemCommand<TResponse> : ICommand<TResponse>;");
+
+        (await AnalyzeAllAsync(domain, configuration)).ShouldBeEmpty();
+        (await AnalyzeAllAsync(application, configuration)).ShouldBeEmpty();
+        (await AnalyzeAllAsync(application, Configuration)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Reports_HS900_when_the_system_command_contract_does_not_derive_from_the_command_contract()
+    {
+        var configuration = Configuration.Replace("\"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\"", "\"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\"" + SystemCommandKey);
+        var application = CompileApplication(
+            CompileDomain().ToMetadataReference(),
+            "namespace MyApp.Shared.Messaging; public interface ISystemCommand<TResponse> : IRequest<TResponse>;");
+
+        var diagnostic = (await AnalyzeAllAsync(application, configuration)).ShouldHaveSingleItem();
+
+        diagnostic.Id.ShouldBe(ClassificationAnalyzer.ConfigurationId);
+        diagnostic.GetMessage().ShouldBe(
+            "contract 'contracts.systemCommand', 'ISystemCommand', does not derive from contract 'contracts.command', 'ICommand'. "
+            + "The contracts of hardslice.json classify the types checked by HS004. "
+            + "Fix: declare 'ISystemCommand' as deriving from 'ICommand': a system command is a command, which goes through the same pipeline. "
+            + "Skill: fix-architecture-violation. Doc: 'docs/rules/HS900.md'.");
+        diagnostic.Location.GetLineSpan().StartLinePosition.Line.ShouldBe(8);
+    }
+
     [Fact]
     public async Task Accepts_comments_in_hardslice_json()
     {

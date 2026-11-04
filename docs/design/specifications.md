@@ -207,7 +207,7 @@ Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modif
 | HS001 | Le Domain ne dépend d'aucun autre projet ni d'EF Core, d'ASP.NET Core ou de la DI | Test d'architecture | Les deux |
 | HS002 | Couches : Application ne dépend ni d'Infrastructure ni d'Api, ni d'EF Core, ni de `HttpContext` | Test d'architecture | Couches |
 | HS003 | Un endpoint n'accède jamais directement à la base : il envoie une commande ou une requête | Analyseur | Les deux |
-| HS004 | Nommage et emplacement : une slice `Xxx` est dans `Features/<Module>/Xxx/` et contient `XxxCommand` (ou `XxxQuery`), son handler et son endpoint. Un validateur présent est nommé `XxxValidator` et reste dans la slice (son obligation relève de HS013) | Analyseur | Slices (variante couches dans `hardslice.json`, v0.5) |
+| HS004 | Nommage et emplacement : une slice `Xxx` est dans `Features/<Module>/Xxx/` et contient `XxxCommand` (ou `XxxQuery`), son handler et son endpoint. Un validateur présent est nommé `XxxValidator` et reste dans la slice (son obligation relève de HS013). Une commande système (`ISystemCommand<T>`) n'a pas d'endpoint, aucun mapping HTTP ne l'envoie, et un type de son module l'envoie | Analyseur | Slices (variante couches dans `hardslice.json`, v0.5) |
 | HS005 | Un handler de commande ne renvoie jamais d'entité ni d'agrégat (un identifiant, un DTO ou rien), ni directement, ni dans une enveloppe générique, une collection, un tableau, un tuple ou un DTO | Analyseur | Les deux |
 | HS006 | Un handler de requête ne matérialise aucune entité suivie par EF Core, ne réactive ni ne reconfigure le suivi, et n'écrit jamais : ni `SaveChanges`, ni `ExecuteUpdate`/`ExecuteDelete`, ni SQL brut d'écriture. Il lit avec `AsNoTracking` et des projections : l'absence de suivi est garantie dans le handler, sans dépendre du réglage global du contexte | Analyseur | Les deux |
 | HS007 | Les entités, racines et entités enfants, n'ont ni `set` ni `init` accessible de l'extérieur, y compris par une interface publique, ni champ public modifiable : l'état change par des méthodes du domaine qui protègent les invariants. **C'est la règle qui empêche le domaine anémique** | Analyseur | Les deux |
@@ -226,7 +226,7 @@ Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modif
 
 ### Classification des types
 
-Les règles du domaine et de la messagerie ne devinent pas le rôle d'un type. Le Domain généré déclare `IEntity` et `IAggregateRoot : IEntity`, à côté d'`IDomainEvent`, et `hardslice.json` déclare ces contrats ainsi que `ICommand<T>`, `IQuery<T>` et `IRequestHandler<TRequest, TResponse>`, par nom de métadonnée et assembly déclarant. Ces interfaces appartiennent à l'application : aucun paquet HardSlice n'est requis au runtime.
+Les règles du domaine et de la messagerie ne devinent pas le rôle d'un type. Le Domain généré déclare `IEntity` et `IAggregateRoot : IEntity`, à côté d'`IDomainEvent`, et `hardslice.json` déclare ces contrats ainsi que `ICommand<T>`, `IQuery<T>` et `IRequestHandler<TRequest, TResponse>`, par nom de métadonnée et assembly déclarant. La clé `systemCommand`, seule facultative (décision du 04/11/2026), déclare `ISystemCommand<T> : ICommand<T>`, le contrat d'une commande que seule l'application envoie (une tâche de fond, un service hébergé) : elle traverse le même pipeline qu'une commande, et HS004 ne lui demande pas d'endpoint. Une application sans travail en arrière-plan n'a rien à déclarer. Ces interfaces appartiennent à l'application : aucun paquet HardSlice n'est requis au runtime.
 
 - Un type appartient à une catégorie s'il implémente le contrat, directement ou par héritage, y compris depuis un assembly référencé. Un type homonyme d'un autre espace de noms ou d'un autre assembly est ignoré.
 - Une propriété `Id` ne classe jamais un type.
@@ -237,7 +237,7 @@ Diagnostics de configuration, émis seulement lorsqu'une règle active en dépen
 
 | Id | Condition |
 |---|---|
-| HS900 | `hardslice.json` introuvable, invalide, sans `version` ou d'une version que les analyseurs ne lisent pas, ou imbriqué sur plus de 64 niveaux, contrat absent, mal formé ou introuvable dans son assembly déclarant alors que la compilation le référence, contrat d'un assembly ni courant ni référencé dans le projet des slices (`<Assembly>.Features`), contrats incohérents |
+| HS900 | `hardslice.json` introuvable, invalide, sans `version` ou d'une version que les analyseurs ne lisent pas, ou imbriqué sur plus de 64 niveaux, contrat absent, mal formé ou introuvable dans son assembly déclarant alors que la compilation le référence, contrat d'un assembly ni courant ni référencé dans le projet des slices (`<Assembly>.Features`), contrats incohérents (`aggregateRoot` qui ne dérive pas d'`entity`, `systemCommand` qui ne dérive pas de `command`, deux clés pour un même type) |
 | HS901 | Type classé dans deux catégories incompatibles : entité et événement, commande et requête, entité et commande ou requête. Les contrats `command` et `query` ne sont exigés que si HS004, HS005 ou HS006 est actif (jamais en `Minimum`) |
 | HS902 | Type de l'assembly du Domain mappé comme entité EF Core (`IEntityTypeConfiguration<T>`, `DbSet<T>`, `ModelBuilder.Entity<T>()`) sans implémenter `IEntity` |
 

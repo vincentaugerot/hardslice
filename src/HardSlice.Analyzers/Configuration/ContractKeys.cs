@@ -9,11 +9,15 @@ internal static class ContractKeys
     public const string AggregateRoot = "aggregateRoot";
     public const string DomainEvent = "domainEvent";
     public const string Command = "command";
+    public const string SystemCommand = "systemCommand";
     public const string Query = "query";
     public const string RequestHandler = "requestHandler";
     public const string DomainEventHandler = "domainEventHandler";
 
-    public static ImmutableArray<string> All { get; } = [Entity, AggregateRoot, DomainEvent, Command, Query, RequestHandler, DomainEventHandler];
+    public static ImmutableArray<string> All { get; } = [Entity, AggregateRoot, DomainEvent, Command, SystemCommand, Query, RequestHandler, DomainEventHandler];
+
+    // Keys a file may leave out: an application without work in the background declares no system command.
+    public static ImmutableHashSet<string> Optional { get; } = ImmutableHashSet.Create(SystemCommand);
 
     // The value the template generates for each key, as an example in diagnostics.
     public static string Example(string key) => key switch
@@ -22,6 +26,7 @@ internal static class ContractKeys
         AggregateRoot => "MyApp.Domain.IAggregateRoot, MyApp.Domain",
         DomainEvent => "MyApp.Domain.IDomainEvent, MyApp.Domain",
         Command => "MyApp.Shared.Messaging.ICommand`1, MyApp",
+        SystemCommand => "MyApp.Shared.Messaging.ISystemCommand`1, MyApp",
         Query => "MyApp.Shared.Messaging.IQuery`1, MyApp",
         RequestHandler => "MyApp.Shared.Messaging.IRequestHandler`2, MyApp",
         DomainEventHandler => "MyApp.Shared.Messaging.IDomainEventHandler`1, MyApp",

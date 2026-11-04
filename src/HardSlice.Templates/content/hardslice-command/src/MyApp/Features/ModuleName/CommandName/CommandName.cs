@@ -1,13 +1,18 @@
 #if (!ParametersIsNone)
 using FluentValidation;
 #endif
-#if (ResponseIsNone)
+#if (ResponseIsNone && !EndpointIsNone)
 using Microsoft.AspNetCore.Http.HttpResults;
 #endif
 using MyApp.Shared.Messaging;
 
 namespace MyApp.Features.ModuleName.CommandName;
 
+#if (EndpointIsNone)
+// A system command: only the application sends it, never an HTTP request. A type of module ModuleName creates it and sends it
+// through IMediator in a scope of its own, such as a hosted service of this slice. It has no endpoint (HS004), and goes through
+// the pipeline of every command: validation, then the transaction.
+#endif
 #if (ParametersIsNone)
 // No parameter: what the command needs comes from the database, the configuration or a service that its module registers,
 // never from the request. It has no validator (HS013), and its tests cover its success or a failure of the domain.
@@ -36,6 +41,9 @@ public sealed record ResponseTypeName(Guid Id);
 #elif (ResponseIsId)
 // Returns the identifier of the aggregate it changes or creates. Replace Id with the fields of the use case.
 public sealed record CommandNameCommand(Guid Id) : ICommand<Guid>;
+#elif (ResponseIsNone && EndpointIsNone)
+// Returns false when the aggregate it changes does not exist. Replace Id with the fields of the use case.
+public sealed record CommandNameCommand(Guid Id) : ICommand<bool>;
 #elif (ResponseIsNone)
 // Returns false when the aggregate it changes does not exist, answered with 404. Replace Id with the fields of the use case.
 public sealed record CommandNameCommand(Guid Id) : ICommand<bool>;
@@ -75,6 +83,7 @@ internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, R
             + "load the aggregate with Set<TAggregate>(), call the method of the aggregate that holds the business rule, "
             + "and return the response. Never call SaveChangesAsync.");
 }
+#if (!EndpointIsNone)
 
 internal static class CommandNameEndpoint
 {
@@ -96,3 +105,4 @@ internal static class CommandNameEndpoint
             TypedResults.Ok(await mediator.Send(command, cancellationToken)));
 #endif
 }
+#endif

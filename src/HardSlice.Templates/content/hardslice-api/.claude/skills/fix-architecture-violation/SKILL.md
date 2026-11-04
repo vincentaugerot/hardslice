@@ -22,7 +22,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`.
 
 4. Find why the code needed what the rule forbids, then apply the first fix of "How to fix" that matches that reason, to the code the message names. Move code to where the sheet says it belongs, and move its tests with it, at the same path under `tests/`. Keep the behavior: the tests that covered the code still pass, with their assertions unchanged.
    - HS000: remove the suppression and fix the code that the suppressed rule reports, with the skill of that rule. Only a maintainer writes a justification: never write one yourself.
-   - HS900, or a message that starts with the name of the configuration file: the configuration or one of its contracts is missing or invalid. Restore it as the sheet says, never adapt it to the code. If the code really needs another configuration, stop: that is a decision of a maintainer.
+   - HS900, or a message that starts with the name of the configuration file: the configuration or one of its contracts is missing or invalid. Restore it as the sheet says, never adapt it to the code. If the code really needs another configuration, stop: that is a decision of a maintainer. `systemCommand` is the only contract a file may leave out, and the only one that HS900 checks against another: `ISystemCommand<T>` derives from `ICommand<T>`.
    - HS901: give the type one role, and split it in two types when the code needs both.
 5. Run the check again, and read the whole output: a fix may reveal another rule, such as code moved into a slice that now needs its tests. Go back to step 1 until the check exits 0.
 

@@ -41,6 +41,13 @@ public sealed class SliceStructureAnalyzerTests
 
             public interface IQuery<TResponse> : IRequest<TResponse>;
 
+            public interface ISystemCommand<TResponse> : ICommand<TResponse>;
+
+            public interface IMediator
+            {
+                Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default);
+            }
+
             public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse>
             {
                 Task<TResponse> Handle(TRequest request, CancellationToken cancellationToken);
@@ -865,6 +872,263 @@ public sealed class SliceStructureAnalyzerTests
                     public Task Handle(BookingConfirmed domainEvent, CancellationToken cancellationToken) => Task.CompletedTask;
                 }
                 """));
+    }
+
+    // PB-067: a system command, declared by the optional contract systemCommand, is sent by the application only.
+    private const string SystemRule = "A system command is sent by the application only: its slice has no endpoint, and a type of its module sends it.";
+
+    private static readonly string SystemConfiguration = Configuration.Replace(
+        "\"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\",",
+        "\"command\": \"MyApp.Shared.Messaging.ICommand`1, MyApp\",\n    \"systemCommand\": \"MyApp.Shared.Messaging.ISystemCommand`1, MyApp\",");
+
+    // CollectFeeds, a system command slice without endpoint, its body given: the command, its validator and its handler come first.
+    private static (string Path, string Source) CollectFeeds(string body, string command = "public sealed record CollectFeedsCommand(int Batch) : ISystemCommand<int>;") =>
+        ("Features/Feeds/CollectFeeds/CollectFeeds.cs",
+            $$"""
+            using FluentValidation;
+            using Microsoft.AspNetCore.Http;
+            using Microsoft.AspNetCore.Routing;
+            using Microsoft.AspNetCore.Builder;
+            using MyApp.Shared.Messaging;
+
+            namespace MyApp.Features.Feeds.CollectFeeds;
+
+            {{command}}
+
+            internal sealed class CollectFeedsValidator : AbstractValidator<CollectFeedsCommand>
+            {
+                public CollectFeedsValidator() => RuleFor(command => command.Batch).GreaterThan(0);
+            }
+
+            internal sealed class CollectFeedsHandler(IMediator mediator) : IRequestHandler<CollectFeedsCommand, int>
+            {
+                public Task<int> Handle(CollectFeedsCommand command, CancellationToken cancellationToken) =>
+                    command.Batch > 10 ? mediator.Send(new CollectFeedsCommand(10), cancellationToken) : Task.FromResult(command.Batch);
+            }
+
+            {{body}}
+            """);
+
+    // The module registers the handler and the validator by their contracts: that does not send the command.
+    private static (string Path, string Source) FeedsModule(string body = "") =>
+        ("Features/Feeds/FeedsModule.cs",
+            $$"""
+            using FluentValidation;
+            using Microsoft.AspNetCore.Builder;
+            using Microsoft.AspNetCore.Http;
+            using Microsoft.AspNetCore.Routing;
+            using Microsoft.Extensions.DependencyInjection;
+            using MyApp.Features.Feeds.CollectFeeds;
+            using MyApp.Shared.Messaging;
+
+            namespace MyApp.Features.Feeds;
+
+            public static class FeedsModule
+            {
+                public static IServiceCollection AddFeedsModule(this IServiceCollection services) =>
+                    services
+                        .AddScoped<IRequestHandler<CollectFeedsCommand, int>, CollectFeedsHandler>()
+                        .AddScoped<IValidator<CollectFeedsCommand>, CollectFeedsValidator>();
+
+                public static void MapFeedsModule(IEndpointRouteBuilder endpoints)
+                {
+                    var group = endpoints.MapGroup("/feeds");
+                    {{body}}
+                }
+            }
+            """);
+
+    private static readonly MetadataReference[] SystemReferences = [];
+
+    [Fact]
+    public async Task Reports_nothing_on_system_commands_that_a_type_of_their_module_creates_or_names_as_a_generic_argument()
+    {
+        await VerifyAsync(
+            SystemConfiguration,
+            SystemReferences,
+            CollectFeeds(
+                """
+                internal sealed class FeedCollector(IMediator mediator)
+                {
+                    public Task<int> CollectAsync(CancellationToken cancellationToken) => mediator.Send(new CollectFeedsCommand(5), cancellationToken);
+                }
+                """),
+            ("Features/Feeds/PurgeFeeds/PurgeFeeds.cs",
+                """
+                using MyApp.Shared.Messaging;
+
+                namespace MyApp.Features.Feeds.PurgeFeeds;
+
+                public sealed record PurgeFeedsCommand : ISystemCommand<int>;
+
+                internal sealed class PurgeFeedsHandler : IRequestHandler<PurgeFeedsCommand, int>
+                {
+                    public Task<int> Handle(PurgeFeedsCommand command, CancellationToken cancellationToken) => Task.FromResult(0);
+                }
+                """),
+            ("Features/Feeds/RefreshFeeds/RefreshFeeds.cs",
+                """
+                using MyApp.Shared.Messaging;
+
+                namespace MyApp.Features.Feeds.RefreshFeeds;
+
+                public sealed record RefreshFeedsCommand : ISystemCommand<bool>;
+
+                internal sealed class RefreshFeedsHandler : IRequestHandler<RefreshFeedsCommand, bool>
+                {
+                    public Task<bool> Handle(RefreshFeedsCommand command, CancellationToken cancellationToken) => Task.FromResult(true);
+                }
+
+                internal sealed class FeedRefresher : MyApp.Shared.Messaging.RecurringCommandService<RefreshFeedsCommand, bool>;
+                """),
+            ("Features/Feeds/FeedsJobs.cs",
+                """
+                using Microsoft.Extensions.DependencyInjection;
+                using MyApp.Features.Feeds.PurgeFeeds;
+                using MyApp.Shared.Messaging;
+
+                namespace MyApp.Features.Feeds;
+
+                internal static class FeedsJobs
+                {
+                    public static IServiceCollection AddFeedsJobs(this IServiceCollection services) =>
+                        services.AddRecurringCommand<PurgeFeedsCommand, int>(TimeSpan.FromMinutes(5));
+                }
+                """),
+            ("Shared/Messaging/RecurringCommands.cs",
+                """
+                using Microsoft.Extensions.DependencyInjection;
+
+                namespace MyApp.Shared.Messaging;
+
+                public class RecurringCommandService<TCommand, TResponse> where TCommand : ISystemCommand<TResponse>, new();
+
+                public static class RecurringCommands
+                {
+                    public static IServiceCollection AddRecurringCommand<TCommand, TResponse>(this IServiceCollection services, TimeSpan interval)
+                        where TCommand : ISystemCommand<TResponse>, new() => services;
+                }
+                """),
+            FeedsModule());
+    }
+
+    [Fact]
+    public async Task Reports_a_system_command_that_no_type_of_its_module_sends()
+    {
+        var diagnostics = await VerifyAsync(
+            SystemConfiguration,
+            SystemReferences,
+            CollectFeeds("", command: "public sealed record [|CollectFeedsCommand|](int Batch) : ISystemCommand<int>;"),
+            FeedsModule(),
+            ("Features/Reports/ReportsCollector.cs",
+                """
+                using MyApp.Shared.Messaging;
+
+                namespace MyApp.Features.Reports;
+
+                internal sealed class ReportsCollector(IMediator mediator)
+                {
+                    public Task<int> CollectAsync() => mediator.Send(new MyApp.Features.Feeds.CollectFeeds.CollectFeedsCommand(1));
+                }
+                """),
+            ("Program.cs",
+                """
+                namespace MyApp;
+
+                public static class Program
+                {
+                    public static object Command() => new MyApp.Features.Feeds.CollectFeeds.CollectFeedsCommand(1);
+                }
+                """));
+
+        diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
+            "system command 'CollectFeedsCommand' of slice 'Feeds/CollectFeeds' is sent by no type of module 'Feeds'. " + SystemRule + " "
+            + "Fix: send 'CollectFeedsCommand' through IMediator from a type of module 'Feeds' other than its handler and its validator, "
+            + "such as a hosted service in 'Features/Feeds/CollectFeeds/' that creates it in a scope of its own, registered by 'FeedsModule'; "
+            + "a command sent over HTTP implements 'ICommand<TResponse>' instead, with its endpoint, and a command that nothing sends is removed with its slice. "
+            + "Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
+    }
+
+    [Fact]
+    public async Task Reports_a_system_command_with_an_endpoint_or_sent_by_an_endpoint()
+    {
+        var diagnostics = await VerifyAsync(
+            SystemConfiguration,
+            SystemReferences,
+            CollectFeeds(
+                """
+                internal static class [|CollectFeedsEndpoint|]
+                {
+                    public static void Map(RouteGroupBuilder group) =>
+                        group.MapPost("/collections", (CollectFeedsCommand command, IMediator mediator) => mediator.Send(command));
+                }
+                """),
+            FeedsModule(
+                """
+                CollectFeedsEndpoint.Map(group);
+                        group.[|MapPost|]("/collect", async (IMediator mediator) => TypedResults.Ok(await mediator.Send(new CollectFeedsCommand(1))));
+                """),
+            ("Program.cs",
+                """
+                using Microsoft.AspNetCore.Builder;
+                using Microsoft.AspNetCore.Routing;
+                using MyApp.Shared.Messaging;
+
+                namespace MyApp;
+
+                public static class Program
+                {
+                    public static void Map(IEndpointRouteBuilder endpoints) =>
+                        endpoints.[|MapPut|]("/feeds/collect", Collect);
+
+                    private static Task<int> Collect(MyApp.Features.Feeds.CollectFeeds.CollectFeedsCommand command, IMediator mediator) => mediator.Send(command);
+                }
+                """));
+
+        diagnostics.Select(diagnostic => diagnostic.GetMessage()).ShouldBe(
+        [
+            "slice 'Feeds/CollectFeeds' of system command 'CollectFeedsCommand' declares endpoint 'CollectFeedsEndpoint'. " + SystemRule + " "
+                + "Fix: remove 'CollectFeedsEndpoint' and its call from 'FeedsModule': the application sends 'CollectFeedsCommand'; "
+                + "an HTTP entry point is a command slice of its own, whose command implements 'ICommand<TResponse>'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
+            "endpoint 'POST /feeds/collect' in 'FeedsModule' sends system command 'CollectFeedsCommand'. " + SystemRule + " "
+                + "Fix: remove the endpoint: a type of module 'Feeds' sends 'CollectFeedsCommand'; "
+                + "an HTTP entry point is a command slice of its own, whose command implements 'ICommand<TResponse>'. Skill: add-slice. Doc: 'docs/rules/HS004.md'.",
+            "endpoint 'PUT /feeds/collect' in 'Program' sends system command 'CollectFeedsCommand'. " + SystemRule + " "
+                + "Fix: remove the endpoint: a type of module 'Feeds' sends 'CollectFeedsCommand'; "
+                + "an HTTP entry point is a command slice of its own, whose command implements 'ICommand<TResponse>'. Skill: add-slice. Doc: 'docs/rules/HS004.md'."
+        ], ignoreOrder: true);
+    }
+
+    // Without the key, ISystemCommand is no contract: its commands keep their endpoint, and nothing names system commands.
+    [Fact]
+    public async Task Requires_an_endpoint_of_every_command_without_the_system_command_contract()
+    {
+        var diagnostics = await VerifyAsync(
+            Configuration,
+            SystemReferences,
+            CollectFeeds("", command: "public sealed record [|CollectFeedsCommand|](int Batch) : ISystemCommand<int>;"),
+            FeedsModule());
+
+        diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
+            "slice 'Feeds/CollectFeeds' declares no endpoint 'CollectFeedsEndpoint'. " + StructureRule + " "
+            + "Fix: declare the internal static class 'CollectFeedsEndpoint' in the slice: its Map(RouteGroupBuilder group) method maps "
+            + "the endpoint, and 'FeedsModule' calls it. Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
+    }
+
+    [Fact]
+    public async Task Names_the_system_command_contract_to_a_command_without_endpoint()
+    {
+        var diagnostics = await VerifyAsync(
+            SystemConfiguration,
+            [],
+            ArchiveBooking(command: "public sealed record [|ArchiveBookingCommand|](Guid BookingId) : ICommand<bool>;", endpoint: ""));
+
+        Fixes(diagnostics).ShouldBe(
+        [
+            "declare the internal static class 'ArchiveBookingEndpoint' in the slice: its Map(RouteGroupBuilder group) method maps the endpoint, "
+                + "and 'BookingsModule' calls it; a command that only the application sends, such as a job, implements 'ISystemCommand<TResponse>' "
+                + "instead and has no endpoint"
+        ]);
     }
 
     [Fact]
