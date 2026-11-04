@@ -17,6 +17,7 @@ The first preview published on NuGet.org. No earlier version was published.
 - A rule sheet for every rule in `docs/rules/`, named by each diagnostic with the skill that fixes it.
 - `hardslice.json` declares `"version": 1`, the version of its format.
 - The application owns `Directory.Packages.props` and adds its packages there. `HardSlice.Analyzers` is referenced from the protected `Directory.HardSlice.props`, which it imports, and `check` fails when a project no longer receives the package. The test projects reference `Microsoft.Extensions.TimeProvider.Testing`, for `FakeTimeProvider`.
+- The web project has its own `UserSecretsId`, so `dotnet user-secrets set` needs no init. `AppFactory` runs the integration tests in the `IntegrationTests` environment, which reads no user secret, and starts no hosted service of the application unless the test keeps it with `KeepHostedService<T>()`.
 
 ### Known limitations
 

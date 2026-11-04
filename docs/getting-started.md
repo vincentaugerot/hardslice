@@ -77,6 +77,8 @@ dotnet run --project src/Rooms -- --environment Development --urls http://localh
 
 The application never migrates its database at startup: `dotnet ef database update`, with the `dotnet-ef` version pinned in `.config/dotnet-tools.json`, creates the database and applies the migrations. The wait runs `pg_isready` over TCP inside the container for at most 60 seconds: the image first initializes the database with a server that accepts no TCP connection, then restarts it. If port 5432 is taken, publish another one and set the connection string for both `dotnet ef` and `dotnet run`, for example `ConnectionStrings__Database="Host=localhost;Port=5433;Database=rooms;Username=postgres;Password=postgres"`.
 
+Keep a local secret, such as an API key, out of the repository with `dotnet user-secrets set <Key> <value> --project src/Rooms`: the project has its own `UserSecretsId`, Development reads the secret, and the integration tests never do.
+
 When upgrading an existing Bookings database, `AddBookingPositivePeriodConstraint` rejects legacy rows with `"End" <= "Start"` through `CK_Bookings_Period_Positive`. Inspect those rows with `SELECT "Id", "Start", "End" FROM "Bookings" WHERE "End" <= "Start";`, restore their intended periods explicitly, then retry the migration. It never deletes or changes reservations automatically.
 
 From another terminal, confirm a booking, then read it at the address of the `Location` header:

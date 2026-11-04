@@ -2827,6 +2827,8 @@ sondes « modes de check » et « hooks » de scripts/test-template.sh
 
 ### PB-062 : Isoler les tests d'intégration des secrets et des services du développeur
 
+Statut : terminé le 04/11/2026. `AppFactory` lance l'application dans l'environnement `IntegrationTests` : les secrets utilisateur, que seul Development charge, ne sont jamais lus, et la chaîne de connexion passe toujours par `UseSetting`. Elle garde ce que Development change pour les tests : validation des enregistrements au démarrage (`ValidateOnBuild`, `ValidateScopes`) et `ThrowOnBadRequest`, dont dépendent les réponses de `BadRequestExceptionHandler`. Elle retire tous les `IHostedService` présents quand `ConfigureTestServices` s'exécute : ce sont ceux de l'application et de ses paquets, ASP.NET Core n'enregistrant les siens qu'après. `KeepHostedService<T>()` en garde un, et refuse un type que l'application n'enregistre pas. Le `UserSecretsId` vient de la liste `guids` de `template.json`.
+
 **Résultat observable**
 
 Une solution générée accepte `dotnet user-secrets set` sans préparation. Ses tests d'intégration ne démarrent aucun service hébergé de l'application et ne lisent aucun secret du développeur, sauf un test qui garde explicitement un service.

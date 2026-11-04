@@ -109,6 +109,19 @@ public sealed class TemplatePackageTests
         properties["WarningsNotAsErrors"].Split(';').ShouldBe(["$(WarningsNotAsErrors)", "NU1901", "NU1902", "NU1903", "NU1904"]);
     }
 
+    // PB-062: dotnet user-secrets set needs a UserSecretsId, and dotnet user-secrets init writes it with a BOM on the first line of the
+    // project. The web project has one, which dotnet new replaces with a new GUID in each generated solution.
+    [Fact]
+    public void Api_template_gives_each_generated_solution_its_own_UserSecretsId()
+    {
+        var root = TemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var userSecretsId = XDocument.Load(Path.Combine(root, "src", "MyApp", "MyApp.csproj")).Descendants("UserSecretsId").ShouldHaveSingleItem().Value;
+
+        Guid.TryParseExact(userSecretsId, "D", out _).ShouldBeTrue();
+        template.RootElement.GetProperty("guids").EnumerateArray().Select(guid => guid.GetString()).ShouldBe([userSecretsId]);
+    }
+
     // hardslice-command generates the three files of a command slice, at the paths of HS004 and HS018, and nothing else.
     [Fact]
     public void Command_item_template_generates_a_slice_its_validator_tests_and_its_integration_tests_only()

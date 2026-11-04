@@ -16,7 +16,7 @@ MyApp is an ASP.NET Core API organized in vertical slices around a rich domain. 
 | `src/MyApp/Shared/Behaviors/` | The pipeline every request goes through, in order: logs, validation, then one transaction per command, which publishes its domain events before it commits. Also the HTTP answers to unreadable requests, such as a date without its offset, and to validation and domain errors. |
 | `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations. It declares no module type. |
 | `tests/MyApp.Tests/` | Unit tests of the domain, the validators and `Shared`, at the same path as the code they test. |
-| `tests/MyApp.IntegrationTests/` | Tests on a real PostgreSQL (Testcontainers), at the same path as the slice they test. |
+| `tests/MyApp.IntegrationTests/` | Tests on a real PostgreSQL (Testcontainers), at the same path as the slice they test. `AppFactory` reads no user secret and starts no hosted service of the application: a test of a hosted service keeps it with `new AppFactory(database).KeepHostedService<TService>()`. |
 | `tests/MyApp.ArchitectureTests/` | Architecture tests of HS001, HS012 to HS014 and HS016 to HS018, on the compiled assemblies and the test sources. |
 | `docs/rules/` | One sheet per HardSlice rule: what it forbids and how to fix it. |
 | `hardslice.json` | HardSlice configuration: the `slices` style, the `contracts` that classify entities, events, commands, queries and handlers, and the folders allowed in `Shared`. |
@@ -115,7 +115,7 @@ dotnet ef database update --project src/MyApp
 dotnet run --project src/MyApp -- --environment Development --urls http://localhost:5080
 ```
 
-The second command waits, for at most 60 seconds, until PostgreSQL accepts TCP connections. Override the connection string with the `ConnectionStrings__Database` environment variable. Running the API is never a substitute for the check script.
+The second command waits, for at most 60 seconds, until PostgreSQL accepts TCP connections. Override the connection string with the `ConnectionStrings__Database` environment variable. Keep a local secret, such as an API key, out of the repository with `dotnet user-secrets set <Key> <value> --project src/MyApp`: Development reads it, the integration tests never do. Running the API is never a substitute for the check script.
 
 ## Verify
 

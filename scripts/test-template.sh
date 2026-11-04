@@ -7,6 +7,8 @@
 # that a missing or invalid hardslice.json, or one of a later version, fails them explicitly, with HS900 for its contracts and its version, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
+# In both variants, dotnet user-secrets set passes without init on a UserSecretsId of its own, and the integration tests read no user
+# secret and start a hosted service registered in Program.cs only in the test that keeps it.
 # It adds CsvHelper to Directory.Packages.props, which the application owns, and a unit test that advances a FakeTimeProvider, and the check passes;
 # without the import of the protected Directory.HardSlice.props both scripts fail before the build, and a reference removed in Directory.Packages.props
 # or another Directory.Packages.props in a project folder fails them after the build, naming the project that no longer receives HardSlice.Analyzers.
@@ -2138,6 +2140,117 @@ CODE
   restore_root_file Directory.Packages.props
 }
 
+# PB-062: each generated solution has its own UserSecretsId, so dotnet user-secrets set needs no init, and its integration tests
+# never read a user secret nor start a hosted service of the application. A BackgroundService registered in Program.cs writes a line
+# each time it starts: after the whole integration test project, only the seeded test that keeps it with KeepHostedService started it,
+# while a user secret set for the application stays out of the configuration of AppFactory, whose test database stays in place.
+user_secrets_ids=()
+probe_integration_isolation() {
+  local project="src/$app_name/$app_name.csproj" service_file="$app_src/Shared/Behaviors/ProbeHostedService.cs"
+  local test_file="$app/tests/$app_name.IntegrationTests/ProbeIsolationTests.cs" starts_file="$app/tests/$app_name.IntegrationTests/bin/Debug/net10.0/probe-hosted-service.log"
+  local user_secrets_id known test_output
+  echo "==> Checking that $app_name has its own UserSecretsId and that its integration tests read no user secret and start no hosted service of the application"
+  user_secrets_id="$(sed -n 's|.*<UserSecretsId>\(.*\)</UserSecretsId>.*|\1|p' "$app/$project")"
+  if [[ ! "$user_secrets_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+    grep -rIlF -- "$user_secrets_id" "$app" --exclude-dir=bin --exclude-dir=obj | grep -vFx "$app/$project"; then
+    echo "error: $project has no UserSecretsId of its own: '$user_secrets_id', or it appears in another file than $project." >&2
+    exit 1
+  fi
+  for known in "${user_secrets_ids[@]}" 5d0a9c3e-7b41-4f6a-9e28-c1b4a7f3d206; do
+    if [[ "$user_secrets_id" == "$known" ]]; then
+      echo "error: $project has the UserSecretsId $user_secrets_id of the template or of another generated solution." >&2
+      exit 1
+    fi
+  done
+  user_secrets_ids+=("$user_secrets_id")
+  (cd "$app" && dotnet user-secrets set "Probe:Secret" "from-the-user-secrets" --project "src/$app_name")
+  if ! (cd "$app" && dotnet user-secrets list --project "src/$app_name") | grep -Fxq "Probe:Secret = from-the-user-secrets"; then
+    echo "error: dotnet user-secrets did not keep Probe:Secret for $app_name." >&2
+    exit 1
+  fi
+  echo "    UserSecretsId $user_secrets_id: dotnet user-secrets set passes without init"
+
+  cp "$app_src/Program.cs" "$work/Program-isolation.backup"
+  awk '/^var app = builder.Build\(\);$/ { print "builder.Services.AddHostedService<ProbeHostedService>();"; print "" } { print }' \
+    "$work/Program-isolation.backup" > "$app_src/Program.cs"
+  if ! grep -Fxq 'builder.Services.AddHostedService<ProbeHostedService>();' "$app_src/Program.cs"; then
+    echo "error: the probe could not register a hosted service in the Program.cs of $app_name." >&2
+    exit 1
+  fi
+  cat > "$service_file" <<CODE
+namespace $app_name.Shared.Behaviors;
+
+// Writes a line next to the assembly each time it starts.
+internal sealed class ProbeHostedService : BackgroundService
+{
+    public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await File.AppendAllTextAsync(Path.Combine(AppContext.BaseDirectory, "probe-hosted-service.log"), "started\n", stoppingToken);
+        Started.TrySetResult();
+    }
+}
+CODE
+  cat > "$test_file" <<CODE
+using System.Net;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using $app_name.Shared.Behaviors;
+
+namespace $app_name.IntegrationTests;
+
+public sealed class ProbeIsolationTests(PostgresDatabase database)
+{
+    [Fact]
+    public async Task Reads_no_user_secret_and_starts_no_hosted_service_of_the_application()
+    {
+        await using var app = new AppFactory(database);
+
+        var response = await app.CreateClient().GetAsync(\$"/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var configuration = app.Services.GetRequiredService<IConfiguration>();
+        configuration["Probe:Secret"].ShouldBeNull();
+        configuration.GetConnectionString("Database").ShouldBe(database.ConnectionString);
+        app.Services.GetServices<IHostedService>().OfType<ProbeHostedService>().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Starts_the_hosted_service_that_the_test_keeps()
+    {
+        await using var app = new AppFactory(database).KeepHostedService<ProbeHostedService>();
+
+        var service = app.Services.GetServices<IHostedService>().OfType<ProbeHostedService>().ShouldHaveSingleItem();
+
+        await service.Started.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        app.Services.GetRequiredService<IConfiguration>()["Probe:Secret"].ShouldBeNull();
+    }
+}
+CODE
+  rm -f "$starts_file"
+  test_output="$(
+    cd "$app"
+    dotnet build "$app_name.slnx" 2>&1 &&
+      dotnet test --project "tests/$app_name.IntegrationTests/$app_name.IntegrationTests.csproj" --no-build 2>&1
+  )" || {
+    printf '%s\n' "$test_output" >&2
+    echo "error: the integration tests of $app_name failed with a hosted service registered and a user secret set." >&2
+    exit 1
+  }
+  if [[ "$(grep -c '^started$' "$starts_file" 2>/dev/null)" != 1 ]]; then
+    printf '%s\n' "$test_output" >&2
+    echo "error: the hosted service of $app_name started $(grep -c '^started$' "$starts_file" 2>/dev/null || echo 0) times in its integration tests, instead of once, in the test that keeps it." >&2
+    exit 1
+  fi
+  echo "    ProbeHostedService started once, in the test that keeps it, and no test read Probe:Secret"
+  rm "$service_file" "$test_file" "$starts_file"
+  mv "$work/Program-isolation.backup" "$app_src/Program.cs"
+  (cd "$app" && dotnet user-secrets clear --project "src/$app_name")
+  rm -r "${HOME:?}/.microsoft/usersecrets/${user_secrets_id:?}"
+}
+
 # Seeds a domain type of module <module> that blocks on a task: the analyzer of the domain reports HS011 in its own compilation.
 probe_blocking_call() {
   local module="$1"
@@ -3219,6 +3332,7 @@ echo "    $version_mismatch ..."
 mv "$work/Directory.HardSlice.props.backup" "$app/Directory.HardSlice.props"
 
 probe_application_packages
+probe_integration_isolation
 
 # A second module beside Bookings, generated by dotnet new hardslice-module and registered in Program.cs: the check passes.
 probe_module_template Rooms MeetingRooms meeting-rooms
@@ -3332,6 +3446,8 @@ app_name="$blank_name"
 app="$blank"
 app_src="$app/src/$app_name"
 domain_project="$app/src/$app_name.Domain/$app_name.Domain.csproj"
+
+probe_integration_isolation
 
 echo "==> Checking that the HS016 analyzer fails both check scripts on a cross-slice reference in $app_name"
 mkdir -p "$app_src/Features/Orders/PlaceOrder" "$app_src/Features/Orders/CancelOrder"

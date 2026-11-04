@@ -7,8 +7,8 @@ using MyApp.Shared.Persistence;
 
 namespace MyApp.IntegrationTests;
 
-// The application as Program.cs composes it, modules included. The factory runs it in Development,
-// where starting the host also validates every service registration.
+// The application as Program.cs composes it, modules included. AppFactory validates every service registration when the host
+// starts, as Development does.
 public sealed class ProgramTests(PostgresDatabase database)
 {
     // The contracts by which a module registers the handlers and validators of its slices, reactions included.

@@ -7,6 +7,7 @@
   "description": "ASP.NET Core API in vertical slices with a rich domain, enforced at build time by HardSlice.Analyzers.",
   "shortName": "hardslice-api",
   "preferNameDirectory": true,
+  "guids": ["5d0a9c3e-7b41-4f6a-9e28-c1b4a7f3d206"],
   "tags": {
     "language": "C#",
     "type": "solution"

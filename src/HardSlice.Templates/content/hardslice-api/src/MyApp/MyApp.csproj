@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <!-- dotnet new gives each solution its own identifier: dotnet user-secrets needs no init. -->
+    <UserSecretsId>5d0a9c3e-7b41-4f6a-9e28-c1b4a7f3d206</UserSecretsId>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
