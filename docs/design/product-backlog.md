@@ -2386,7 +2386,7 @@ Le vérificateur passe sur les exécutions Claude Code consignées. Chaque exéc
 
 ### PB-051 : Publier la préversion `0.3.0-preview.1`
 
-Statut : en attente du feu vert du mainteneur. PB-080, terminé, a revalidé les paquets après PB-075 à PB-079 et PB-085 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` de PB-080 (« revalidate the 0.3.0-preview.1 packages after PB-075 to PB-079 and PB-085 »), sur lequel les paquets ont été revalidés en dernier le 04/11/2026. PB-074 les avait revalidés après PB-060 à PB-073.
+Statut : suspendu. Décision du mainteneur du 04/11/2026, après PB-080 : aucune version n'est publiée sur NuGet.org pour l'instant. Le but est la version la plus stable possible, quel que soit son numéro, et Ghostline sert à itérer tout de suite (section 7, PB-081 à PB-088). L'étiquette visera le commit du dernier ticket de revalidation des paquets le jour où le mainteneur décidera la publication. PB-080, terminé, a revalidé les paquets après PB-075 à PB-079 et PB-085 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` de PB-080 (« revalidate the 0.3.0-preview.1 packages after PB-075 to PB-079 and PB-085 »), sur lequel les paquets ont été revalidés en dernier le 04/11/2026. PB-074 les avait revalidés après PB-060 à PB-073.
 
 **Résultat observable**
 
@@ -2904,7 +2904,9 @@ L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jo
 
 Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux. PB-075, ajouté le même jour à partir d'une entrée du 04/11/2026, change le texte d'un diagnostic après PB-074. PB-076, ajouté le même jour à partir de l'entrée « no path to bring a generated solution to a newer template », change le texte des erreurs de l'outil sur les fichiers HardSlice. PB-077, ajouté le même jour à partir de l'entrée « the build hook reports the files not yet edited of a planned change », change la réponse du hook après une édition. PB-078, ajouté le même jour à partir de l'entrée « the Stop hook relaunches the agent on a failure only a protected file can fix », change la réponse du hook de fin de tour quand la vérification s'arrête sur un fichier HardSlice protégé. Un ticket de revalidation des paquets les suit.
 
-Complété le 04/11/2026 par PB-079 à PB-086, tirés des six tâches encore ouvertes issues des entrées du 04/11/2026 (authentification dans `Shared` et réponses du middleware, endpoint protégé, service hébergé non périodique, condition de démarrage d'un job, migration qui convertit des lignes, mise à niveau d'une solution générée), et des entrées sans tâche qui leur sont liées. Leurs arbitrages sont validés par le mainteneur le 04/11/2026 (bloc suivant). PB-079 corrige avant PB-051 des textes que la préversion figerait sous une forme trompeuse. PB-085, une consigne de plus, est avancé avant PB-080 par décision du mainteneur : il rejoint la seule reconstruction des paquets sans purge de plus pour Ghostline. PB-080 revalide les paquets après PB-075 à PB-079 et PB-085, et PB-051 en dépend. PB-081 à PB-084 et PB-086 ajoutent sans rien corriger de figé : ils passent après PB-051 et forment l'incrément `0.3.0-preview.2`. L'entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » n'a pas de tâche et attend une décision du mainteneur (verrou gardé, une seule instance, ou jeton de concurrence sur `ObservedTrip`) : elle n'est pas découpée ici.
+Complété le 04/11/2026 par PB-079 à PB-086, tirés des six tâches encore ouvertes issues des entrées du 04/11/2026 (authentification dans `Shared` et réponses du middleware, endpoint protégé, service hébergé non périodique, condition de démarrage d'un job, migration qui convertit des lignes, mise à niveau d'une solution générée), et des entrées sans tâche qui leur sont liées. Leurs arbitrages sont validés par le mainteneur le 04/11/2026 (bloc suivant). PB-079 corrige avant PB-051 des textes que la préversion figerait sous une forme trompeuse. PB-085, une consigne de plus, est avancé avant PB-080 par décision du mainteneur : il rejoint la seule reconstruction des paquets sans purge de plus pour Ghostline. PB-080 revalide les paquets après PB-075 à PB-079 et PB-085, et PB-051 en dépend. PB-081 à PB-084 et PB-086 ajoutent sans rien corriger de figé : ils devaient passer après PB-051 et former l'incrément `0.3.0-preview.2`.
+
+Décision du mainteneur du 04/11/2026, après PB-080 : aucune version n'est publiée sur NuGet.org pour l'instant, PB-051 compris. Le but est la version la plus stable possible, quel que soit son numéro, et Ghostline sert à itérer tout de suite. PB-081 à PB-084 et PB-086 ne dépendent donc plus de PB-051 et passent maintenant, avec PB-087, tiré de l'entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » (arbitrage 8, option B validée le même jour). PB-088 revalide ensuite les paquets, toujours sous `0.3.0-preview.1`, et Ghostline se met à niveau sur son commit avec `dotnet hardslice upgrade` (PB-086). Le critère de placement des arbitrages ci-dessous (avant ou après PB-051) ne décide plus que de l'ordre des tickets.
 
 ### Résultat attendu
 
@@ -2966,6 +2968,11 @@ Pour PB-079 à PB-086. Validés par le mainteneur le 04/11/2026 : les recommanda
    - Ce qui devrait passer avant PB-051 : rien, si `upgrade` lit la version de la solution dans `Directory.HardSlice.props`, protégé, et reçoit la variante (`--no-sample`) ou la déduit. Écrire la version et les options du template dans un fichier de la solution figerait un fichier de plus, et une entrée de plus de la liste protégée, pour une information que la commande peut lire ou demander.
    - Recommandation : C, après PB-051, dans `0.3.0-preview.2`. Le premier cas réel est le passage d'une solution `0.3.0-preview.1` à `0.3.0-preview.2`, et la base d'une fusion n'existe que pour une version publiée. Une solution générée par une construction locale non publiée, comme Ghostline aujourd'hui, se migre à la main.
    - Décision du mainteneur : B d'abord, après PB-051. La réécriture des fichiers que le template possède et la liste avec diff des autres règlent l'essentiel d'une migration, sans restaurer de génération d'origine. La fusion à trois voies de C est différée (section 9), à arbitrer une fois B utilisé sur une vraie mise à niveau.
+8. **Le 409 d'un index unique et une modification concurrente (PB-087).** Entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » (04/11/2026). Le 409 de PB-069 couvre deux créations concurrentes du même agrégat. Deux commandes qui modifient un agrégat déjà stocké s'écrasent l'une l'autre sans erreur : seul l'exemple `Booking` a un jeton de concurrence, et `add-slice` dit que « the index and the 409 cover the others ».
+   - Option A : une consigne seule, dans `AGENTS.md`, `add-slice` et `add-aggregate`. Le 409 d'un index unique ne couvre que les créations, une modification concurrente demande un jeton de concurrence (`xmin`), et une fusion qui ne doit jamais échouer garde le verrou de transaction.
+   - Option B : A, plus un jeton `xmin` généré par défaut par `hardslice-aggregate`, comme celui de `Booking`. Une modification concurrente d'un agrégat généré répond 409 au lieu de perdre une écriture.
+   - Option C : A, plus une règle qui signale une entité mappée sans jeton. Bruyante, car beaucoup d'agrégats ne sont jamais modifiés en concurrence.
+   - Décision du mainteneur du 04/11/2026 : B. La perte silencieuse est le pire cas, `TransactionBehavior` traduit déjà le conflit en 409, et `xmin` ne coûte rien en PostgreSQL.
 
 Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactory, with no way to configure the instance it builds » par PB-082, « FakeTimeProvider does not say which timers wait on it » par PB-082 pour une commande planifiée (l'horloge générique reste différée avec le template d'un service non périodique), « AddRecurringCommand has no start condition, so a missing key fails every cycle » et « AppFactory also removes the hosted services that only check the configuration at start » par PB-083, « AGENTS.md mixes the text of the template and the text of the application » par PB-086 en partie (le diff d'`AGENTS.md` est listé), et par la fusion différée en section 9 pour le reste.
 
@@ -2975,12 +2982,14 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | Réponses du middleware | PB-079 | avant PB-051 | `HS015.md` figerait une affirmation fausse sur la signature |
 | Règle d'autorisation déclarée | aucun | section 9 | un seul cas réel, existence d'une politique lue à l'exécution |
 | Paquets revalidés | PB-080 | avant PB-051 | PB-075 à PB-079 non reconstruits, l'étiquette de PB-051 vise ce commit |
-| `--require` et client authentifié | PB-081 | après PB-051 | ajout, dépend de PB-079 |
-| Heure quotidienne et reprises | PB-082 | après PB-051 | ajout au service générique, la consigne actuelle n'est pas fausse |
-| Condition de démarrage | PB-083 | après PB-051 | ajout, dépend de PB-082 |
-| HS006 sur les services hébergés | PB-084 | après PB-051 | nouveaux diagnostics, dépend de PB-083 |
+| `--require` et client authentifié | PB-081 | après PB-080 | ajout, dépend de PB-079 |
+| Heure quotidienne et reprises | PB-082 | après PB-080 | ajout au service générique, la consigne actuelle n'est pas fausse |
+| Condition de démarrage | PB-083 | après PB-080 | ajout, dépend de PB-082 |
+| HS006 sur les services hébergés | PB-084 | après PB-080 | nouveaux diagnostics, dépend de PB-083 |
 | Migrations et champs privés | PB-085 | avant PB-080, donc avant PB-051 | décision du mainteneur : consigne contre une perte de données, sans purge de plus puisqu'elle rejoint PB-080 |
-| `dotnet hardslice upgrade` (option B) | PB-086 | après PB-051 | ajout d'une commande, la consigne de PB-076 suffit d'ici là |
+| `dotnet hardslice upgrade` (option B) | PB-086 | après PB-080 | ajout d'une commande, la consigne de PB-076 suffit d'ici là |
+| Jeton de concurrence des agrégats | PB-087 | après PB-080 | consigne fausse dans `add-slice`, écriture perdue sans erreur |
+| Paquets revalidés | PB-088 | après PB-081 à PB-087 | Ghostline se met à niveau sur ce commit |
 | Fusion à trois voies de `upgrade` | aucun | section 9 | la base de la fusion n'existe que pour une version publiée, à arbitrer après PB-086 |
 
 ### Critères communs à tous les tickets de l'incrément
@@ -3010,14 +3019,16 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | PB-078 (fin de tour sur un fichier HardSlice protégé) | PB-076, PB-077 | aucun |
 | PB-079 (`Shared/Http` et réponses du middleware) | PB-078 | aucun |
 | PB-080 (paquets revalidés) | PB-075 à PB-079, PB-085 | aucun |
-| PB-081 (endpoint protégé, `--require`) | PB-051, PB-079 | PB-082, PB-086 |
-| PB-082 (heure quotidienne et reprises) | PB-051 | PB-081, PB-086 |
-| PB-083 (condition de démarrage) | PB-082 | PB-081, PB-086 |
-| PB-084 (HS006 sur les services hébergés d'une slice) | PB-083 | PB-081, PB-086 |
+| PB-081 (endpoint protégé, `--require`) | PB-079, PB-080 | PB-082, PB-086, PB-087 |
+| PB-082 (heure quotidienne et reprises) | PB-080 | PB-081, PB-086, PB-087 |
+| PB-083 (condition de démarrage) | PB-082 | PB-081, PB-086, PB-087 |
+| PB-084 (HS006 sur les services hébergés d'une slice) | PB-083 | PB-081, PB-086, PB-087 |
 | PB-085 (migrations qui convertissent des lignes) | PB-079 | aucun |
-| PB-086 (`dotnet hardslice upgrade`) | PB-051 | PB-081 à PB-084 |
+| PB-086 (`dotnet hardslice upgrade`) | PB-080 | PB-081 à PB-084, PB-087 |
+| PB-087 (jeton de concurrence des agrégats) | PB-080 | PB-081 à PB-084, PB-086 |
+| PB-088 (paquets revalidés) | PB-081 à PB-087 | aucun |
 
-PB-051 dépend de PB-080. Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, PB-051, puis PB-081 à PB-084 et PB-086 dans l'ordre des numéros.
+Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
 
 ### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
@@ -3526,7 +3537,7 @@ scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/pa
 
 ### PB-081 : Générer et tester un endpoint protégé avec `--require`
 
-Statut : prêt après PB-051, arbitrage 3 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : une option, un client de test et une consigne s'ajoutent sans rien corriger de figé. Dépend de PB-079, qui dit où vont le schéma et la politique. Reprend la tâche « générer et tester un endpoint protégé (--require, client authentifié d'AppFactory, skill) ».
+Statut : prêt, arbitrage 3 validé le 04/11/2026. Ne dépend plus de PB-051, suspendu par décision du mainteneur du 04/11/2026. Dépend de PB-079, qui dit où vont le schéma et la politique. Reprend la tâche « générer et tester un endpoint protégé (--require, client authentifié d'AppFactory, skill) ».
 
 **Résultat observable**
 
@@ -3559,7 +3570,7 @@ sondes des templates d'éléments de scripts/test-template.sh
 
 ### PB-082 : Envoyer une commande à heure fixe, avec reprises, par le service des commandes récurrentes
 
-Statut : prêt après PB-051, arbitrage 4 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : une surcharge du service générique et des options s'ajoutent, et la puce « Background work » d'`AGENTS.md` n'est pas fausse. Reprend la tâche « arbitrer et livrer un service hébergé non périodique (heure quotidienne, reprises) » et l'élément de la section 9 « Template d'un service hébergé non périodique », à arbitrer après PB-068. Reprend aussi les entrées sans tâche « RecurringCommandCycles takes a bare AppFactory, with no way to configure the instance it builds » et, pour une commande planifiée, « FakeTimeProvider does not say which timers wait on it ».
+Statut : prêt, arbitrage 4 validé le 04/11/2026. Ne dépend plus de PB-051, suspendu par décision du mainteneur du 04/11/2026. Reprend la tâche « arbitrer et livrer un service hébergé non périodique (heure quotidienne, reprises) » et l'élément de la section 9 « Template d'un service hébergé non périodique », à arbitrer après PB-068. Reprend aussi les entrées sans tâche « RecurringCommandCycles takes a bare AppFactory, with no way to configure the instance it builds » et, pour une commande planifiée, « FakeTimeProvider does not say which timers wait on it ».
 
 **Résultat observable**
 
@@ -3598,7 +3609,7 @@ sondes du template d'application et des templates d'éléments de scripts/test-t
 
 ### PB-083 : Donner une condition de démarrage à une commande planifiée
 
-Statut : prêt après PB-051, arbitrage 5 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : un paramètre facultatif, une ligne de journal et une consigne s'ajoutent. Dépend de PB-082, dont il étend le service générique. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la condition, et les entrées sans tâche « AddRecurringCommand has no start condition, so a missing key fails every cycle » et « AppFactory also removes the hosted services that only check the configuration at start ». La règle va à PB-084.
+Statut : prêt, arbitrage 5 validé le 04/11/2026. Ne dépend plus de PB-051, suspendu par décision du mainteneur du 04/11/2026. Dépend de PB-082, dont il étend le service générique. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la condition, et les entrées sans tâche « AddRecurringCommand has no start condition, so a missing key fails every cycle » et « AppFactory also removes the hosted services that only check the configuration at start ». La règle va à PB-084.
 
 **Résultat observable**
 
@@ -3632,7 +3643,7 @@ sondes du template d'application de scripts/test-template.sh, dans les deux vari
 
 ### PB-084 : Étendre HS006 aux services hébergés et aux conditions d'une slice
 
-Statut : prêt après PB-051, arbitrage 5 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : l'extension ajoute des diagnostics sur du code accepté jusque-là, ce qu'une préversion suivante peut faire, et aucun texte figé n'est faux. Dépend de PB-083, pour que la règle accepte la lecture d'une condition sanctionnée. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la règle.
+Statut : prêt, arbitrage 5 validé le 04/11/2026. Ne dépend plus de PB-051, suspendu par décision du mainteneur du 04/11/2026. Dépend de PB-083, pour que la règle accepte la lecture d'une condition sanctionnée. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la règle.
 
 **Résultat observable**
 
@@ -3696,7 +3707,7 @@ sondes des templates d'éléments de scripts/test-template.sh
 
 ### PB-086 : Mettre à niveau une solution générée avec `dotnet hardslice upgrade`
 
-Statut : prêt après PB-051, arbitrage 7 validé le 04/11/2026 avec l'option B : aucune fusion à trois voies, différée en section 9. Après PB-051, dans `0.3.0-preview.2` : une commande s'ajoute, et la consigne de PB-076 suffit d'ici là. Reprend la tâche « mettre à niveau une solution générée vers un template plus récent », dont PB-076 a repris le `Fix:` et le `Doc:` de l'erreur, et en partie l'entrée sans tâche « AGENTS.md mixes the text of the template and the text of the application ».
+Statut : prêt, arbitrage 7 validé le 04/11/2026 avec l'option B : aucune fusion à trois voies, différée en section 9. Ne dépend plus de PB-051, suspendu par décision du mainteneur du 04/11/2026. Reprend la tâche « mettre à niveau une solution générée vers un template plus récent », dont PB-076 a repris le `Fix:` et le `Doc:` de l'erreur, et en partie l'entrée sans tâche « AGENTS.md mixes the text of the template and the text of the application ».
 
 **Résultat observable**
 
@@ -3729,9 +3740,71 @@ dotnet build --no-restore && dotnet test --no-build
 sonde de mise à niveau de scripts/test-template.sh, depuis une solution générée par une version antérieure du template
 ```
 
+### PB-087 : Dire que le 409 d'un index unique ne couvre que les créations, et générer un jeton de concurrence à chaque agrégat
+
+Statut : prêt, arbitrage 8 validé le 04/11/2026 (option B). Reprend la tâche « Dire que le 409 d'un index unique ne couvre que les créations, et protéger une modification concurrente d'un agrégat » et l'entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » de `ghostline/docs/hardslice-friction.md`.
+
+**Résultat observable**
+
+`dotnet new hardslice-aggregate` génère un mapping avec un jeton de concurrence sur `xmin`, comme celui de `Booking`, que la migration de l'agrégat enregistre. Quand deux commandes modifient en même temps le même agrégat généré, la seconde répond 409 au lieu d'écraser la première. `AGENTS.md`, `add-slice` et `add-aggregate` distinguent trois cas : une création sous une clé unique (l'index et son 409), une modification concurrente (le jeton et son 409, l'appel ou le cycle suivant reprend), et une fusion qui ne doit jamais échouer (le verrou de transaction).
+
+**Constat**
+
+Ghostline, entrée du 04/11/2026 : `CollectRealtimeFeeds` trouve un `ObservedTrip` déjà stocké et l'enrichit (`ObservedTrip.See`). Deux collectes concurrentes, depuis deux instances de l'application, ajoutent chacune la même observation à leur copie, et le dernier commit écrase les compteurs de l'autre sans erreur : `ObservedTrip` n'a pas de jeton de concurrence, et l'index de `TripObservations` n'est pas unique. `add-slice` dit pourtant, après le verrou d'un handler qui fusionne, que « the index and the 409 cover the others ». Seul `Booking` a un jeton (`Property<uint>("Version").IsRowVersion()`), et `TransactionBehavior` traduit déjà `DbUpdateConcurrencyException` en 409. `hardslice-aggregate` n'en génère pas et `add-aggregate` n'en parle pas. Ghostline garde son verrou (décision du mainteneur du 04/11/2026).
+
+**Périmètre**
+
+- `hardslice-aggregate` : la propriété fantôme `Version` sur `xmin` (`IsRowVersion()`) dans `<Aggregate>Configuration.cs`, avec un commentaire qui dit ce qu'elle protège, comme celui de `BookingConfiguration`. La migration que l'agent ajoute l'enregistre dans l'instantané du modèle, sans SQL (Npgsql n'en écrit pas pour `xmin`, comme `AddBookingConcurrencyToken`). Le domaine n'en sait rien.
+- Entités enfants (`hardslice-entity`) : une commande qui ne change qu'un enfant ne met pas à jour la ligne de la racine, dont EF Core ne vérifie alors pas le `xmin`. Le ticket le vérifie, puis choisit et documente dans `add-aggregate` comment couvrir ce cas (jeton sur l'enfant, ou racine toujours modifiée avec ses enfants), avec le test qui le prouve.
+- `AGENTS.md` (puce du handler de commande, sous 150 lignes dans les deux variantes), `add-slice` (la phrase « the index and the 409 cover the others » remplacée par les trois cas), `add-aggregate` (le jeton généré, ce qu'il couvre, le 409 qu'il produit).
+- `docs/item-templates.md`, README du paquet de templates si la liste de ce que génère `hardslice-aggregate` y figure, `CHANGELOG.md`.
+
+**Cas vérifiés**
+
+- Agrégat généré, dans les deux variantes : deux modifications concurrentes du même agrégat, la seconde répond 409 (sonde de `scripts/test-template.sh` avec un test d'intégration de la solution générée).
+- Migration de l'agrégat généré : le jeton est dans l'instantané du modèle, aucune colonne créée, `MigrationsTests` vert.
+- Création concurrente sous une clé unique : toujours 409 par l'index (PB-069 inchangé).
+- Modification concurrente d'un enfant seul : le comportement choisi est prouvé par un test.
+- `TemplatePackageTests` : les trois cas dans `AGENTS.md` et `add-slice`, le jeton dans `add-aggregate`, copie `.agents/` comprise.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sondes des templates d'éléments de scripts/test-template.sh, dans les deux variantes
+```
+
+Contournement que Ghostline peut retirer : aucun, son verrou reste la forme d'une fusion qui ne doit jamais échouer. Un jeton sur `ObservedTrip` lui reste possible, au choix de l'application.
+
+### PB-088 : Revalider les paquets après PB-081 à PB-087, pour la mise à niveau de Ghostline
+
+Statut : prêt, après PB-081 à PB-087. Reconstruction sous la même version, `0.3.0-preview.1` : rien n'est publié, et le numéro ne compte pas tant que rien ne l'est (décision du mainteneur du 04/11/2026).
+
+**Résultat observable**
+
+Les paquets reconstruits dans `artifacts/packages` passent le parcours de PB-080, et `dotnet hardslice upgrade` (PB-086) met à niveau une copie de Ghostline vers eux. Ghostline peut se mettre à niveau sur ce commit.
+
+**Périmètre**
+
+- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-081 à PB-087 ajoutent. Chaque ticket y écrit sa ligne : ce ticket vérifie que l'entrée dit ce que livrent les paquets.
+- `README.md` et README des paquets : ce que PB-081 à PB-087 changent de ce qu'ils présentent.
+- Passage complet de `scripts/test-template.sh` et de `scripts/verify-published.sh --source artifacts/packages` sur les paquets reconstruits.
+- Essai de `dotnet hardslice upgrade` sur un clone jetable de Ghostline, dans un dossier temporaire et un home isolé (`scripts/dotnet-cli-home.sh`), jamais sur le dépôt de Ghostline lui-même : les fichiers réécrits, ajoutés et à fusionner sont notés dans le statut, pour préparer la mise à niveau de Ghostline. Un défaut de la commande trouvé ici se corrige dans ce ticket, avec son test.
+- Statut : la procédure de mise à niveau de Ghostline sur ce commit (purge des deux caches que dit `CONTRIBUTING.md`, réinstallation du template, `dotnet tool restore`, `dotnet hardslice upgrade`, fusion des fichiers listés).
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o artifacts/packages; done
+scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/packages
+dotnet hardslice upgrade, sur un clone jetable de Ghostline
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-080 et PB-085 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur. PB-081 à PB-084 et PB-086, arbitrages validés, forment l'incrément `0.3.0-preview.2`, avec ses critères communs, sa revalidation des paquets et sa publication, à découper à ce moment.
+L'incrément est terminé lorsque PB-064 à PB-088 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-088. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
 
 ## 8. Incréments suivants
 
