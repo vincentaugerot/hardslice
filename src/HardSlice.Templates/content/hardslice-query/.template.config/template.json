@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Query",
   "name": "HardSlice query slice",
-  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests. --route chooses the route of its endpoint, which answers GET. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests, and with --result filtered the validator of its filter and its tests. --route chooses the route of its endpoint, which answers GET. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-query",
   "sourceName": "QueryName",
   "preferNameDirectory": false,
@@ -18,6 +18,11 @@
   "tags": {
     "language": "C#",
     "type": "item"
+  },
+  "forms": {
+    "firstLowerCase": {
+      "identifier": "firstLowerCaseInvariant"
+    }
   },
   "symbols": {
     "Module": {
@@ -40,7 +45,7 @@
       "type": "parameter",
       "datatype": "choice",
       "defaultValue": "single",
-      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default) or many (the list of the DTOs). Not list: dotnet new would read it as its list command.",
+      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs) or filtered (the list of the DTOs that the filter of --parameter selects, read from the query string and checked by a validator). Not list: dotnet new would read it as its list command.",
       "choices": [
         {
           "choice": "single",
@@ -49,8 +54,17 @@
         {
           "choice": "many",
           "description": "The list of the DTOs."
+        },
+        {
+          "choice": "filtered",
+          "description": "The list of the DTOs that the filter of --parameter selects; a request without it is answered with 400."
         }
       ]
+    },
+    "Parameter": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The filter of --result filtered, as <Name>:<Type>: a PascalCase name and one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly. The query reads it from the query string, such as ?date=2026-11-04, and its validator answers 400 to a request without it. Required with --result filtered, refused otherwise."
     },
     "Route": {
       "type": "parameter",
@@ -86,6 +100,191 @@
       "parameters": {
         "sourceVariableName": "AppName",
         "fallbackVariableName": "Unbound"
+      }
+    },
+    "ParameterText": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Parameter",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "ParameterText"
+    },
+    "ParameterIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParameterText",
+        "pattern": "."
+      }
+    },
+    "ParameterIsWellFormed": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParameterText",
+        "pattern": "^[A-Z][A-Za-z0-9]*:[^:]+$"
+      }
+    },
+    "FilterName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParameterText",
+        "steps": [
+          {
+            "regex": "^([^:]*):.*$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "replaces": "FilterName",
+      "fileRename": "FilterName"
+    },
+    "FilterKey": {
+      "type": "derived",
+      "valueSource": "FilterName",
+      "valueTransform": "firstLowerCase",
+      "replaces": "filterName",
+      "fileRename": "filterName"
+    },
+    "FilterType": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParameterText",
+        "steps": [
+          {
+            "regex": "^[^:]*:",
+            "replacement": ""
+          }
+        ]
+      },
+      "replaces": "FilterType",
+      "fileRename": "FilterType"
+    },
+    "FilterTypeIsKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterType",
+        "pattern": "^(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)$"
+      }
+    },
+    "FilterIsString": {
+      "type": "computed",
+      "value": "(FilterType == \"string\")"
+    },
+    "FilterValue": {
+      "type": "generated",
+      "generator": "switch",
+      "replaces": "FilterValue",
+      "parameters": {
+        "evaluator": "C++",
+        "datatype": "string",
+        "cases": [
+          {
+            "condition": "(FilterType == \"string\")",
+            "value": "\"value\""
+          },
+          {
+            "condition": "(FilterType == \"bool\")",
+            "value": "true"
+          },
+          {
+            "condition": "(FilterType == \"int\")",
+            "value": "1"
+          },
+          {
+            "condition": "(FilterType == \"long\")",
+            "value": "1L"
+          },
+          {
+            "condition": "(FilterType == \"decimal\")",
+            "value": "1.5m"
+          },
+          {
+            "condition": "(FilterType == \"double\")",
+            "value": "1.5"
+          },
+          {
+            "condition": "(FilterType == \"Guid\")",
+            "value": "Guid.NewGuid()"
+          },
+          {
+            "condition": "(FilterType == \"DateOnly\")",
+            "value": "new DateOnly(2026, 11, 4)"
+          },
+          {
+            "condition": "(FilterType == \"TimeOnly\")",
+            "value": "new TimeOnly(8, 30)"
+          },
+          {
+            "condition": "(FilterType == \"DateTimeOffset\")",
+            "value": "new DateTimeOffset(2026, 11, 4, 8, 30, 0, TimeSpan.Zero)"
+          },
+          {
+            "value": "default"
+          }
+        ]
+      }
+    },
+    "FilterQueryValue": {
+      "type": "generated",
+      "generator": "switch",
+      "replaces": "filter-query-value",
+      "parameters": {
+        "evaluator": "C++",
+        "datatype": "string",
+        "cases": [
+          {
+            "condition": "(FilterType == \"string\")",
+            "value": "value"
+          },
+          {
+            "condition": "(FilterType == \"bool\")",
+            "value": "true"
+          },
+          {
+            "condition": "(FilterType == \"int\")",
+            "value": "1"
+          },
+          {
+            "condition": "(FilterType == \"long\")",
+            "value": "1"
+          },
+          {
+            "condition": "(FilterType == \"decimal\")",
+            "value": "1.5"
+          },
+          {
+            "condition": "(FilterType == \"double\")",
+            "value": "1.5"
+          },
+          {
+            "condition": "(FilterType == \"Guid\")",
+            "value": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "condition": "(FilterType == \"DateOnly\")",
+            "value": "2026-11-04"
+          },
+          {
+            "condition": "(FilterType == \"TimeOnly\")",
+            "value": "08:30"
+          },
+          {
+            "condition": "(FilterType == \"DateTimeOffset\")",
+            "value": "2026-11-04T08:30:00%2B00:00"
+          },
+          {
+            "value": ""
+          }
+        ]
       }
     },
     "QueryRouteWords": {
@@ -232,6 +431,14 @@
       "type": "computed",
       "value": "(Result == \"many\")"
     },
+    "ResultIsFiltered": {
+      "type": "computed",
+      "value": "(Result == \"filtered\")"
+    },
+    "ResultIsList": {
+      "type": "computed",
+      "value": "(Result != \"single\")"
+    },
     "AppIsKnown": {
       "type": "generated",
       "generator": "regexMatch",
@@ -262,6 +469,25 @@
         "source": "name",
         "pattern": "Query$"
       }
+    },
+    "ResultDto": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "name",
+        "steps": [
+          {
+            "regex": "^[A-Z][a-z0-9]+(?=[A-Z])",
+            "replacement": ""
+          },
+          {
+            "regex": "$",
+            "replacement": "Dto"
+          }
+        ]
+      },
+      "replaces": "ResultDtoName",
+      "fileRename": "ResultDtoName"
     },
     "ModuleIsPascalCase": {
       "type": "generated",
@@ -314,9 +540,25 @@
       "type": "computed",
       "value": "(ResultIsSingle && RouteNamesId)"
     },
+    "ParameterIsMissing": {
+      "type": "computed",
+      "value": "(ResultIsFiltered && !ParameterIsGiven)"
+    },
+    "ParameterIsUnused": {
+      "type": "computed",
+      "value": "(!ResultIsFiltered && ParameterIsGiven)"
+    },
+    "ParameterIsMalformed": {
+      "type": "computed",
+      "value": "(ResultIsFiltered && ParameterIsGiven && !ParameterIsWellFormed)"
+    },
+    "ParameterTypeIsUnknown": {
+      "type": "computed",
+      "value": "(ResultIsFiltered && ParameterIsWellFormed && !FilterTypeIsKnown)"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown)"
     }
   },
   "sources": [
@@ -326,6 +568,12 @@
           "condition": "(!Accepted)",
           "exclude": [
             "**/*"
+          ]
+        },
+        {
+          "condition": "(!ResultIsFiltered)",
+          "exclude": [
+            "tests/MyApp.Tests/**/*"
           ]
         }
       ]
@@ -521,6 +769,82 @@
       "continueOnError": false
     },
     {
+      "id": "refuseFilterWithoutParameter",
+      "condition": "(ParameterIsMissing)",
+      "description": "Refuses a filtered result without its filter.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --result filtered needs --parameter <Name>:<Type>, the filter that the query reads from the query string, such as --parameter Date:DateOnly. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseParameterWithoutFilter",
+      "condition": "(ParameterIsUnused)",
+      "description": "Refuses a filter that the result does not read.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --parameter 'ParameterText' is the filter of --result filtered, which reads it from the query string: pass --result filtered with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMalformedParameter",
+      "condition": "(ParameterIsMalformed)",
+      "description": "Refuses a filter that is not <Name>:<Type>.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --parameter 'ParameterText' is not <Name>:<Type>, a PascalCase name and its type separated by a colon, such as --parameter Date:DateOnly. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseUnknownParameterType",
+      "condition": "(ParameterTypeIsUnknown)",
+      "description": "Refuses a filter of a type that the template does not generate.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --parameter 'ParameterText' has the type 'FilterType', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, written as in C#. For another type, such as an enum of the domain, generate the query with the closest of them, then change the type of the query, of its validator and of its tests. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "registerSlice",
       "condition": "(Accepted)",
       "description": "Lines to add to the module of the slice.",
@@ -529,11 +853,15 @@
       "manualInstructions": [
         {
           "condition": "(ResultIsSingle)",
-          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, QueryNameDto?>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName?>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
           "condition": "(ResultIsMany)",
-          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<QueryNameDto>>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ResultIsFiltered)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

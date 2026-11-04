@@ -20,6 +20,10 @@
     "Method": {
       "longName": "method",
       "shortName": ""
+    },
+    "Parameter": {
+      "longName": "parameter",
+      "shortName": ""
     }
   }
 }

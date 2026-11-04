@@ -7,9 +7,10 @@
 # the usings the file does not have yet, the registrations after 'services' (unless <registrations> is 'without-registrations'),
 # and the call of Map before 'return endpoints;'. Fails if the instructions do not name the module file or one of these lines:
 # two registrations for hardslice-command, the handler and the validator, or the handler alone of a command without parameters,
-# one for hardslice-query, the handler, and one for hardslice-event, the handler of its reaction, which has no endpoint to map,
-# as a system command of hardslice-command --endpoint none has none. A recurring command of hardslice-command --every has two, its
-# handler and its AddRecurringCommand, and no endpoint.
+# one for hardslice-query, the handler, or two with --result filtered, the handler and the validator of its filter, and one for
+# hardslice-event, the handler of its reaction, which has no endpoint to map, as a system command of hardslice-command
+# --endpoint none has none. A recurring command of hardslice-command --every has two, its handler and its AddRecurringCommand,
+# and no endpoint.
 register_slice() {
   local template="$1"
   local output="$2"
@@ -28,6 +29,9 @@ register_slice() {
   fi
   if [[ "$template" != hardslice-command || "$output" == *"without validator since the command has no parameter:"* ]]; then
     expected_registrations=1
+  fi
+  if [[ "$template" == hardslice-query && "$output" == *"register the handler and the validator by their contracts:"* ]]; then
+    expected_registrations=2
   fi
   module_file="$(sed -n 's/^Manual instructions: Register the \(slice\|reaction\) in \(src\/.*Module\.cs\):$/\2/p' <<< "$output")"
   lines="$(grep -E '^            \.(AddScoped<(IRequestHandler|IValidator|IDomainEventHandler)|AddRecurringCommand)<' <<< "$output" || true)"

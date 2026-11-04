@@ -18,8 +18,9 @@
 # that only the TODO(hardslice): test fails, that the none and DTO responses build without HardSlice diagnostic, and that a reference completion passes the check.
 # Its system commands, generated with --endpoint none, have no endpoint, fail HS004 while no type of their module sends them, and pass once a hosted service does.
 # Its recurring commands, generated with --every through each of its refusals, are sent by AddRecurringCommand, and their tests run three cycles on a FakeTimeProvider.
-# It generates query slices with dotnet new hardslice-query the same way, both results, single and many, without HardSlice diagnostic, HS006 included,
-# and proves that an unknown aggregate fails the build with a compiler error that names it.
+# It generates query slices with dotnet new hardslice-query the same way, the three results, single, many and filtered (with the validator of
+# its filter, through each refusal of --parameter), named without their verb, without HardSlice diagnostic, HS006 included, with the 400 of a
+# filtered query without its filter, and proves that an unknown aggregate fails the build with a compiler error that names it.
 # It generates slices with the route and the method of --route and --method, a PUT and a DELETE in a module created with its own
 # --route and a query on a route of its own, through the refusals of a route or a method they cannot map, and their tests pass on these routes.
 # It generates an aggregate with dotnet new hardslice-aggregate through each of its refusals, proves it builds without HardSlice diagnostic,
@@ -2990,13 +2991,21 @@ probe_recurring_commands() {
   mv "$work/module-recurring.backup" "$module_file"
 }
 
-# Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and leaves the
-# printed instructions in $query_output.
+# The DTO that dotnet new hardslice-query names after the slice <name>: the name without its first word, the verb of the use case,
+# followed by Dto, such as BookingSummaryDto for GetBookingSummary. A name of one word, or whose first word is a single capital,
+# is kept whole.
+query_dto() {
+  printf '%sDto\n' "$(sed -E 's/^[A-Z][a-z0-9]+([A-Z])/\1/' <<< "$1")"
+}
+
+# Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and the unit tests of
+# its validator with --result filtered only, and leaves the printed instructions in $query_output.
 generate_query() {
   local module="$1"
   local name="$2"
   shift 2
   local generated
+  local unit_test="tests/$app_name.Tests/Features/$module/$name/${name}ValidatorTests.cs"
 
   if ! query_output="$(new_item hardslice-query --project "src/$app_name/$app_name.csproj" --module "$module" --name "$name" "$@")"; then
     printf '%s\n' "$query_output" >&2
@@ -3011,7 +3020,12 @@ generate_query() {
       exit 1
     fi
   done
-  if [[ -e "$app/tests/$app_name.Tests/Features/$module/$name" ]]; then
+  if [[ " $* " == *" --result filtered "* ]]; then
+    if [[ ! -f "$app/$unit_test" ]]; then
+      echo "error: dotnet new hardslice-query --result filtered did not create $unit_test in $app_name." >&2
+      exit 1
+    fi
+  elif [[ -e "$app/tests/$app_name.Tests/Features/$module/$name" ]]; then
     echo "error: dotnet new hardslice-query created unit tests for the slice $module/$name of $app_name, which has no validator." >&2
     exit 1
   fi
@@ -3046,20 +3060,28 @@ complete_query_tests() {
 
 # Generates a query slice of module <module>, which must exist, reading <aggregate>, an aggregate of the domain of the module
 # whose identifier is an <aggregate>Id, through every path of dotnet new hardslice-query: refusals, instructions, a forgotten
-# registration, the TODO(hardslice): tests of both results, an unknown aggregate, then the reference completion, in which
-# <create> is the expression that creates an aggregate to store. The module file is restored and the slices removed at the end.
+# registration, the TODO(hardslice): tests of the three results (<name> single, <many-name> many, <filtered-name> filtered by a
+# date, whose request without date is answered 400), an unknown aggregate, then the reference completion, in which <create> is
+# the expression that creates an aggregate to store. The module file is restored and the slices removed at the end.
 probe_query_template() {
   local module="$1"
   local name="$2"
   local many_name="$3"
-  local aggregate="$4"
-  local create="$5"
+  local filtered_name="$4"
+  local aggregate="$5"
+  local create="$6"
   local module_file="$app_src/Features/$module/${module}Module.cs"
   local project="src/$app_name/$app_name.csproj"
   local slice_name
   local test_output
   local build_output
   local test_file
+  local refusal
+  local -a fields
+  local dto="$(query_dto "$name")"
+  local many_dto="$(query_dto "$many_name")"
+  local filtered_dto="$(query_dto "$filtered_name")"
+  local filtered_slice="$app_src/Features/$module/$filtered_name/$filtered_name.cs"
 
   cp "$module_file" "$work/module.backup"
 
@@ -3075,11 +3097,26 @@ probe_query_template() {
   # 'list' is not a value: dotnet new would read '--result list' as its list command.
   expect_item_refused hardslice-query "an unknown result" "'list' is not a valid value for --result" --project "$project" --module "$module" --name "$name" --aggregate "$aggregate" --result=list
 
+  echo "==> Checking that dotnet new hardslice-query refuses a filtered result without its filter, a filter without filtered result, and a filter it cannot generate in $app_name"
+  for refusal in "a filtered result without --parameter|--result filtered needs --parameter <Name>:<Type>|--result|filtered" \
+    "a filter of a single result|--parameter 'Date:DateOnly' is the filter of --result filtered|--parameter|Date:DateOnly" \
+    "a filter of a list of every aggregate|--parameter 'Date:DateOnly' is the filter of --result filtered|--result|many|--parameter|Date:DateOnly" \
+    "a filter without type|--parameter 'Date' is not <Name>:<Type>|--result|filtered|--parameter|Date" \
+    "a filter whose name is not PascalCase|--parameter 'date:DateOnly' is not <Name>:<Type>|--result|filtered|--parameter|date:DateOnly" \
+    "a filter of a type it does not generate|--parameter 'Date:DateTime' has the type 'DateTime', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset|--result|filtered|--parameter|Date:DateTime"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    expect_item_refused hardslice-query "${fields[0]}" "${fields[1]}" --project "$project" --module "$module" --name "$filtered_name" --aggregate "$aggregate" "${fields[@]:2}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-query refused ${fields[0]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+
   echo "==> Generating the query slice $module/$name of $app_name with dotnet new hardslice-query"
   generate_query "$module" "$name" --aggregate "$aggregate"
   for expected in "Register the slice in src/$app_name/Features/$module/${module}Module.cs:" \
     "using $app_name.Features.$module.$name;" \
-    "            .AddScoped<IRequestHandler<${name}Query, ${name}Dto?>, ${name}Handler>()" \
+    "            .AddScoped<IRequestHandler<${name}Query, ${dto}?>, ${name}Handler>()" \
     "        ${name}Endpoint.Map(group);"; do
     if ! grep -Fxq -- "$expected" <<< "${query_output//Manual instructions: /}"; then
       printf '%s\n' "$query_output" >&2
@@ -3087,7 +3124,11 @@ probe_query_template() {
       exit 1
     fi
   done
-  if grep -q 'MyApp\|ModuleName\|QueryName\|AggregateName\|query-route\|module-route' \
+  if ! grep -Fxq "public sealed record $dto(Guid Id);" "$app_src/Features/$module/$name/$name.cs"; then
+    echo "error: dotnet new hardslice-query did not name the DTO of $module/$name $dto, the name of the slice without its verb." >&2
+    exit 1
+  fi
+  if grep -q 'MyApp\|ModuleName\|QueryName\|AggregateName\|ResultDtoName\|query-route\|module-route' \
     "$app_src/Features/$module/$name/$name.cs" "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"; then
     echo "error: the slice $module/$name generated in $app_name keeps a placeholder of the template." >&2
     exit 1
@@ -3112,7 +3153,7 @@ probe_query_template() {
   fi
   test_output="$(strip_ansi <<< "$test_output")"
   for expected in "failed $app_name.IntegrationTests.ProgramTests.Resolves_every_handler_and_validator_of_the_application_by_its_contract" \
-    "'${name}Handler' as 'IRequestHandler<${name}Query, ${name}Dto>'" \
+    "'${name}Handler' as 'IRequestHandler<${name}Query, ${dto}>'" \
     "failed $app_name.IntegrationTests.Features.$module.$name.${name}Tests.Returns_404_for_an_unknown_aggregate"; do
     if [[ "$test_output" != *"$expected"* ]]; then
       printf '%s\n' "$test_output" >&2
@@ -3123,19 +3164,48 @@ probe_query_template() {
   echo "    ProgramTests names '${name}Handler'"
   cp "$work/module.backup" "$module_file"
 
-  # Both results at once: each fails the check on its TODO(hardslice): test only, the 404 of the single result passes.
-  echo "==> Checking that $app_name builds the registered query slices $module/$name and $module/$many_name (--result many) without HardSlice diagnostic, HS006 included, and fails the check on their TODO(hardslice): tests only"
+  # The three results at once: each fails the check on its TODO(hardslice): test only, the 404 of the single result passes, and
+  # so do the validator tests of the filtered result and its 400 on a request without date.
+  echo "==> Checking that $app_name builds the registered query slices $module/$name, $module/$many_name (--result many) and $module/$filtered_name (--result filtered --parameter Date:DateOnly) without HardSlice diagnostic, HS006 included, and fails the check on their TODO(hardslice): tests only"
   register_slice hardslice-query "$query_output"
   generate_query "$module" "$many_name" --aggregate "$aggregate" --result many
-  if ! grep -Fxq "            .AddScoped<IRequestHandler<${many_name}Query, IReadOnlyList<${many_name}Dto>>, ${many_name}Handler>()" <<< "${query_output//Manual instructions: /}"; then
+  if ! grep -Fxq "            .AddScoped<IRequestHandler<${many_name}Query, IReadOnlyList<${many_dto}>>, ${many_name}Handler>()" <<< "${query_output//Manual instructions: /}"; then
     printf '%s\n' "$query_output" >&2
     echo "error: dotnet new hardslice-query --result many did not register a handler that returns a list." >&2
     exit 1
   fi
   register_slice hardslice-query "$query_output"
-  expect_check_fails_on_todo_tests_only "the generated query slices $module/$name and $module/$many_name" \
+  generate_query "$module" "$filtered_name" --aggregate "$aggregate" --result filtered --parameter Date:DateOnly
+  for expected in "using FluentValidation;" \
+    "            .AddScoped<IRequestHandler<${filtered_name}Query, IReadOnlyList<${filtered_dto}>>, ${filtered_name}Handler>()" \
+    "            .AddScoped<IValidator<${filtered_name}Query>, ${filtered_name}Validator>()"; do
+    if ! grep -Fxq -- "$expected" <<< "${query_output//Manual instructions: /}"; then
+      printf '%s\n' "$query_output" >&2
+      echo "error: dotnet new hardslice-query --result filtered did not print the line '$expected'." >&2
+      exit 1
+    fi
+  done
+  for expected in "public sealed record ${filtered_name}Query(DateOnly? Date) : IQuery<IReadOnlyList<${filtered_dto}>>;" \
+    "public sealed record ${filtered_dto}(Guid Id);" \
+    "        RuleFor(query => query.Date).NotNull();" \
+    "        group.MapGet(\"/$(sed 's/\([a-z0-9]\)\([A-Z]\)/\1-\2/g' <<< "$filtered_name" | tr '[:upper:]' '[:lower:]')\", async ([AsParameters] ${filtered_name}Query query, IMediator mediator, CancellationToken cancellationToken) =>"; do
+    if ! grep -Fxq -- "$expected" "$filtered_slice"; then
+      cat "$filtered_slice" >&2
+      echo "error: the slice $module/$filtered_name does not hold the line: $expected" >&2
+      exit 1
+    fi
+  done
+  if ! grep -Fxq "public sealed record $many_dto(Guid Id);" "$app_src/Features/$module/$many_name/$many_name.cs" ||
+    ! grep -Fq '?date=2026-11-04"' "$app/tests/$app_name.IntegrationTests/Features/$module/$filtered_name/${filtered_name}Tests.cs" ||
+    ! grep -Fxq '        problem.Errors.Keys.ShouldBe(["date"]);' "$app/tests/$app_name.IntegrationTests/Features/$module/$filtered_name/${filtered_name}Tests.cs"; then
+    echo "error: dotnet new hardslice-query did not name the DTO of $module/$many_name $many_dto, or the tests of $module/$filtered_name do not read ?date=." >&2
+    exit 1
+  fi
+  register_slice hardslice-query "$query_output"
+  expect_check_fails_on_todo_tests_only "the generated query slices $module/$name, $module/$many_name and $module/$filtered_name" \
     "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$many_name.${many_name}Tests.Lists_a_stored_aggregate_as_its_dto" \
-      "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Reads_a_stored_aggregate_as_its_dto" | LC_ALL=C sort)"
+      "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Reads_a_stored_aggregate_as_its_dto" \
+      "$app_name.IntegrationTests.Features.$module.$filtered_name.${filtered_name}Tests.Lists_the_stored_aggregates_that_its_filter_selects" | LC_ALL=C sort)"
   cp "$module_file" "$work/module-registered.backup"
 
   # A registered slice, so that HS015 has nothing to report: the compiler alone names the aggregate it does not find.
@@ -3162,19 +3232,24 @@ probe_query_template() {
   done
   cp "$work/module-registered.backup" "$module_file"
 
-  # The reference completion: each test stores an aggregate created by <create> and asserts the identifier it reads. No marker remains.
-  echo "==> Checking that the reference completion of $module/$name and $module/$many_name passes the check of $app_name"
+  # The reference completion: each test stores an aggregate created by <create> and asserts the identifier it reads, and the
+  # filtered handler keeps every aggregate, the stored one included. No marker remains.
+  echo "==> Checking that the reference completion of $module/$name, $module/$many_name and $module/$filtered_name passes the check of $app_name"
   complete_query_tests "$aggregate" "$create" "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs" \
-    "$app/tests/$app_name.IntegrationTests/Features/$module/$many_name/${many_name}Tests.cs"
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$many_name/${many_name}Tests.cs" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$filtered_name/${filtered_name}Tests.cs"
+  sed '/^            \/\/ TODO(hardslice): keep the /d' "$filtered_slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$filtered_slice"
   if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
-    echo "error: the reference completion of $module/$name and $module/$many_name leaves TODO(hardslice): markers." >&2
+    echo "error: the reference completion of $module/$name, $module/$many_name and $module/$filtered_name leaves TODO(hardslice): markers." >&2
     exit 1
   fi
   bash "$app/scripts/check.sh"
 
-  for slice_name in "$name" "$many_name"; do
+  for slice_name in "$name" "$many_name" "$filtered_name"; do
     rm -r "$app_src/Features/$module/$slice_name" "$app/tests/$app_name.IntegrationTests/Features/$module/$slice_name"
   done
+  rm -r "$app/tests/$app_name.Tests/Features/$module/${filtered_name:?}"
   mv "$work/module.backup" "$module_file"
   rm "$work/module-registered.backup"
 }
@@ -3246,7 +3321,7 @@ probe_slice_routes() {
     "tests/$app_name.IntegrationTests/Features/$module/$delete_name/${delete_name}Tests.cs|    private const string Route = ${module}Module.Route + \"/$delete_route\";" \
     "tests/$app_name.IntegrationTests/Features/$module/$delete_name/${delete_name}Tests.cs|        var response = await app.CreateClient().DeleteAsync(\$\"{Route}/{command.Id}\", TestContext.Current.CancellationToken);" \
     "tests/$app_name.IntegrationTests/Features/$module/$delete_name/${delete_name}Tests.cs|        var response = await app.CreateClient().DeleteAsync(\$\"{Route}/{Guid.Empty}\", TestContext.Current.CancellationToken);" \
-    "src/$app_name/Features/$query_module/$query_name/$query_name.cs|        group.MapGet(\"/trips/{id:guid}\", async Task<Results<Ok<${query_name}Dto>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>" \
+    "src/$app_name/Features/$query_module/$query_name/$query_name.cs|        group.MapGet(\"/trips/{id:guid}\", async Task<Results<Ok<$(query_dto "$query_name")>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>" \
     "tests/$app_name.IntegrationTests/Features/$query_module/$query_name/${query_name}Tests.cs|    private const string Route = ${query_module}Module.Route + \"/trips\";"; do
     expected="${generated#*|}"
     if ! grep -Fxq -- "$expected" "$app/${generated%%|*}"; then
@@ -4152,7 +4227,7 @@ mv "$work/Program.cs.backup" "$app_src/Program.cs"
 
 probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings RemindBookings CollectBookingFeeds
 probe_recurring_commands Bookings CollectBookingStats PurgeBookingDrafts
-probe_query_template Bookings GetBookingSummary ListBookingSummaries Booking \
+probe_query_template Bookings GetBookingSummary ListBookingSummaries GetBookingsOnDate Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetBookingTrip Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
@@ -4447,7 +4522,7 @@ probe_recurring_commands Rooms CollectRoomStats PurgeRoomDrafts
 probe_aggregate_template Rooms Room Rooms keep
 # Its child entities, generated by dotnet new hardslice-entity in both forms, then removed with their migration.
 probe_entity_template Rooms Room RoomSeat RoomVisit RoomVisitLog
-probe_query_template Rooms GetRoomSummary ListRoomSummaries Room 'Room.Create()'
+probe_query_template Rooms GetRoomSummary ListRoomSummaries GetRoomsOnDate Room 'Room.Create()'
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoomTrip Room 'Room.Create()'
 # The events of Rooms are generated by dotnet new hardslice-event, with a reaction in Rooms and one in a second module, both
 # completed with the aggregate Room.

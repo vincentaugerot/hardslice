@@ -492,7 +492,8 @@ public sealed class TemplatePackageTests
         symbols.TryGetProperty("ModuleRoute", out _).ShouldBeFalse();
     }
 
-    // hardslice-query generates the two files of a query slice, at the paths of HS004 and HS018, and nothing else: a query has no validator.
+    // hardslice-query generates the two files of a query slice, at the paths of HS004 and HS018, and the tests of the validator of a
+    // filtered query (PB-070), excluded from the other results, which have no validator.
     [Fact]
     public void Query_item_template_generates_a_slice_and_its_integration_tests_only()
     {
@@ -516,8 +517,87 @@ public sealed class TemplatePackageTests
         // Never list: dotnet new would read '--result list' as its own list command.
         symbols.GetProperty("Result").GetProperty("choices").EnumerateArray()
             .Select(choice => choice.GetProperty("choice").GetString())
-            .ShouldBe(["single", "many"]);
+            .ShouldBe(["single", "many", "filtered"]);
         symbols.GetProperty("Result").GetProperty("defaultValue").GetString().ShouldBe("single");
+        var modifiers = config.GetProperty("sources")[0].GetProperty("modifiers");
+        modifiers[1].GetProperty("condition").GetString().ShouldBe("(!ResultIsFiltered)");
+        modifiers[1].GetProperty("exclude").EnumerateArray().Select(glob => glob.GetString()).ShouldBe(["tests/MyApp.Tests/**/*"]);
+    }
+
+    // PB-070: the DTO is named after the slice without its first word, the verb of the use case, for every result. A name of one word,
+    // or whose first word is a single capital, is kept whole.
+    [Theory]
+    [InlineData("GetBooking", "BookingDto")]
+    [InlineData("ListRoomBookings", "RoomBookingsDto")]
+    [InlineData("GetScheduledTrips", "ScheduledTripsDto")]
+    [InlineData("CountBookings", "BookingsDto")]
+    [InlineData("Bookings", "BookingsDto")]
+    [InlineData("URLStatus", "URLStatusDto")]
+    public void Query_item_template_names_its_dto_without_the_verb_of_the_slice(string name, string dto)
+    {
+        var root = QueryTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var symbol = template.RootElement.GetProperty("symbols").GetProperty("ResultDto");
+
+        symbol.GetProperty("parameters").GetProperty("source").GetString().ShouldBe("name");
+        symbol.GetProperty("parameters").GetProperty("steps").EnumerateArray()
+            .Aggregate(name, (value, step) => Regex.Replace(
+                value, step.GetProperty("regex").GetString()!, step.GetProperty("replacement").GetString()!))
+            .ShouldBe(dto);
+        symbol.GetProperty("replaces").GetString().ShouldBe("ResultDtoName");
+        foreach (var file in QueryTemplateFiles.Where(file => file.EndsWith(".cs", StringComparison.Ordinal)))
+            File.ReadAllText(Path.Combine(root, file)).ShouldNotContain("QueryNameDto");
+    }
+
+    // PB-070: --parameter of --result filtered is <Name>:<Type>, a PascalCase name and one of the listed types, written as in C#.
+    [Theory]
+    [InlineData("Date:DateOnly", true, true)]
+    [InlineData("ServiceDate:DateOnly", true, true)]
+    [InlineData("Name:string", true, true)]
+    [InlineData("At:DateTimeOffset", true, true)]
+    [InlineData("Count:int", true, true)]
+    [InlineData("Id:Guid", true, true)]
+    [InlineData("Date:DateTime", true, false)]
+    [InlineData("Name:String", true, false)]
+    [InlineData("Status:BookingStatus", true, false)]
+    [InlineData("date:DateOnly", false, false)]
+    [InlineData("Date", false, false)]
+    [InlineData("Date:", false, false)]
+    [InlineData("Date:DateOnly:Extra", false, false)]
+    public void Query_item_template_accepts_a_filter_of_a_listed_type_only(string parameter, bool wellFormed, bool generated)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+        var type = Regex.Replace(parameter, @"^[^:]*:", "");
+
+        Matches(symbols, "ParameterIsWellFormed", parameter).ShouldBe(wellFormed);
+        (wellFormed && Matches(symbols, "FilterTypeIsKnown", type)).ShouldBe(generated);
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!
+            .ShouldContain("!ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown");
+    }
+
+    // PB-070: each listed type has a value of its own in the tests, a C# expression and the text of the query string. The template
+    // engine reads a value shaped as a date and time as a date: the one of DateTimeOffset is encoded so that it stays text.
+    [Fact]
+    public void Query_item_template_gives_every_listed_filter_type_a_test_value()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+        string[] types = ["string", "bool", "int", "long", "decimal", "double", "Guid", "DateOnly", "TimeOnly", "DateTimeOffset"];
+
+        symbols.GetProperty("FilterTypeIsKnown").GetProperty("parameters").GetProperty("pattern").GetString()
+            .ShouldBe($"^(?:{string.Join('|', types)})$");
+        foreach (var symbol in new[] { "FilterValue", "FilterQueryValue" })
+        {
+            var cases = symbols.GetProperty(symbol).GetProperty("parameters").GetProperty("cases").EnumerateArray().ToArray();
+            cases.Take(types.Length).Select(entry => entry.GetProperty("condition").GetString())
+                .ShouldBe(types.Select(type => $"(FilterType == \"{type}\")"));
+            cases.Take(types.Length).ShouldAllBe(entry => entry.GetProperty("value").GetString()!.Length > 0);
+        }
+        symbols.GetProperty("FilterQueryValue").GetProperty("parameters").GetProperty("cases")[types.Length - 1]
+            .GetProperty("value").GetString().ShouldBe("2026-11-04T08:30:00%2B00:00");
     }
 
     // Both results read the aggregate without tracking and project it to the DTO of the slice (HS006).
@@ -528,7 +608,7 @@ public sealed class TemplatePackageTests
             Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
 
         Regex.Matches(slice, @"db\.Set<AggregateName>\(\)\s+\.AsNoTracking\(\)").Count.ShouldBe(2);
-        Regex.Matches(slice, @"\.Select\(aggregate => new QueryNameDto\(").Count.ShouldBe(2);
+        Regex.Matches(slice, @"\.Select\(aggregate => new ResultDtoName\(").Count.ShouldBe(2);
         slice.ShouldNotContain("AsTracking()");
         slice.ShouldNotContain("SaveChanges");
     }
@@ -542,7 +622,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(10);
+        refusals.Length.ShouldBe(14);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -1629,7 +1709,8 @@ public sealed class TemplatePackageTests
         ".template.config/dotnetcli.host.json",
         ".template.config/template.json",
         "src/MyApp/Features/ModuleName/QueryName/QueryName.cs",
-        "tests/MyApp.IntegrationTests/Features/ModuleName/QueryName/QueryNameTests.cs"
+        "tests/MyApp.IntegrationTests/Features/ModuleName/QueryName/QueryNameTests.cs",
+        "tests/MyApp.Tests/Features/ModuleName/QueryName/QueryNameValidatorTests.cs"
     ];
 
     private static readonly string[] ModuleTemplateFiles =

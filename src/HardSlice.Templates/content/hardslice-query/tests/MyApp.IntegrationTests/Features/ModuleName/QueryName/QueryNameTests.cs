@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+#if (ResultIsFiltered)
+using Microsoft.AspNetCore.Http;
+#endif
 using MyApp.Domain.ModuleName;
 using MyApp.Features.ModuleName;
 using MyApp.Features.ModuleName.QueryName;
@@ -27,10 +30,10 @@ public sealed class QueryNameTests(PostgresDatabase database)
         var response = await app.CreateClient().GetAsync($"{Route}/{id}", TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var dto = await response.Content.ReadFromJsonAsync<QueryNameDto>(TestContext.Current.CancellationToken);
+        var dto = await response.Content.ReadFromJsonAsync<ResultDtoName>(TestContext.Current.CancellationToken);
         dto.ShouldNotBeNull();
         dto.Id.ShouldBe(id);
-        Assert.Fail("TODO(hardslice): assert the values of QueryNameDto that the use case reads from the stored AggregateName.");
+        Assert.Fail("TODO(hardslice): assert the values of ResultDtoName that the use case reads from the stored AggregateName.");
     }
 
     [Fact]
@@ -42,6 +45,34 @@ public sealed class QueryNameTests(PostgresDatabase database)
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
+#elif (ResultIsFiltered)
+    [Fact]
+    public async Task Lists_the_stored_aggregates_that_its_filter_selects()
+    {
+        var id = await StoreAggregateName();
+        await using var app = new AppFactory(database);
+
+        var response = await app.CreateClient().GetAsync($"{Route}?filterName=filter-query-value", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var dtos = await response.Content.ReadFromJsonAsync<ResultDtoName[]>(TestContext.Current.CancellationToken);
+        dtos.ShouldNotBeNull();
+        dtos.Select(dto => dto.Id).ShouldContain(id);
+        Assert.Fail("TODO(hardslice): store the AggregateName with the FilterName that the query string selects and another one that it excludes, then assert the values of ResultDtoName that the use case reads, and their order.");
+    }
+
+    [Fact]
+    public async Task Rejects_a_request_without_its_filter_with_a_validation_problem_before_its_handler()
+    {
+        await using var app = new AppFactory(database);
+
+        var response = await app.CreateClient().GetAsync(Route, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<HttpValidationProblemDetails>(TestContext.Current.CancellationToken);
+        problem.ShouldNotBeNull();
+        problem.Errors.Keys.ShouldBe(["filterName"]);
+    }
 #else
     [Fact]
     public async Task Lists_a_stored_aggregate_as_its_dto()
@@ -52,10 +83,10 @@ public sealed class QueryNameTests(PostgresDatabase database)
         var response = await app.CreateClient().GetAsync(Route, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var dtos = await response.Content.ReadFromJsonAsync<QueryNameDto[]>(TestContext.Current.CancellationToken);
+        var dtos = await response.Content.ReadFromJsonAsync<ResultDtoName[]>(TestContext.Current.CancellationToken);
         dtos.ShouldNotBeNull();
         dtos.Select(dto => dto.Id).ShouldContain(id);
-        Assert.Fail("TODO(hardslice): assert the values of QueryNameDto that the use case reads, and its filter and order if any.");
+        Assert.Fail("TODO(hardslice): assert the values of ResultDtoName that the use case reads, and its filter and order if any.");
     }
 #endif
 
