@@ -20,6 +20,12 @@ internal static class Cli
                           never edit. Exits 1 when one is protected, 0 when none is, 2 on a line that git quoted, which
                           only -z avoids: the CI of the solution runs it on the files of a pull request, which a
                           maintainer approves with the label hardslice-approved.
+          upgrade         Brings the solution to the template of the version of the tool, from a git tree without changes
+                          but the tool manifest: generates hardslice-api anew under its name in a temporary folder, rewrites
+                          the files the template owns (protected files and rule sheets), adds the files the solution lacks,
+                          and lists with their diff the files of the application that differ, to merge. Leaves out the sample
+                          when the solution has no src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless
+                          --sample or --no-sample says. Writes protected files: a maintainer runs it, never an agent.
           hook <cli> <event>
                           The hooks of an agent: reads the payload of the CLI on the standard input, refuses the edit
                           of a protected file, runs check --build after the edit of a .cs file and check before the
@@ -36,6 +42,8 @@ internal static class Cli
           --version       Prints the version of the tool.
 
         Exit codes of check and check --build: 0 the check passed, 1 a step failed, 2 a wrong command line only.
+        Exit codes of upgrade: 0 nothing left to merge, 1 the upgrade failed (with a change in the git tree, nothing is written),
+        2 a wrong command line, 3 files left to merge or to review, listed.
         """;
 
     // Where the end hook counts its relaunches for each failure, one file per session, in a folder of the user: a shared folder,
@@ -82,6 +90,15 @@ internal static class Cli
             case ["protected", ..]:
                 error.WriteLine($"error: protected takes no argument: it reads the paths on its standard input. Unknown arguments: '{string.Join(' ', args[1..])}'.");
                 return UsageError;
+            case ["upgrade"]:
+                return Upgrade(currentDirectory, runner, output, error, sample: null);
+            case ["upgrade", "--no-sample"]:
+                return Upgrade(currentDirectory, runner, output, error, sample: false);
+            case ["upgrade", "--sample"]:
+                return Upgrade(currentDirectory, runner, output, error, sample: true);
+            case ["upgrade", ..]:
+                error.WriteLine($"error: upgrade takes no argument, or --sample or --no-sample to choose the variant of the template. Unknown arguments: '{string.Join(' ', args[1..])}'.");
+                return UsageError;
             case ["--help" or "-h" or "help"]:
                 output.WriteLine(Usage);
                 return 0;
@@ -97,6 +114,9 @@ internal static class Cli
                 return UsageError;
         }
     }
+
+    private static int Upgrade(string currentDirectory, ICommandRunner runner, TextWriter output, TextWriter error, bool? sample) =>
+        new UpgradeCommand(runner, new DotnetNewGenerator(runner), output, error).Run(currentDirectory, sample);
 
     private static int Explain(string ruleId, TextWriter output, TextWriter error)
     {

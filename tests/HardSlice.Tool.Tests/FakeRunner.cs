@@ -49,7 +49,15 @@ internal sealed class FakeRunner : ICommandRunner
     public bool Succeeds(string fileName, IReadOnlyList<string> arguments, string workingDirectory) =>
         Record(fileName, arguments, workingDirectory) == 0;
 
-    private int Record(string fileName, IReadOnlyList<string> arguments, string workingDirectory)
+    // The output given with the command is its standard output.
+    public CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory)
+    {
+        var exitCode = Record(fileName, arguments, workingDirectory, write: false);
+        var command = Commands[^1];
+        return new CommandOutput(exitCode, _outputs.FirstOrDefault(output => command.StartsWith(output.Key, StringComparison.Ordinal)).Value ?? "", "");
+    }
+
+    private int Record(string fileName, IReadOnlyList<string> arguments, string workingDirectory, bool write = true)
     {
         var command = string.Join(' ', [fileName, .. arguments]);
         Commands.Add(command);
@@ -58,7 +66,7 @@ internal sealed class FakeRunner : ICommandRunner
             throw new InvalidOperationException($"simulated failure of '{command}'");
         _effects.FirstOrDefault(effect => command.StartsWith(effect.Key, StringComparison.Ordinal)).Value?.Invoke();
         var output = _outputs.FirstOrDefault(output => command.StartsWith(output.Key, StringComparison.Ordinal)).Value;
-        if (output is not null)
+        if (output is not null && write)
             _writer?.WriteLine(output);
         return _exitCodes.FirstOrDefault(exitCode => command.StartsWith(exitCode.Key, StringComparison.Ordinal)).Value;
     }

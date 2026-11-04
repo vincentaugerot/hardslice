@@ -78,6 +78,26 @@ public sealed class CliTests
         output.ShouldContain("check");
         output.ShouldContain("check --build");
         output.ShouldContain("explain <rule>");
+        output.ShouldContain("upgrade");
+        output.ShouldContain("Exit codes of upgrade: 0 nothing left to merge, 1 the upgrade failed");
+    }
+
+    // PB-086: upgrade takes the variant of the template, or deduces it, and nothing else. A wrong command line runs nothing.
+    [Theory]
+    [InlineData("--force")]
+    [InlineData("--no-sample", "--sample")]
+    [InlineData("0.3.0-preview.2")]
+    public void Upgrade_refuses_any_argument_but_the_variant_with_exit_code_2(params string[] arguments)
+    {
+        var runner = new FakeRunner();
+        var error = new StringWriter();
+
+        var exitCode = Cli.Run(["upgrade", .. arguments], Repository.Root, runner, new StringWriter(), error);
+
+        exitCode.ShouldBe(2);
+        runner.Commands.ShouldBeEmpty();
+        error.ToString().ShouldBe(
+            $"error: upgrade takes no argument, or --sample or --no-sample to choose the variant of the template. Unknown arguments: '{string.Join(' ', arguments)}'.{Environment.NewLine}");
     }
 
     [Fact]

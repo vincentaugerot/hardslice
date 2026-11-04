@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text;
 
 namespace HardSlice.Tool;
 
@@ -11,10 +12,16 @@ internal interface ICommandRunner
     // Runs a command with its output discarded: true if it exits 0, false if it fails or cannot start.
     bool Succeeds(string fileName, IReadOnlyList<string> arguments, string workingDirectory);
 
+    // Runs a command and returns its exit code with its output and its errors, read in UTF-8, never shown: a command that cannot
+    // start exits with CheckCommand.Failure and says why in its errors.
+    CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory);
+
     // The same runner, except that Run writes the output and the errors of its commands to the writer, line by line, instead of
     // the console: a hook hands them to the agent on its own streams.
     ICommandRunner WithOutput(TextWriter writer);
 }
+
+internal sealed record CommandOutput(int ExitCode, string Output, string Error);
 
 internal sealed class ProcessRunner(Func<string, string?> environment, TextWriter? writer = null) : ICommandRunner
 {
@@ -97,6 +104,30 @@ internal sealed class ProcessRunner(Func<string, string?> environment, TextWrite
         {
             // The command is not on the PATH.
             return false;
+        }
+    }
+
+    public CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory)
+    {
+        var startInfo = StartInfo(fileName, arguments, workingDirectory);
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.RedirectStandardInput = true;
+        startInfo.StandardOutputEncoding = Encoding.UTF8;
+        startInfo.StandardErrorEncoding = Encoding.UTF8;
+        try
+        {
+            using var process = Process.Start(startInfo)!;
+            process.StandardInput.Close();
+            // Both streams are read at once so that a verbose command never blocks on a full pipe.
+            var standardOutput = process.StandardOutput.ReadToEndAsync();
+            var standardError = process.StandardError.ReadToEndAsync();
+            process.WaitForExit();
+            return new CommandOutput(process.ExitCode, standardOutput.GetAwaiter().GetResult(), standardError.GetAwaiter().GetResult());
+        }
+        catch (Win32Exception exception)
+        {
+            return new CommandOutput(CheckCommand.Failure, "", $"error: '{fileName}' cannot start: {exception.Message}");
         }
     }
 

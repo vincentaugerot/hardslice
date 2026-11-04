@@ -49,6 +49,8 @@ The protected files are `.editorconfig`, `.globalconfig`, `Directory.Build.props
 
 "Forbidden" of `AGENTS.md` holds this list for agents, and the skills link to it. `dotnet hardslice protected` reads paths on its standard input, one per line or separated by NUL characters, lists the protected ones and exits 1 when there is one.
 
+`dotnet hardslice upgrade` rewrites the protected files and the rule sheets from the template of a newer version of the tool, and lists the files of the application to merge, as [Upgrading a generated solution](getting-started.md#upgrading-a-generated-solution) describes. A maintainer runs it, never an agent, and its pull request needs the label `hardslice-approved`.
+
 The hooks run in the process of the local tool, restored by the check script or `dotnet tool restore`. Until then, `dotnet hardslice` only prints that the tool must be restored, with code 0, and the agent goes on unchecked. Copilot CLI also runs the hooks of `.claude/settings.json`, without handing their failures to the agent: they exit 0 at once there (`COPILOT_CLI`).
 
 The hooks only shorten the loop. A file written through the shell escapes the edit hooks, and an agent or a human who turns them off is stopped by the check script and CI, which fails a pull request that changes a protected file without the label `hardslice-approved`.

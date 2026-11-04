@@ -24,6 +24,9 @@ internal static class ProtectedFiles
     public static IReadOnlyList<string> Entries(string solutionName) =>
         [.. AnyFolderFiles, .. RootFiles, .. RootFolders(solutionName)];
 
+    // The folders of the root whose every file is protected, each ending with '/', for the solution of the given name.
+    public static IReadOnlyList<string> Folders(string solutionName) => RootFolders(solutionName);
+
     // The protected entry that the path, relative to the root of the solution with '/', falls under, or null.
     public static string? Match(string relativePath, string solutionName)
     {
