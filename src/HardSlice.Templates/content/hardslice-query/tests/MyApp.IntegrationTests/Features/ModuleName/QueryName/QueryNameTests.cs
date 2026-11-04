@@ -1,13 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
 using MyApp.Domain.ModuleName;
+using MyApp.Features.ModuleName;
 using MyApp.Features.ModuleName.QueryName;
 
 namespace MyApp.IntegrationTests.Features.ModuleName.QueryName;
 
 public sealed class QueryNameTests(PostgresDatabase database)
 {
-    private const string Route = "/module-route/query-route";
+#if (RouteHasParameters)
+    // TODO(hardslice): replace each route parameter between braces in Route with a value of the test, and bind it in the endpoint of QueryName, such as a parameter of its delegate.
+#endif
+#if (RouteIsGroup)
+    private const string Route = ModuleNameModule.Route;
+#else
+    private const string Route = ModuleNameModule.Route + "/query-route";
+#endif
 
 #if (ResultIsSingle)
     [Fact]

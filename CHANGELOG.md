@@ -20,6 +20,7 @@ The first preview published on NuGet.org. No earlier version was published.
 - The web project has its own `UserSecretsId`, so `dotnet user-secrets set` needs no init. `AppFactory` runs the integration tests in the `IntegrationTests` environment, which reads no user secret, and starts no hosted service of the application unless the test keeps it with `KeepHostedService<T>()`.
 - The agent kit says that a command without parameters has no validator and tests a failure of the domain, or its success, instead of an invalid request, and the fix of HS014 says so for such a command. It says that a command handler may read from outside through the services of its module, such as `IHttpClientFactory`, and that an effect it has outside must stay harmless if its transaction rolls back.
 - `hardslice-command --parameters none` generates a command without parameters: an empty record, an endpoint that reads no body, no validator nor validator tests, and an integration test of its success instead of a 400. It refuses `--response none`, whose 404 answers an aggregate that such a command cannot name.
+- `hardslice-command` and `hardslice-query` take `--route`, the route of the endpoint under the group of its module (route parameters included, `/` for the group itself), and `--method`: `POST`, `PUT`, `PATCH` or `DELETE` for a command, whose `DELETE` reads its `Id` from the route, `GET` for a query. The contract of a module holds the route of its group in its constant `Route`, under which the generated tests call their slice.
 
 ### Known limitations
 

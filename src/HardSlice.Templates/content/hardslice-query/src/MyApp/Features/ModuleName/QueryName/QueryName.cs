@@ -50,7 +50,7 @@ internal static class QueryNameEndpoint
 {
     public static void Map(RouteGroupBuilder group) =>
 #if (ResultIsSingle)
-        group.MapGet("/query-route/{id:guid}", async Task<Results<Ok<QueryNameDto>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+        group.MapGet("/query-id-route", async Task<Results<Ok<QueryNameDto>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(new QueryNameQuery(id), cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound());
 #else
         group.MapGet("/query-route", async (IMediator mediator, CancellationToken cancellationToken) =>

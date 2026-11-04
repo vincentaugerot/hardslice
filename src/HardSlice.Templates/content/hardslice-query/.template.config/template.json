@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Query",
   "name": "HardSlice query slice",
-  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests. --route chooses the route of its endpoint, which answers GET. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-query",
   "sourceName": "QueryName",
   "preferNameDirectory": false,
@@ -52,6 +52,17 @@
         }
       ]
     },
+    "Route": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The route of the endpoint under the group of the module, chosen after the resource it reads rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as trips or {roomId:guid}/bookings, or / for the group itself. The name of the slice in kebab-case by default. With --result single, /{id:guid} follows it."
+    },
+    "Method": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "GET",
+      "description": "The HTTP method of the endpoint: GET, the only method of a query, which only reads."
+    },
     "AppName": {
       "type": "bind",
       "binding": "msbuild:RootNamespace",
@@ -77,28 +88,6 @@
         "fallbackVariableName": "Unbound"
       }
     },
-    "ModuleRouteWords": {
-      "type": "generated",
-      "generator": "regex",
-      "parameters": {
-        "source": "Module",
-        "steps": [
-          {
-            "regex": "(?<=[a-z0-9])([A-Z])",
-            "replacement": "-$1"
-          }
-        ]
-      }
-    },
-    "ModuleRoute": {
-      "type": "generated",
-      "generator": "casing",
-      "parameters": {
-        "source": "ModuleRouteWords",
-        "toLower": true
-      },
-      "replaces": "module-route"
-    },
     "QueryRouteWords": {
       "type": "generated",
       "generator": "regex",
@@ -118,8 +107,122 @@
       "parameters": {
         "source": "QueryRouteWords",
         "toLower": true
+      }
+    },
+    "RouteOrDefault": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Route",
+        "fallbackVariableName": "QueryRoute"
+      }
+    },
+    "SliceRoute": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "RouteOrDefault",
+        "steps": [
+          {
+            "regex": "^/",
+            "replacement": ""
+          }
+        ]
       },
-      "replaces": "query-route"
+      "fileRename": "slice-route"
+    },
+    "EndpointRoute": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "SliceRoute",
+        "steps": [
+          {
+            "regex": "^",
+            "replacement": "/"
+          }
+        ]
+      },
+      "replaces": "/query-route"
+    },
+    "IdRouteSource": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "SliceRoute"
+          },
+          {
+            "type": "const",
+            "value": "/{id:guid}"
+          }
+        ]
+      }
+    },
+    "IdEndpointRoute": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "IdRouteSource",
+        "steps": [
+          {
+            "regex": "^/?",
+            "replacement": "/"
+          }
+        ]
+      },
+      "replaces": "/query-id-route"
+    },
+    "RouteIsGroup": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "^$"
+      }
+    },
+    "RouteHasParameters": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "\\{"
+      }
+    },
+    "RouteNamesId": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "(?i)\\{id[:?}]"
+      }
+    },
+    "RouteIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "^(?:(?:[a-z0-9]+(?:-[a-z0-9]+)*|\\{[A-Za-z][A-Za-z0-9]*(?::[a-z]+(?:\\([^(){}/]*\\))?)*\\??\\})(?:/(?:[a-z0-9]+(?:-[a-z0-9]+)*|\\{[A-Za-z][A-Za-z0-9]*(?::[a-z]+(?:\\([^(){}/]*\\))?)*\\??\\}))*)?$"
+      }
+    },
+    "HttpMethod": {
+      "type": "generated",
+      "generator": "casing",
+      "parameters": {
+        "source": "Method",
+        "toLower": false
+      },
+      "fileRename": "HttpMethodName"
+    },
+    "MethodIsGet": {
+      "type": "computed",
+      "value": "(HttpMethod == \"GET\")"
     },
     "ResultIsSingle": {
       "type": "computed",
@@ -207,9 +310,13 @@
         "pattern": "^[A-Z][A-Za-z0-9]*$"
       }
     },
+    "RouteHidesId": {
+      "type": "computed",
+      "value": "(ResultIsSingle && RouteNamesId)"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet)"
     }
   },
   "sources": [
@@ -352,6 +459,63 @@
       "manualInstructions": [
         {
           "text": "error: --aggregate 'AggregateName' is not PascalCase: pass the aggregate root that the query reads, a type of src/MyApp.Domain/<Module>/, such as --aggregate Booking. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidRoute",
+      "condition": "(!RouteIsValid)",
+      "description": "Refuses a route that ASP.NET Core or the tests could not use.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --route '/slice-route' is not a route of lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as --route trips or --route {roomId:guid}/bookings. Pass --route / for the group of the module itself. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseRouteThatHidesId",
+      "condition": "(RouteHidesId)",
+      "description": "Refuses a route that already holds the parameter that a single result appends.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --route '/slice-route' holds a parameter id, which --result single appends to it as /{id:guid} to read the aggregate by its identifier. Remove it from --route, such as --route trips, or pass / for the group of the module. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseCommandMethod",
+      "condition": "(!MethodIsGet)",
+      "description": "Refuses a method other than GET.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --method 'HttpMethodName' is not GET: a query only reads and answers GET. A use case that changes state is a command, generated with dotnet new hardslice-command, which takes --method POST, PUT, PATCH or DELETE. Nothing was created."
         }
       ],
       "continueOnError": false

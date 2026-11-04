@@ -18,7 +18,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name <Module>
    ```
 
-   Add `--route <route>` only when its endpoints must answer under a group other than the name in kebab-case, such as `--route meeting-rooms`: the tests that the `add-slice` skill generates call the default group, so their `Route` will change too. If the template refuses, read its message, fix the argument and run it again: a refusal prints `created successfully` first, then fails with exit code 105 and creates nothing.
+   Add `--route <route>` only when its endpoints must answer under a group other than the name in kebab-case, such as `--route meeting-rooms`. The contract holds it in its constant `Route`, under which the tests that the `add-slice` skill generates call their slices. If the template refuses, read its message, fix the argument and run it again: a refusal prints `created successfully` first, then fails with exit code 105 and creates nothing.
 3. Copy the three lines it prints into `src/MyApp/Program.cs`, at the places it names: the `using`, `builder.Services.Add<Module>Module();` before `var app = builder.Build();`, and `app.Map<Module>Module();` before `app.Run();`. Change nothing else in that file.
 4. Add the module to the "Modules and slices" map of `AGENTS.md`, its name in backticks followed by `: no slice yet.`, in place of the line `- None yet: ...` for the first module.
 5. Run the check, and fix the code until it exits 0:

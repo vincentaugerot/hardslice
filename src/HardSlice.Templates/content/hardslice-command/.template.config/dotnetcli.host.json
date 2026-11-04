@@ -12,6 +12,14 @@
     "Parameters": {
       "longName": "parameters",
       "shortName": ""
+    },
+    "Route": {
+      "longName": "route",
+      "shortName": ""
+    },
+    "Method": {
+      "longName": "method",
+      "shortName": ""
     }
   }
 }

@@ -3,13 +3,21 @@ using System.Net.Http.Json;
 #if (!ParametersIsNone)
 using Microsoft.AspNetCore.Http;
 #endif
+using MyApp.Features.ModuleName;
 using MyApp.Features.ModuleName.CommandName;
 
 namespace MyApp.IntegrationTests.Features.ModuleName.CommandName;
 
 public sealed class CommandNameTests(PostgresDatabase database)
 {
-    private const string Route = "/module-route/command-route";
+#if (RouteHasParameters)
+    // TODO(hardslice): replace each route parameter between braces in Route with a value of the test, and bind it in the endpoint of CommandName, such as a parameter of its delegate.
+#endif
+#if (RouteIsGroup)
+    private const string Route = ModuleNameModule.Route;
+#else
+    private const string Route = ModuleNameModule.Route + "/command-route";
+#endif
 #if (ParametersIsNone)
 
     // No parameter, so no invalid request: test its success here, and a failure of the domain when one can happen, such as the
@@ -19,7 +27,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
     {
         await using var app = new AppFactory(database);
 
+#if (MethodIsDelete)
+        var response = await app.CreateClient().DeleteAsync(Route, TestContext.Current.CancellationToken);
+#else
         var response = await app.CreateClient().PostAsync(Route, content: null, TestContext.Current.CancellationToken);
+#endif
 
         response.StatusCode.ShouldBe(
             HttpStatusCode.OK,
@@ -34,7 +46,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
         await using var app = new AppFactory(database);
         var command = new CommandNameCommand(Guid.NewGuid());
 
+#if (ReadsIdFromRoute)
+        var response = await app.CreateClient().DeleteAsync($"{Route}/{command.Id}", TestContext.Current.CancellationToken);
+#else
         var response = await app.CreateClient().PostAsJsonAsync(Route, command, TestContext.Current.CancellationToken);
+#endif
 
 #if (ResponseIsNone)
         response.StatusCode.ShouldBe(
@@ -52,7 +68,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
     {
         await using var app = new AppFactory(database);
 
+#if (ReadsIdFromRoute)
+        var response = await app.CreateClient().DeleteAsync($"{Route}/{Guid.Empty}", TestContext.Current.CancellationToken);
+#else
         var response = await app.CreateClient().PostAsJsonAsync(Route, new CommandNameCommand(Guid.Empty), TestContext.Current.CancellationToken);
+#endif
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var problem = await response.Content.ReadFromJsonAsync<HttpValidationProblemDetails>(TestContext.Current.CancellationToken);

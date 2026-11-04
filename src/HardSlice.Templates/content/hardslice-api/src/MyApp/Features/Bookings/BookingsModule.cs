@@ -8,6 +8,9 @@ namespace MyApp.Features.Bookings;
 
 public static class BookingsModule
 {
+    // The route of the group that maps the endpoints of the module: the integration tests of its slices call theirs under it.
+    public const string Route = "/bookings";
+
     // Handlers are registered by their contract only: endpoints reach them through IMediator, never directly.
     public static IServiceCollection AddBookingsModule(this IServiceCollection services) =>
         services
@@ -19,7 +22,7 @@ public static class BookingsModule
 
     public static IEndpointRouteBuilder MapBookingsModule(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/bookings");
+        var group = endpoints.MapGroup(Route);
         ConfirmBookingEndpoint.Map(group);
         CancelBookingEndpoint.Map(group);
         GetBookingEndpoint.Map(group);

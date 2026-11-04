@@ -20,6 +20,19 @@ public sealed record CommandNameCommand : ICommand<ResponseTypeName>;
 // Values only: never an entity, not even in a property (HS005). Replace Id with what the command did.
 public sealed record ResponseTypeName(Guid Id);
 #endif
+#elif (ReadsIdFromRoute)
+// A DELETE has no body: its endpoint reads Id, the identifier of the aggregate, from its route.
+#if (ResponseIsId)
+public sealed record CommandNameCommand(Guid Id) : ICommand<Guid>;
+#elif (ResponseIsNone)
+// Returns false when the aggregate does not exist, answered with 404.
+public sealed record CommandNameCommand(Guid Id) : ICommand<bool>;
+#else
+public sealed record CommandNameCommand(Guid Id) : ICommand<ResponseTypeName>;
+
+// Values only: never an entity, not even in a property (HS005).
+public sealed record ResponseTypeName(Guid Id);
+#endif
 #elif (ResponseIsId)
 // Returns the identifier of the aggregate it changes or creates. Replace Id with the fields of the use case.
 public sealed record CommandNameCommand(Guid Id) : ICommand<Guid>;
@@ -69,6 +82,12 @@ internal static class CommandNameEndpoint
 #if (ParametersIsNone)
         group.MapPost("/command-route", async (IMediator mediator, CancellationToken cancellationToken) =>
             TypedResults.Ok(await mediator.Send(new CommandNameCommand(), cancellationToken)));
+#elif (ReadsIdFromRoute && ResponseIsNone)
+        group.MapPost("/command-id-route", async Task<Results<NoContent, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+            await mediator.Send(new CommandNameCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
+#elif (ReadsIdFromRoute)
+        group.MapPost("/command-id-route", async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await mediator.Send(new CommandNameCommand(id), cancellationToken)));
 #elif (ResponseIsNone)
         group.MapPost("/command-route", async Task<Results<NoContent, NotFound>> (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(command, cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());

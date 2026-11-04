@@ -180,7 +180,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(9);
+        refusals.Length.ShouldBe(13);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -255,6 +255,126 @@ public sealed class TemplatePackageTests
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("ResponseIsAccepted");
     }
 
+    // PB-065: --route takes the words and the route parameters of ASP.NET Core, relative to the group of the module, and / for the group
+    // itself; the slice templates refuse the rest, as hardslice-module does for its group.
+    [Theory]
+    [InlineData("versions", true)]
+    [InlineData("schedule/versions", true)]
+    [InlineData("meeting-rooms", true)]
+    [InlineData("", true)]
+    [InlineData("{id:guid}/extensions", true)]
+    [InlineData("{roomId:guid}/bookings/{day:datetime}", true)]
+    [InlineData("items/{page:int:min(1)}", true)]
+    [InlineData("items/{slug?}", true)]
+    [InlineData("Versions", false)]
+    [InlineData("versions/", false)]
+    [InlineData("schedule//versions", false)]
+    [InlineData("meeting rooms", false)]
+    [InlineData("-versions", false)]
+    [InlineData("{id", false)]
+    [InlineData("{1id}", false)]
+    [InlineData("{id:Guid}", false)]
+    [InlineData("versions?date=today", false)]
+    public void Slice_item_templates_accept_a_route_of_words_and_route_parameters(string route, bool accepted)
+    {
+        var repository = FindRepositoryRoot();
+        foreach (var root in new[] { CommandTemplateRoot(repository), QueryTemplateRoot(repository) })
+        {
+            using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+            var symbols = template.RootElement.GetProperty("symbols");
+
+            Matches(symbols, "RouteIsValid", route).ShouldBe(accepted);
+            symbols.GetProperty("SliceRoute").GetProperty("parameters").GetProperty("source").GetString().ShouldBe("RouteOrDefault");
+            symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("RouteIsValid && !RouteHidesId");
+        }
+    }
+
+    // PB-065: a single result and a DELETE append /{id:guid} to --route, which must not name id already: ASP.NET Core refuses a route
+    // parameter twice when it maps the endpoint.
+    [Theory]
+    [InlineData("{id}/history", true)]
+    [InlineData("{Id:guid}", true)]
+    [InlineData("{id?}", true)]
+    [InlineData("{identifier}/history", false)]
+    [InlineData("{roomId:guid}", false)]
+    [InlineData("ids", false)]
+    public void Slice_item_templates_refuse_a_route_that_names_the_id_they_append(string route, bool named)
+    {
+        var repository = FindRepositoryRoot();
+        using var command = JsonDocument.Parse(File.ReadAllText(Path.Combine(CommandTemplateRoot(repository), ".template.config", "template.json")));
+        using var query = JsonDocument.Parse(File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), ".template.config", "template.json")));
+
+        Matches(command.RootElement.GetProperty("symbols"), "RouteNamesId", route).ShouldBe(named);
+        Matches(query.RootElement.GetProperty("symbols"), "RouteNamesId", route).ShouldBe(named);
+        command.RootElement.GetProperty("symbols").GetProperty("RouteHidesId").GetProperty("value").GetString().ShouldBe("(ReadsIdFromRoute && RouteNamesId)");
+        command.RootElement.GetProperty("symbols").GetProperty("ReadsIdFromRoute").GetProperty("value").GetString().ShouldBe("(MethodIsDelete && !ParametersIsNone)");
+        query.RootElement.GetProperty("symbols").GetProperty("RouteHidesId").GetProperty("value").GetString().ShouldBe("(ResultIsSingle && RouteNamesId)");
+    }
+
+    // PB-065: a command answers POST by default, PUT, PATCH or DELETE, a query GET only, in any case; the endpoint and the test follow.
+    [Fact]
+    public void Slice_item_templates_map_and_call_the_method_of_their_use_case()
+    {
+        var repository = FindRepositoryRoot();
+        using var command = JsonDocument.Parse(File.ReadAllText(Path.Combine(CommandTemplateRoot(repository), ".template.config", "template.json")));
+        using var query = JsonDocument.Parse(File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), ".template.config", "template.json")));
+        var commandSymbols = command.RootElement.GetProperty("symbols");
+        var querySymbols = query.RootElement.GetProperty("symbols");
+
+        foreach (var symbols in new[] { commandSymbols, querySymbols })
+        {
+            symbols.GetProperty("Route").TryGetProperty("defaultValue", out _).ShouldBeFalse();
+            symbols.GetProperty("HttpMethod").GetProperty("generator").GetString().ShouldBe("casing");
+            symbols.GetProperty("HttpMethod").GetProperty("parameters").GetProperty("toLower").GetBoolean().ShouldBeFalse();
+        }
+        commandSymbols.GetProperty("Method").GetProperty("defaultValue").GetString().ShouldBe("POST");
+        commandSymbols.GetProperty("MethodIsAccepted").GetProperty("value").GetString().ShouldBe("(MethodIsPost || MethodIsPut || MethodIsPatch || MethodIsDelete)");
+        commandSymbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("MethodIsAccepted");
+        querySymbols.GetProperty("Method").GetProperty("defaultValue").GetString().ShouldBe("GET");
+        querySymbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("MethodIsGet");
+        foreach (var (symbol, replaced, values) in new[]
+        {
+            ("MapMethod", "MapPost", new[] { "MapPut", "MapPatch", "MapDelete", "MapPost" }),
+            ("SendJson", "PostAsJsonAsync", new[] { "PutAsJsonAsync", "PatchAsJsonAsync", "PostAsJsonAsync" }),
+            ("SendWithoutBody", "PostAsync", new[] { "PutAsync", "PatchAsync", "PostAsync" }),
+        })
+        {
+            var generated = commandSymbols.GetProperty(symbol);
+            generated.GetProperty("replaces").GetString().ShouldBe(replaced);
+            generated.GetProperty("parameters").GetProperty("cases").EnumerateArray().Select(@case => @case.GetProperty("value").GetString()).ShouldBe(values);
+        }
+
+        var slice = File.ReadAllText(Path.Combine(CommandTemplateRoot(repository), "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
+        slice.ShouldContain("group.MapPost(\"/command-id-route\", async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>");
+        var commandTests = File.ReadAllText(Path.Combine(CommandTemplateRoot(repository), "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        commandTests.ShouldContain("DeleteAsync($\"{Route}/{command.Id}\", TestContext.Current.CancellationToken)");
+        commandTests.ShouldContain("DeleteAsync(Route, TestContext.Current.CancellationToken)");
+        var querySlice = File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
+        querySlice.ShouldContain("group.MapGet(\"/query-id-route\", ");
+        querySlice.ShouldContain("group.MapGet(\"/query-route\", ");
+    }
+
+    // PB-065: the generated tests call the route of the slice under the constant Route of its module, the group of --route included,
+    // and a route parameter left between braces is a marker to replace.
+    [Theory]
+    [InlineData("hardslice-command", "CommandName", "/command-route")]
+    [InlineData("hardslice-query", "QueryName", "/query-route")]
+    public void Slice_item_templates_test_the_route_of_the_slice_under_the_group_of_its_module(string template, string name, string token)
+    {
+        var root = Path.Combine(FindRepositoryRoot(), "src", "HardSlice.Templates", "content", template);
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", name, $"{name}Tests.cs"));
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
+
+        tests.ShouldContain("using MyApp.Features.ModuleName;\n");
+        tests.ShouldContain("#if (RouteIsGroup)\n    private const string Route = ModuleNameModule.Route;\n#else\n"
+            + $"    private const string Route = ModuleNameModule.Route + \"{token}\";\n#endif\n");
+        tests.ShouldContain("#if (RouteHasParameters)\n    // TODO(hardslice): replace each route parameter between braces in Route with a value of the test");
+        tests.ShouldNotContain("module-route");
+        symbols.GetProperty("EndpointRoute").GetProperty("replaces").GetString().ShouldBe(token);
+        symbols.TryGetProperty("ModuleRoute", out _).ShouldBeFalse();
+    }
+
     // hardslice-query generates the two files of a query slice, at the paths of HS004 and HS018, and nothing else: a query has no validator.
     [Fact]
     public void Query_item_template_generates_a_slice_and_its_integration_tests_only()
@@ -305,7 +425,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(7);
+        refusals.Length.ShouldBe(10);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -351,7 +471,9 @@ public sealed class TemplatePackageTests
         contract.ShouldContain("    public static IServiceCollection AddModuleNameModule(this IServiceCollection services) =>");
         contract.ShouldContain("        services;");
         contract.ShouldContain("    public static IEndpointRouteBuilder MapModuleNameModule(this IEndpointRouteBuilder endpoints)");
-        contract.ShouldContain("        var group = endpoints.MapGroup(\"/module-route\");");
+        // PB-065: the route of the group is a constant of the contract, which the integration tests of the slice templates call under.
+        contract.ShouldContain("    public const string Route = \"/module-route\";");
+        contract.ShouldContain("        var group = endpoints.MapGroup(Route);");
         contract.ShouldContain("        return endpoints;");
         contract.ShouldNotContain(line => line.StartsWith("using ", StringComparison.Ordinal));
     }
@@ -767,18 +889,26 @@ public sealed class TemplatePackageTests
             instructions.ShouldContain("Until it is restored, the hooks do nothing.", Case.Sensitive, $"{file} does not say that the hooks wait for the tool.");
     }
 
-    // PB-056: the slice templates call the group of the module named in kebab-case; a module created with --route maps another one.
+    // PB-065: the slice templates take the route of the slice from --route and call it under <Module>Module.Route, the group of a
+    // module created with its own --route included: the agent kit asks for --route every time and no longer to change the tests.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Agent_guidance_says_to_change_the_route_of_the_generated_tests_in_a_module_mapped_with_its_own_route(bool noSample)
+    public void Agent_guidance_asks_for_the_route_of_every_slice_and_no_change_of_the_route_of_its_tests(bool noSample)
     {
         var templateRoot = TemplateRoot(FindRepositoryRoot());
         var agents = string.Join('\n', AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample));
         var addSlice = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-slice", "SKILL.md"));
+        var addModule = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-module", "SKILL.md"));
 
-        agents.ShouldContain("In a module mapped with `--route`, change `Route` in its generated tests.");
-        addSlice.ShouldContain("change `Route` in the generated tests");
+        agents.ShouldContain("Always pass `--route`, named after the resource rather than the use case");
+        addSlice.ShouldContain("Always pass `--route`, the route of the endpoint under the group of the module, named after the resource");
+        addSlice.ShouldContain("--module <Module> --name <Slice> --route <route>");
+        addSlice.ShouldContain("--aggregate <Aggregate> --route <route>");
+        addSlice.ShouldContain("The generated tests call the route of the slice under `<Module>Module.Route`, the group of the module.");
+        addModule.ShouldContain("The contract holds it in its constant `Route`");
+        foreach (var text in new[] { agents, addSlice, addModule })
+            text.ShouldNotContain("change `Route`");
     }
 
     // PB-063: a command without parameters has no validator (HS013) nor invalid request, and a command handler may read from outside

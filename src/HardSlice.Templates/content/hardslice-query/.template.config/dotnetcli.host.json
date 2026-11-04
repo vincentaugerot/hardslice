@@ -12,6 +12,14 @@
     "Result": {
       "longName": "result",
       "shortName": ""
+    },
+    "Route": {
+      "longName": "route",
+      "shortName": ""
+    },
+    "Method": {
+      "longName": "method",
+      "shortName": ""
     }
   }
 }

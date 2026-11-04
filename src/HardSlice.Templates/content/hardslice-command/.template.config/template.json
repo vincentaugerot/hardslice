@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -52,6 +52,17 @@
         }
       ]
     },
+    "Route": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The route of the endpoint under the group of the module, chosen after the resource it changes rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as versions or {id:guid}/extensions, or / for the group itself. The name of the slice in kebab-case by default. With --method DELETE and --parameters id, /{id:guid} follows it."
+    },
+    "Method": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "POST",
+      "description": "The HTTP method of the endpoint: POST (by default), PUT, PATCH or DELETE, in any case. A DELETE has no body: with --parameters id, it reads the Id of the command from its route, /{id:guid} after --route."
+    },
     "AppName": {
       "type": "bind",
       "binding": "msbuild:RootNamespace",
@@ -77,28 +88,6 @@
         "fallbackVariableName": "Unbound"
       }
     },
-    "ModuleRouteWords": {
-      "type": "generated",
-      "generator": "regex",
-      "parameters": {
-        "source": "Module",
-        "steps": [
-          {
-            "regex": "(?<=[a-z0-9])([A-Z])",
-            "replacement": "-$1"
-          }
-        ]
-      }
-    },
-    "ModuleRoute": {
-      "type": "generated",
-      "generator": "casing",
-      "parameters": {
-        "source": "ModuleRouteWords",
-        "toLower": true
-      },
-      "replaces": "module-route"
-    },
     "CommandRouteWords": {
       "type": "generated",
       "generator": "regex",
@@ -118,8 +107,212 @@
       "parameters": {
         "source": "CommandRouteWords",
         "toLower": true
+      }
+    },
+    "RouteOrDefault": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Route",
+        "fallbackVariableName": "CommandRoute"
+      }
+    },
+    "SliceRoute": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "RouteOrDefault",
+        "steps": [
+          {
+            "regex": "^/",
+            "replacement": ""
+          }
+        ]
       },
-      "replaces": "command-route"
+      "fileRename": "slice-route"
+    },
+    "EndpointRoute": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "SliceRoute",
+        "steps": [
+          {
+            "regex": "^",
+            "replacement": "/"
+          }
+        ]
+      },
+      "replaces": "/command-route"
+    },
+    "IdRouteSource": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "SliceRoute"
+          },
+          {
+            "type": "const",
+            "value": "/{id:guid}"
+          }
+        ]
+      }
+    },
+    "IdEndpointRoute": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "IdRouteSource",
+        "steps": [
+          {
+            "regex": "^/?",
+            "replacement": "/"
+          }
+        ]
+      },
+      "replaces": "/command-id-route"
+    },
+    "RouteIsGroup": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "^$"
+      }
+    },
+    "RouteHasParameters": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "\\{"
+      }
+    },
+    "RouteNamesId": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "(?i)\\{id[:?}]"
+      }
+    },
+    "RouteIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceRoute",
+        "pattern": "^(?:(?:[a-z0-9]+(?:-[a-z0-9]+)*|\\{[A-Za-z][A-Za-z0-9]*(?::[a-z]+(?:\\([^(){}/]*\\))?)*\\??\\})(?:/(?:[a-z0-9]+(?:-[a-z0-9]+)*|\\{[A-Za-z][A-Za-z0-9]*(?::[a-z]+(?:\\([^(){}/]*\\))?)*\\??\\}))*)?$"
+      }
+    },
+    "HttpMethod": {
+      "type": "generated",
+      "generator": "casing",
+      "parameters": {
+        "source": "Method",
+        "toLower": false
+      },
+      "fileRename": "HttpMethodName"
+    },
+    "MethodIsGet": {
+      "type": "computed",
+      "value": "(HttpMethod == \"GET\")"
+    },
+    "MethodIsPost": {
+      "type": "computed",
+      "value": "(HttpMethod == \"POST\")"
+    },
+    "MethodIsPut": {
+      "type": "computed",
+      "value": "(HttpMethod == \"PUT\")"
+    },
+    "MethodIsPatch": {
+      "type": "computed",
+      "value": "(HttpMethod == \"PATCH\")"
+    },
+    "MethodIsDelete": {
+      "type": "computed",
+      "value": "(HttpMethod == \"DELETE\")"
+    },
+    "MethodIsAccepted": {
+      "type": "computed",
+      "value": "(MethodIsPost || MethodIsPut || MethodIsPatch || MethodIsDelete)"
+    },
+    "MapMethod": {
+      "type": "generated",
+      "generator": "switch",
+      "replaces": "MapPost",
+      "parameters": {
+        "evaluator": "C++",
+        "datatype": "string",
+        "cases": [
+          {
+            "condition": "(HttpMethod == \"PUT\")",
+            "value": "MapPut"
+          },
+          {
+            "condition": "(HttpMethod == \"PATCH\")",
+            "value": "MapPatch"
+          },
+          {
+            "condition": "(HttpMethod == \"DELETE\")",
+            "value": "MapDelete"
+          },
+          {
+            "value": "MapPost"
+          }
+        ]
+      }
+    },
+    "SendJson": {
+      "type": "generated",
+      "generator": "switch",
+      "replaces": "PostAsJsonAsync",
+      "parameters": {
+        "evaluator": "C++",
+        "datatype": "string",
+        "cases": [
+          {
+            "condition": "(HttpMethod == \"PUT\")",
+            "value": "PutAsJsonAsync"
+          },
+          {
+            "condition": "(HttpMethod == \"PATCH\")",
+            "value": "PatchAsJsonAsync"
+          },
+          {
+            "value": "PostAsJsonAsync"
+          }
+        ]
+      }
+    },
+    "SendWithoutBody": {
+      "type": "generated",
+      "generator": "switch",
+      "replaces": "PostAsync",
+      "parameters": {
+        "evaluator": "C++",
+        "datatype": "string",
+        "cases": [
+          {
+            "condition": "(HttpMethod == \"PUT\")",
+            "value": "PutAsync"
+          },
+          {
+            "condition": "(HttpMethod == \"PATCH\")",
+            "value": "PatchAsync"
+          },
+          {
+            "value": "PostAsync"
+          }
+        ]
+      }
     },
     "ResponseIsId": {
       "type": "computed",
@@ -261,9 +454,17 @@
       "type": "computed",
       "value": "(ParametersIsNone && ResponseIsNone)"
     },
+    "ReadsIdFromRoute": {
+      "type": "computed",
+      "value": "(MethodIsDelete && !ParametersIsNone)"
+    },
+    "RouteHidesId": {
+      "type": "computed",
+      "value": "(ReadsIdFromRoute && RouteNamesId)"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted)"
     }
   },
   "sources": [
@@ -449,6 +650,82 @@
       "manualInstructions": [
         {
           "text": "error: --response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for. Pass --response id for the identifier of the aggregate it creates or changes, or the PascalCase name of a DTO of what it did, such as --response ImportResultDto, or keep the parameters with --parameters id. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidRoute",
+      "condition": "(!RouteIsValid)",
+      "description": "Refuses a route that ASP.NET Core or the tests could not use.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --route '/slice-route' is not a route of lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as --route versions or --route {id:guid}/extensions. Pass --route / for the group of the module itself. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseRouteThatHidesId",
+      "condition": "(RouteHidesId)",
+      "description": "Refuses a route that already holds the parameter that DELETE appends.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --route '/slice-route' holds a parameter id, which --method DELETE appends to it as /{id:guid} to read the Id of the command. Remove it from --route, such as --route versions, or pass / for the group of the module. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseQueryMethod",
+      "condition": "(MethodIsGet)",
+      "description": "Refuses GET, the method of a query.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --method GET only reads, while a command changes state: pass --method POST, PUT, PATCH or DELETE, or generate a query with dotnet new hardslice-query. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidMethod",
+      "condition": "(!MethodIsAccepted && !MethodIsGet)",
+      "description": "Refuses an unknown HTTP method.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --method 'HttpMethodName' is not POST, PUT, PATCH or DELETE, the methods of a command, such as --method PUT. Nothing was created."
         }
       ],
       "continueOnError": false

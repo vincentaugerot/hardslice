@@ -52,7 +52,7 @@ Modules and slices:
 
 Use the skills `add-module`, then `add-aggregate`, then `add-slice` for each use case. They run, from the root of the solution:
 
-1. `dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name <Module>`, with `--route <route>` for a group other than the module name in kebab-case (then change `Route` in the tests that the slice templates generate, which call the default group): the public contract `src/MyApp/Features/<Module>/<Module>Module.cs`, the folder of its domain and its test folders. Add the lines it prints to `Program.cs`.
+1. `dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name <Module>`, with `--route <route>` for a group other than the module name in kebab-case: the public contract `src/MyApp/Features/<Module>/<Module>Module.cs`, the folder of its domain and its test folders. Add the lines it prints to `Program.cs`.
 2. `dotnet new hardslice-aggregate --project src/MyApp/MyApp.csproj --module <Module> --name <Aggregate>`: the aggregate, its `<Aggregate>Id`, its mapping and its unit tests. Rename its factory method `Create` after the business fact, give it its state and its rules, map that state, and add the migration it prints: see [Changing the database](#changing-the-database).
 3. Add its slices as below, then add the module to the map above.
 <!--#endif -->
@@ -67,11 +67,11 @@ Use the skill `add-slice`, and `add-domain-event` for a fact other code reacts t
 <!--#else -->
    A broken rule throws `DomainException`, answered with 400. A rule broken by the current state, such as a duplicate, throws a `ConflictException`, answered with 409.
 <!--#endif -->
-2. Generate the slice with its tests: `dotnet new hardslice-command --project src/MyApp/MyApp.csproj --module <Module> --name <Slice>` when it changes state, with `--parameters none` for a command without parameters (an empty record, no validator), `--response none` when it returns only whether its aggregate exists (a `bool`, `false` answered with 404, refused with `--parameters none`) or `--response <Dto>` for a DTO of values (a `Guid` identifier by default); `dotnet new hardslice-query --project src/MyApp/MyApp.csproj --module <Module> --name <Slice> --aggregate <Aggregate>` when it only reads, one DTO by its id or a list with `--result many`.
+2. Generate the slice with its tests: `dotnet new hardslice-command --project src/MyApp/MyApp.csproj --module <Module> --name <Slice>` when it changes state, with `--parameters none` for a command without parameters (an empty record, no validator), `--response none` when it returns only whether its aggregate exists (a `bool`, `false` answered with 404, refused with `--parameters none`) or `--response <Dto>` for a DTO of values (a `Guid` identifier by default); `dotnet new hardslice-query --project src/MyApp/MyApp.csproj --module <Module> --name <Slice> --aggregate <Aggregate>` when it only reads, one DTO by its id or a list with `--result many`. Always pass `--route`, named after the resource rather than the use case (`--route versions`, not `import-schedule`), and `--method PUT`, `PATCH` or `DELETE` for a command that replaces, changes or deletes it (`POST` by default).
 <!--#if (!NoSample) -->
-   Follow `ConfirmBooking` and `GetBooking`. In a module mapped with `--route`, change `Route` in its generated tests. A slice holds:
+   Follow `ConfirmBooking` and `GetBooking`. A slice holds:
 <!--#else -->
-   In a module mapped with `--route`, change `Route` in its generated tests. A slice holds:
+   A slice holds:
 <!--#endif -->
    - a public request: an `ICommand<TResponse>` when it changes state, an `IQuery<TResponse>` when it only reads. The response type is exact (invariant), matching its handler and pipeline;
    - an `internal` validator, an `AbstractValidator<TRequest>`, required for a command with parameters, that checks the shape of the input (required fields, formats, lengths). A failure is answered with 400 naming the fields, before the handler runs. A command without parameters, an empty record, has none: never an empty validator;
