@@ -9,7 +9,9 @@ namespace HardSlice.Analyzers;
 
 // HS010: the domain and the slices never read the system clock. The clock properties of DateTime and DateTimeOffset are
 // recognized by their symbols. The domain is the assembly that declares the entity contract of hardslice.json: all its code
-// is checked, in its own compilation. In any other compilation, only the code of its slices is (SliceMap). Not applied to test projects.
+// is checked, in its own compilation. In any other compilation, only the code of its slices is (SliceMap). A slice also never
+// waits on the system clock: 'Task.Delay' and 'new PeriodicTimer' without a TimeProvider argument are reported there, recognized
+// by their symbols too. Not applied to test projects.
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
 {
@@ -24,7 +26,16 @@ public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         helpLinkUri: RuleSheet.Uri(DiagnosticId));
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
+    private static readonly DiagnosticDescriptor TimerRule = new(
+        DiagnosticId,
+        title: "The domain or a slice reads the system clock",
+        messageFormat: "{0} waits on the system clock with '{1}'. A slice waits on an injected TimeProvider, which tests advance. Fix: {2}. Skill: fix-architecture-violation. Doc: 'docs/rules/HS010.md'.",
+        category: "HardSlice.Architecture",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        helpLinkUri: RuleSheet.Uri(DiagnosticId));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule, TimerRule);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -48,6 +59,14 @@ public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
             start.RegisterOperationAction(
                 operationContext => Analyze(operationContext, clock, isDomain, slices, expression),
                 OperationKind.PropertyReference);
+
+            if (SystemTimers.Create(compilation) is { } timers)
+            {
+                start.RegisterOperationAction(
+                    operationContext => AnalyzeTimer(operationContext, timers, slices),
+                    OperationKind.Invocation,
+                    OperationKind.ObjectCreation);
+            }
         });
     }
 
@@ -84,6 +103,41 @@ public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
             fix));
     }
 
+    // 'Task.Delay(TimeSpan)' or 'new PeriodicTimer(TimeSpan)' in a slice: the overload that takes a TimeProvider replaces it.
+    private static void AnalyzeTimer(OperationAnalysisContext context, SystemTimers timers, SliceMap slices)
+    {
+        var method = context.Operation switch
+        {
+            IInvocationOperation invocation => invocation.TargetMethod,
+            IObjectCreationOperation creation => creation.Constructor,
+            _ => null
+        };
+        if (method is null || timers.FixOf(method) is not { } fix || slices.SliceOf(context.ContainingSymbol) is not { } slice)
+            return;
+
+        var location = context.Operation.Syntax switch
+        {
+            InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess } => memberAccess.Name.GetLocation(),
+            BaseObjectCreationExpressionSyntax creation => creation.NewKeyword.GetLocation(),
+            var syntax => syntax.GetLocation()
+        };
+        context.ReportDiagnostic(Diagnostic.Create(
+            TimerRule,
+            location,
+            $"{ContainingMember.Describe(context.ContainingSymbol)} in slice '{slice}'",
+            method.MethodKind == MethodKind.Constructor
+                ? $"new {method.ContainingType.Name}({string.Join(", ", method.Parameters.Select(parameter => parameter.Type.ToDisplayString(TimerFormat)))})"
+                : method.ToDisplayString(TimerFormat),
+            fix));
+    }
+
+    // 'Task.Delay(TimeSpan, CancellationToken)'.
+    private static readonly SymbolDisplayFormat TimerFormat = new(
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
+        memberOptions: SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeParameters,
+        parameterOptions: SymbolDisplayParameterOptions.IncludeType,
+        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
     // 'db.Set<Booking>().Where(booking => booking.End < DateTimeOffset.UtcNow)': the lambda is converted to Expression<TDelegate>.
     private static bool IsInExpressionTree(IOperation operation, INamedTypeSymbol? expression)
     {
@@ -101,6 +155,36 @@ public sealed class SystemClockAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
+    }
+
+    // The methods that wait on the system clock, with the call that replaces each: every overload of Task.Delay and of the
+    // constructor of PeriodicTimer that takes no TimeProvider. Null when the compilation knows no TimeProvider, before .NET 8.
+    private sealed class SystemTimers(ImmutableDictionary<ISymbol, string> fixes)
+    {
+        public static SystemTimers? Create(Compilation compilation)
+        {
+            var timeProvider = compilation.GetTypeByMetadataName("System.TimeProvider");
+            if (timeProvider is null || timeProvider.TypeKind == TypeKind.Error)
+                return null;
+
+            var fixes = ImmutableDictionary.CreateBuilder<ISymbol, string>(SymbolEqualityComparer.Default);
+            Add(compilation.GetTypeByMetadataName("System.Threading.Tasks.Task")?.GetMembers("Delay").OfType<IMethodSymbol>().Where(method => method.IsStatic),
+                "inject TimeProvider and pass it: Task.Delay(delay, timeProvider, cancellationToken)");
+            Add(compilation.GetTypeByMetadataName("System.Threading.PeriodicTimer")?.InstanceConstructors,
+                "inject TimeProvider and pass it: new PeriodicTimer(period, timeProvider); for a command sent at regular intervals, register it with AddRecurringCommand in its module instead");
+            return fixes.Count == 0 ? null : new SystemTimers(fixes.ToImmutable());
+
+            void Add(IEnumerable<IMethodSymbol>? methods, string fix)
+            {
+                foreach (var method in methods ?? [])
+                {
+                    if (!method.Parameters.Any(parameter => SymbolEqualityComparer.Default.Equals(parameter.Type, timeProvider)))
+                        fixes[method] = fix;
+                }
+            }
+        }
+
+        public string? FixOf(IMethodSymbol method) => fixes.TryGetValue(method.OriginalDefinition, out var fix) ? fix : null;
     }
 
     // The properties that read the system clock, with the TimeProvider call that replaces each.

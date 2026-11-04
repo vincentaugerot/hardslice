@@ -181,7 +181,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(14);
+        refusals.Length.ShouldBe(16);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -203,7 +203,9 @@ public sealed class TemplatePackageTests
 
         parameters.GetProperty("datatype").GetString().ShouldBe("choice");
         parameters.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["id", "none"]);
-        parameters.GetProperty("defaultValue").GetString().ShouldBe("id");
+        // No default value: --every refuses an explicit --parameters id, which generates the same slice as no option at all.
+        parameters.TryGetProperty("defaultValue", out _).ShouldBeFalse();
+        symbols.GetProperty("ParametersIsNone").GetProperty("value").GetString().ShouldBe("(Parameters == \"none\" || EveryIsGiven)");
         host.RootElement.GetProperty("symbolInfo").GetProperty("Parameters").GetProperty("longName").GetString().ShouldBe("parameters");
         symbols.GetProperty("ResponseNeedsParameters").GetProperty("value").GetString().ShouldBe("(ParametersIsNone && ResponseIsNone)");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!ResponseNeedsParameters");
@@ -222,8 +224,9 @@ public sealed class TemplatePackageTests
             "(!EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
             "(!EndpointIsNone && ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && ParametersIsNone && ResponseIsDto)",
             "(EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
-            "(EndpointIsNone && ParametersIsNone && ResponseIsId)", "(EndpointIsNone && ParametersIsNone && ResponseIsDto)"]);
-        registrations.Where(registration => registration.Key.Contains("&& ParametersIsNone", StringComparison.Ordinal))
+            "(EndpointIsNone && ParametersIsNone && ResponseIsId && !EveryIsGiven)", "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !EveryIsGiven)",
+            "(EveryIsGiven && ResponseIsId)", "(EveryIsGiven && ResponseIsDto)"]);
+        registrations.Where(registration => registration.Key.Contains("&& ParametersIsNone", StringComparison.Ordinal) || registration.Key.StartsWith("(EveryIsGiven", StringComparison.Ordinal))
             .ShouldAllBe(registration => !registration.Value.Contains("Validator") && !registration.Value.Contains("FluentValidation"));
 
         var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
@@ -249,7 +252,8 @@ public sealed class TemplatePackageTests
 
         endpoint.GetProperty("datatype").GetString().ShouldBe("choice");
         endpoint.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["http", "none"]);
-        endpoint.GetProperty("defaultValue").GetString().ShouldBe("http");
+        endpoint.TryGetProperty("defaultValue", out _).ShouldBeFalse();
+        symbols.GetProperty("EndpointIsNone").GetProperty("value").GetString().ShouldBe("(Endpoint == \"none\" || EveryIsGiven)");
         host.RootElement.GetProperty("symbolInfo").GetProperty("Endpoint").GetProperty("longName").GetString().ShouldBe("endpoint");
         symbols.GetProperty("EndpointOptionsWithoutEndpoint").GetProperty("value").GetString().ShouldBe("(EndpointIsNone && (RouteIsGiven || MethodIsGiven))");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!EndpointOptionsWithoutEndpoint");
@@ -275,6 +279,71 @@ public sealed class TemplatePackageTests
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
         tests.ShouldContain("await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new CommandNameCommand(), TestContext.Current.CancellationToken);");
         tests.ShouldContain("await Should.ThrowAsync<ValidationException>(");
+    }
+
+    // PB-068: --every generates a system command without parameter that AddRecurringCommand sends at regular intervals, with an
+    // integration test that runs three cycles on a FakeTimeProvider. It refuses an invalid interval, and --parameters id or
+    // --endpoint http, which it contradicts.
+    [Theory]
+    [InlineData("00:00:30", true)]
+    [InlineData("01:00:00", true)]
+    [InlineData("23:59:59", true)]
+    [InlineData("1.00:00:00", true)]
+    [InlineData("48.23:59:59", true)]
+    [InlineData("", true)]
+    [InlineData("00:00:00", false)]
+    [InlineData("0.00:00:00", false)]
+    [InlineData("49.00:00:00", false)]
+    [InlineData("24:00:00", false)]
+    [InlineData("00:60:00", false)]
+    [InlineData("0:0:30", false)]
+    [InlineData("00:00:30.5", false)]
+    [InlineData("30s", false)]
+    [InlineData("-00:00:30", false)]
+    public void Command_item_template_accepts_an_interval_that_a_timer_can_wait(string interval, bool accepted)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(CommandTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+
+        Matches(template.RootElement.GetProperty("symbols"), "EveryIsValid", interval).ShouldBe(accepted);
+    }
+
+    [Fact]
+    public void Command_item_template_generates_a_recurring_command_and_refuses_the_options_it_contradicts()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+
+        symbols.GetProperty("Every").GetProperty("datatype").GetString().ShouldBe("text");
+        host.RootElement.GetProperty("symbolInfo").GetProperty("Every").GetProperty("longName").GetString().ShouldBe("every");
+        // The interval, in the comment of the slice and in the printed lines.
+        symbols.GetProperty("EveryOrUnbound").GetProperty("replaces").GetString().ShouldBe("RecurringInterval");
+        symbols.GetProperty("EveryOrUnbound").GetProperty("fileRename").GetString().ShouldBe("RecurringInterval");
+        File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs")).ShouldContain("sends a new one every RecurringInterval");
+        symbols.GetProperty("EveryContradictsOptions").GetProperty("value").GetString()
+            .ShouldBe("(EveryIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!EveryContradictsOptions && EveryIsValid");
+        symbols.GetProperty("CommandContract").GetProperty("parameters").GetProperty("cases")[0].GetProperty("condition").GetString()
+            .ShouldBe("(Endpoint == \"none\" || EveryIsGiven)");
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        postActions.Single(action => action.GetProperty("id").GetString() == "refuseInvalidInterval").GetProperty("condition").GetString().ShouldBe("(!EveryIsValid)");
+        postActions.Single(action => action.GetProperty("id").GetString() == "refuseEveryWithOptions").GetProperty("condition").GetString().ShouldBe("(EveryContradictsOptions)");
+        var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .Where(instruction => instruction.GetProperty("condition").GetString()!.StartsWith("(EveryIsGiven", StringComparison.Ordinal))
+            .Select(instruction => instruction.GetProperty("text").GetString()!)
+            .ToArray();
+        registrations.Length.ShouldBe(2);
+        registrations[0].ShouldContain("            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\n");
+        registrations[1].ShouldContain("            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\n");
+        registrations.ShouldAllBe(text => text.Contains("using System.Globalization;\n") && !text.Contains("Endpoint.Map(group)") && !text.Contains("Validator"));
+
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        tests.ShouldContain("var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app);");
+        tests.ShouldContain("for (var cycle = 1; cycle <= 3; cycle++)");
     }
 
     // PB-056: a DTO named Guid, or after a type of the slice, would hide that type and break the build of the slice (CS0118, CS0102).

@@ -743,7 +743,8 @@ public sealed class SliceStructureAnalyzer : DiagnosticAnalyzer
                     $"system command '{command.Name}' of slice '{slice}' is sent by no type of module '{module}'",
                     SystemRule,
                     $"send '{command.Name}' through IMediator from a type of module '{module}' other than its handler and its validator, "
-                        + $"such as a hosted service in 'Features/{slice}/' that creates it in a scope of its own, registered by '{module}Module'; "
+                        + $"such as AddRecurringCommand<{command.Name}, TResponse> in '{module}Module' for a periodic task, "
+                        + $"or a hosted service in 'Features/{slice}/' that creates it in a scope of its own, registered by '{module}Module'; "
                         + $"a command sent over HTTP implements '{messaging.Command.ToDisplayString(DisplayFormat)}' instead, with its endpoint, "
                         + "and a command that nothing sends is removed with its slice"));
             }

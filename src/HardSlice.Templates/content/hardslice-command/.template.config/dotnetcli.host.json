@@ -24,6 +24,10 @@
     "Method": {
       "longName": "method",
       "shortName": ""
+    },
+    "Every": {
+      "longName": "every",
+      "shortName": ""
     }
   }
 }

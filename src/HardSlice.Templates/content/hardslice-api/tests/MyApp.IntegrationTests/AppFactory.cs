@@ -46,14 +46,20 @@ public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactor
             .Select(service => (Descriptor: service, Type: ImplementationOf(service)))
             .ToList();
 
-        var unknown = _keptHostedServices.Except(hostedServices.Select(service => service.Type)).Select(type => type.Name).ToList();
+        var unknown = _keptHostedServices.Except(hostedServices.Select(service => service.Type)).Select(Describe).ToList();
         if (unknown.Count > 0)
             throw new InvalidOperationException(
-                $"KeepHostedService: the application registers no hosted service {string.Join(", ", unknown)}. Register it with AddHostedService.");
+                $"KeepHostedService: the application registers no hosted service {string.Join(", ", unknown)}. Register it with AddHostedService, "
+                + "or with AddRecurringCommand<TCommand, TResponse> for a RecurringCommandService.");
 
         foreach (var service in hostedServices.Where(service => !_keptHostedServices.Contains(service.Type)))
             services.Remove(service.Descriptor);
     }
+
+    private static string Describe(Type type) =>
+        type.IsGenericType
+            ? $"{type.Name[..type.Name.IndexOf('`')]}<{string.Join(", ", type.GetGenericArguments().Select(Describe))}>"
+            : type.Name;
 
     // A hosted service registered with a factory is known by the type its factory returns.
     private static Type ImplementationOf(ServiceDescriptor service) =>

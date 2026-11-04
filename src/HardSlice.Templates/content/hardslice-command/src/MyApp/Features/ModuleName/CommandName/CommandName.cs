@@ -8,7 +8,11 @@ using MyApp.Shared.Messaging;
 
 namespace MyApp.Features.ModuleName.CommandName;
 
-#if (EndpointIsNone)
+#if (EveryIsGiven)
+// A recurring system command: AddRecurringCommand, in ModuleNameModule, sends a new one every RecurringInterval, or every
+// ModuleName:CommandName:Interval of the configuration, each time in a scope of its own. It has no endpoint (HS004), and goes
+// through the pipeline of every command: a failed cycle rolls its transaction back, is logged, and the next one runs.
+#elif (EndpointIsNone)
 // A system command: only the application sends it, never an HTTP request. A type of module ModuleName creates it and sends it
 // through IMediator in a scope of its own, such as a hosted service of this slice. It has no endpoint (HS004), and goes through
 // the pipeline of every command: validation, then the transaction.

@@ -1044,7 +1044,8 @@ public sealed class SliceStructureAnalyzerTests
         diagnostics.ShouldHaveSingleItem().GetMessage().ShouldBe(
             "system command 'CollectFeedsCommand' of slice 'Feeds/CollectFeeds' is sent by no type of module 'Feeds'. " + SystemRule + " "
             + "Fix: send 'CollectFeedsCommand' through IMediator from a type of module 'Feeds' other than its handler and its validator, "
-            + "such as a hosted service in 'Features/Feeds/CollectFeeds/' that creates it in a scope of its own, registered by 'FeedsModule'; "
+            + "such as AddRecurringCommand<CollectFeedsCommand, TResponse> in 'FeedsModule' for a periodic task, "
+            + "or a hosted service in 'Features/Feeds/CollectFeeds/' that creates it in a scope of its own, registered by 'FeedsModule'; "
             + "a command sent over HTTP implements 'ICommand<TResponse>' instead, with its endpoint, and a command that nothing sends is removed with its slice. "
             + "Skill: add-slice. Doc: 'docs/rules/HS004.md'.");
     }

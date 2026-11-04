@@ -1,4 +1,6 @@
-#if (EndpointIsNone)
+#if (EveryIsGiven)
+using MyApp.Features.ModuleName.CommandName;
+#elif (EndpointIsNone)
 #if (!ParametersIsNone)
 using FluentValidation;
 #endif
@@ -17,13 +19,35 @@ using MyApp.Features.ModuleName.CommandName;
 
 namespace MyApp.IntegrationTests.Features.ModuleName.CommandName;
 
-#if (EndpointIsNone)
+#if (EveryIsGiven)
+// AddRecurringCommand sends the command at each interval: its tests run its cycles one at a time on a FakeTimeProvider, as the
+// application does, without any real wait. No other test starts the recurring command.
+#elif (EndpointIsNone)
 // A system command has no endpoint: its tests send it through IMediator, in a scope of their own, as the type of module ModuleName
 // that sends it does.
 #endif
 public sealed class CommandNameTests(PostgresDatabase database)
 {
-#if (EndpointIsNone)
+#if (EveryIsGiven)
+    [Fact]
+    public async Task Runs_a_cycle_at_each_interval()
+    {
+        await using var app = new AppFactory(database);
+#if (ResponseIsId)
+        var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app);
+#else
+        var cycles = new RecurringCommandCycles<CommandNameCommand, ResponseTypeName>(app);
+#endif
+
+        for (var cycle = 1; cycle <= 3; cycle++)
+        {
+            // CommandNameHandler throws its NotImplementedException until it is replaced by the use case.
+            var response = await cycles.RunNextAsync();
+        }
+
+        Assert.Fail("TODO(hardslice): assert the business outcome of three cycles of CommandName, such as the state stored in PostgreSQL, read with database.CreateDbContext().");
+    }
+#elif (EndpointIsNone)
 #if (ParametersIsNone)
     // No parameter, so no invalid command: test its success here, and a failure of the domain when one can happen.
     [Fact]

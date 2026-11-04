@@ -256,6 +256,101 @@ public sealed class SystemClockAnalyzerTests
             """);
     }
 
+    // PB-068: a slice that waits on a system timer cannot be tested with a FakeTimeProvider.
+    [Fact]
+    public async Task Reports_a_delay_or_a_periodic_timer_of_a_slice_without_TimeProvider()
+    {
+        var diagnostics = await VerifyAsync(
+            """
+            namespace MyApp.Features.Realtime.CollectRealtimeFeeds;
+
+            internal sealed class CollectRealtimeFeedsHandler
+            {
+                private readonly PeriodicTimer _field = [|new|] PeriodicTimer(TimeSpan.FromMinutes(1));
+
+                public async Task Handle(CancellationToken cancellationToken)
+                {
+                    await Task.[|Delay|](TimeSpan.FromSeconds(1));
+                    await Task.[|Delay|](1000, cancellationToken);
+                    await System.Threading.Tasks.Task.[|Delay|](TimeSpan.FromSeconds(1), cancellationToken);
+                    using PeriodicTimer timer = [|new|](TimeSpan.FromSeconds(30));
+                    Func<Task> later = () => Task.[|Delay|](10);
+                }
+            }
+            """);
+
+        Subjects(diagnostics).ShouldBe(
+        [
+            "'CollectRealtimeFeedsHandler._field' in slice 'Realtime/CollectRealtimeFeeds' waits on the system clock with 'new PeriodicTimer(TimeSpan)'",
+            "'CollectRealtimeFeedsHandler.Handle' in slice 'Realtime/CollectRealtimeFeeds' waits on the system clock with 'Task.Delay(TimeSpan)'",
+            "'CollectRealtimeFeedsHandler.Handle' in slice 'Realtime/CollectRealtimeFeeds' waits on the system clock with 'Task.Delay(int, CancellationToken)'",
+            "'CollectRealtimeFeedsHandler.Handle' in slice 'Realtime/CollectRealtimeFeeds' waits on the system clock with 'Task.Delay(TimeSpan, CancellationToken)'",
+            "'CollectRealtimeFeedsHandler.Handle' in slice 'Realtime/CollectRealtimeFeeds' waits on the system clock with 'new PeriodicTimer(TimeSpan)'",
+            "'CollectRealtimeFeedsHandler.Handle' in slice 'Realtime/CollectRealtimeFeeds' waits on the system clock with 'Task.Delay(int)'"
+        ]);
+        diagnostics.ShouldAllBe(diagnostic => diagnostic.GetMessage().Contains("A slice waits on an injected TimeProvider, which tests advance."));
+        Fixes(diagnostics).Distinct().ShouldBe(
+        [
+            "inject TimeProvider and pass it: new PeriodicTimer(period, timeProvider); for a command sent at regular intervals, register it with AddRecurringCommand in its module instead",
+            "inject TimeProvider and pass it: Task.Delay(delay, timeProvider, cancellationToken)"
+        ]);
+    }
+
+    [Fact]
+    public async Task Accepts_a_delay_or_a_periodic_timer_on_TimeProvider_and_outside_the_slices()
+    {
+        await VerifyAsync(
+            """
+            namespace MyApp.Features.Realtime.CollectRealtimeFeeds
+            {
+                internal sealed class CollectRealtimeFeedsHandler(TimeProvider timeProvider)
+                {
+                    public async Task Handle(TimeSpan interval, CancellationToken cancellationToken)
+                    {
+                        await Task.Delay(interval, timeProvider, cancellationToken);
+                        await Task.Delay(interval, timeProvider);
+                        using var timer = new PeriodicTimer(interval, timeProvider);
+                        await Task.CompletedTask.WaitAsync(interval, timeProvider, cancellationToken);
+                        await Task.Run(() => { }, cancellationToken);
+                    }
+                }
+            }
+
+            namespace MyApp.Shared.Messaging
+            {
+                internal sealed class Poller
+                {
+                    public Task Wait() => Task.Delay(TimeSpan.FromSeconds(1));
+
+                    public PeriodicTimer Timer() => new(TimeSpan.FromSeconds(1));
+                }
+            }
+
+            namespace MyApp.Features.Realtime
+            {
+                public static class RealtimeModule
+                {
+                    public static Task Warmup() => Task.Delay(100);
+                }
+            }
+            """);
+    }
+
+    [Fact]
+    public async Task Does_not_report_the_timers_of_the_domain()
+    {
+        await VerifyDomainAsync(
+            Configuration,
+            """
+            namespace MyApp.Domain.Bookings;
+
+            public static class Pause
+            {
+                public static Task Wait() => Task.Delay(1);
+            }
+            """);
+    }
+
     [Fact]
     public async Task Does_not_report_the_top_level_statements_of_Program()
     {

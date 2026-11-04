@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval>, one that AddRecurringCommand sends at regular intervals. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -39,8 +39,7 @@
     "Parameters": {
       "type": "parameter",
       "datatype": "choice",
-      "defaultValue": "id",
-      "description": "What the command takes from the request: id (a Guid Id to replace with the fields of the use case, checked by a validator, by default) or none (an empty record, without validator: what it needs comes from the database, the configuration or a service of its module).",
+      "description": "What the command takes from the request: id (a Guid Id to replace with the fields of the use case, checked by a validator, by default) or none (an empty record, without validator: what it needs comes from the database, the configuration or a service of its module). --every implies none.",
       "choices": [
         {
           "choice": "id",
@@ -55,8 +54,7 @@
     "Endpoint": {
       "type": "parameter",
       "datatype": "choice",
-      "defaultValue": "http",
-      "description": "How the command is sent: http (an endpoint of the module, by default) or none (a system command, which implements ISystemCommand<TResponse>: only a type of its module sends it, such as a hosted service, and HS004 refuses an endpoint for it).",
+      "description": "How the command is sent: http (an endpoint of the module, by default) or none (a system command, which implements ISystemCommand<TResponse>: only a type of its module sends it, such as a hosted service, and HS004 refuses an endpoint for it). --every implies none.",
       "choices": [
         {
           "choice": "http",
@@ -77,6 +75,11 @@
       "type": "parameter",
       "datatype": "text",
       "description": "The HTTP method of the endpoint: POST (by default), PUT, PATCH or DELETE, in any case. A DELETE has no body: with --parameters id, it reads the Id of the command from its route, /{id:guid} after --route."
+    },
+    "Every": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Sends the command at regular intervals, through AddRecurringCommand in the module: the interval as [d.]hh:mm:ss, longer than zero and under 49 days, such as 00:00:30 or 1.00:00:00, which the key <Module>:<Name>:Interval of the configuration replaces. Implies --endpoint none and --parameters none: a system command without parameter, whose integration test runs three cycles on a FakeTimeProvider."
     },
     "AppName": {
       "type": "bind",
@@ -134,6 +137,16 @@
         "fallbackVariableName": "Unbound"
       }
     },
+    "EveryOrUnbound": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Every",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "RecurringInterval",
+      "replaces": "RecurringInterval"
+    },
     "RouteIsGiven": {
       "type": "generated",
       "generator": "regexMatch",
@@ -150,6 +163,24 @@
       "parameters": {
         "source": "MethodOrUnbound",
         "pattern": "."
+      }
+    },
+    "EveryIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "EveryOrUnbound",
+        "pattern": "."
+      }
+    },
+    "EveryIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "EveryOrUnbound",
+        "pattern": "^(?:|(?!(?:0{1,2}\\.)?00:00:00$)(?:(?:[0-3]?[0-9]|4[0-8])\\.)?(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"
       }
     },
     "CommandRouteWords": {
@@ -512,15 +543,19 @@
     },
     "ParametersIsNone": {
       "type": "computed",
-      "value": "(Parameters == \"none\")"
+      "value": "(Parameters == \"none\" || EveryIsGiven)"
     },
     "EndpointIsNone": {
       "type": "computed",
-      "value": "(Endpoint == \"none\")"
+      "value": "(Endpoint == \"none\" || EveryIsGiven)"
     },
     "EndpointOptionsWithoutEndpoint": {
       "type": "computed",
       "value": "(EndpointIsNone && (RouteIsGiven || MethodIsGiven))"
+    },
+    "EveryContradictsOptions": {
+      "type": "computed",
+      "value": "(EveryIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))"
     },
     "CommandContract": {
       "type": "generated",
@@ -531,7 +566,7 @@
         "datatype": "string",
         "cases": [
           {
-            "condition": "(Endpoint == \"none\")",
+            "condition": "(Endpoint == \"none\" || EveryIsGiven)",
             "value": "ISystemCommand"
           },
           {
@@ -554,7 +589,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid)"
     }
   },
   "sources": [
@@ -739,7 +774,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for. Pass --response id for the identifier of the aggregate it creates or changes, or the PascalCase name of a DTO of what it did, such as --response ImportResultDto, or keep the parameters with --parameters id. Nothing was created."
+          "text": "error: --response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for, nor one with --every, which implies it. Pass --response id for the identifier of the aggregate it creates or changes, or the PascalCase name of a DTO of what it did, such as --response ImportResultDto, or keep the parameters with --parameters id. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -839,6 +874,43 @@
       "continueOnError": false
     },
     {
+      "id": "refuseInvalidInterval",
+      "condition": "(!EveryIsValid)",
+      "description": "Refuses an interval that a timer cannot wait.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --every 'RecurringInterval' is not an interval of the form [d.]hh:mm:ss, longer than zero and under 49 days, such as --every 00:00:30, --every 01:00:00 or --every 1.00:00:00. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseEveryWithOptions",
+      "condition": "(EveryContradictsOptions)",
+      "description": "Refuses --every with --parameters id or --endpoint http.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --every sends a new command at regular intervals, built without parameter and sent by the application only, so it implies --parameters none and --endpoint none, while --parameters id or --endpoint http asks for the opposite. Remove them, or generate the slice without --every. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "registerSlice",
       "condition": "(Accepted)",
       "description": "Lines to add to the module of the slice.",
@@ -878,12 +950,20 @@
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsId)",
+          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsId && !EveryIsGiven)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsDto)",
+          "condition": "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !EveryIsGiven)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && ResponseIsId)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && ResponseIsDto)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

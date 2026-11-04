@@ -3,7 +3,7 @@
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable and the instruction file of each agent and the skills they read,
 # runs the "Run the API" path of docs/getting-started.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline and that queries read without tracking, proves both scripts name the missing container runtime,
-# then proves a seeded violation of HS000 (test projects included), HS001, HS003, HS004 (a reaction slice included), HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
+# then proves a seeded violation of HS000 (test projects included), HS001, HS003, HS004 (a reaction slice included), HS005, HS006, HS007, HS008, HS009, HS010 (a delay without TimeProvider included), HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 fails both, naming the rule and a rule doc that exists, that the HS019 suggestion leaves both passing and reaches the compiler log,
 # that a missing or invalid hardslice.json, or one of a later version, fails them explicitly, with HS900 for its contracts and its version, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
@@ -17,6 +17,7 @@
 # It generates command slices with dotnet new hardslice-command through each of its refusals, registers them with the lines it prints, checks that the test of the host names a forgotten registration,
 # that only the TODO(hardslice): test fails, that the none and DTO responses build without HardSlice diagnostic, and that a reference completion passes the check.
 # Its system commands, generated with --endpoint none, have no endpoint, fail HS004 while no type of their module sends them, and pass once a hosted service does.
+# Its recurring commands, generated with --every through each of its refusals, are sent by AddRecurringCommand, and their tests run three cycles on a FakeTimeProvider.
 # It generates query slices with dotnet new hardslice-query the same way, both results, single and many, without HardSlice diagnostic, HS006 included,
 # and proves that an unknown aggregate fails the build with a compiler error that names it.
 # It generates slices with the route and the method of --route and --method, a PUT and a DELETE in a module created with its own
@@ -1430,6 +1431,20 @@ internal sealed class ExpireProbesHandler
 }
 EOF
   expect_failure "HS010: 'ExpireProbesHandler.Handle' in slice '$module/ExpireProbes' reads 'DateTimeOffset.UtcNow'." "docs/rules/HS010.md" "a slice handler of $app_name that reads the system clock" check.sh check.ps1
+  # PB-068: a delay on the system clock, which no test can advance. The one on the injected TimeProvider passes.
+  cat > "$app_src/Features/$module/ExpireProbes/ExpireProbes.cs" <<EOF
+namespace $app_name.Features.$module.ExpireProbes;
+
+internal sealed class ExpireProbesHandler(TimeProvider timeProvider)
+{
+    public async Task Handle(CancellationToken cancellationToken)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(1), timeProvider, cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(1));
+    }
+}
+EOF
+  expect_failure "HS010: 'ExpireProbesHandler.Handle' in slice '$module/ExpireProbes' waits on the system clock with 'Task.Delay(TimeSpan)'." "docs/rules/HS010.md" "a slice handler of $app_name that waits on the system clock" check.sh check.ps1
   rm -r "$app_src/Features/$module/ExpireProbes"
 
   mkdir -p "$app/src/$app_name.Domain/$module"
@@ -2344,7 +2359,7 @@ expect_item_refused() {
 }
 
 # Generates the command slice <module>/<name> with the remaining options, checks that its three files exist, or two without
-# validator tests for --parameters none, and leaves the printed instructions in $command_output.
+# validator tests for --parameters none or --every, and leaves the printed instructions in $command_output.
 generate_command() {
   local module="$1"
   local name="$2"
@@ -2357,9 +2372,9 @@ generate_command() {
     echo "error: dotnet new hardslice-command failed on the slice $module/$name of $app_name." >&2
     exit 1
   fi
-  if [[ " $* " == *" --parameters none "* ]]; then
+  if [[ " $* " == *" --parameters none "* || " $* " == *" --every "* ]]; then
     if [[ -e "$app/$validator_tests" || -e "$app/$(dirname "$validator_tests")" ]]; then
-      echo "error: dotnet new hardslice-command --parameters none created $(dirname "$validator_tests") in $app_name." >&2
+      echo "error: dotnet new hardslice-command $* created $(dirname "$validator_tests") in $app_name." >&2
       exit 1
     fi
     validator_tests=""
@@ -2878,6 +2893,98 @@ internal static class RefreshProbesEndpoint
 PROBE
   expect_failure "HS004: slice '$module/RefreshProbes' of system command 'RefreshProbesCommand' declares endpoint 'RefreshProbesEndpoint'." "docs/rules/HS004.md" "a system command of $app_name with an endpoint" check.sh check.ps1
   rm -r "$app_src/Features/$module/RefreshProbes"
+}
+
+# The recurring commands <module>/<name> and <module>/<dto-name> generated with --every, the second with --parameters none
+# --endpoint none written out and the DTO <dto-name>Result: system commands without parameter, without validator nor endpoint,
+# whose printed registrations hold AddRecurringCommand, with an integration test that runs three cycles on a FakeTimeProvider.
+# The check fails on their TODO(hardslice): tests only, then passes after their reference completion, whose second test checks
+# that a test that does not keep them never starts them. An invalid interval, --parameters id, --endpoint http and --response none
+# are refused with exit 105. The module is left as it was and the slices are removed.
+probe_recurring_commands() {
+  local module="$1"
+  local name="$2"
+  local dto_name="$3"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local project="src/$app_name/$app_name.csproj"
+  local refusal
+  local generated
+  local slice
+  local integration_test
+  local -a parts
+
+  echo "==> Checking that dotnet new hardslice-command --every refuses an invalid interval and the options it contradicts in $app_name"
+  for refusal in \
+    "an interval of zero|is not an interval of the form [d.]hh:mm:ss|--every|00:00:00" \
+    "an interval in seconds|is not an interval of the form [d.]hh:mm:ss|--every|30s" \
+    "an interval of 49 days|is not an interval of the form [d.]hh:mm:ss|--every|49.00:00:00" \
+    "a recurring command with parameters|--every sends a new command at regular intervals, built without parameter|--every|00:00:30|--parameters|id" \
+    "a recurring command with an endpoint|--every sends a new command at regular intervals, built without parameter|--every|00:00:30|--endpoint|http" \
+    "a recurring command that answers 404|--response none answers 404 to an unknown aggregate|--every|00:00:30|--response|none"; do
+    IFS='|' read -r -a parts <<< "$refusal"
+    expect_item_refused hardslice-command "${parts[0]}" "${parts[1]}" --project "$project" --module "$module" --name "$name" "${parts[@]:2}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-command refused ${parts[0]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+
+  echo "==> Generating the recurring commands $module/$name and $module/$dto_name of $app_name with dotnet new hardslice-command --every"
+  cp "$module_file" "$work/module-recurring.backup"
+  generate_command "$module" "$name" --every 00:00:30
+  if [[ "$command_output" == *"Endpoint.Map(group);"* || "$command_output" == *"IValidator"* ]] ||
+    ! grep -Fxq "            .AddScoped<IRequestHandler<${name}Command, Guid>, ${name}Handler>()" <<< "$command_output" ||
+    ! grep -Fxq "            .AddRecurringCommand<${name}Command, Guid>(\"$module:$name\", TimeSpan.Parse(\"00:00:30\", CultureInfo.InvariantCulture))" <<< "$command_output"; then
+    printf '%s\n' "$command_output" >&2
+    echo "error: dotnet new hardslice-command --every did not print the registration of the handler and of AddRecurringCommand, without validator nor call of Map." >&2
+    exit 1
+  fi
+  register_slice hardslice-command "$command_output"
+  generate_command "$module" "$dto_name" --every 1.00:00:00 --parameters none --endpoint none --response "${dto_name}Result"
+  register_slice hardslice-command "$command_output"
+  for generated in "$name|public sealed record ${name}Command : ISystemCommand<Guid>;|RecurringCommandCycles<${name}Command, Guid>" \
+    "$dto_name|public sealed record ${dto_name}Command : ISystemCommand<${dto_name}Result>;|RecurringCommandCycles<${dto_name}Command, ${dto_name}Result>"; do
+    IFS='|' read -r -a parts <<< "$generated"
+    slice="$app_src/Features/$module/${parts[0]}/${parts[0]}.cs"
+    integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/${parts[0]}/${parts[0]}Tests.cs"
+    if ! grep -Fxq "${parts[1]}" "$slice" || grep -q 'Endpoint\|Map[A-Z][a-z]*(\|Validator' "$slice"; then
+      cat "$slice" >&2
+      echo "error: dotnet new hardslice-command --every did not generate a system command without parameter, validator nor endpoint: ${parts[1]}" >&2
+      exit 1
+    fi
+    if ! grep -Fq "var cycles = new ${parts[2]}(app);" "$integration_test" || ! grep -Fq "for (var cycle = 1; cycle <= 3; cycle++)" "$integration_test" ||
+      grep -q 'CreateClient\|GetRequiredService<IMediator>' "$integration_test"; then
+      cat "$integration_test" >&2
+      echo "error: the integration test of $module/${parts[0]} generated with --every does not run three cycles with RecurringCommandCycles." >&2
+      exit 1
+    fi
+  done
+  if grep -q 'MyApp\|ModuleName\|CommandName\|ResponseTypeName\|RecurringInterval' \
+    "$app_src/Features/$module/$name/$name.cs" "$app_src/Features/$module/$dto_name/$dto_name.cs" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs" "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name/${dto_name}Tests.cs"; then
+    echo "error: a recurring command generated in $app_name keeps a placeholder of the template." >&2
+    exit 1
+  fi
+
+  # AddRecurringCommand sends them, so HS004 is satisfied: only the markers fail, the first one through the NotImplementedException
+  # of the handler, thrown by the first cycle.
+  echo "==> Checking that $app_name builds the recurring commands without HardSlice diagnostic and fails the check on their TODO(hardslice): tests only"
+  expect_check_fails_on_todo_tests_only "the recurring commands $module/$name and $module/$dto_name" \
+    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$dto_name.${dto_name}Tests.Runs_a_cycle_at_each_interval" \
+      "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Runs_a_cycle_at_each_interval" | LC_ALL=C sort)"
+
+  echo "==> Checking that the reference completion of the recurring commands $module/$name and $module/$dto_name passes the check of $app_name"
+  complete_recurring_command "$module" "$name" id
+  complete_recurring_command "$module" "$dto_name" "${dto_name}Result"
+  # The second one waits a day between its cycles: its test moves the clock by three days, never the real one.
+  sed 's/TestInstants\.Start\.AddSeconds(90)/TestInstants.Start.AddDays(3)/' \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name/${dto_name}Tests.cs" > "$work/test.cs"
+  mv "$work/test.cs" "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name/${dto_name}Tests.cs"
+  bash "$app/scripts/check.sh"
+
+  rm -r "$app_src/Features/$module/$name" "$app_src/Features/$module/$dto_name" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name"
+  mv "$work/module-recurring.backup" "$module_file"
 }
 
 # Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and leaves the
@@ -4041,6 +4148,7 @@ remove_module Rooms
 mv "$work/Program.cs.backup" "$app_src/Program.cs"
 
 probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings RemindBookings CollectBookingFeeds
+probe_recurring_commands Bookings CollectBookingStats PurgeBookingDrafts
 probe_query_template Bookings GetBookingSummary ListBookingSummaries Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetBookingTrip Booking \
@@ -4327,6 +4435,7 @@ rm "$app/src/$app_name.Domain/Hs001Probe.cs"
 probe_module_template Rooms MeetingRooms meeting-rooms
 
 probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRooms RemindRooms CollectRoomFeeds
+probe_recurring_commands Rooms CollectRoomStats PurgeRoomDrafts
 
 # The aggregate that the query slices read is generated by dotnet new hardslice-aggregate in the domain of Rooms, mapped by the
 # module and migrated with the command it prints, as "Adding a first module" of AGENTS.md says.
