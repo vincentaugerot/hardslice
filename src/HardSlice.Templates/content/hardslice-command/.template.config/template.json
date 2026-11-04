@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -35,6 +35,22 @@
       "description": "What the command returns: id (a Guid, by default), none (a bool, false answered with 404) or the PascalCase name of a DTO of values that the slice declares.",
       "replaces": "ResponseTypeName",
       "fileRename": "ResponseTypeName"
+    },
+    "Parameters": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "id",
+      "description": "What the command takes from the request: id (a Guid Id to replace with the fields of the use case, checked by a validator, by default) or none (an empty record, without validator: what it needs comes from the database, the configuration or a service of its module).",
+      "choices": [
+        {
+          "choice": "id",
+          "description": "A Guid Id, to replace with the fields of the use case, its validator and its validator tests."
+        },
+        {
+          "choice": "none",
+          "description": "No parameter: an empty record, an endpoint without body, no validator nor validator tests."
+        }
+      ]
     },
     "AppName": {
       "type": "bind",
@@ -237,9 +253,17 @@
       "type": "computed",
       "value": "(ResponseIsId || ResponseIsNone || (ResponseIsPascalCase && !ResponseIsReserved && !ResponseIsSliceType))"
     },
+    "ParametersIsNone": {
+      "type": "computed",
+      "value": "(Parameters == \"none\")"
+    },
+    "ResponseNeedsParameters": {
+      "type": "computed",
+      "value": "(ParametersIsNone && ResponseIsNone)"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters)"
     }
   },
   "sources": [
@@ -249,6 +273,12 @@
           "condition": "(!Accepted)",
           "exclude": [
             "**/*"
+          ]
+        },
+        {
+          "condition": "(ParametersIsNone)",
+          "exclude": [
+            "tests/MyApp.Tests/**/*"
           ]
         }
       ]
@@ -406,6 +436,24 @@
       "continueOnError": false
     },
     {
+      "id": "refuseResponseWithoutIdentifier",
+      "condition": "(ResponseNeedsParameters)",
+      "description": "Refuses a command without parameters that answers 404 to an aggregate it cannot name.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for. Pass --response id for the identifier of the aggregate it creates or changes, or the PascalCase name of a DTO of what it did, such as --response ImportResultDto, or keep the parameters with --parameters id. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "registerSlice",
       "condition": "(Accepted)",
       "description": "Lines to add to the module of the slice.",
@@ -413,16 +461,24 @@
       "applyFileRenamesToManualInstructions": true,
       "manualInstructions": [
         {
-          "condition": "(ResponseIsId)",
+          "condition": "(!ParametersIsNone && ResponseIsId)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(ResponseIsNone)",
+          "condition": "(!ParametersIsNone && ResponseIsNone)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, bool>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(ResponseIsDto)",
+          "condition": "(!ParametersIsNone && ResponseIsDto)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ParametersIsNone && ResponseIsId)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ParametersIsNone && ResponseIsDto)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

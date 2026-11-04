@@ -19,6 +19,7 @@ The first preview published on NuGet.org. No earlier version was published.
 - The application owns `Directory.Packages.props` and adds its packages there. `HardSlice.Analyzers` is referenced from the protected `Directory.HardSlice.props`, which it imports, and `check` fails when a project no longer receives the package. The test projects reference `Microsoft.Extensions.TimeProvider.Testing`, for `FakeTimeProvider`.
 - The web project has its own `UserSecretsId`, so `dotnet user-secrets set` needs no init. `AppFactory` runs the integration tests in the `IntegrationTests` environment, which reads no user secret, and starts no hosted service of the application unless the test keeps it with `KeepHostedService<T>()`.
 - The agent kit says that a command without parameters has no validator and tests a failure of the domain, or its success, instead of an invalid request, and the fix of HS014 says so for such a command. It says that a command handler may read from outside through the services of its module, such as `IHttpClientFactory`, and that an effect it has outside must stay harmless if its transaction rolls back.
+- `hardslice-command --parameters none` generates a command without parameters: an empty record, an endpoint that reads no body, no validator nor validator tests, and an integration test of its success instead of a 400. It refuses `--response none`, whose 404 answers an aggregate that such a command cannot name.
 
 ### Known limitations
 

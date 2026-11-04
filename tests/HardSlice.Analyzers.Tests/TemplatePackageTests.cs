@@ -180,12 +180,56 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(8);
+        refusals.Length.ShouldBe(9);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
         template.RootElement.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
         postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
+    }
+
+    // PB-064: --parameters none generates an empty command without validator nor validator tests, and refuses --response none, whose
+    // 404 answers an unknown aggregate that such a command has no identifier to look for. Without the option, the slice is unchanged.
+    [Fact]
+    public void Command_item_template_generates_a_command_without_parameters_and_refuses_it_a_response_of_404()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+        var parameters = symbols.GetProperty("Parameters");
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+
+        parameters.GetProperty("datatype").GetString().ShouldBe("choice");
+        parameters.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["id", "none"]);
+        parameters.GetProperty("defaultValue").GetString().ShouldBe("id");
+        host.RootElement.GetProperty("symbolInfo").GetProperty("Parameters").GetProperty("longName").GetString().ShouldBe("parameters");
+        symbols.GetProperty("ResponseNeedsParameters").GetProperty("value").GetString().ShouldBe("(ParametersIsNone && ResponseIsNone)");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!ResponseNeedsParameters");
+        config.GetProperty("sources")[0].GetProperty("modifiers").EnumerateArray()
+            .Where(modifier => modifier.GetProperty("condition").GetString() == "(ParametersIsNone)")
+            .SelectMany(modifier => modifier.GetProperty("exclude").EnumerateArray().Select(pattern => pattern.GetString()))
+            .ShouldBe(["tests/MyApp.Tests/**/*"]);
+        var refusal = config.GetProperty("postActions").EnumerateArray()
+            .Single(action => action.GetProperty("id").GetString() == "refuseResponseWithoutIdentifier");
+        refusal.GetProperty("condition").GetString().ShouldBe("(ResponseNeedsParameters)");
+        var registrations = config.GetProperty("postActions").EnumerateArray()
+            .Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        registrations.Keys.ShouldBe([
+            "(!ParametersIsNone && ResponseIsId)", "(!ParametersIsNone && ResponseIsNone)", "(!ParametersIsNone && ResponseIsDto)",
+            "(ParametersIsNone && ResponseIsId)", "(ParametersIsNone && ResponseIsDto)"]);
+        registrations.Where(registration => registration.Key.StartsWith("(ParametersIsNone", StringComparison.Ordinal))
+            .ShouldAllBe(registration => !registration.Value.Contains("Validator") && !registration.Value.Contains("FluentValidation"));
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
+        slice.ShouldContain("public sealed record CommandNameCommand : ICommand<Guid>;");
+        slice.ShouldContain("public sealed record CommandNameCommand : ICommand<ResponseTypeName>;");
+        slice.ShouldContain("async (IMediator mediator, CancellationToken cancellationToken) =>\n            TypedResults.Ok(await mediator.Send(new CommandNameCommand(), cancellationToken))");
+        slice.ShouldContain("#if (!ParametersIsNone)\n\n// Checks the shape of the input only");
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        tests.ShouldContain("PostAsync(Route, content: null, TestContext.Current.CancellationToken)");
     }
 
     // PB-056: a DTO named Guid, or after a type of the slice, would hide that type and break the build of the slice (CS0118, CS0102).
@@ -750,12 +794,13 @@ public sealed class TemplatePackageTests
 
         agents.ShouldContain("an invalid request included for a command with parameters.");
         agents.ShouldContain("The tests of a command without parameters cover a failure of the domain, or its success, instead");
+        agents.ShouldContain("`--parameters none` for a command without parameters");
         agents.ShouldContain("A command without parameters, an empty record, has none: never an empty validator;");
         agents.ShouldContain("A command handler may read from outside, such as a download or a file, through services its module registers, such as `IHttpClientFactory`");
         agents.ShouldContain("An effect it has outside survives a rollback, so it must stay harmless then");
         agents.ShouldContain("has no mechanism in this solution yet: tell the user instead of writing it.");
-        addSlice.ShouldContain("- command without parameters, such as an import that reads its source from the configuration: declare it as an empty record");
-        addSlice.ShouldContain("delete the validator, its unit tests `<Slice>ValidatorTests.cs` and the integration test of the invalid command");
+        addSlice.ShouldContain("- command without parameters, such as an import that reads its source from the configuration: generated with `--parameters none`, it is an empty record");
+        addSlice.ShouldNotContain("delete the validator");
         addSlice.ShouldContain("A command without parameters has no invalid request: its integration tests assert its success, and a failure of the domain");
         addSlice.ShouldContain("- command that reads from outside, such as a download or a file: the handler injects what it needs, registered in `Add<Module>Module`");
         addSlice.ShouldContain("has no mechanism in this solution yet: stop and tell the user instead of writing it");

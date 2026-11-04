@@ -8,6 +8,10 @@
     "Response": {
       "longName": "response",
       "shortName": ""
+    },
+    "Parameters": {
+      "longName": "parameters",
+      "shortName": ""
     }
   }
 }

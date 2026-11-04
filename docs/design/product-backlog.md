@@ -2942,6 +2942,8 @@ Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ord
 
 ### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
+Statut : terminé le 04/11/2026. Ferme les entrées « hardslice-command, no option for a command without parameters » et « the frictions of roadmap 1.1 came back » (pour sa commande) de `ghostline/docs/hardslice-friction.md`. `--parameters` est un choix, `id` par défaut (fichiers et lignes imprimées identiques à ceux d'avant, vérifié contre le template de HEAD) ou `none` : record vide, endpoint sans corps, ni validateur ni tests de validation, enregistrement du handler seul, test d'intégration du succès qui poste sans corps. `--parameters none --response none` est refusé (code 105, rien de créé) : le 404 répond à un agrégat inconnu que la commande ne peut pas nommer. Une valeur inconnue est refusée par `dotnet new` (code 127), comme `--result` de `hardslice-query`. `add-slice` ne dit plus quoi supprimer de la slice générée : il renvoie vers l'option, comme `AGENTS.md` (141 et 149 lignes, inchangé). Contournement que Ghostline peut retirer : aucun code à changer dans `ImportSchedule` ni `CollectRealtimeFeeds`, déjà réécrits, mais ses prochaines commandes sans paramètre se génèrent avec `--parameters none` au lieu de supprimer le validateur, ses tests et le test du 400, puis de réécrire l'endpoint.
+
 **Résultat observable**
 
 `dotnet new hardslice-command --module Schedule --name ImportScheduleCommand --parameters none` génère une commande sans paramètre, sans validateur ni tests de validation, un endpoint qui ne lit pas de corps, et un test d'intégration qui ne vérifie pas de 400. La vérification est verte après complétion de référence.

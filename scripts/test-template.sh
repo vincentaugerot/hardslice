@@ -2305,7 +2305,8 @@ solution_snapshot() {
   (cd "$app" && find src tests -type f -not -path '*/bin/*' -not -path '*/obj/*' -print0 | LC_ALL=C sort -z | xargs -0 cksum)
 }
 
-# A refused generation of the item template <template> exits with a non-zero code, prints <message> and creates or changes nothing.
+# A refused generation of the item template <template> exits with a non-zero code, left in $item_refused_status, prints <message>
+# and creates or changes nothing.
 expect_item_refused() {
   local template="$1"
   local description="$2"
@@ -2331,24 +2332,32 @@ expect_item_refused() {
     echo "error: dotnet new $template refused $description in $app_name but changed its files." >&2
     exit 1
   fi
+  item_refused_status="$status"
   echo "    $description: exit $status, $message"
 }
 
-# Generates the command slice <module>/<name> with the remaining options, checks that its three files exist, and leaves the
-# printed instructions in $command_output.
+# Generates the command slice <module>/<name> with the remaining options, checks that its three files exist, or two without
+# validator tests for --parameters none, and leaves the printed instructions in $command_output.
 generate_command() {
   local module="$1"
   local name="$2"
   shift 2
   local generated
+  local validator_tests="tests/$app_name.Tests/Features/$module/$name/${name}ValidatorTests.cs"
 
   if ! command_output="$(new_item hardslice-command --project "src/$app_name/$app_name.csproj" --module "$module" --name "$name" "$@")"; then
     printf '%s\n' "$command_output" >&2
     echo "error: dotnet new hardslice-command failed on the slice $module/$name of $app_name." >&2
     exit 1
   fi
-  for generated in "src/$app_name/Features/$module/$name/$name.cs" \
-    "tests/$app_name.Tests/Features/$module/$name/${name}ValidatorTests.cs" \
+  if [[ " $* " == *" --parameters none "* ]]; then
+    if [[ -e "$app/$validator_tests" || -e "$app/$(dirname "$validator_tests")" ]]; then
+      echo "error: dotnet new hardslice-command --parameters none created $(dirname "$validator_tests") in $app_name." >&2
+      exit 1
+    fi
+    validator_tests=""
+  fi
+  for generated in "src/$app_name/Features/$module/$name/$name.cs" $validator_tests \
     "tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"; do
     if [[ ! -f "$app/$generated" ]]; then
       printf '%s\n' "$command_output" >&2
@@ -2497,12 +2506,15 @@ expect_check_fails_on_todo_tests_only() {
 
 # Generates a command slice of module <module>, which must exist, through every path of dotnet new hardslice-command: refusals,
 # instructions, a forgotten registration, the TODO(hardslice): tests, the other responses, then the reference completion.
-# The module file is restored and the slices removed at the end.
+# Then the commands without parameters <parameterless-name> and <parameterless-dto-name>, through their TODO(hardslice): tests
+# and their reference completion. The module file is restored and the slices removed at the end.
 probe_command_template() {
   local module="$1"
   local name="$2"
   local none_name="$3"
   local dto_name="$4"
+  local parameterless_name="$5"
+  local parameterless_dto_name="$6"
   local module_file="$app_src/Features/$module/${module}Module.cs"
   local slice="$app_src/Features/$module/$name/$name.cs"
   local integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
@@ -2527,6 +2539,13 @@ probe_command_template() {
   for hidden_response in Guid "${name}Command" "$name"; do
     expect_item_refused hardslice-command "the response $hidden_response" "--response '$hidden_response' would name the DTO as a type that the slice already uses" --project "$project" --module "$module" --name "$name" --response "$hidden_response"
   done
+  # PB-064: --response none answers 404 to an aggregate that a command without parameters cannot name.
+  expect_item_refused hardslice-command "a command without parameters that answers 404" "--response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for" --project "$project" --module "$module" --name "$parameterless_name" --parameters none --response none
+  if [[ "$item_refused_status" != 105 ]]; then
+    echo "error: dotnet new hardslice-command refused --parameters none --response none with exit $item_refused_status instead of 105." >&2
+    exit 1
+  fi
+  expect_item_refused hardslice-command "unknown parameters" "'many' is not a valid value for --parameters" --project "$project" --module "$module" --name "$parameterless_name" --parameters many
 
   echo "==> Generating the command slice $module/$name of $app_name with dotnet new hardslice-command"
   generate_command "$module" "$name"
@@ -2547,6 +2566,7 @@ probe_command_template() {
   fi
   generated_slice="$(cat "$slice")"
   expect_item_refused hardslice-command "a slice that exists" "--force" --project "$project" --module "$module" --name "$name"
+  expect_explicit_parameters_id "$module" "$name"
 
   # The endpoint is mapped, so the build passes: only the test of the host and the generated tests see the forgotten registrations.
   echo "==> Checking that the test of the host names the handler and the validator of $module/$name that ${module}Module does not register"
@@ -2612,9 +2632,111 @@ probe_command_template() {
   complete_command "$module" "$name"
   bash "$app/scripts/check.sh"
 
+  probe_parameterless_commands "$module" "$parameterless_name" "$parameterless_dto_name"
+
   rm -r "$app_src/Features/$module/$name" "$app/tests/$app_name.Tests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$name"
   mv "$work/module.backup" "$module_file"
   rm "$work/module-registered.backup"
+}
+
+# The slice <module>/<name> generated with --parameters id holds the files and prints the lines of the slice generated without
+# the option, which already exists: it is generated as <name>Explicit, compared once renamed back, then removed.
+expect_explicit_parameters_id() {
+  local module="$1"
+  local name="$2"
+  local default_output="$command_output"
+  local kebab_name
+  local renaming
+  local folder
+  local generated
+
+  kebab_name="$(sed 's/\([a-z0-9]\)\([A-Z]\)/\1-\2/g' <<< "$name" | tr '[:upper:]' '[:lower:]')"
+  renaming="s/${name}Explicit/$name/g; s/$kebab_name-explicit/$kebab_name/g"
+  generate_command "$module" "${name}Explicit" --parameters id
+  for folder in "src/$app_name/Features/$module" "tests/$app_name.Tests/Features/$module" "tests/$app_name.IntegrationTests/Features/$module"; do
+    for generated in "$app/$folder/${name}Explicit"/*; do
+      if ! sed "$renaming" "$generated" | diff - "$app/$folder/$name/$(basename "${generated//${name}Explicit/$name}")"; then
+        echo "error: dotnet new hardslice-command --parameters id did not generate $generated as the default does." >&2
+        exit 1
+      fi
+    done
+    rm -r "${app:?}/$folder/${name:?}Explicit"
+  done
+  if [[ "$(sed "$renaming" <<< "$command_output")" != "$default_output" ]]; then
+    diff <(sed "$renaming" <<< "$command_output") <(printf '%s\n' "$default_output") >&2 || true
+    echo "error: dotnet new hardslice-command --parameters id did not print the lines of the default." >&2
+    exit 1
+  fi
+  command_output="$default_output"
+  echo "    --parameters id: the files and the lines of the default"
+}
+
+# The command slices <module>/<name> and <module>/<dto-name> generated with --parameters none, responding with their identifier
+# and with <dto-name>Result: empty records without validator nor validator tests, endpoints without body, the handler alone
+# registered, integration tests that post without body and check no 400. The check fails on their TODO(hardslice): tests only,
+# then passes after their reference completion. The module is left as it was and the slices are removed.
+probe_parameterless_commands() {
+  local module="$1"
+  local name="$2"
+  local dto_name="$3"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local slice
+  local integration_test
+  local expected
+  local generated
+
+  echo "==> Generating the commands without parameters $module/$name and $module/$dto_name of $app_name with dotnet new hardslice-command --parameters none"
+  cp "$module_file" "$work/module-parameterless.backup"
+  generate_command "$module" "$name" --parameters none
+  if [[ "$command_output" == *"IValidator"* || "$command_output" == *"using FluentValidation;"* ]] ||
+    ! grep -Fxq "            .AddScoped<IRequestHandler<${name}Command, Guid>, ${name}Handler>()" <<< "$command_output"; then
+    printf '%s\n' "$command_output" >&2
+    echo "error: dotnet new hardslice-command --parameters none did not print the registration of the handler alone." >&2
+    exit 1
+  fi
+  register_slice hardslice-command "$command_output"
+  generate_command "$module" "$dto_name" --parameters none --response "${dto_name}Result"
+  register_slice hardslice-command "$command_output"
+  for generated in "$name|public sealed record ${name}Command : ICommand<Guid>;" \
+    "$dto_name|public sealed record ${dto_name}Command : ICommand<${dto_name}Result>;" \
+    "$dto_name|public sealed record ${dto_name}Result(Guid Id);"; do
+    slice="$app_src/Features/$module/${generated%%|*}/${generated%%|*}.cs"
+    integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/${generated%%|*}/${generated%%|*}Tests.cs"
+    expected="${generated#*|}"
+    if ! grep -Fxq "$expected" "$slice" || grep -q 'Validator\|FluentValidation\|command =>' "$slice" ||
+      ! grep -Fq "async (IMediator mediator, CancellationToken cancellationToken) =>" "$slice" ||
+      ! grep -Fq "mediator.Send(new ${generated%%|*}Command(), cancellationToken)" "$slice"; then
+      cat "$slice" >&2
+      echo "error: dotnet new hardslice-command --parameters none did not generate an empty command, without validator, sent by an endpoint without body: $expected" >&2
+      exit 1
+    fi
+    if ! grep -Fq "PostAsync(Route, content: null, " "$integration_test" || grep -q 'BadRequest\|Rejects_\|PostAsJsonAsync' "$integration_test"; then
+      cat "$integration_test" >&2
+      echo "error: the integration test of $module/${generated%%|*} generated with --parameters none does not post without body, or checks a 400." >&2
+      exit 1
+    fi
+  done
+  if grep -q 'MyApp\|ModuleName\|CommandName\|ResponseTypeName\|command-route\|module-route' \
+    "$app_src/Features/$module/$name/$name.cs" "$app_src/Features/$module/$dto_name/$dto_name.cs" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs" "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name/${dto_name}Tests.cs"; then
+    echo "error: a command without parameters generated in $app_name keeps a placeholder of the template." >&2
+    exit 1
+  fi
+
+  # HS013 asks no validator of them, HS014 sees their integration tests: only the markers fail.
+  echo "==> Checking that $app_name builds the commands without parameters without HardSlice diagnostic and fails the check on their TODO(hardslice): tests only"
+  expect_check_fails_on_todo_tests_only "the commands without parameters $module/$name and $module/$dto_name" \
+    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$dto_name.${dto_name}Tests.Handles_the_command" \
+      "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Handles_the_command" | LC_ALL=C sort)"
+
+  echo "==> Checking that the reference completion of the commands without parameters $module/$name and $module/$dto_name passes the check of $app_name"
+  complete_parameterless_command "$module" "$name" id
+  complete_parameterless_command "$module" "$dto_name" "${dto_name}Result"
+  bash "$app/scripts/check.sh"
+
+  rm -r "$app_src/Features/$module/$name" "$app_src/Features/$module/$dto_name" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$dto_name"
+  mv "$work/module-parameterless.backup" "$module_file"
 }
 
 # Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and leaves the
@@ -3379,7 +3501,7 @@ rm "$work/RoomsModule.cs.backup"
 remove_module Rooms
 mv "$work/Program.cs.backup" "$app_src/Program.cs"
 
-probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking
+probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings
 probe_query_template Bookings GetBookingSummary ListBookingSummaries Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories
@@ -3661,7 +3783,7 @@ rm "$app/src/$app_name.Domain/Hs001Probe.cs"
 # hardslice-query its first query slices.
 probe_module_template Rooms MeetingRooms meeting-rooms
 
-probe_command_template Rooms RenameRoom CloseRoom ResizeRoom
+probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRooms
 
 # The aggregate that the query slices read is generated by dotnet new hardslice-aggregate in the domain of Rooms, mapped by the
 # module and migrated with the command it prints, as "Adding a first module" of AGENTS.md says.

@@ -44,9 +44,11 @@ dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings 
 
 It creates `src/Rooms/Features/Bookings/ExtendBooking/ExtendBooking.cs`, with the command `ExtendBookingCommand`, its validator, its handler and its endpoint `POST /bookings/extend-booking`, the validator tests in `tests/Rooms.Tests/Features/Bookings/ExtendBooking/` and the integration tests in `tests/Rooms.IntegrationTests/Features/Bookings/ExtendBooking/`. Then it prints the lines to add to `BookingsModule.cs`: the usings, the registrations of the handler and the validator, and the call of `Map`. `--response` sets what the command returns: `id` (a `Guid`) by default, `none` (a `bool` whose `false` is answered with 404), or the name of a DTO of values, which the slice declares.
 
+`--parameters` sets what the command takes from the request: `id` by default, a `Guid Id` to replace with the fields of the use case, checked by its validator. `none` generates a command without parameters, such as an import that reads its source from the configuration: an empty record, an endpoint that reads no body, no validator nor validator tests, and an integration test that posts without body and checks its success instead of a 400. The template then prints the registration of the handler alone. It combines with `--response id` and with a DTO, never with `--response none`, whose 404 answers an unknown aggregate that such a command has no identifier to look for.
+
 The validator tests pass. The handler throws `NotImplementedException` and the integration test ends with `TODO(hardslice):`. A slice its module does not register fails the check too: a test of the host resolves every request handler and validator of the application from the container, and names the ones that are missing.
 
-Without `--project`, before the first restore, with a name that is not PascalCase or ends with `Command`, for a module without `Features/<Module>/<Module>Module.cs`, or with a `--response` DTO named `Guid` or as a type of the slice, it exits with an error that says what to do and creates nothing. It refuses to overwrite an existing slice without `--force`.
+Without `--project`, before the first restore, with a name that is not PascalCase or ends with `Command`, for a module without `Features/<Module>/<Module>Module.cs`, with a `--response` DTO named `Guid` or as a type of the slice, or with `--parameters none --response none`, it exits with an error that says what to do and creates nothing. It refuses to overwrite an existing slice without `--force`.
 
 ## A query slice
 

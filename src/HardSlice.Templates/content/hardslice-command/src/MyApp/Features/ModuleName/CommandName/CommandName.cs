@@ -1,4 +1,6 @@
+#if (!ParametersIsNone)
 using FluentValidation;
+#endif
 #if (ResponseIsNone)
 using Microsoft.AspNetCore.Http.HttpResults;
 #endif
@@ -6,7 +8,19 @@ using MyApp.Shared.Messaging;
 
 namespace MyApp.Features.ModuleName.CommandName;
 
+#if (ParametersIsNone)
+// No parameter: what the command needs comes from the database, the configuration or a service that its module registers,
+// never from the request. It has no validator (HS013), and its tests cover its success or a failure of the domain.
 #if (ResponseIsId)
+// Returns the identifier of the aggregate it changes or creates.
+public sealed record CommandNameCommand : ICommand<Guid>;
+#else
+public sealed record CommandNameCommand : ICommand<ResponseTypeName>;
+
+// Values only: never an entity, not even in a property (HS005). Replace Id with what the command did.
+public sealed record ResponseTypeName(Guid Id);
+#endif
+#elif (ResponseIsId)
 // Returns the identifier of the aggregate it changes or creates. Replace Id with the fields of the use case.
 public sealed record CommandNameCommand(Guid Id) : ICommand<Guid>;
 #elif (ResponseIsNone)
@@ -19,6 +33,7 @@ public sealed record CommandNameCommand(Guid Id) : ICommand<ResponseTypeName>;
 // Values only: never an entity, not even in a property (HS005).
 public sealed record ResponseTypeName(Guid Id);
 #endif
+#if (!ParametersIsNone)
 
 // Checks the shape of the input only: business rules stay in the aggregate.
 internal sealed class CommandNameValidator : AbstractValidator<CommandNameCommand>
@@ -26,6 +41,7 @@ internal sealed class CommandNameValidator : AbstractValidator<CommandNameComman
     public CommandNameValidator() =>
         RuleFor(command => command.Id).NotEmpty();
 }
+#endif
 
 // Changes the aggregate only: TransactionBehavior saves and commits it, and publishes its domain events before.
 #if (ResponseIsId)
@@ -50,7 +66,10 @@ internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, R
 internal static class CommandNameEndpoint
 {
     public static void Map(RouteGroupBuilder group) =>
-#if (ResponseIsNone)
+#if (ParametersIsNone)
+        group.MapPost("/command-route", async (IMediator mediator, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await mediator.Send(new CommandNameCommand(), cancellationToken)));
+#elif (ResponseIsNone)
         group.MapPost("/command-route", async Task<Results<NoContent, NotFound>> (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(command, cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
 #else
