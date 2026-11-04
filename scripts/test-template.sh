@@ -24,6 +24,8 @@
 # With the sample, it runs the hooks of Claude Code with their payloads: a protected file refused, the errors of the build after the edit of a .cs file,
 # the end of a turn blocked by a failing check and let through by a passing one, nothing under Copilot CLI; then the same with
 # the hooks of Codex, which read the files of a patch, and of Copilot CLI, which answer in JSON.
+# It proves that check --build, and the hook after an edit that runs it, restore once after an edit of a project that changes no package, then no more,
+# restore a package added and build with it, and say that a project without obj/ has never been restored.
 # Then, in a temporary git repository of the solution, the pre-commit hook of .githooks/, turned on as AGENTS.md says, refuses a commit
 # that breaks HS010 and accepts a compliant one, and the job protected-files of .github/workflows/hardslice.yml fails on a change of
 # scripts/check.sh until the label hardslice-approved is set. In both variants, actionlint validates that workflow.
@@ -1645,6 +1647,76 @@ CODE
   echo "    Stop: HS010 blocks the end of the turn with code 2, a passing check lets the agent finish; under Copilot CLI, every hook exits 0"
 }
 
+# Runs check --build of both scripts in turn: each must pass, and restore first only for the first <restores> of them, with
+# <reason> in its title. Prints the output of a failing one.
+expect_build_restores() {
+  local restores="$1" reason="$2" description="$3" script check_output count=0
+  for script in check.sh check.ps1; do
+    if ! check_output="$(run_check_mode "$script" --build 2>&1)"; then
+      printf '%s\n' "$check_output" >&2
+      echo "error: scripts/$script --build failed on $app_name after $description." >&2
+      exit 1
+    fi
+    count=$((count + 1))
+    if (( count <= restores )); then
+      if [[ "$check_output" != *"==> Restoring $app_name.slnx: $reason"* ]]; then
+        printf '%s\n' "$check_output" >&2
+        echo "error: scripts/$script --build did not restore $app_name after $description, saying '$reason'." >&2
+        exit 1
+      fi
+    elif [[ "$check_output" == *"==> Restoring"* ]]; then
+      printf '%s\n' "$check_output" >&2
+      echo "error: scripts/$script --build restored $app_name again after $description, although no file read by the restore changed since the last one." >&2
+      exit 1
+    fi
+  done
+}
+
+# PB-061: a restore that changes no package does not rewrite project.assets.json. check --build records what its restore read,
+# so a project file edited without changing a package, as dotnet user-secrets init does, is restored once, by the hook after an
+# edit or by the first check --build, then no more. A package added is restored and seen by the build. Without obj/, the project
+# has never been restored.
+probe_restore_once() {
+  local project="src/$app_name/$app_name.csproj" csv_file="tests/$app_name.Tests/CsvProbe.cs"
+  cp -p "$app/$project" "$work/restore-project.backup"
+  cp -p "$app/Directory.Packages.props" "$work/restore-packages.backup"
+
+  printf '%s\n' "<!-- An edit that changes no package. -->" >> "$app/$project"
+  expect_build_restores 1 "$project changed since the last restore of $project" "an edit of $project that changes no package"
+  printf '%s\n' "<!-- Another edit that changes no package. -->" >> "$app/$project"
+  run_claude_hook PostToolUse "$(claude_payload PostToolUse "$app/src/$app_name/Program.cs")"
+  if [[ "$hook_status" != 0 || -n "$hook_error" ]]; then
+    printf '%s\n' "$hook_error" >&2
+    echo "error: the PostToolUse hook failed after an edit of $project that changes no package (code $hook_status)." >&2
+    exit 1
+  fi
+  expect_build_restores 0 "" "the restore of the PostToolUse hook"
+  echo "    $project edited without a package change: restored once, by check --build or the hook after an edit, then no more"
+
+  sed -i.bak 's|<ItemGroup Label="Validation">|<ItemGroup Label="Validation"><PackageVersion Include="CsvHelper" Version="33.1.0" />|' "$app/Directory.Packages.props"
+  sed -i.bak 's|<PackageReference Include="FluentValidation" />|<PackageReference Include="FluentValidation" /><PackageReference Include="CsvHelper" />|' "$app/$project"
+  rm "$app/Directory.Packages.props.bak" "$app/$project.bak"
+  cat > "$app/$csv_file" <<CODE
+namespace $app_name.Tests;
+
+internal static class CsvProbe
+{
+    internal static readonly Type Reader = typeof(CsvHelper.CsvReader);
+}
+CODE
+  expect_build_restores 1 "Directory.Packages.props changed since the last restore of" "CsvHelper added to Directory.Packages.props and $project"
+  echo "    CsvHelper added: restored, then built by a test that uses it, then no more restore"
+  rm "$app/$csv_file"
+
+  mv "$work/restore-project.backup" "$app/$project"
+  mv "$work/restore-packages.backup" "$app/Directory.Packages.props"
+  touch "$app/$project" "$app/Directory.Packages.props"
+  expect_build_restores 1 "Directory.Packages.props changed since the last restore of" "CsvHelper removed from Directory.Packages.props and $project"
+  rm -rf "${app:?}/src/$app_name/obj"
+  expect_build_restores 1 "$project has never been restored" "the deletion of src/$app_name/obj"
+  echo "    src/$app_name/obj deleted: has never been restored"
+}
+
 codex_payload() {
   local event="$1" patch="$2" active="${3:-false}"
   printf '{"session_id":"test-template-codex-%s","cwd":"%s","hook_event_name":"%s","tool_name":"apply_patch","tool_input":{"command":"%s"},"stop_hook_active":%s}' \
@@ -3052,6 +3124,9 @@ probe_check_modes Bookings "src/$app_name/Features/Bookings/ConfirmBooking/Confi
 
 echo "==> Checking the hooks of Claude Code: protected files, the build after an edit and the check before handing back"
 probe_claude_hooks Bookings
+
+echo "==> Checking that check --build restores once after an edit of a project that changes no package, then no more"
+probe_restore_once
 
 echo "==> Checking the hooks of Codex and Copilot CLI: protected files, the build after an edit and the check before handing back"
 probe_codex_and_copilot_hooks Bookings

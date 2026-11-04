@@ -161,6 +161,126 @@ public sealed class CheckCommandTests
         runner.Commands.ShouldBe([Restore]);
     }
 
+    // PB-061: a restore that changes no package does not rewrite project.assets.json. A project file edited without changing a
+    // package, as dotnet user-secrets init does, stayed newer than it, and every build after an edit restored again.
+    [Fact]
+    public void Check_build_restores_once_after_a_project_file_changed_without_a_package_then_no_more()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        Touch(solution.Write("src/Demo/Demo.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><UserSecretsId>id</UserSecretsId></PropertyGroup></Project>"));
+        var first = new FakeRunner();
+        var second = new FakeRunner();
+
+        var (exitCode, output, _) = Check(first, solution.Root, "--build");
+        Check(second, solution.Root, "--build").ExitCode.ShouldBe(0);
+
+        exitCode.ShouldBe(0);
+        output.ShouldContain("==> Restoring Demo.slnx: src/Demo/Demo.csproj changed since the last restore of src/Demo/Demo.csproj");
+        first.Commands.ShouldBe([Restore, IncrementalBuild]);
+        second.Commands.ShouldBe([IncrementalBuild]);
+    }
+
+    [Theory]
+    [InlineData("src/Demo/Demo.csproj")]
+    [InlineData("Directory.Packages.props")]
+    [InlineData("Directory.HardSlice.props")]
+    public void Check_build_restores_again_when_a_file_read_by_the_restore_changes_after_the_recorded_restore(string changed)
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        Touch(Path.Combine(solution.Root, changed));
+        Check(new FakeRunner(), solution.Root, "--build").ExitCode.ShouldBe(0);
+        var file = Path.Combine(solution.Root, changed);
+        File.AppendAllText(file, "<!-- a change read by the restore -->");
+        Touch(file);
+        var runner = new FakeRunner();
+
+        var (exitCode, output, _) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldBe([Restore, IncrementalBuild]);
+        output.ShouldContain($"==> Restoring Demo.slnx: {changed} changed since the last restore of src/Demo/Demo.csproj");
+    }
+
+    // The trace holds the files as they were before the restore ran: one changed while it ran may not have been read.
+    [Fact]
+    public void Check_build_restores_again_when_a_file_changed_while_the_restore_ran()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        Touch(Path.Combine(solution.Root, "src/Demo/Demo.csproj"));
+        var during = new FakeRunner().After(Restore, () => Touch(solution.Write("src/Demo/Demo.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />")));
+        Check(during, solution.Root, "--build").ExitCode.ShouldBe(0);
+        var runner = new FakeRunner();
+
+        Check(runner, solution.Root, "--build").ExitCode.ShouldBe(0);
+
+        during.Commands.ShouldBe([Restore, IncrementalBuild]);
+        runner.Commands.ShouldBe([Restore, IncrementalBuild]);
+    }
+
+    [Fact]
+    public void Check_build_restores_again_when_a_root_file_read_by_the_restore_was_removed()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        Touch(solution.Write("Directory.Build.props", "<Project />"));
+        Check(new FakeRunner(), solution.Root, "--build").ExitCode.ShouldBe(0);
+        File.Delete(Path.Combine(solution.Root, "Directory.Build.props"));
+        var runner = new FakeRunner();
+
+        var (_, output, _) = Check(runner, solution.Root, "--build");
+
+        runner.Commands.ShouldBe([Restore, IncrementalBuild]);
+        output.ShouldContain("==> Restoring Demo.slnx: Directory.Build.props was removed since the last restore of src/Demo/Demo.csproj");
+    }
+
+    [Fact]
+    public void A_failing_restore_records_nothing_and_the_next_build_restores_again()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        Touch(Path.Combine(solution.Root, "src/Demo/Demo.csproj"));
+        Check(new FakeRunner().Failing(Restore, 1), solution.Root, "--build").ExitCode.ShouldBe(1);
+        var runner = new FakeRunner();
+
+        Check(runner, solution.Root, "--build").ExitCode.ShouldBe(0);
+
+        runner.Commands.ShouldBe([Restore, IncrementalBuild]);
+    }
+
+    // dotnet build restores before it builds: when it passed, the restore did too.
+    [Fact]
+    public void The_build_of_a_passing_full_check_records_the_restore_for_check_build()
+    {
+        using var solution = new TemporarySolution();
+        foreach (var project in solution.TestProjects)
+            Touch(Path.Combine(solution.Root, project));
+        Check(new FakeRunner(), solution.Root).ExitCode.ShouldBe(0);
+        var runner = new FakeRunner();
+
+        Check(runner, solution.Root, "--build").ExitCode.ShouldBe(0);
+
+        runner.Commands.ShouldBe([IncrementalBuild]);
+    }
+
+    [Fact]
+    public void Check_build_says_never_restored_once_the_obj_folder_of_a_recorded_project_is_deleted()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects(("src/Demo/Demo.csproj", true));
+        Touch(Path.Combine(solution.Root, "src/Demo/Demo.csproj"));
+        Check(new FakeRunner(), solution.Root, "--build").ExitCode.ShouldBe(0);
+        Directory.Delete(Path.Combine(solution.Root, "src/Demo/obj"), recursive: true);
+        var runner = new FakeRunner();
+
+        var (_, output, _) = Check(runner, solution.Root, "--build");
+
+        runner.Commands.ShouldBe([Restore, IncrementalBuild]);
+        output.ShouldContain("==> Restoring Demo.slnx: src/Demo/Demo.csproj has never been restored");
+    }
+
     // The compiler output reaches the console as is: the tool never captures nor rewrites it.
     [Fact]
     public void Check_build_exits_with_the_code_of_a_failing_build_before_looking_for_markers()
@@ -490,6 +610,9 @@ public sealed class CheckCommandTests
         var exitCode = Cli.Run(["check", .. mode], currentDirectory, runner, output, error);
         return (exitCode, output.ToString(), error.ToString());
     }
+
+    // Makes a file newer than the assets files that TemporarySolution writes, as an edit after the last restore does.
+    private static void Touch(string file) => File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(5));
 
     private static string[] Lines(string text) => text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 }

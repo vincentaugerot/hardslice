@@ -48,9 +48,11 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
     // The suffixes of the test projects that the full check runs with --no-build, after the build of the .slnx.
     private static readonly string[] TestSuffixes = ["Tests", "ArchitectureTests", "IntegrationTests"];
 
-    private int RunFull(Solution solution) =>
-        TestProjectsInSolution(solution)
-            ?? Step(solution, $"Building {solution.File}", "build", solution.File)
+    private int RunFull(Solution solution)
+    {
+        var restore = RestoreState.Read(solution);
+        return TestProjectsInSolution(solution)
+            ?? Restored(restore, Step(solution, $"Building {solution.File}", "build", solution.File))
             ?? AnalyzersReceived(solution)
             ?? Step(solution, "Running unit tests", "test", "--project", solution.TestProject("Tests"), "--no-build")
             ?? Step(solution, "Running architecture tests", "test", "--project", solution.TestProject("ArchitectureTests"), "--no-build")
@@ -58,19 +60,31 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
             ?? Step(solution, "Running integration tests", "test", "--project", solution.TestProject("IntegrationTests"), "--no-build")
             ?? Markers(solution)
             ?? Passed("==> Check passed");
+    }
 
-    // dotnet build --no-restore, after a restore only when an assets file is missing or older than what it was restored from.
+    // dotnet build --no-restore, after a restore only when a project has never been restored or a file its restore reads
+    // changed since its last restore (RestoreState).
     // Its console logger is replaced by one that prints the errors alone, each as the compiler wrote it, without the banner
     // and summary that dotnet build adds to its own.
     private int RunBuild(Solution solution)
     {
         output.WriteLine(BuildModeReduction);
-        var restore = RestoreState.Outdated(solution);
-        return (restore is null ? null : Step(solution, $"Restoring {solution.File}: {restore}", "restore", solution.File, "-nologo", "-v:q"))
+        var restore = RestoreState.Read(solution);
+        var outdated = restore.Outdated;
+        return (outdated is null ? null : Restored(restore, Step(solution, $"Restoring {solution.File}: {outdated}", "restore", solution.File, "-nologo", "-v:q")))
             ?? Step(solution, $"Building {solution.File}", "build", solution.File, "--no-restore", "-nologo", "-tl:off", "-noconsolelogger", ErrorsOnlyLogger)
             ?? AnalyzersReceived(solution)
             ?? Markers(solution)
             ?? Passed("==> Build passed. Tests did not run: only the full check decides that the work is done.");
+    }
+
+    // The result of a step that restored the solution, dotnet restore or dotnet build without --no-restore: when it passed, every
+    // project was restored from the files read before it, and the next check --build skips the restore until one of them changes.
+    private static int? Restored(RestoreState restore, int? step)
+    {
+        if (step is null)
+            restore.Record();
+        return step;
     }
 
     // Null when the step passes, otherwise Failure: the code of the command, such as 2 for a failed test under

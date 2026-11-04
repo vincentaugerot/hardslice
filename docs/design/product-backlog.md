@@ -2796,6 +2796,8 @@ sondes « fichiers protégés », « hooks » et « workflow généré » de scr
 
 ### PB-061 : Ne restaurer avant le build que lorsqu'un fichier lu par la restauration a changé
 
+Statut : terminé le 04/11/2026. La trace `obj/hardslice.restore` porte l'empreinte SHA-256 du contenu de chaque fichier lu (fichiers de la racine présents et projet), relevée avant la restauration et écrite seulement si elle réussit : un fichier modifié pendant la restauration la relance au build suivant, et un fichier de la racine supprimé aussi (« was removed »). Un fichier est à jour si son contenu est celui de la trace, ou s'il est plus ancien que `project.assets.json`. Le build du check complet, qui restaure, écrit aussi la trace.
+
 **Résultat observable**
 
 Après une modification d'un `.csproj` qui ne change aucun paquet, le hook après édition restaure une fois, puis plus du tout tant qu'aucun fichier lu par la restauration ne change.
