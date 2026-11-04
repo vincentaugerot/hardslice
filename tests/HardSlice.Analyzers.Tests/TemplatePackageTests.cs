@@ -69,6 +69,7 @@ public sealed class TemplatePackageTests
             PackedFiles(archive, "/hardslice-query/").ShouldBe(QueryTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-module/").ShouldBe(ModuleTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-aggregate/").ShouldBe(AggregateTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-entity/").ShouldBe(EntityTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-event/").ShouldBe(EventTemplateFiles.Order(StringComparer.Ordinal));
             // docs/agents/support.md: .claude/skills/ is the only source, the pack copies it into .agents/skills/ for Codex and Gemini CLI.
             PackedFiles(archive, "/hardslice-api/.claude/skills/").ShouldBe(SkillNames.Select(skill => $"{skill}/SKILL.md").Order(StringComparer.Ordinal));
@@ -671,6 +672,143 @@ public sealed class TemplatePackageTests
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("NameIsFree");
     }
 
+    // PB-066: hardslice-entity generates a child entity, its identifier, its mapping next to the mapping of its root, the converter
+    // of the identifier of the root and its unit tests. It reads the mappings of the web project, and creates the converter only
+    // while the module has none for that root.
+    [Fact]
+    public void Entity_item_template_generates_the_child_its_identifier_its_mapping_the_converter_of_its_root_and_its_unit_tests_only()
+    {
+        var root = EntityTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(EntityTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-entity");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        config.GetProperty("sourceName").GetString().ShouldBe("EntityName");
+        var symbols = config.GetProperty("symbols");
+        symbols.GetProperty("AppName").GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        symbols.GetProperty("MappingFiles").GetProperty("binding").GetString().ShouldBe("msbuild:HardSliceMappingFiles");
+        symbols.GetProperty("Module").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+        symbols.GetProperty("Aggregate").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+        symbols.GetProperty("Aggregate").GetProperty("replaces").GetString().ShouldBe("AggregateName");
+        var link = symbols.GetProperty("Link");
+        link.GetProperty("defaultValue").GetString().ShouldBe("collection");
+        link.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["collection", "id"]);
+        symbols.GetProperty("TableOrDefault").GetProperty("replaces").GetString().ShouldBe("EntityTable");
+        symbols.GetProperty("Collection").GetProperty("replaces").GetString().ShouldBe("EntityCollection");
+        var modifiers = config.GetProperty("sources")[0].GetProperty("modifiers");
+        modifiers[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        modifiers[1].GetProperty("condition").GetString().ShouldBe("(ConverterExists)");
+        modifiers[1].GetProperty("exclude").EnumerateArray().Select(glob => glob.GetString())
+            .ShouldBe(["src/MyApp/Features/ModuleName/AggregateNameIdConverter.cs"]);
+        File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), "Directory.Build.targets"))
+            .ShouldContain("<HardSliceMappingFiles>");
+    }
+
+    // A child held by its root maps the collection of the root and the identifier of the root as a shadow property. A child of a
+    // large collection holds that identifier, without navigation (HS008 knows no owner for it). Both store it with the converter.
+    [Fact]
+    public void Entity_item_template_maps_a_child_held_by_its_root_or_holding_the_identifier_of_its_root()
+    {
+        var root = EntityTemplateRoot(FindRepositoryRoot());
+        var entity = File.ReadAllText(Path.Combine(root, "src", "MyApp.Domain", "ModuleName", "EntityName.cs"));
+        var configuration = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "EntityNameConfiguration.cs"));
+        var converter = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "AggregateNameIdConverter.cs"));
+
+        entity.ShouldContain("public sealed class EntityName : IEntity\n");
+        entity.ShouldNotContain(" set;");
+        entity.ShouldNotContain(" init;");
+        entity.ShouldNotContain("AggregateName AggregateName");
+        Branch(entity, linkIsId: true).ShouldContain("    public AggregateNameId AggregateNameId { get; }");
+        Branch(entity, linkIsId: true).ShouldContain("    public static EntityName Create(AggregateNameId aggregateNameId) => new(EntityNameId.New(), aggregateNameId);");
+        Branch(entity, linkIsId: false).ShouldContain("    public static EntityName Create() => new(EntityNameId.New());");
+        Branch(entity, linkIsId: false).ShouldNotContain("AggregateNameId");
+        configuration.ShouldContain("internal sealed class EntityNameConfiguration : IEntityTypeConfiguration<EntityName>");
+        configuration.ShouldContain("        builder.ToTable(\"EntityTable\");");
+        Branch(configuration, linkIsId: true).ShouldContain("builder.Property(entity => entity.AggregateNameId).HasConversion<AggregateNameIdConverter>();");
+        Branch(configuration, linkIsId: true).ShouldContain("            .WithMany()\n            .HasForeignKey(entity => entity.AggregateNameId)");
+        Branch(configuration, linkIsId: false).ShouldContain("builder.Property<AggregateNameId>(\"AggregateNameId\").HasConversion<AggregateNameIdConverter>();");
+        Branch(configuration, linkIsId: false).ShouldContain("            .WithMany(\"EntityCollection\")\n            .HasForeignKey(\"AggregateNameId\")");
+        converter.ShouldContain(
+            "internal sealed class AggregateNameIdConverter() : ValueConverter<AggregateNameId, Guid>(id => id.Value, value => new AggregateNameId(value));");
+    }
+
+    // Every refusal fails the generation, after excluding every file, and says that nothing was created. The last two actions print
+    // what to complete for each link, the collection to add to the root for a held child, and the migration.
+    [Fact]
+    public void Entity_item_template_refuses_with_an_error_that_creates_nothing()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(EntityTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Length.ShouldBe(11);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        var completions = postActions[^2..];
+        completions.Select(action => action.GetProperty("condition").GetString()).ShouldBe(["(Accepted && !LinkIsId)", "(Accepted && LinkIsId)"]);
+        var held = completions[0].GetProperty("manualInstructions")[0].GetProperty("text").GetString()!;
+        held.ShouldContain("\nprivate readonly List<EntityName> _entityCollection = [];\npublic IReadOnlyList<EntityName> EntityCollection => _entityCollection.AsReadOnly();\n");
+        completions[1].GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldNotContain("_entityCollection");
+        completions.ShouldAllBe(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!
+            .Contains("dotnet ef migrations add AddEntityTable --project src/MyApp --output-dir Shared/Persistence/Migrations", StringComparison.Ordinal));
+    }
+
+    // The aggregate is known by its mapping in the folder of its module, a name already mapped there is refused, and the converter
+    // of the root is created only while the module has none. dotnet new evaluates regexMatch with System.Text.RegularExpressions.
+    [Theory]
+    [InlineData("Schedule|ScheduleVersion|", false, false)]
+    [InlineData("Schedule|ScheduleVersion|/app/src/A/Features/Schedule/ScheduleVersionConfiguration.cs;", true, false)]
+    [InlineData("Schedule|ScheduleVersion|/app/src/A/Features/Schedule/StopConfiguration.cs;/app/src/A/Features/Schedule/ScheduleVersionConfiguration.cs;/app/src/A/Features/Schedule/ScheduleVersionIdConverter.cs", true, true)]
+    [InlineData("Schedule|ScheduleVersion|C:\\app\\src\\A\\Features\\Schedule\\ScheduleVersionConfiguration.cs;C:\\app\\src\\A\\Features\\Schedule\\ScheduleVersionIdConverter.cs", true, true)]
+    [InlineData("Schedule|ScheduleVersion|/app/src/A/Features/Realtime/ScheduleVersionConfiguration.cs;/app/src/A/Features/Realtime/ScheduleVersionIdConverter.cs", false, false)]
+    [InlineData("Schedule|Version|/app/src/A/Features/Schedule/ScheduleVersionConfiguration.cs;/app/src/A/Features/Schedule/ScheduleVersionIdConverter.cs", false, false)]
+    [InlineData("Schedule|ScheduleVersion|/app/src/A/Features/Schedule/Import/ScheduleVersionConfiguration.cs", false, false)]
+    public void Entity_item_template_finds_the_aggregate_and_its_converter_in_the_mappings_of_its_module(string probe, bool aggregateExists, bool converterExists)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(EntityTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+
+        Matches(symbols, "AggregateExists", probe).ShouldBe(aggregateExists);
+        Matches(symbols, "ConverterExists", probe).ShouldBe(converterExists);
+        Matches(symbols, "NameIsMapped", probe).ShouldBe(aggregateExists);
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("AggregateExists && TableIsValid && NameIsFree && !NameIsMapped");
+    }
+
+    // The lines of <source> that the template keeps for --link id (<linkIsId>) or --link collection, the only condition of its files.
+    private static string Branch(string source, bool linkIsId)
+    {
+        var kept = new List<string>();
+        bool? inIdBranch = null;
+        foreach (var line in source.Split('\n'))
+        {
+            switch (line.Trim())
+            {
+                case "#if (LinkIsId)":
+                    inIdBranch = true;
+                    break;
+                case "#else":
+                    inIdBranch = false;
+                    break;
+                case "#endif":
+                    inIdBranch = null;
+                    break;
+                default:
+                    if (inIdBranch is null || inIdBranch == linkIsId)
+                        kept.Add(line);
+                    break;
+            }
+        }
+        return string.Join('\n', kept);
+    }
+
     // PB-056: --reaction-only adds the reaction slice of an event that exists, which --force would overwrite with a blank event.
     [Fact]
     public void Event_item_template_adds_a_reaction_alone_to_an_event_that_exists()
@@ -1126,6 +1264,7 @@ public sealed class TemplatePackageTests
     [Theory]
     [InlineData("add-module", "hardslice-module")]
     [InlineData("add-aggregate", "hardslice-aggregate")]
+    [InlineData("add-aggregate", "hardslice-entity")]
     [InlineData("add-slice", "hardslice-command")]
     [InlineData("add-slice", "hardslice-query")]
     [InlineData("add-domain-event", "hardslice-event")]
@@ -1397,6 +1536,17 @@ public sealed class TemplatePackageTests
         "tests/MyApp.Tests/Domain/ModuleName/AggregateNameTests.cs"
     ];
 
+    private static readonly string[] EntityTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp.Domain/ModuleName/EntityName.cs",
+        "src/MyApp.Domain/ModuleName/EntityNameId.cs",
+        "src/MyApp/Features/ModuleName/AggregateNameIdConverter.cs",
+        "src/MyApp/Features/ModuleName/EntityNameConfiguration.cs",
+        "tests/MyApp.Tests/Domain/ModuleName/EntityNameTests.cs"
+    ];
+
     private static readonly string[] EventTemplateFiles =
     [
         ".template.config/dotnetcli.host.json",
@@ -1424,6 +1574,9 @@ public sealed class TemplatePackageTests
 
     private static string AggregateTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-aggregate");
+
+    private static string EntityTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-entity");
 
     private static string EventTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-event");

@@ -34,14 +34,14 @@ The check builds the solution and runs its unit, architecture and integration te
 dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
 ```
 
-[Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the five element templates.
+[Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the six element templates.
 
 ## What you get
 
 | Part | What it does |
 |---|---|
 | `hardslice-api` solution template | An ASP.NET Core API in vertical slices around a separate domain project, with PostgreSQL, EF Core, a small in-house mediator and FluentValidation, its unit, integration and architecture tests, and the `Bookings` sample or none. |
-| Five item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-command`, `hardslice-query` and `hardslice-event` generate an element in its place with its tests, which fail until the element is completed. |
+| Six item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-entity`, `hardslice-command`, `hardslice-query` and `hardslice-event` generate an element in its place with its tests, which fail until the element is completed. |
 | `HardSlice.Analyzers` | Roslyn analyzers that report the rules at build time and in the IDE. |
 | Architecture tests | The rules that span projects, modules and test folders, in every generated solution. |
 | `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files. |

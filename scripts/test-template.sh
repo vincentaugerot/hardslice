@@ -22,6 +22,10 @@
 # --route and a query on a route of its own, through the refusals of a route or a method they cannot map, and their tests pass on these routes.
 # It generates an aggregate with dotnet new hardslice-aggregate through each of its refusals, proves it builds without HardSlice diagnostic,
 # that the check fails on its TODO(hardslice): test, then on its missing migration, and passes once the printed migration is added.
+# It generates two child entities of an aggregate with dotnet new hardslice-entity through each of its refusals, one held in a
+# collection of the root, which creates the converter of the identifier of the root, and one that holds that identifier, which
+# reuses it, proves they build without HardSlice diagnostic, that the check fails until the root holds the printed collection,
+# then on their TODO(hardslice): tests, and passes once the printed migration creates both tables.
 # It generates domain events with dotnet new hardslice-event through each of its refusals and its HS019 warning, with a reaction in
 # the module of the event and one in a second module, registers them with the lines it prints, checks that the test of the host
 # names a forgotten registration, that only the TODO(hardslice): tests fail without HardSlice diagnostic, and that a reference completion passes the check.
@@ -3201,6 +3205,281 @@ probe_aggregate_template() {
   fi
 }
 
+# The files that dotnet new hardslice-entity creates for the child entity <name> of module <module>, besides the converter of
+# the identifier of its root, which only the first child of a root creates.
+entity_files() {
+  local module="$1"
+  local name="$2"
+  printf '%s\n' "src/$app_name.Domain/$module/$name.cs" \
+    "src/$app_name.Domain/$module/${name}Id.cs" \
+    "src/$app_name/Features/$module/${name}Configuration.cs" \
+    "tests/$app_name.Tests/Domain/$module/${name}Tests.cs"
+}
+
+# Generates the child entity <name> of the aggregate <module>/<aggregate> with the remaining options, checks that its files
+# exist, and leaves the printed instructions in $entity_output.
+generate_entity() {
+  local module="$1"
+  local aggregate="$2"
+  local name="$3"
+  shift 3
+  local generated
+
+  if ! entity_output="$(new_item hardslice-entity --project "src/$app_name/$app_name.csproj" --module "$module" --aggregate "$aggregate" --name "$name" "$@")"; then
+    printf '%s\n' "$entity_output" >&2
+    echo "error: dotnet new hardslice-entity failed on the child entity $name of $module/$aggregate in $app_name." >&2
+    exit 1
+  fi
+  while read -r generated; do
+    if [[ ! -f "$app/$generated" ]]; then
+      printf '%s\n' "$entity_output" >&2
+      echo "error: dotnet new hardslice-entity did not create $generated in $app_name." >&2
+      exit 1
+    fi
+  done < <(entity_files "$module" "$name")
+}
+
+# Generates two child entities of the aggregate <aggregate> of module <module>, mapped to the table <aggregate>s and without a
+# converter of its identifier yet, through every path of dotnet new hardslice-entity: its refusals, <held> held in a collection
+# of the root, which creates the converter of the identifier of the root, then <with-id>, which holds that identifier
+# (--link id), mapped to the table <table>, and reuses the converter. Both build without HardSlice diagnostic, HS008 included,
+# fail the check on their TODO(hardslice): tests only, then pass it once the root holds the collection its instructions print,
+# the markers are replaced and the printed migration is added. The children, the converter and the migration are removed and
+# the root restored at the end.
+probe_entity_template() {
+  local module="$1"
+  local aggregate="$2"
+  local held="$3"
+  local with_id="$4"
+  local table="$5"
+  local project="src/$app_name/$app_name.csproj"
+  local migrations="$app_src/Shared/Persistence/Migrations"
+  local root="$app/src/$app_name.Domain/$module/$aggregate.cs"
+  local converter="$app_src/Features/$module/${aggregate}IdConverter.cs"
+  local collection="${held}s"
+  local field="_${collection,}"
+  local held_lines
+  local held_output
+  local migration
+  local migration_file
+  local build_output
+  local refusal
+  local fields
+  local arguments
+  local option
+  local converter_sum
+  local check_output
+  local generated
+  local expected
+
+  if [[ -e "$converter" ]]; then
+    echo "error: $module/$aggregate of $app_name already has its converter ${aggregate}IdConverter: the probe of hardslice-entity needs a root without it." >&2
+    exit 1
+  fi
+
+  echo "==> Checking that dotnet new hardslice-entity refuses an unreadable application, an invalid or missing name, module or aggregate, an invalid table and a name the module cannot take in $app_name"
+  expect_item_refused hardslice-entity "a run without the web project" "with --project src/<App>/<App>.csproj" --module "$module" --aggregate "$aggregate" --name "$held"
+  expect_item_refused hardslice-entity "a run without module" "Missing mandatory option(s) for the template 'HardSlice child entity': '--module'." --project "$project" --aggregate "$aggregate" --name "$held"
+  expect_item_refused hardslice-entity "a run without aggregate" "Missing mandatory option(s) for the template 'HardSlice child entity': '--aggregate'." --project "$project" --module "$module" --name "$held"
+  expect_item_refused hardslice-entity "an unknown link" "'parent' is not a valid value for --link" --project "$project" --module "$module" --aggregate "$aggregate" --name "$held" --link parent
+  for refusal in "a run without name|--name is required" \
+    "a name that is not PascalCase|--name 'room-seat' is not PascalCase|--name|room-seat" \
+    "a module that is not PascalCase|--module 'payments' is not PascalCase|--module|payments" \
+    "a module that does not exist|module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found|--module|Payments" \
+    "an aggregate that is not PascalCase|--aggregate 'invoice' is not PascalCase|--aggregate|invoice" \
+    "an aggregate that the module does not map|aggregate 'Invoice' does not exist in module '$module': its mapping src/$app_name/Features/$module/InvoiceConfiguration.cs was not found. Create the aggregate first with dotnet new hardslice-aggregate --project src/$app_name/$app_name.csproj --module $module --name Invoice|--aggregate|Invoice" \
+    "a table that is not an identifier|--table 'room-seats' is not a table name of letters, digits and underscores|--table|room-seats" \
+    "a child entity named as its module|--name '$module' is already the name of a module or of a namespace of the application|--name|$module" \
+    "a child entity named as a namespace of the application|--name 'Domain' is already the name of a module or of a namespace of the application|--name|Domain" \
+    "a child entity named as a type of the implicit usings|--name 'Task' is already the name of a type that the files of the application or of its tests import|--name|Task" \
+    "a child entity named as its aggregate|--name '$aggregate' is already mapped in module '$module': src/$app_name/Features/$module/${aggregate}Configuration.cs exists|--name|$aggregate"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    # The valid value of each option that the refusal does not give, and none for --name in the run without name.
+    arguments=(--project "$project")
+    for option in --module --aggregate --name; do
+      [[ " ${fields[*]:2} " == *" $option "* || ( "$option" == --name && "${fields[0]}" == "a run without name" ) ]] && continue
+      case "$option" in
+        --module) arguments+=(--module "$module") ;;
+        --aggregate) arguments+=(--aggregate "$aggregate") ;;
+        --name) arguments+=(--name "$held") ;;
+      esac
+    done
+    expect_item_refused hardslice-entity "${fields[0]}" "${fields[1]}" "${arguments[@]}" "${fields[@]:2}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-entity refused ${fields[0]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+
+  cp "$root" "$work/entity-root.backup"
+  [[ ! -d "$migrations" ]] || cp -r "$migrations" "$work/entity-migrations.backup"
+
+  echo "==> Generating the child entity $held of $module/$aggregate in $app_name, held in a collection of its root, with dotnet new hardslice-entity"
+  generate_entity "$module" "$aggregate" "$held"
+  held_output="$entity_output"
+  if [[ ! -f "$converter" ]]; then
+    echo "error: dotnet new hardslice-entity did not create the converter ${aggregate}IdConverter with the first child of $aggregate." >&2
+    exit 1
+  fi
+  held_lines="$(printf '%s\n' "private readonly List<$held> $field = [];" "public IReadOnlyList<$held> $collection => $field.AsReadOnly();")"
+  for expected in "Complete the child entity $held of aggregate $aggregate, then add its migration:" \
+    "private readonly List<$held> $field = [];" \
+    "public IReadOnlyList<$held> $collection => $field.AsReadOnly();" \
+    "dotnet ef migrations add Add$collection --project src/$app_name --output-dir Shared/Persistence/Migrations"; do
+    if ! grep -Fxq -- "$expected" <<< "${entity_output//Manual instructions: /}"; then
+      printf '%s\n' "$entity_output" >&2
+      echo "error: dotnet new hardslice-entity did not print the line '$expected'." >&2
+      exit 1
+    fi
+  done
+  for expected in "src/$app_name.Domain/$module/$held.cs|public sealed class $held : IEntity" \
+    "src/$app_name.Domain/$module/$held.cs|    public static $held Create() => new(${held}Id.New());" \
+    "src/$app_name.Domain/$module/${held}Id.cs|public readonly record struct ${held}Id(Guid Value)" \
+    "src/$app_name/Features/$module/${held}Configuration.cs|internal sealed class ${held}Configuration : IEntityTypeConfiguration<$held>" \
+    "src/$app_name/Features/$module/${held}Configuration.cs|        builder.ToTable(\"$collection\");" \
+    "src/$app_name/Features/$module/${held}Configuration.cs|        builder.Property<${aggregate}Id>(\"${aggregate}Id\").HasConversion<${aggregate}IdConverter>();" \
+    "src/$app_name/Features/$module/${held}Configuration.cs|            .WithMany(\"$collection\")" \
+    "src/$app_name/Features/$module/${aggregate}IdConverter.cs|internal sealed class ${aggregate}IdConverter() : ValueConverter<${aggregate}Id, Guid>(id => id.Value, value => new ${aggregate}Id(value));"; do
+    if ! grep -Fxq -- "${expected#*|}" "$app/${expected%%|*}"; then
+      cat "$app/${expected%%|*}" >&2
+      echo "error: dotnet new hardslice-entity did not write the line '${expected#*|}' in ${expected%%|*}." >&2
+      exit 1
+    fi
+  done
+  expect_item_refused hardslice-entity "a child entity that exists" "--name '$held' is already mapped in module '$module'" --project "$project" --module "$module" --aggregate "$aggregate" --name "$held"
+  if [[ "$item_refused_status" != 105 ]]; then
+    echo "error: dotnet new hardslice-entity refused a child entity that exists with exit $item_refused_status instead of 105." >&2
+    exit 1
+  fi
+
+  echo "==> Generating the child entity $with_id of $module/$aggregate in $app_name, which holds the identifier of its root, with dotnet new hardslice-entity --link id --table $table"
+  converter_sum="$(cksum < "$converter")"
+  generate_entity "$module" "$aggregate" "$with_id" --link id --table "$table"
+  if [[ "$(cksum < "$converter")" != "$converter_sum" ]] ||
+    [[ "$(find "$app_src/Features/$module" -name '*IdConverter.cs' | wc -l)" != 1 ]]; then
+    echo "error: dotnet new hardslice-entity did not reuse the converter ${aggregate}IdConverter for the second child of $aggregate." >&2
+    exit 1
+  fi
+  for expected in "Complete the child entity $with_id of aggregate $aggregate, then add its migration:" \
+    "dotnet ef migrations add Add$table --project src/$app_name --output-dir Shared/Persistence/Migrations"; do
+    if ! grep -Fxq -- "$expected" <<< "${entity_output//Manual instructions: /}"; then
+      printf '%s\n' "$entity_output" >&2
+      echo "error: dotnet new hardslice-entity --link id did not print the line '$expected'." >&2
+      exit 1
+    fi
+  done
+  if [[ "$entity_output" == *"private readonly List<"* ]]; then
+    printf '%s\n' "$entity_output" >&2
+    echo "error: dotnet new hardslice-entity --link id asks for a collection of the root." >&2
+    exit 1
+  fi
+  for expected in "src/$app_name.Domain/$module/$with_id.cs|    public ${aggregate}Id ${aggregate}Id { get; }" \
+    "src/$app_name.Domain/$module/$with_id.cs|    public static $with_id Create(${aggregate}Id ${aggregate,}Id) => new(${with_id}Id.New(), ${aggregate,}Id);" \
+    "src/$app_name/Features/$module/${with_id}Configuration.cs|        builder.ToTable(\"$table\");" \
+    "src/$app_name/Features/$module/${with_id}Configuration.cs|        builder.Property(entity => entity.${aggregate}Id).HasConversion<${aggregate}IdConverter>();" \
+    "src/$app_name/Features/$module/${with_id}Configuration.cs|            .WithMany()" \
+    "src/$app_name/Features/$module/${with_id}Configuration.cs|            .HasForeignKey(entity => entity.${aggregate}Id)"; do
+    if ! grep -Fxq -- "${expected#*|}" "$app/${expected%%|*}"; then
+      cat "$app/${expected%%|*}" >&2
+      echo "error: dotnet new hardslice-entity --link id did not write the line '${expected#*|}' in ${expected%%|*}." >&2
+      exit 1
+    fi
+  done
+  while read -r generated; do
+    if grep -q 'MyApp\|ModuleName\|AggregateName\|aggregateName\|EntityName\|EntityTable\|EntityCollection\|entityCollection\|#if\|#else\|#endif' "$app/$generated"; then
+      echo "error: $generated, generated in $app_name, keeps a placeholder or a condition of the template." >&2
+      exit 1
+    fi
+    # PB-056: the template cites no type of the Bookings sample, which --no-sample leaves out.
+    if [[ "$module$aggregate" != *Booking* ]] && grep -qi 'booking' "$app/$generated"; then
+      echo "error: $generated, generated in $app_name, mentions the Bookings sample." >&2
+      exit 1
+    fi
+  done < <(entity_files "$module" "$held"; entity_files "$module" "$with_id"; echo "src/$app_name/Features/$module/${aggregate}IdConverter.cs")
+
+  # HS008 knows no owner for either child yet, then knows the root as the owner of the held one: neither reports.
+  echo "==> Checking that $app_name builds both children of $module/$aggregate without HardSlice diagnostic, HS007, HS008 and HS902 included"
+  if ! build_output="$(cd "$app" && dotnet build "$app_name.slnx" 2>&1)" || grep -Eq '(error|warning) HS[0-9]{3}' <<< "$build_output"; then
+    printf '%s\n' "$build_output" >&2
+    echo "error: $app_name does not build the children of $module/$aggregate without HardSlice diagnostic." >&2
+    exit 1
+  fi
+  echo "    $held, $with_id and ${aggregate}IdConverter build"
+
+  # Until the root holds the collection that the mapping of the held child names, EF Core builds no model: the tests that build
+  # it fail with the TODO(hardslice): tests, on the message that the instructions announce.
+  echo "==> Checking that the check of $app_name fails on the collection of $held missing from $aggregate, as the template says"
+  if check_output="$(run_check check.sh 2>&1)"; then
+    echo "error: scripts/check.sh passed on the generated children of $module/$aggregate." >&2
+    exit 1
+  fi
+  check_output="$(strip_ansi <<< "$check_output")"
+  if [[ "$check_output" != *"The navigation '$collection' cannot be added to the entity type '$aggregate' because there is no corresponding CLR property"* ]] ||
+    [[ "$held_output" != *"saying that the navigation $collection has no corresponding CLR property"* ]] ||
+    grep -Eq '(error|warning) HS[0-9]{3}' <<< "$check_output"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh did not fail on the collection $collection missing from $aggregate, without HardSlice diagnostic." >&2
+    exit 1
+  fi
+  echo "    EF Core: the navigation '$collection' has no corresponding CLR property on '$aggregate'"
+
+  # The reference completion: the root holds the collection as the instructions print it, the state of each child is its identifiers.
+  echo "==> Completing $module/$aggregate with the collection of $held that the template printed"
+  if ! HELD_LINES="$held_lines" awk '
+      BEGIN { split(ENVIRON["HELD_LINES"], held, "\n") }
+      { print }
+      /^    private readonly List<IDomainEvent> _domainEvents = \[\];$/ { print "    " held[1]; added++ }
+      /^    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents\.AsReadOnly\(\);$/ { print ""; print "    " held[2]; added++ }
+      END { if (added != 2) exit 1 }' "$root" > "$work/root.cs"; then
+    echo "error: $root has no list of events or no DomainEvents to add the collection of $held next to." >&2
+    exit 1
+  fi
+  mv "$work/root.cs" "$root"
+
+  echo "==> Checking that the check of $app_name then fails on the TODO(hardslice): tests of the children of $module/$aggregate only"
+  expect_check_fails_on_todo_tests_only "the generated children of $module/$aggregate" \
+    "$(printf '%s\n' "$app_name.Tests.Domain.$module.${held}Tests.Create_gives_the_new_${held}_its_state" \
+      "$app_name.Tests.Domain.$module.${with_id}Tests.Create_gives_the_new_${with_id}_its_state" | LC_ALL=C sort)"
+  for generated in "$held" "$with_id"; do
+    sed '/^        Assert\.Fail("TODO(hardslice): /,/");$/d' "$app/tests/$app_name.Tests/Domain/$module/${generated}Tests.cs" > "$work/test.cs"
+    mv "$work/test.cs" "$app/tests/$app_name.Tests/Domain/$module/${generated}Tests.cs"
+  done
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of the children of $module/$aggregate leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+
+  echo "==> Checking that $app_name passes the check once the migration printed for $held is added, with the tables of both children"
+  migration="dotnet ef migrations add Add$collection --project src/$app_name --output-dir Shared/Persistence/Migrations"
+  (
+    cd "$app"
+    dotnet tool restore > /dev/null
+    $migration
+  )
+  migration_file="$(find "$migrations" -name "*_Add$collection.cs" -not -name '*.Designer.cs')"
+  for expected in "name: \"$collection\"," "name: \"$table\"," "principalTable: \"${aggregate}s\","; do
+    if ! grep -Fq -- "$expected" "$migration_file"; then
+      cat "$migration_file" >&2
+      echo "error: the migration of the children of $module/$aggregate does not hold '$expected'." >&2
+      exit 1
+    fi
+  done
+  if [[ "$(grep -Fc 'onDelete: ReferentialAction.Cascade' "$migration_file")" != 2 ]]; then
+    cat "$migration_file" >&2
+    echo "error: the migration of the children of $module/$aggregate does not delete both children with their root." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+
+  while read -r generated; do
+    rm "${app:?}/${generated:?}"
+  done < <(entity_files "$module" "$held"; entity_files "$module" "$with_id")
+  rm "${converter:?}"
+  mv "$work/entity-root.backup" "$root"
+  rm -r "${migrations:?}"
+  [[ ! -d "$work/entity-migrations.backup" ]] || mv "$work/entity-migrations.backup" "$migrations"
+}
+
 # The files that dotnet new hardslice-event creates for the event <name> of module <module>, then, with <reaction>
 # '<module>/<slice>', for its reaction slice: the handler and its integration tests.
 event_files() {
@@ -3623,6 +3902,7 @@ probe_query_template Bookings GetBookingSummary ListBookingSummaries Booking \
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetBookingTrip Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories
+probe_entity_template Bookings Booking BookingNote BookingAuditEntry BookingAudit
 probe_event_template Bookings BookingExtended BookingArchived Housekeeping Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 
@@ -3906,6 +4186,8 @@ probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRo
 # The aggregate that the query slices read is generated by dotnet new hardslice-aggregate in the domain of Rooms, mapped by the
 # module and migrated with the command it prints, as "Adding a first module" of AGENTS.md says.
 probe_aggregate_template Rooms Room Rooms keep
+# Its child entities, generated by dotnet new hardslice-entity in both forms, then removed with their migration.
+probe_entity_template Rooms Room RoomSeat RoomVisit RoomVisitLog
 probe_query_template Rooms GetRoomSummary ListRoomSummaries Room 'Room.Create()'
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoomTrip Room 'Room.Create()'
 # The events of Rooms are generated by dotnet new hardslice-event, with a reaction in Rooms and one in a second module, both

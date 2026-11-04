@@ -1,0 +1,647 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Vincent Augerot",
+  "classifications": [
+    "Web",
+    "API",
+    "Vertical Slices",
+    "DDD"
+  ],
+  "identity": "HardSlice.Templates.Entity",
+  "name": "HardSlice child entity",
+  "description": "A child entity of an aggregate of a hardslice-api solution: the entity, its typed identifier, its EF Core mapping next to the mapping of its root, the converter of the identifier of the root, and its unit tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "shortName": "hardslice-entity",
+  "sourceName": "EntityName",
+  "preferNameDirectory": false,
+  "preferDefaultName": true,
+  "defaultName": "HardSliceNameMissing",
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "forms": {
+    "firstLowerCase": {
+      "identifier": "firstLowerCaseInvariant"
+    }
+  },
+  "symbols": {
+    "Module": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The module of the aggregate, in PascalCase, such as Schedule: src/<App>/Features/<Module>/<Module>Module.cs must exist.",
+      "replaces": "ModuleName",
+      "fileRename": "ModuleName"
+    },
+    "Aggregate": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The aggregate root that owns the child entity, in PascalCase, such as ScheduleVersion: its mapping src/<App>/Features/<Module>/<Aggregate>Configuration.cs must exist.",
+      "replaces": "AggregateName",
+      "fileRename": "AggregateName"
+    },
+    "Link": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "collection",
+      "description": "How the child is tied to its root: collection (the root holds it in a collection, loaded and saved with it, by default) or id (the child holds the identifier of its root, without navigation, for a collection too large to load with its root).",
+      "choices": [
+        {
+          "choice": "collection",
+          "description": "Held in a collection of the root, named as its table: loaded, saved and deleted with the root."
+        },
+        {
+          "choice": "id",
+          "description": "Holds the identifier of its root, without navigation: written and read apart from the root, such as millions of rows."
+        }
+      ]
+    },
+    "Table": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The table of the child entity, and the name of the collection of the root that holds it: letters, digits and underscores, such as StopTimes. The name of the entity followed by s by default."
+    },
+    "AppName": {
+      "type": "bind",
+      "binding": "msbuild:RootNamespace",
+      "replaces": "MyApp",
+      "fileRename": "MyApp"
+    },
+    "ModuleFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceModuleFiles"
+    },
+    "MappingFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceMappingFiles"
+    },
+    "Unbound": {
+      "type": "generated",
+      "generator": "constant",
+      "parameters": {
+        "value": ""
+      }
+    },
+    "AppNameOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "AppName",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "MappingFilesOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "MappingFiles",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "PluralTable": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "s"
+          }
+        ]
+      }
+    },
+    "TableOrDefault": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Table",
+        "fallbackVariableName": "PluralTable"
+      },
+      "replaces": "EntityTable",
+      "fileRename": "EntityTable"
+    },
+    "Collection": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Table",
+        "fallbackVariableName": "PluralTable"
+      },
+      "replaces": "EntityCollection",
+      "fileRename": "EntityCollection"
+    },
+    "CollectionField": {
+      "type": "derived",
+      "valueSource": "Collection",
+      "valueTransform": "firstLowerCase",
+      "replaces": "entityCollection",
+      "fileRename": "entityCollection"
+    },
+    "AggregateVariable": {
+      "type": "derived",
+      "valueSource": "Aggregate",
+      "valueTransform": "firstLowerCase",
+      "replaces": "aggregateName"
+    },
+    "LinkIsId": {
+      "type": "computed",
+      "value": "(Link == \"id\")"
+    },
+    "AppIsKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppNameOrEmpty",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      }
+    },
+    "NameIsGiven": {
+      "type": "computed",
+      "value": "(name != \"HardSliceNameMissing\")"
+    },
+    "NameIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ModuleIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Module",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "AggregateIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Aggregate",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ModuleProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "ModuleExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ModuleProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "AggregateProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "Aggregate"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "MappingFilesOrEmpty"
+          }
+        ]
+      }
+    },
+    "AggregateExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AggregateProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\2Configuration\\.cs(?:;|$)"
+      }
+    },
+    "ConverterExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AggregateProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\2IdConverter\\.cs(?:;|$)"
+      }
+    },
+    "TableIsValid": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "TableOrDefault",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      }
+    },
+    "NameProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "NameIsModule": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "NameProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "AppProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "AppNameOrEmpty"
+          }
+        ]
+      }
+    },
+    "NameIsNamespace": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppProbe",
+        "pattern": "^(?:(?:Domain|Features|Shared|Tests|IntegrationTests|ArchitectureTests)\\||([A-Za-z0-9]+)\\|(?:[^|]*\\.)?\\1(?:\\.[^|]*)?$)"
+      }
+    },
+    "NameIsImportedType": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "^(?:Action|Array|Assert|Attribute|Barrier|Buffer|Console|Convert|Delegate|Directory|Endpoint|Enum|Environment|Exception|File|FormFile|Guid|Host|Index|Lock|Math|Monitor|Mutex|Object|Parallel|Path|Random|Range|Record|Results|Route|Semaphore|Should|Stream|String|Task|TestContext|Thread|Timeout|Timer|Tuple|Type|TypedResults|Uri|Version)$"
+      }
+    },
+    "MappedNameProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "MappingFilesOrEmpty"
+          }
+        ]
+      }
+    },
+    "NameIsMapped": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "MappedNameProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\2Configuration\\.cs(?:;|$)"
+      }
+    },
+    "NameIsFree": {
+      "type": "computed",
+      "value": "(!NameIsModule && !NameIsNamespace && !NameIsImportedType)"
+    },
+    "Accepted": {
+      "type": "computed",
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && AggregateIsPascalCase && ModuleExists && AggregateExists && TableIsValid && NameIsFree && !NameIsMapped)"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!Accepted)",
+          "exclude": [
+            "**/*"
+          ]
+        },
+        {
+          "condition": "(ConverterExists)",
+          "exclude": [
+            "src/MyApp/Features/ModuleName/AggregateNameIdConverter.cs"
+          ]
+        }
+      ]
+    }
+  ],
+  "postActions": [
+    {
+      "id": "refuseUnknownApplication",
+      "condition": "(!AppIsKnown)",
+      "description": "Refuses a solution whose web project it cannot read.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: hardslice-entity reads the application from its web project, which it could not evaluate. Run it from the root of the solution with --project src/<App>/<App>.csproj, once the solution is restored (after a first build or check), such as: dotnet new hardslice-entity --project src/<App>/<App>.csproj --module <Module> --aggregate <Aggregate> --name <Entity>. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingName",
+      "condition": "(!NameIsGiven)",
+      "description": "Refuses a child entity without name.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name is required: the child entity in PascalCase and in the singular, such as --name StopTime. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidName",
+      "condition": "(!NameIsPascalCase)",
+      "description": "Refuses a name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'EntityName' is not PascalCase: it names the child entity, its identifier, its mapping and its tests, such as --name StopTime. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidModule",
+      "condition": "(!ModuleIsPascalCase)",
+      "description": "Refuses a module name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --module 'ModuleName' is not PascalCase: pass the name of an existing module, such as the folder of src/MyApp/Features/<Module>/. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidAggregate",
+      "condition": "(!AggregateIsPascalCase)",
+      "description": "Refuses an aggregate name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --aggregate 'AggregateName' is not PascalCase: pass the root of an existing aggregate of the module, such as the type mapped by src/MyApp/Features/<Module>/<Aggregate>Configuration.cs. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingModule",
+      "condition": "(ModuleIsPascalCase && !ModuleExists)",
+      "description": "Refuses a module that does not exist.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: module 'ModuleName' does not exist: src/MyApp/Features/ModuleName/ModuleNameModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name ModuleName, then its aggregate with dotnet new hardslice-aggregate. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingAggregate",
+      "condition": "(ModuleIsPascalCase && AggregateIsPascalCase && ModuleExists && !AggregateExists)",
+      "description": "Refuses an aggregate that the module does not map.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: aggregate 'AggregateName' does not exist in module 'ModuleName': its mapping src/MyApp/Features/ModuleName/AggregateNameConfiguration.cs was not found. Create the aggregate first with dotnet new hardslice-aggregate --project src/MyApp/MyApp.csproj --module ModuleName --name AggregateName, then add its child entity. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidTable",
+      "condition": "(!TableIsValid)",
+      "description": "Refuses a table name that is not an identifier.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --table 'EntityTable' is not a table name of letters, digits and underscores, such as --table StopTimes. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNameOfNamespace",
+      "condition": "(NameIsPascalCase && (NameIsModule || NameIsNamespace))",
+      "description": "Refuses a child entity named as a module or a namespace of the application.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'EntityName' is already the name of a module or of a namespace of the application: in the mapping and the tests, it would name that namespace instead of the entity (CS0118). Name the entity after one instance, such as --name StopTime in module Schedule. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNameOfImportedType",
+      "condition": "(NameIsImportedType)",
+      "description": "Refuses a child entity named as a type that every file imports.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'EntityName' is already the name of a type that the files of the application or of its tests import, from System, System.IO, System.Threading.Tasks, ASP.NET Core, xUnit or Shouldly: the mapping and the tests would not know which one they use (CS0104). Choose another name of the domain, such as --name WorkItem rather than Task. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMappedName",
+      "condition": "(NameIsPascalCase && ModuleIsPascalCase && NameIsMapped)",
+      "description": "Refuses a name that the module already maps.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-entity.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'EntityName' is already mapped in module 'ModuleName': src/MyApp/Features/ModuleName/EntityNameConfiguration.cs exists, the mapping of an aggregate or of another child entity. Choose another name, or change the existing entity by hand. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "completeHeldEntity",
+      "condition": "(Accepted && !LinkIsId)",
+      "description": "The child entity to complete and the migration to add.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "text": "Complete the child entity EntityName of aggregate AggregateName, then add its migration:\n1. Hold it in AggregateName, in src/MyApp.Domain/ModuleName/AggregateName.cs, under the name its mapping gives the collection:\nprivate readonly List<EntityName> _entityCollection = [];\npublic IReadOnlyList<EntityName> EntityCollection => _entityCollection.AsReadOnly();\nThen add a method of AggregateName for each change of the collection, such as AddEntityName, which builds the child with EntityName.Create and checks the rules of the whole aggregate. Until AggregateName holds EntityCollection, EF Core cannot build the model: the tests that build it, dotnet ef and the check fail, saying that the navigation EntityCollection has no corresponding CLR property.\n2. Give EntityName its state and its rules in src/MyApp.Domain/ModuleName/EntityName.cs: name its factory method Create after the business fact, take the state of the new child as parameters and throw a DomainException for each rule they break. Map that state in src/MyApp/Features/ModuleName/EntityNameConfiguration.cs, which AppDbContext applies by itself: there is nothing to register. AggregateNameIdConverter stores the identifier of the root for every child of AggregateName.\n3. Replace the TODO(hardslice): marker of tests/MyApp.Tests/Domain/ModuleName/EntityNameTests.cs, and test the new methods of AggregateName: the check fails while the marker is left.\n4. Add the migration of the table EntityTable from the root of the solution, once the mapping is complete:\ndotnet tool restore\ndotnet ef migrations add AddEntityTable --project src/MyApp --output-dir Shared/Persistence/Migrations\nUntil it exists, the integration tests fail the check: MigrationsTests finds changes missing from the migrations, and once the solution has a migration, EF Core refuses to migrate the database of the others."
+        }
+      ],
+      "continueOnError": true
+    },
+    {
+      "id": "completeEntityWithRootId",
+      "condition": "(Accepted && LinkIsId)",
+      "description": "The child entity to complete and the migration to add.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "text": "Complete the child entity EntityName of aggregate AggregateName, then add its migration:\n1. EntityName holds AggregateNameId and AggregateName holds nothing of it: never add a collection of EntityName to the root, which would load every child with it. A command writes the children of one root apart from it, and a query reads them by AggregateNameId.\n2. Give EntityName its state and its rules in src/MyApp.Domain/ModuleName/EntityName.cs: name its factory method Create after the business fact, take the state of the new child as parameters and throw a DomainException for each rule they break. Map that state in src/MyApp/Features/ModuleName/EntityNameConfiguration.cs, which AppDbContext applies by itself: there is nothing to register. AggregateNameIdConverter stores the identifier of the root for every child of AggregateName.\n3. Replace the TODO(hardslice): marker of tests/MyApp.Tests/Domain/ModuleName/EntityNameTests.cs: the check fails while it is left.\n4. Add the migration of the table EntityTable from the root of the solution, once the mapping is complete:\ndotnet tool restore\ndotnet ef migrations add AddEntityTable --project src/MyApp --output-dir Shared/Persistence/Migrations\nUntil it exists, the integration tests fail the check: MigrationsTests finds changes missing from the migrations, and once the solution has a migration, EF Core refuses to migrate the database of the others."
+        }
+      ],
+      "continueOnError": true
+    }
+  ]
+}

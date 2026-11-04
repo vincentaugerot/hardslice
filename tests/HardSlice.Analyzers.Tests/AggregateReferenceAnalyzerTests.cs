@@ -264,6 +264,42 @@ public sealed class AggregateReferenceAnalyzerTests
             """);
     }
 
+    // PB-066: the child of a large collection, as dotnet new hardslice-entity --link id generates it, holds the identifier of its
+    // root and the root holds nothing of it. Beside a child held in a collection of the same root, neither is reported.
+    [Fact]
+    public async Task Stays_silent_on_a_child_that_holds_the_identifier_of_its_root_beside_a_child_held_by_that_root()
+    {
+        var diagnostics = await VerifyAsync(
+            """
+            namespace MyApp.Domain.Schedule;
+
+            public readonly record struct ScheduleVersionId(Guid Value);
+
+            public sealed class ScheduleVersion : IAggregateRoot
+            {
+                private readonly List<Stop> _stops = [];
+
+                public ScheduleVersionId Id { get; }
+
+                public IReadOnlyList<Stop> Stops => _stops.AsReadOnly();
+            }
+
+            public sealed class Stop : IEntity
+            {
+                public Guid Id { get; }
+            }
+
+            public sealed class StopTime : IEntity
+            {
+                public Guid Id { get; }
+
+                public ScheduleVersionId ScheduleVersionId { get; }
+            }
+            """);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task Reports_generic_collections_tuples_and_generic_roots()
     {

@@ -1,11 +1,12 @@
 # Item templates
 
-`HardSlice.Templates` ships five item templates besides the `hardslice-api` solution template. Each one generates one element of a solution in its place, with its tests, and prints the registrations to add: it never edits an existing file. The skills of the [agent loop](agent-loop.md) call them, so an agent never recreates the structure of an element by hand.
+`HardSlice.Templates` ships six item templates besides the `hardslice-api` solution template. Each one generates one element of a solution in its place, with its tests, and prints the registrations to add: it never edits an existing file. The skills of the [agent loop](agent-loop.md) call them, so an agent never recreates the structure of an element by hand.
 
 | Template | Generates | Skill that calls it |
 |---|---|---|
 | [`hardslice-module`](#a-module) | the public contract of a module, the folders of its domain and of its tests | `add-module` |
 | [`hardslice-aggregate`](#an-aggregate) | an aggregate root, its identifier, its EF Core mapping and its unit tests | `add-aggregate` |
+| [`hardslice-entity`](#a-child-entity) | a child entity of an aggregate, its identifier, its EF Core mapping and its unit tests | `add-aggregate` |
 | [`hardslice-command`](#a-command-slice) | a command slice: command, validator, handler, endpoint and tests | `add-slice` |
 | [`hardslice-query`](#a-query-slice) | a query slice that reads an aggregate: query, DTO, handler, endpoint and tests | `add-slice` |
 | [`hardslice-event`](#a-domain-event-and-its-reaction) | a domain event and, on request, the reaction slice that handles it, with its tests | `add-domain-event` |
@@ -35,6 +36,23 @@ It creates the aggregate root `Invoice` and its identifier `InvoiceId`, a `reado
 Its unit test of the state ends with `TODO(hardslice):`, and the integration tests fail until the migration is added: `MigrationsTests` finds changes missing from the migrations, and once the solution has a migration, EF Core refuses to migrate the database of the others.
 
 It exits with an error and creates nothing without `--project`, before the first restore, with a name or a module that is not PascalCase, for a module without `Features/<Module>/<Module>Module.cs`, with a table that is not made of letters, digits and underscores, or with a name that the generated code could not use: that of a module or a namespace of the application (`Rooms`, `Domain`) or of a type that its files import (`Task`, `File`). It refuses to overwrite an existing aggregate without `--force`.
+
+## A child entity
+
+```text
+dotnet new hardslice-entity --project src/Rooms/Rooms.csproj --module Payments --aggregate Invoice --name InvoiceLine
+```
+
+It creates the child entity `InvoiceLine` of the aggregate `Invoice` and its identifier `InvoiceLineId` in `src/Rooms.Domain/Payments/`, its EF Core mapping `InvoiceLineConfiguration` next to `InvoiceConfiguration` in `src/Rooms/Features/Payments/`, and its unit tests in `tests/Rooms.Tests/Domain/Payments/`. The child is `sealed` and implements `IEntity`: a private constructor for persistence, a static factory method `Create` to rename after the business fact, and no public setter. The mapping uses the table `InvoiceLines`, the name followed by `s` (`--table` sets another one), and stores the identifier of the root through `InvoiceIdConverter`, a `ValueConverter` of the module that the first child of `Invoice` creates and the next ones reuse. The mapping of the root may use it too, with `HasConversion<InvoiceIdConverter>()`. Then it prints what to complete and the migration to add.
+
+`--link` sets how the child is tied to its root:
+
+- `collection`, by default: the root holds the child in a collection, loaded and saved with it, named as the table. The template prints the private list and its read-only view to add to the root, such as `public IReadOnlyList<InvoiceLine> InvoiceLines => _invoiceLines.AsReadOnly();`, with the methods of the root that add, change and remove a child: it never edits the root. The identifier of the root is a shadow property of the mapping, the child knows nothing of it. A child removed from the collection is deleted. Until the root holds the collection, EF Core cannot build the model, so the integration tests and `dotnet ef` fail.
+- `id`: the child holds `InvoiceId InvoiceId`, the identifier of its root, and the root holds nothing of it. This is the form of a collection too large to load with its root, such as millions of rows: a command writes the children of one root apart from it, and a query reads them by the identifier of the root. HS008 knows no owner for such a child and reports nothing, as [its sheet](../src/HardSlice.Templates/content/hardslice-api/docs/rules/HS008.md#large-child-collections) says.
+
+In both forms, a foreign key deletes the children with their root. The unit test of the state ends with `TODO(hardslice):`, and the integration tests fail until the migration is added, as for an aggregate.
+
+It exits with an error and creates nothing without `--project`, before the first restore, with a name, a module or an aggregate that is not PascalCase, for a module without `Features/<Module>/<Module>Module.cs`, for an aggregate without `Features/<Module>/<Aggregate>Configuration.cs`, with a table that is not made of letters, digits and underscores, with a name that the generated code could not use, as for an aggregate, or with a name that the module already maps, that of its aggregate included.
 
 ## A command slice
 
@@ -84,9 +102,10 @@ Without `--project`, before the first restore, with a name or a module that is n
 
 - The item templates read the application and its modules through `--project` only, once the web project is restored: `dotnet new` evaluates no project from the root of a solution, and cannot read a file before it creates the others.
 - A refusal prints `The template ... was created successfully.` before `Post action failed.` and its error, and exits with code 105: nothing is created.
-- They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module. `hardslice-aggregate` prints the migration to add, and `hardslice-event` how to raise the event.
+- They only print the registrations of the module, of the slice or of the reaction, which you or the agent add to `Program.cs` or to the module. `hardslice-aggregate` and `hardslice-entity` print the migration to add, `hardslice-entity` the collection to add to the root, and `hardslice-event` how to raise the event.
 - `hardslice-module` puts a `.gitkeep` in the folders it creates without file, as `dotnet new` creates no empty folder. With `--force`, it overwrites the contract of an existing module, its registrations included.
 - The tests that `hardslice-command` and `hardslice-query` generate call `<Module>Module.Route`, the constant that `hardslice-module` writes in the contract of the module. A module written by hand without it fails the build of these tests (CS0117): add `public const string Route` to it and map its group with it.
 - They cannot check that the route of a slice is free in its module: two endpoints with the same method and route fail at run time, in the integration tests.
+- `hardslice-entity` knows an aggregate by its mapping only, `Features/<Module>/<Aggregate>Configuration.cs`: it cannot tell a root from a child entity, nor read the root to add the collection to it.
 - `hardslice-query` cannot check the aggregate: the compiler does. Its list result is `--result many`, not `list`, which `dotnet new` would read as its own `list` command.
 - `hardslice-event --reaction-only` cannot check that the event exists: the compiler does, and the test it generates leaves the building of the event to complete.

@@ -15,7 +15,7 @@ From nothing to a running API in five steps: install the templates, generate a s
 dotnet new install HardSlice.Templates@0.3.0-preview.1
 ```
 
-This installs the `hardslice-api` solution template and the five [item templates](item-templates.md) from NuGet.org. They pin `HardSlice.Analyzers` and `HardSlice.Tool` at the same version, in `Directory.HardSlice.props` and `.config/dotnet-tools.json`: the generated solutions restore both from NuGet.org, with their other packages.
+This installs the `hardslice-api` solution template and the six [item templates](item-templates.md) from NuGet.org. They pin `HardSlice.Analyzers` and `HardSlice.Tool` at the same version, in `Directory.HardSlice.props` and `.config/dotnet-tools.json`: the generated solutions restore both from NuGet.org, with their other packages.
 
 To try a build of this repository instead, see [Try a local build of the packages](../CONTRIBUTING.md#try-a-local-build-of-the-packages).
 

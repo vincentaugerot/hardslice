@@ -1,8 +1,10 @@
 <Project>
-  <!-- The module files of the web project, read by the item templates (dotnet new hardslice-aggregate, hardslice-command, hardslice-query and hardslice-event) through their
-       project binding to refuse an element of a module that does not exist. Evaluated only: no target reads it. -->
+  <!-- The module files of the web project, read by the item templates (dotnet new hardslice-aggregate, hardslice-entity, hardslice-command, hardslice-query and hardslice-event) through their
+       project binding to refuse an element of a module that does not exist. The mappings and the converters of identifiers, read by dotnet new hardslice-entity to refuse an
+       unknown aggregate or a name already mapped, and to create the converter of the root only once. Evaluated only: no target reads them. -->
   <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)/Features')">
     <HardSliceModuleFiles>$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*Module.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceModuleFiles>
+    <HardSliceMappingFiles>$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*Configuration.cs', 'System.IO.SearchOption.AllDirectories'))));$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*IdConverter.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceMappingFiles>
   </PropertyGroup>
 
   <!-- Read evaluated Compile items and symbols without compiling a potentially stale test assembly. -->
