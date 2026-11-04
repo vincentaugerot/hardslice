@@ -1331,6 +1331,68 @@ public sealed class TemplatePackageTests
             .ShouldBeEmpty("Bulk writes are documented in add-aggregate, never generated.");
     }
 
+    // PB-085: a migration scaffolded on a table that holds rows loses them. add-aggregate says how to rewrite it as a conversion in
+    // both directions, under a longer timeout for that run only and tried on a copy of the data, and how to map private fields
+    // behind the read-only view that HS007 expects. AGENTS.md sends there from "Changing the database". The pack copies the skill
+    // into .agents/skills/ as is, which the test of the pack checks.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_how_to_change_the_shape_of_stored_rows_and_to_map_private_fields(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var addAggregate = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-aggregate", "SKILL.md"));
+
+        var database = agents.SkipWhile(line => line != "## Changing the database").TakeWhile(line => line != "## Running the API").ToArray();
+        database.Single(line => line.StartsWith("2. After any mapping change, add a migration.", StringComparison.Ordinal))
+            .ShouldContain("Read the migration before applying it: the change of a table that holds rows comes as drops and adds that lose them, "
+                + "to rewrite as a conversion in both directions, and a state stored in another shape than the one the entity shows maps "
+                + "private fields, as `add-aggregate` details.");
+        agents.Length.ShouldBeLessThan(150);
+
+        addAggregate.ShouldContain("Also use when a mapping changes a table that already holds rows, or when an entity stores its state in another shape");
+        addAggregate.ShouldContain("A change of a table that already holds rows follows [Changing the shape of stored rows](#changing-the-shape-of-stored-rows).");
+        addAggregate.ShouldContain("lives in private fields, as [Mapping private fields](#mapping-private-fields) says.");
+
+        var reshape = Section(addAggregate, "## Changing the shape of stored rows");
+        reshape.ShouldContain("1. Read `Up` and `Down` of the generated migration before applying it anywhere.");
+        reshape.ShouldContain("An operation was scaffolded that may result in the loss of data.");
+        reshape.ShouldContain("2. Rewrite the loss as a conversion, in SQL through `migrationBuilder.Sql`:");
+        reshape.ShouldContain("fill it from the old one with `INSERT INTO ... SELECT ...`");
+        reshape.ShouldContain("3. Write the `Down` that converts back");
+        reshape.ShouldContain("the loss is a decision: ask the user before writing it");
+        reshape.ShouldContain("Apply it with a longer timeout for that run only, in the connection string that `dotnet ef database update` receives: "
+            + "`dotnet ef database update --project src/MyApp --connection \"<connection string>;Command Timeout=600\"`. Never raise it in "
+            + "the configuration nor in the code of the application");
+        reshape.ShouldContain("5. Try it on a copy of the data, in both directions, before a database that matters.");
+        reshape.ShouldContain("which runs `Down`");
+
+        var privateFields = Section(addAggregate, "## Mapping private fields");
+        privateFields.ShouldContain("HS007 accepts private fields, and EF Core reads and writes them by their names.");
+        privateFields.ShouldContain("builder.PrimitiveCollection<string[]>(\"_stopIds\").HasColumnName(\"StopIds\").IsRequired();");
+        privateFields.ShouldContain("builder.Property<DateTimeOffset?>(\"_plannedAt\").HasColumnName(\"PlannedAt\");");
+        privateFields.ShouldContain("public IReadOnlyList<TripStop> Stops => [..");
+        privateFields.ShouldContain("builder.Ignore(trip => trip.Stops);");
+        privateFields.ShouldContain("never the array itself, which a caller could change: HS007 forbids a public mutable object.");
+
+        addAggregate.ShouldContain("- Apply a migration that drops or changes a table holding rows without converting them, in both directions, or raise the "
+            + "command timeout in the connection string of the application.");
+        addAggregate.ShouldContain("- Make a mapped private field public, or show the array it holds, so that a slice or a test reaches it.");
+        addAggregate.IndexOf("\n## Changing the shape of stored rows\n", StringComparison.Ordinal)
+            .ShouldBeLessThan(addAggregate.IndexOf("\n## Never\n", StringComparison.Ordinal));
+        addAggregate.IndexOf("\n## Mapping private fields\n", StringComparison.Ordinal)
+            .ShouldBeLessThan(addAggregate.IndexOf("\n## Never\n", StringComparison.Ordinal));
+
+        static string Section(string markdown, string heading)
+        {
+            var start = markdown.IndexOf($"\n{heading}\n", StringComparison.Ordinal);
+            start.ShouldBeGreaterThan(0, $"add-aggregate has no section '{heading}'.");
+            var end = markdown.IndexOf("\n## ", start + heading.Length + 1, StringComparison.Ordinal);
+            return markdown[start..(end < 0 ? markdown.Length : end)];
+        }
+    }
+
     // PB-063: outside the code blocks that quote a diagnostic, every instruction of the agent kit that asks for an invalid request or
     // for validator tests says which commands it concerns. HS013 is about commands with parameters only, and says so once.
     [Theory]
