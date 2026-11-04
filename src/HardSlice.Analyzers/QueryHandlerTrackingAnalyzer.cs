@@ -235,7 +235,7 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
         public IAnonymousFunctionOperation? LastProjection { get; } = lastProjection;
 
         // Null when the query cannot be analyzed: obtained from a field, a property, a parameter or a method other than an
-        // operator, rooted in a set of types that are not entities, or held by a local reassigned another way.
+        // operator that receives no query, rooted in a set of types that are not entities, or held by a local reassigned another way.
         public static Query? Recognize(IOperation source, EntityFramework entityFramework, EntityContainment containment, CancellationToken cancellationToken) =>
             Recognize(source, entityFramework, containment, ImmutableHashSet<ILocalSymbol>.Empty.WithComparer(SymbolEqualityComparer.Default), cancellationToken);
 
@@ -283,10 +283,49 @@ public sealed class QueryHandlerTrackingAnalyzer : DiagnosticAnalyzer
                             ? Create(initialized.Root, operators, elementType, initialized.Guaranteed, initialized.LastProjection)
                             : null;
 
+                    case IInvocationOperation invocation when entityFramework.QueryElement(invocation.Type) is not null:
+                        return Composed(invocation, entityFramework, containment, followed, operators, elementType, cancellationToken);
+
                     default:
                         return null;
                 }
             }
+        }
+
+        // A composition, such as a rule of the domain 'ServiceCalendar.RunningOn(db.Set<ServiceCalendar>().AsNoTracking(), date)':
+        // a method that is not an operator, returns a query and receives the queries it composes from the handler. Its body is
+        // not read: it is trusted to compose only the queries it receives. Each of them must be recognized, and the query is
+        // guaranteed when each one is; otherwise the first one without a guarantee is reported as its root. A method that
+        // receives no query, such as one that takes the context and creates its own source, is not analyzed.
+        private static Query? Composed(
+            IInvocationOperation composition,
+            EntityFramework entityFramework,
+            EntityContainment containment,
+            ImmutableHashSet<ILocalSymbol> followed,
+            ImmutableArray<IInvocationOperation>.Builder operators,
+            ITypeSymbol elementType,
+            CancellationToken cancellationToken)
+        {
+            Query? first = null;
+            Query? unguaranteed = null;
+            var values = composition.Arguments.Select(argument => argument.Value).Prepend(composition.Instance);
+            foreach (var value in values)
+            {
+                if (value is null || entityFramework.QueryElement(value.Type) is null)
+                    continue;
+
+                if (Recognize(value, entityFramework, containment, followed, cancellationToken) is not { } source)
+                    return null;
+
+                first ??= source;
+                if (unguaranteed is null && !source.Guaranteed.Any(entityFramework.SetsTracking))
+                    unguaranteed = source;
+            }
+
+            // What the composition returns is its result: the projections of its sources stay inside it.
+            return (unguaranteed ?? first) is { } root
+                ? Create(root.Root, operators, elementType, root.Guaranteed, projection: null)
+                : null;
         }
 
         // Operators come from the execution to the root: the first projection met is the last one EF Core applies.

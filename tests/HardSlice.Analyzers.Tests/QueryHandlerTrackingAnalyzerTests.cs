@@ -77,6 +77,22 @@ public sealed class QueryHandlerTrackingAnalyzerTests
 
                 public int Bookings { get; set; }
             }
+
+            // Rules of the domain that a query needs in the database: a predicate, and compositions of the queries they receive.
+            public static class BookingRules
+            {
+                public static System.Linq.Expressions.Expression<Func<Booking, bool>> IsActive { get; } = booking => !booking.IsCancelled;
+
+                public static IQueryable<Booking> ActiveIn(IQueryable<Booking> bookings, Guid roomId) =>
+                    bookings.Where(booking => booking.RoomId == roomId && !booking.IsCancelled);
+
+                public static IQueryable<Booking> Labelled(IQueryable<Booking> bookings, IQueryable<BookingLine> lines, string label) =>
+                    bookings.Where(booking => booking.Lines.Any(line => lines.Any(labelled => labelled.Id == line.Id && labelled.Label == label)));
+
+                public static IQueryable<Guid> RoomsOf(IQueryable<Booking> bookings) => bookings.Select(booking => booking.RoomId).Distinct();
+
+                public static IQueryable<Booking> Active(this IQueryable<Booking> bookings) => bookings.Where(IsActive);
+            }
         }
         """;
 
@@ -449,6 +465,132 @@ public sealed class QueryHandlerTrackingAnalyzerTests
                 {
                     var bookings = await db.Bookings.ToListAsync(cancellationToken);
                     return await db.SaveChangesAsync(cancellationToken);
+                }
+            }
+            """);
+    }
+
+    // A rule of the domain that composes the queries the handler gives it, which keeps AsNoTracking on each root and projects.
+    [Fact]
+    public async Task Accepts_a_rule_of_the_domain_that_composes_the_queries_of_the_handler()
+    {
+        await VerifyAsync(
+            """
+            namespace MyApp.Features.Bookings.ListBookings;
+
+            internal sealed class ListBookingsHandler(AppDbContext db) : IRequestHandler<ListBookingsQuery, IReadOnlyList<BookingDto>>
+            {
+                public async Task<IReadOnlyList<BookingDto>> Handle(ListBookingsQuery query, CancellationToken cancellationToken)
+                {
+                    var labelled = await BookingRules.Labelled(db.Set<Booking>().AsNoTracking(), db.Set<BookingLine>().AsNoTracking(), "window")
+                        .Select(booking => booking.Id)
+                        .ToListAsync(cancellationToken);
+                    var rooms = await BookingRules.RoomsOf(db.Bookings.AsNoTracking()).ToListAsync(cancellationToken);
+                    var untracked = await BookingRules.ActiveIn(db.Bookings.AsNoTracking(), Guid.Empty).ToListAsync(cancellationToken);
+                    var extension = db.Bookings.AsNoTracking().Active().ToList();
+                    var guaranteedAfter = BookingRules.ActiveIn(db.Bookings, Guid.Empty).AsNoTracking().ToList();
+                    var values = BookingRules.RoomsOf(db.Bookings).ToList();
+
+                    var active = BookingRules.ActiveIn(db.Bookings.AsNoTracking(), Guid.Empty);
+                    foreach (var booking in active)
+                        _ = booking;
+
+                    return await BookingRules.ActiveIn(db.Set<Booking>().AsNoTracking(), Guid.Empty)
+                        .Select(booking => new BookingDto(booking.Id.Value, booking.RoomId))
+                        .ToListAsync(cancellationToken);
+                }
+            }
+            """);
+    }
+
+    // An Expression<Func<T, bool>> of the domain in Where is an argument of an operator: the query keeps its root and its chain.
+    [Fact]
+    public async Task Accepts_a_predicate_of_the_domain_in_Where()
+    {
+        await VerifyAsync(
+            """
+            namespace MyApp.Features.Bookings.ListBookings;
+
+            internal sealed class ListBookingsHandler(AppDbContext db) : IRequestHandler<ListBookingsQuery, IReadOnlyList<BookingDto>>
+            {
+                public async Task<IReadOnlyList<BookingDto>> Handle(ListBookingsQuery query, CancellationToken cancellationToken)
+                {
+                    var untracked = await db.Set<Booking>().AsNoTracking().Where(BookingRules.IsActive).ToListAsync(cancellationToken);
+                    var any = await db.Bookings.AnyAsync(BookingRules.IsActive, cancellationToken);
+                    return await db.Bookings
+                        .Where(BookingRules.IsActive)
+                        .Select(booking => new BookingDto(booking.Id.Value, booking.RoomId))
+                        .ToListAsync(cancellationToken);
+                }
+            }
+            """);
+    }
+
+    [Fact]
+    public async Task Reports_a_rule_of_the_domain_that_returns_entities_from_a_query_without_a_guarantee()
+    {
+        var diagnostics = await VerifyAsync(
+            """
+            namespace MyApp.Features.Bookings.ListBookings;
+
+            internal sealed class ListBookingsHandler(AppDbContext db) : IRequestHandler<ListBookingsQuery, IReadOnlyList<BookingDto>>
+            {
+                public async Task<IReadOnlyList<BookingDto>> Handle(ListBookingsQuery query, CancellationToken cancellationToken)
+                {
+                    var composed = await BookingRules.ActiveIn(db.Bookings, Guid.Empty).[|ToListAsync|](cancellationToken);
+                    var oneRoot = BookingRules.Labelled(db.Bookings.AsNoTracking(), db.Set<BookingLine>(), "window").[|ToList|]();
+                    var extension = db.Bookings.Active().[|ToList|]();
+                    var predicate = db.Bookings.Where(BookingRules.IsActive).[|ToList|]();
+                    var described = BookingRules.ActiveIn(db.Bookings, Guid.Empty).Select(booking => new DescribedDto(booking.Describe())).[|ToList|]();
+
+                    var active = BookingRules.ActiveIn(db.Set<Booking>(), Guid.Empty);
+                    return (await active.[|ToListAsync|](cancellationToken)).Select(booking => new BookingDto(booking.Id.Value, booking.RoomId)).ToList();
+                }
+            }
+            """);
+
+        Subjects(diagnostics).ShouldBe(
+        [
+            "query handler 'ListBookingsHandler' reads 'Booking' from 'AppDbContext.Bookings' without a local guarantee that it is not tracked",
+            "query handler 'ListBookingsHandler' reads 'Booking' from 'Set<BookingLine>()' without a local guarantee that it is not tracked",
+            "query handler 'ListBookingsHandler' reads 'Booking' from 'AppDbContext.Bookings' without a local guarantee that it is not tracked",
+            "query handler 'ListBookingsHandler' reads 'Booking' from 'AppDbContext.Bookings' without a local guarantee that it is not tracked",
+            "query handler 'ListBookingsHandler' reads 'Booking' from 'AppDbContext.Bookings' without a local guarantee that it is not tracked",
+            "query handler 'ListBookingsHandler' reads 'Booking' from 'Set<Booking>()' without a local guarantee that it is not tracked"
+        ]);
+    }
+
+    // The forbidden form: a helper that creates its source or returns entities. HS006 does not read it, as its sheet says.
+    [Fact]
+    public async Task Does_not_follow_a_helper_that_creates_its_source_or_returns_entities()
+    {
+        await VerifyAsync(
+            """
+            namespace MyApp.Features.Bookings.ListBookings
+            {
+                internal sealed class ListBookingsHandler(AppDbContext db, IQueryable<Booking> injected) : IRequestHandler<ListBookingsQuery, IReadOnlyList<BookingDto>>
+                {
+                    public async Task<IReadOnlyList<BookingDto>> Handle(ListBookingsQuery query, CancellationToken cancellationToken)
+                    {
+                        var created = await BookingReads.Active(db).ToListAsync(cancellationToken);
+                        var loaded = await BookingReads.LoadActiveAsync(db, cancellationToken);
+                        var replaced = await BookingReads.Replace(db.Bookings.AsNoTracking(), db).ToListAsync(cancellationToken);
+                        var fromParameter = await BookingRules.ActiveIn(injected, Guid.Empty).ToListAsync(cancellationToken);
+                        return [];
+                    }
+                }
+            }
+
+            namespace MyApp.Shared.Persistence
+            {
+                internal static class BookingReads
+                {
+                    public static IQueryable<Booking> Active(AppDbContext db) => db.Bookings.Where(booking => !booking.IsCancelled);
+
+                    public static Task<List<Booking>> LoadActiveAsync(AppDbContext db, CancellationToken cancellationToken) =>
+                        db.Bookings.Where(booking => !booking.IsCancelled).ToListAsync(cancellationToken);
+
+                    public static IQueryable<Booking> Replace(IQueryable<Booking> bookings, AppDbContext db) => db.Bookings;
                 }
             }
             """);
