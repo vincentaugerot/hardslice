@@ -62,6 +62,15 @@ public sealed class BookingsReferenceTests
         (await AnalyzeAllAsync(CompileApplication(), Configuration, AllMode)).ShouldBeEmpty();
     }
 
+    // PB-072: a command handler that saves its root early, then writes rows in bulk through the connection of AppDbContext, in the
+    // transaction of the command and with a longer timeout, is the exception that AGENTS.md admits: no rule reports it.
+    [Fact]
+    public async Task Reports_no_HardSlice_diagnostic_on_a_command_that_saves_its_root_before_a_bulk_write()
+    {
+        (await AnalyzeAllAsync(ConfirmBookingThatWritesItsNightsInBulk(), Configuration)).ShouldBeEmpty();
+        (await AnalyzeAllAsync(ConfirmBookingThatWritesItsNightsInBulk(), Configuration, AllMode)).ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task Reports_HS902_when_the_Bookings_reference_maps_a_domain_type_without_contract()
     {
@@ -649,6 +658,36 @@ public sealed class BookingsReferenceTests
         return CompileApplication((path, confirmBooking
             .Replace(load, "var existingBookings = db.Set<Booking>()")
             .Replace(loaded, ".ToListAsync(cancellationToken).Result;")));
+    }
+
+    // ConfirmBooking, whose handler writes one row per night of the booking by binary COPY, after the early save of the booking.
+    private static CSharpCompilation ConfirmBookingThatWritesItsNightsInBulk()
+    {
+        var path = "Features/Bookings/ConfirmBooking/ConfirmBooking.cs";
+        var confirmBooking = ReferenceSource(path);
+        var saved = "            throw new BookingConflictException(command.RoomId, period);\n        }\n";
+        confirmBooking.ShouldContain(saved);
+
+        return CompileApplication((path, confirmBooking.Replace(saved, saved +
+            """
+
+                    var connection = (NpgsqlConnection)db.Database.GetDbConnection();
+                    db.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
+                    await using (var importer = await connection.BeginBinaryImportAsync(
+                        "COPY \"BookingNights\" (\"BookingId\", \"Night\") FROM STDIN (FORMAT BINARY)", cancellationToken))
+                    {
+                        importer.Timeout = TimeSpan.FromMinutes(5);
+                        for (var night = DateOnly.FromDateTime(period.Start.UtcDateTime); night < DateOnly.FromDateTime(period.End.UtcDateTime); night = night.AddDays(1))
+                        {
+                            await importer.StartRowAsync(cancellationToken);
+                            await importer.WriteAsync(booking.Id.Value, NpgsqlTypes.NpgsqlDbType.Uuid, cancellationToken);
+                            await importer.WriteAsync(night, NpgsqlTypes.NpgsqlDbType.Date, cancellationToken);
+                        }
+
+                        await importer.CompleteAsync(cancellationToken);
+                    }
+
+            """)));
     }
 
     // BookingsModule, which registers a handler under another contract.

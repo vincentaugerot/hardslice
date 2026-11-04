@@ -1,6 +1,6 @@
 ---
 name: add-aggregate
-description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, or a child entity of an aggregate with dotnet new hardslice-entity, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order.
+description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, or a child entity of an aggregate with dotnet new hardslice-entity, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk.
 ---
 
 # Add an aggregate
@@ -65,6 +65,17 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
 5. Complete the child as steps 4 to 6 complete a root: its factory method named after the business fact, its rules, the `TODO(hardslice):` marker of `tests/MyApp.Tests/Domain/<Module>/<Entity>Tests.cs`, and the mapping of its state.
 6. Add the migration that the template printed, as step 7 says: it must create the table of the child, with its foreign key to the table of the root, and nothing else. Add the mapping of the child to the entry of its module in `AGENTS.md`, then run the check.
 
+## Children written in bulk
+
+A command that writes many children of one root at once, such as the millions of rows of an import, may write them outside the change tracker, which would take minutes and gigabytes to save them. These children hold the identifier of their root (`--link id`). The solution generates no helper for it: write it in the handler, or in `src/MyApp/Shared/Persistence/` once several slices need it, with no module type in it.
+
+1. Build each child with its factory method, as any child, so that its rules hold.
+2. Add the root, then save it early, before the first child: `db.Set<<Aggregate>>().Add(root);`, then `await db.SaveChangesAsync(cancellationToken);`. The save runs in the transaction of the command, which still commits or rolls back everything. The root stays tracked: the pipeline still publishes its domain events, then saves what changed after and commits.
+3. Write the children after that save, through the connection of `AppDbContext`, which already holds the transaction of the command, such as a binary `COPY` from `((NpgsqlConnection)db.Database.GetDbConnection()).BeginBinaryImportAsync(...)`. Never open a connection or a transaction of your own: the rows would outlive a rollback of the command. Write the table and the columns that the mapping declares, each value as its column stores it, through the converter of the mapping for a typed identifier, such as `<Aggregate>IdConverter`. Nothing is tracked, generated nor published for these rows: no default value of the mapping, no domain event.
+4. Keep the foreign key to the root immediate, as the migration of the child creates it: PostgreSQL checks each row as it is written, against the root saved before. Never make it `DEFERRABLE INITIALLY DEFERRED` nor remove it to write the children first: a deferred key is checked row by row at the commit, which then takes minutes and outlasts its timeout.
+5. A write that takes longer than the 30 seconds that Npgsql gives a command by default gets a longer timeout in that command only: the `Timeout` of the importer for a `COPY`, `db.Database.SetCommandTimeout(...)` for the SQL that EF Core sends. Never raise it in the connection string, which would change it for every request.
+6. The integration test of the command reads the children back from the database, and checks that a command that fails partway, such as on an invalid row of its source, leaves neither the root nor any child.
+
 ## Never
 
 These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the check cannot pass without one, stop and explain the conflict instead.
@@ -72,6 +83,7 @@ These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the c
 - Write the aggregate, a child entity, their identifiers or their mappings yourself, or remove `IAggregateRoot` or `IEntity`.
 - Give the aggregate a public setter, an `init` accessor or a public field to make a slice or a test simpler.
 - Put an invariant in a handler, a validator or an endpoint instead of the aggregate.
+- Write children in bulk before their root, through a connection or a transaction of your own, or under a deferred or a missing foreign key.
 - Leave an empty test or an assertion that checks nothing in place of the `TODO(hardslice):` marker.
 - Suppress a HardSlice diagnostic, lower its severity or turn the analyzers off.
 - Create, edit or delete a protected file: the list of [Forbidden](../../../AGENTS.md#forbidden) names them all.

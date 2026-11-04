@@ -1270,6 +1270,38 @@ public sealed class TemplatePackageTests
         addSlice.ShouldContain("has no mechanism in this solution yet: stop and tell the user instead of writing it");
     }
 
+    // PB-072: a command may save a root early to write its children in bulk after it, through the connection and the transaction of
+    // AppDbContext, under immediate foreign keys and with a longer timeout for that command only. No bulk helper is generated.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_when_a_command_writes_children_in_bulk(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = string.Join('\n', AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample));
+        var skills = Path.Combine(templateRoot, ".claude", "skills");
+        var addAggregate = File.ReadAllText(Path.Combine(skills, "add-aggregate", "SKILL.md"));
+        var addSlice = File.ReadAllText(Path.Combine(skills, "add-slice", "SKILL.md"));
+
+        agents.ShouldContain("Save early only to translate a database error into a domain exception, or to save a root before a bulk write of its "
+            + "children in the same transaction, as `add-aggregate` details.");
+        agents.ShouldContain("A command handler never calls `SaveChangesAsync`: each command runs in one transaction that the pipeline saves and commits");
+        addAggregate.ShouldContain("\n## Children written in bulk\n");
+        addAggregate.ShouldContain("The solution generates no helper for it");
+        addAggregate.ShouldContain("2. Add the root, then save it early, before the first child");
+        addAggregate.ShouldContain("through the connection of `AppDbContext`, which already holds the transaction of the command");
+        addAggregate.ShouldContain("Never open a connection or a transaction of your own");
+        addAggregate.ShouldContain("4. Keep the foreign key to the root immediate");
+        addAggregate.ShouldContain("Never make it `DEFERRABLE INITIALLY DEFERRED` nor remove it to write the children first");
+        addAggregate.ShouldContain("gets a longer timeout in that command only: the `Timeout` of the importer for a `COPY`, `db.Database.SetCommandTimeout(...)`");
+        addAggregate.ShouldContain("- Write children in bulk before their root, through a connection or a transaction of your own, or under a deferred or a missing foreign key.");
+        addSlice.ShouldContain("It never calls `SaveChangesAsync`, except to save early as the cases below say");
+        addSlice.ShouldContain("as [Children written in bulk](../add-aggregate/SKILL.md#children-written-in-bulk) of `add-aggregate` details;");
+        Directory.EnumerateFiles(Path.Combine(templateRoot, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => File.ReadAllText(file).Contains("BeginBinaryImport", StringComparison.Ordinal))
+            .ShouldBeEmpty("Bulk writes are documented in add-aggregate, never generated.");
+    }
+
     // PB-063: outside the code blocks that quote a diagnostic, every instruction of the agent kit that asks for an invalid request or
     // for validator tests says which commands it concerns. HS013 is about commands with parameters only, and says so once.
     [Theory]
