@@ -63,6 +63,8 @@ public sealed class RecurringCommandCycles<TCommand, TResponse>
 
     // Moves Clock to the instant of the next cycle, then returns the response of that cycle, or throws the exception that failed
     // it. RecurringCommandService logs that exception, then sends the command again or waits for the next instant of its schedule.
+    // A cycle that an IRecurringCommandCondition<TCommand> holds back throws a HeldCycleException, whose message is the reason.
+    // With RecurringSchedule.AlsoAtStart, the first cycle is due at TestInstants.Start: RunNextAsync runs it without moving Clock.
     public async Task<TResponse> RunNextAsync()
     {
         var due = await NextDueAsync();
@@ -111,6 +113,8 @@ public sealed class RecurringCommandCycles<TCommand, TResponse>
                 return default!;
             });
         }
+
+        public void Held(string reason) => _outcomes.Writer.TryWrite(() => throw new HeldCycleException(reason));
     }
 
     private sealed class FailingCycles(RecurringCommandCycles<TCommand, TResponse> cycles) : IPipelineBehavior<TCommand, TResponse>
@@ -128,3 +132,7 @@ public sealed class RecurringCommandCycles<TCommand, TResponse>
 
 // The failure that RecurringCommandCycles.FailNext gives a cycle.
 public sealed class FailedCycleException(string message) : Exception(message);
+
+// What RecurringCommandCycles.RunNextAsync throws for a cycle that a condition of the command held back: the command was not
+// sent, and the message is the reason that the condition gave.
+public sealed class HeldCycleException(string reason) : Exception(reason);

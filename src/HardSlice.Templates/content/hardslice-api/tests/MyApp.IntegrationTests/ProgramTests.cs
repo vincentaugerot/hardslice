@@ -11,8 +11,10 @@ namespace MyApp.IntegrationTests;
 // starts, as Development does.
 public sealed class ProgramTests(PostgresDatabase database)
 {
-    // The contracts by which a module registers the handlers and validators of its slices, reactions included.
-    private static readonly Type[] RegisteredContracts = [typeof(IRequestHandler<,>), typeof(IValidator<>), typeof(IDomainEventHandler<>)];
+    // The contracts by which a module registers the handlers and validators of its slices, reactions included, and the conditions
+    // of its recurring commands.
+    private static readonly Type[] RegisteredContracts =
+        [typeof(IRequestHandler<,>), typeof(IValidator<>), typeof(IDomainEventHandler<>), typeof(IRecurringCommandCondition<>)];
 
     [Fact]
     public async Task Starts_and_answers_HTTP_requests_on_its_migrated_database()
@@ -28,8 +30,9 @@ public sealed class ProgramTests(PostgresDatabase database)
         (await db.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken)).ShouldBeEmpty();
     }
 
-    // A slice its module forgot to register compiles, but its endpoint fails at the first request, and a forgotten reaction
-    // never runs: every handler and validator declared in the application must be resolved from the container, by its contract.
+    // A slice its module forgot to register compiles, but its endpoint fails at the first request, and a forgotten reaction or
+    // condition never runs: every handler, validator and condition declared in the application must be resolved from the
+    // container, by its contract.
     [Fact]
     public async Task Resolves_every_handler_and_validator_of_the_application_by_its_contract()
     {
@@ -48,8 +51,8 @@ public sealed class ProgramTests(PostgresDatabase database)
 
         unregistered.ShouldBeEmpty(
             "These types are not registered: add each to the Add<Module>Module method of its module, by its contract, "
-            + "such as .AddScoped<IRequestHandler<TRequest, TResponse>, THandler>(), .AddScoped<IValidator<TRequest>, TValidator>() "
-            + "or .AddScoped<IDomainEventHandler<TEvent>, THandler>().");
+            + "such as .AddScoped<IRequestHandler<TRequest, TResponse>, THandler>(), .AddScoped<IValidator<TRequest>, TValidator>(), "
+            + ".AddScoped<IDomainEventHandler<TEvent>, THandler>() or .AddScoped<IRecurringCommandCondition<TCommand>, TCondition>().");
     }
 
     private static string Describe(Type type) =>

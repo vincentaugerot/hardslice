@@ -2282,7 +2282,7 @@ probe_integration_isolation() {
   local project="src/$app_name/$app_name.csproj" service_file="$app_src/Shared/Behaviors/ProbeHostedService.cs"
   local test_file="$app/tests/$app_name.IntegrationTests/ProbeIsolationTests.cs" starts_file="$app/tests/$app_name.IntegrationTests/bin/Debug/net10.0/probe-hosted-service.log"
   local user_secrets_id known test_output
-  echo "==> Checking that $app_name has its own UserSecretsId and that its integration tests read no user secret and start no hosted service of the application"
+  echo "==> Checking that $app_name has its own UserSecretsId and that its integration tests read no user secret and start no hosted service of the application, each one logged"
   user_secrets_id="$(sed -n 's|.*<UserSecretsId>\(.*\)</UserSecretsId>.*|\1|p' "$app/$project")"
   if [[ ! "$user_secrets_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
     grep -rIlF -- "$user_secrets_id" "$app" --exclude-dir=bin --exclude-dir=obj | grep -vFx "$app/$project"; then
@@ -2325,21 +2325,29 @@ internal sealed class ProbeHostedService : BackgroundService
     }
 }
 CODE
+  # PB-083: the logs that a test captures say which hosted service AppFactory removed, and how to keep it.
   cat > "$test_file" <<CODE
+using System.Collections.Concurrent;
 using System.Net;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using $app_name.Shared.Behaviors;
 
 namespace $app_name.IntegrationTests;
 
 public sealed class ProbeIsolationTests(PostgresDatabase database)
 {
+    private const string Removed =
+        "AppFactory removed the hosted service ProbeHostedService of the application: a test that needs it calls KeepHostedService<ProbeHostedService>() on its AppFactory";
+
     [Fact]
     public async Task Reads_no_user_secret_and_starts_no_hosted_service_of_the_application()
     {
-        await using var app = new AppFactory(database);
+        var logs = new ConcurrentQueue<string>();
+        await using var app = new AppFactory(database).WithWebHostBuilder(builder => Capture(builder, logs));
 
         var response = await app.CreateClient().GetAsync(\$"/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
@@ -2348,17 +2356,39 @@ public sealed class ProbeIsolationTests(PostgresDatabase database)
         configuration["Probe:Secret"].ShouldBeNull();
         configuration.GetConnectionString("Database").ShouldBe(database.ConnectionString);
         app.Services.GetServices<IHostedService>().OfType<ProbeHostedService>().ShouldBeEmpty();
+        logs.Where(line => line.StartsWith("AppFactory removed", StringComparison.Ordinal)).ShouldBe([Removed]);
     }
 
     [Fact]
     public async Task Starts_the_hosted_service_that_the_test_keeps()
     {
-        await using var app = new AppFactory(database).KeepHostedService<ProbeHostedService>();
+        var logs = new ConcurrentQueue<string>();
+        await using var app = new AppFactory(database).KeepHostedService<ProbeHostedService>().WithWebHostBuilder(builder => Capture(builder, logs));
 
         var service = app.Services.GetServices<IHostedService>().OfType<ProbeHostedService>().ShouldHaveSingleItem();
 
         await service.Started.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         app.Services.GetRequiredService<IConfiguration>()["Probe:Secret"].ShouldBeNull();
+        logs.ShouldNotContain(line => line.StartsWith("AppFactory removed", StringComparison.Ordinal));
+    }
+
+    private static void Capture(IWebHostBuilder builder, ConcurrentQueue<string> logs) =>
+        builder.ConfigureLogging(logging => logging.AddProvider(new CapturedLogs(logs)));
+
+    private sealed class CapturedLogs(ConcurrentQueue<string> logs) : ILoggerProvider, ILogger
+    {
+        public ILogger CreateLogger(string categoryName) => this;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            logs.Enqueue(formatter(state, exception));
+
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public void Dispose()
+        {
+        }
     }
 }
 CODE
@@ -2377,7 +2407,7 @@ CODE
     echo "error: the hosted service of $app_name started $(grep -c '^started$' "$starts_file" 2>/dev/null || echo 0) times in its integration tests, instead of once, in the test that keeps it." >&2
     exit 1
   fi
-  echo "    ProbeHostedService started once, in the test that keeps it, and no test read Probe:Secret"
+  echo "    ProbeHostedService started once, in the test that keeps it, its removal logged in the other one, and no test read Probe:Secret"
   rm "$service_file" "$test_file" "$starts_file"
   mv "$work/Program-isolation.backup" "$app_src/Program.cs"
   (cd "$app" && dotnet user-secrets clear --project "src/$app_name")
@@ -3234,6 +3264,117 @@ probe_scheduled_commands() {
     rm -r "${app_src:?}/Features/${module:?}/${slice:?}" "${tests:?}/${slice:?}"
   done
   mv "$work/module-scheduled.backup" "$module_file"
+}
+
+# PB-083: the recurring command <module>/<name>, generated with --every 00:00:30 and completed, gets a condition in the folder of its
+# slice, <name>Condition, which holds it back while the setting Probe:ApiKey is not set. ProgramTests names the condition while its
+# module does not register it. Once registered, the generated tests pass on an instance that sets the key, a test sees each cycle
+# held back with its reason without the key, and another sends it at start too through the key AtStart of its section. The module
+# is left as it was and the slice is removed.
+probe_recurring_condition() {
+  local module="$1"
+  local name="$2"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local slice="$app_src/Features/$module/$name"
+  local tests="$app/tests/$app_name.IntegrationTests/Features/$module/$name"
+  local test_output
+  local expected
+
+  echo "==> Generating the recurring command $module/$name of $app_name and holding it back with a condition of its slice"
+  cp "$module_file" "$work/module-condition.backup"
+  generate_command "$module" "$name" --every 00:00:30
+  register_slice hardslice-command "$command_output"
+  complete_recurring_command "$module" "$name" id
+  cat > "$slice/${name}Condition.cs" <<CODE
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.$module.$name;
+
+// Holds ${name}Command back while Probe:ApiKey, the key of the service it reads, is not set: no cycle fails on it.
+internal sealed class ${name}Condition(IConfiguration configuration) : IRecurringCommandCondition<${name}Command>
+{
+    public Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken) =>
+        Task.FromResult(string.IsNullOrEmpty(configuration["Probe:ApiKey"]) ? "Probe:ApiKey is not set" : null);
+}
+CODE
+  # The generated tests run their cycles on an instance that sets the key.
+  sed -e "s/^        var cycles = new RecurringCommandCycles<${name}Command, Guid>(app);$/        var cycles = new RecurringCommandCycles<${name}Command, Guid>(app, builder => builder.UseSetting(\"Probe:ApiKey\", \"probe-key\"));/" \
+    "$tests/${name}Tests.cs" > "$work/test.cs"
+  if ! grep -Fq 'builder.UseSetting("Probe:ApiKey", "probe-key")' "$work/test.cs" || ! NAME="$name" MODULE="$module" awk '
+      { lines[NR] = $0 }
+      END {
+        print "using Microsoft.AspNetCore.Hosting;"
+        for (i = 1; i < NR; i++) print lines[i]
+        print ""
+        print "    [Fact]"
+        print "    public async Task Is_held_back_with_its_reason_while_its_key_is_not_set()"
+        print "    {"
+        print "        await using var app = new AppFactory(database);"
+        print "        var cycles = new RecurringCommandCycles<" ENVIRON["NAME"] "Command, Guid>(app);"
+        print ""
+        print "        for (var cycle = 1; cycle <= 2; cycle++)"
+        print "            (await Should.ThrowAsync<HeldCycleException>(cycles.RunNextAsync())).Message.ShouldBe(\"Probe:ApiKey is not set\");"
+        print ""
+        print "        (await cycles.NextDueAsync()).ShouldBe(TestInstants.Start.AddSeconds(90));"
+        print "    }"
+        print ""
+        print "    [Fact]"
+        print "    public async Task Is_sent_at_start_too_when_its_section_says_so()"
+        print "    {"
+        print "        await using var app = new AppFactory(database);"
+        print "        var cycles = new RecurringCommandCycles<" ENVIRON["NAME"] "Command, Guid>(app, builder => builder"
+        print "            .UseSetting(\"Probe:ApiKey\", \"probe-key\")"
+        print "            .UseSetting(\"" ENVIRON["MODULE"] ":" ENVIRON["NAME"] ":AtStart\", \"true\"));"
+        print ""
+        print "        (await cycles.RunNextAsync()).ShouldNotBe(Guid.Empty);"
+        print "        cycles.Clock.GetUtcNow().ShouldBe(TestInstants.Start);"
+        print "        (await cycles.RunNextAsync()).ShouldNotBe(Guid.Empty);"
+        print "        cycles.Clock.GetUtcNow().ShouldBe(TestInstants.Start.AddSeconds(30));"
+        print "    }"
+        print lines[NR]
+        if (lines[NR] != "}") exit 1
+      }' "$work/test.cs" > "$tests/${name}Tests.cs"; then
+    echo "error: the integration test of $module/$name is not as dotnet new hardslice-command --every generates it." >&2
+    exit 1
+  fi
+
+  # The condition compiles without HardSlice diagnostic, but nothing checks it until its module registers it.
+  echo "==> Checking that the test of the host names the condition of $module/$name that ${module}Module does not register"
+  if test_output="$(
+    cd "$app"
+    dotnet build "$app_name.slnx" 2>&1 &&
+      dotnet test --project "tests/$app_name.IntegrationTests/$app_name.IntegrationTests.csproj" --no-build 2>&1
+  )"; then
+    echo "error: the integration tests of $app_name passed with a condition its module does not register." >&2
+    exit 1
+  fi
+  test_output="$(strip_ansi <<< "$test_output")"
+  for expected in "failed $app_name.IntegrationTests.ProgramTests.Resolves_every_handler_and_validator_of_the_application_by_its_contract" \
+    "'${name}Condition' as 'IRecurringCommandCondition<${name}Command>'" \
+    ".AddScoped<IRecurringCommandCondition<TCommand>, TCondition>()" \
+    "failed $app_name.IntegrationTests.Features.$module.$name.${name}Tests.Is_held_back_with_its_reason_while_its_key_is_not_set"; do
+    if [[ "$test_output" != *"$expected"* ]]; then
+      printf '%s\n' "$test_output" >&2
+      echo "error: the integration tests of $app_name did not report '$expected' for the unregistered condition of $module/$name." >&2
+      exit 1
+    fi
+  done
+  echo "    ProgramTests names '${name}Condition'"
+
+  echo "==> Checking that $app_name passes the check once ${module}Module registers the condition of $module/$name"
+  if ! awk -v handler="            .AddScoped<IRequestHandler<${name}Command, Guid>, ${name}Handler>()" \
+      -v condition="            .AddScoped<IRecurringCommandCondition<${name}Command>, ${name}Condition>()" '
+      $0 == handler && !added { print; print condition; added = 1; next }
+      { print }
+      END { if (!added) exit 1 }' "$module_file" > "$work/module.cs"; then
+    echo "error: the module of $app_name does not register the handler of $name." >&2
+    exit 1
+  fi
+  mv "$work/module.cs" "$module_file"
+  bash "$app/scripts/check.sh"
+
+  rm -r "${slice:?}" "${tests:?}"
+  mv "$work/module-condition.backup" "$module_file"
 }
 
 # The DTO that dotnet new hardslice-query names after the slice <name>: the name without its first word, the verb of the use case,
@@ -4783,6 +4924,7 @@ mv "$work/Program.cs.backup" "$app_src/Program.cs"
 probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings RemindBookings CollectBookingFeeds
 probe_recurring_commands Bookings CollectBookingStats PurgeBookingDrafts
 probe_scheduled_commands Bookings ImportNightlyBookings RetryBookingStats CloseBookingDay ImportBookingFeeds
+probe_recurring_condition Bookings CollectGuardedBookingFeeds
 probe_query_template Bookings GetBookingSummary ListBookingSummaries GetBookingsOnDate Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetBookingTrip Booking \
@@ -5067,6 +5209,7 @@ probe_module_template Rooms MeetingRooms meeting-rooms
 probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRooms RemindRooms CollectRoomFeeds
 probe_recurring_commands Rooms CollectRoomStats PurgeRoomDrafts
 probe_scheduled_commands Rooms ImportNightlyRooms RetryRoomStats CloseRoomDay ImportRoomFeeds
+probe_recurring_condition Rooms CollectGuardedRoomFeeds
 
 # The aggregate that the query slices read is generated by dotnet new hardslice-aggregate in the domain of Rooms, mapped by the
 # module and migrated with the command it prints, as "Adding a first module" of AGENTS.md says.

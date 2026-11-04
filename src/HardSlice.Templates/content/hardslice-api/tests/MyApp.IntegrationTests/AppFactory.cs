@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using MyApp.Shared.Persistence;
 
 namespace MyApp.IntegrationTests;
@@ -12,7 +13,8 @@ namespace MyApp.IntegrationTests;
 // It runs in its own environment, IntegrationTests: the user secrets of the developer, which only Development loads, never reach a
 // test. It keeps what Development changes for the tests: every service registration is validated when the host starts, and a request
 // that cannot be read is thrown to the exception handlers. No hosted service that the application registers starts, those of its
-// packages included, unless the test keeps it with KeepHostedService. ASP.NET Core registers its own after them: they always run.
+// packages included, unless the test keeps it with KeepHostedService, and each one it removes is logged before the host starts.
+// ASP.NET Core registers its own after them: they always run.
 // An endpoint that requires an authorization policy is called with app.CreateAuthorizedClient(policy), from AuthorizedClients.
 public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactory<Program>
 {
@@ -47,6 +49,25 @@ public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactor
         });
     }
 
+    // As WebApplicationFactory builds and starts the host, with a line for each hosted service of the application that it does not
+    // start: a test that waits for its work, or for the check of a setting it makes at start, reads why in the logs it captures.
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = builder.Build();
+        var logger = host.Services.GetRequiredService<ILogger<AppFactory>>();
+        foreach (var service in host.Services.GetRequiredService<RemovedHostedServices>().Types)
+        {
+            var name = Describe(service);
+            logger.LogInformation(
+                "AppFactory removed the hosted service {HostedService} of the application: a test that needs it calls KeepHostedService<{KeptService}>() on its AppFactory",
+                name,
+                name);
+        }
+
+        host.Start();
+        return host;
+    }
+
     private void RemoveHostedServicesOfTheApplication(IServiceCollection services)
     {
         var hostedServices = services
@@ -60,14 +81,22 @@ public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactor
                 $"KeepHostedService: the application registers no hosted service {string.Join(", ", unknown)}. Register it with AddHostedService, "
                 + "or with AddRecurringCommand<TCommand, TResponse> for a RecurringCommandService.");
 
-        foreach (var service in hostedServices.Where(service => !_keptHostedServices.Contains(service.Type)))
+        var removed = hostedServices.Where(service => !_keptHostedServices.Contains(service.Type)).ToList();
+        foreach (var service in removed)
             services.Remove(service.Descriptor);
+        services.AddSingleton(new RemovedHostedServices([.. removed.Select(service => service.Type).Where(type => type.FullName != AspNetCoreHostedService)]));
     }
 
     private static string Describe(Type type) =>
         type.IsGenericType
             ? $"{type.Name[..type.Name.IndexOf('`')]}<{string.Join(", ", type.GetGenericArguments().Select(Describe))}>"
             : type.Name;
+
+    // ASP.NET Core registers this hosted service of its own once more after the test services: the server always runs, so its
+    // removal is not logged.
+    private const string AspNetCoreHostedService = "Microsoft.AspNetCore.Hosting.GenericWebHostService";
+
+    private sealed record RemovedHostedServices(IReadOnlyList<Type> Types);
 
     // A hosted service registered with a factory is known by the type its factory returns.
     private static Type ImplementationOf(ServiceDescriptor service) =>

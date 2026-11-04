@@ -263,12 +263,161 @@ public sealed class RecurringCommandTests
         exception.Message.ShouldContain("Ticks:TimeZone, the time zone of Tick, must be the IANA id of a time zone of this machine");
     }
 
+    [Fact]
+    public async Task Holds_the_command_back_while_its_condition_gives_a_reason_and_logs_it_once()
+    {
+        var cycles = new Cycles();
+        var waits = new Waits();
+        var logs = new RecordingLoggerProvider();
+        var gate = new Gate { Reason = "Ticks:Key is not set" };
+        using var host = await StartAsync(cycles, waits: waits, logs: logs, gate: gate);
+        var clock = host.Services.GetRequiredService<FakeTimeProvider>();
+
+        for (var cycle = 1; cycle <= 3; cycle++)
+        {
+            clock.SetUtcNow(await waits.NextAsync());
+            (await waits.HeldAsync()).ShouldBe("Ticks:Key is not set");
+        }
+
+        cycles.Sent.ShouldBe(0);
+        gate.Checks.ShouldBe(3);
+        host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested.ShouldBeFalse();
+        logs.Messages("Tick is").ShouldBe(["Tick is sent every 00:00:30", "Tick is not sent: Ticks:Key is not set"]);
+        logs.Entries.ShouldNotContain(entry => entry.Level >= LogLevel.Warning);
+
+        gate.Reason = null;
+        var due = await waits.NextAsync();
+        due.ShouldBe(Start + 4 * Interval, "A held cycle is not retried: the next instant of the schedule comes.");
+        clock.SetUtcNow(due);
+        (await cycles.NextAsync()).ShouldBe(1);
+        logs.Messages("Tick is").Last().ShouldBe("Tick is sent again: its conditions hold");
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Logs_the_reason_again_when_it_changes()
+    {
+        var cycles = new Cycles();
+        var waits = new Waits();
+        var logs = new RecordingLoggerProvider();
+        var gate = new Gate { Reason = "Ticks:Key is not set" };
+        using var host = await StartAsync(cycles, waits: waits, logs: logs, gate: gate);
+        var clock = host.Services.GetRequiredService<FakeTimeProvider>();
+
+        foreach (var reason in new[] { "Ticks:Key is not set", "Ticks:Key is not set", "a version covers the day", "a version covers the day" })
+        {
+            gate.Reason = reason;
+            clock.SetUtcNow(await waits.NextAsync());
+            (await waits.HeldAsync()).ShouldBe(reason);
+        }
+
+        logs.Messages("Tick is not sent").ShouldBe(["Tick is not sent: Ticks:Key is not set", "Tick is not sent: a version covers the day"]);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Checks_its_conditions_in_a_scope_of_their_own_before_each_send()
+    {
+        var cycles = new Cycles();
+        var waits = new Waits();
+        var gate = new Gate();
+        using var host = await StartAsync(cycles, waits: waits, gate: gate);
+        var clock = host.Services.GetRequiredService<FakeTimeProvider>();
+
+        clock.SetUtcNow(await waits.NextAsync());
+        (await cycles.NextAsync()).ShouldBe(1);
+
+        gate.Checks.ShouldBe(1);
+        gate.Scopes.ShouldHaveSingleItem().ShouldNotBeSameAs(cycles.Scopes.ShouldHaveSingleItem());
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task A_condition_that_throws_fails_the_cycle_and_its_retries_check_it_again()
+    {
+        var cycles = new Cycles();
+        var waits = new Waits();
+        var logs = new RecordingLoggerProvider();
+        var gate = new Gate { Throws = true };
+        using var host = await StartAsync(cycles, RecurringSchedule.Every(Interval).WithRetries(TimeSpan.FromSeconds(5), 1), waits: waits, logs: logs, gate: gate);
+        var clock = host.Services.GetRequiredService<FakeTimeProvider>();
+
+        clock.SetUtcNow(await waits.NextAsync());
+        (await waits.NextAsync()).ShouldBe(Start + Interval + TimeSpan.FromSeconds(5));
+        gate.Throws = false;
+        clock.SetUtcNow(Start + Interval + TimeSpan.FromSeconds(5));
+
+        (await cycles.NextAsync()).ShouldBe(1);
+        gate.Checks.ShouldBe(2);
+        var failure = logs.Entries.Where(entry => entry.Level == LogLevel.Error).ShouldHaveSingleItem();
+        failure.Message.ShouldBe("Tick failed: retry 1 of 1 is sent in 00:00:05");
+        failure.Exception.ShouldBeOfType<InvalidOperationException>().Message.ShouldBe("The condition fails.");
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A condition that holds back the cycle at start only, as an import at start that a stored version makes useless.
+    [Theory]
+    [InlineData(null, 2)]
+    [InlineData("a version covers the day", 1)]
+    public async Task Sends_the_command_at_start_when_its_condition_holds_then_at_each_instant(string? reasonAtStart, int sent)
+    {
+        var cycles = new Cycles();
+        var waits = new Waits();
+        var gate = new Gate { ReasonAtStart = reasonAtStart };
+        using var host = await StartAsync(cycles, Nightly.AlsoAtStart(), waits: waits, gate: gate);
+        var clock = host.Services.GetRequiredService<FakeTimeProvider>();
+        var night = new DateTimeOffset(2100, 1, 4, 9, 30, 0, TimeSpan.Zero);
+
+        (await waits.NextAsync()).ShouldBe(Start, "The cycle at start is due as soon as the host starts.");
+        if (reasonAtStart is null)
+            (await cycles.NextAsync()).ShouldBe(1);
+        else
+            (await waits.HeldAsync()).ShouldBe(reasonAtStart);
+        (await waits.NextAsync()).ShouldBe(night, "Then the schedule goes on from its first instant.");
+        clock.SetUtcNow(night);
+        (await cycles.NextAsync()).ShouldBe(sent);
+
+        gate.Cycles.ShouldBe([new RecurringCycle(Start, true, 0), new RecurringCycle(night, false, 0)]);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Tells_its_conditions_which_retry_of_the_cycle_at_start_they_decide_on()
+    {
+        var cycles = new Cycles(1);
+        var waits = new Waits();
+        var gate = new Gate();
+        using var host = await StartAsync(cycles, Nightly.AlsoAtStart().WithRetries(TimeSpan.FromHours(1), 2), waits: waits, gate: gate);
+        var clock = host.Services.GetRequiredService<FakeTimeProvider>();
+
+        (await waits.NextAsync()).ShouldBe(Start);
+        (await cycles.NextAsync()).ShouldBe(1);
+        clock.SetUtcNow(await waits.NextAsync());
+        (await cycles.NextAsync()).ShouldBe(2);
+
+        gate.Cycles.ShouldBe([new RecurringCycle(Start, true, 0), new RecurringCycle(Start.AddHours(1), true, 1)]);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Reads_whether_it_sends_the_command_at_start_from_its_configuration_section()
+    {
+        var cycles = new Cycles();
+        using var host = await StartAsync(cycles, configuration: new() { ["Ticks:AtStart"] = "true" });
+
+        (await cycles.NextAsync()).ShouldBe(1);
+
+        host.Services.GetRequiredService<FakeTimeProvider>().GetUtcNow().ShouldBe(Start);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
     private static async Task<IHost> StartAsync(
         Cycles cycles,
         RecurringSchedule? schedule = null,
         Dictionary<string, string?>? configuration = null,
         Waits? waits = null,
-        RecordingLoggerProvider? logs = null)
+        RecordingLoggerProvider? logs = null,
+        Gate? gate = null)
     {
         var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
         foreach (var (key, value) in configuration ?? [])
@@ -277,12 +426,15 @@ public sealed class RecurringCommandTests
             builder.Logging.AddProvider(logs);
         if (waits is not null)
             builder.Services.AddSingleton<IRecurringCommandMonitor<Tick, int>>(waits);
+        if (gate is not null)
+            builder.Services.AddSingleton(gate).AddScoped<IRecurringCommandCondition<Tick>, TickCondition>();
 
         var clock = new FakeTimeProvider(Start);
         builder.Services
             .AddSingleton(clock)
             .AddSingleton<TimeProvider>(clock)
             .AddSingleton(cycles)
+            .AddScoped<ScopeMarker>()
             .AddMediator()
             .AddScoped<IRequestHandler<Tick, int>, TickHandler>()
             .AddRecurringCommand<Tick, int>("Ticks", schedule ?? RecurringSchedule.Every(Interval));
@@ -312,6 +464,9 @@ public sealed class RecurringCommandTests
 
         public ConcurrentQueue<object> Commands { get; } = new();
 
+        // The scope of each command that reached the handler.
+        public ConcurrentQueue<ScopeMarker> Scopes { get; } = new();
+
         public int Sent => Commands.Count;
 
         public int Record(object command)
@@ -333,10 +488,45 @@ public sealed class RecurringCommandTests
         }
     }
 
-    // The instants that the service waits for, in order.
+    // One per scope of the container: tells the scope of a condition from the one of the command.
+    private sealed class ScopeMarker;
+
+    // What the condition of Tick answers: Reason, or ReasonAtStart for the cycle at start, null to send the command, or an
+    // exception while Throws. It records the cycles and the scopes it decides in.
+    private sealed class Gate
+    {
+        public string? Reason { get; set; }
+
+        public string? ReasonAtStart { get; set; }
+
+        public bool Throws { get; set; }
+
+        public int Checks => Cycles.Count;
+
+        public ConcurrentQueue<RecurringCycle> Cycles { get; } = new();
+
+        public ConcurrentQueue<ScopeMarker> Scopes { get; } = new();
+
+        public string? Check(RecurringCycle cycle, ScopeMarker scope)
+        {
+            Scopes.Enqueue(scope);
+            Cycles.Enqueue(cycle);
+            if (Throws)
+                throw new InvalidOperationException("The condition fails.");
+            return cycle.AtStart ? ReasonAtStart ?? Reason : Reason;
+        }
+    }
+
+    private sealed class TickCondition(Gate gate, ScopeMarker scope) : IRecurringCommandCondition<Tick>
+    {
+        public Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken) => Task.FromResult(gate.Check(cycle, scope));
+    }
+
+    // The instants that the service waits for, in order, and the reasons of the cycles that a condition held back.
     private sealed class Waits : IRecurringCommandMonitor<Tick, int>
     {
         private readonly Channel<DateTimeOffset> _waits = Channel.CreateUnbounded<DateTimeOffset>();
+        private readonly Channel<string> _held = Channel.CreateUnbounded<string>();
 
         public void Waiting(DateTimeOffset due) => _waits.Writer.TryWrite(due);
 
@@ -348,18 +538,29 @@ public sealed class RecurringCommandTests
         {
         }
 
+        public void Held(string reason) => _held.Writer.TryWrite(reason);
+
         // The next instant the service waits for, within 10 seconds.
-        public async Task<DateTimeOffset> NextAsync()
+        public Task<DateTimeOffset> NextAsync() => ReadAsync(_waits.Reader);
+
+        // The reason of the next cycle that a condition held back, within 10 seconds.
+        public Task<string> HeldAsync() => ReadAsync(_held.Reader);
+
+        private static async Task<T> ReadAsync<T>(ChannelReader<T> reader)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            return await _waits.Reader.ReadAsync(timeout.Token);
+            return await reader.ReadAsync(timeout.Token);
         }
     }
 
-    private sealed class TickHandler(Cycles cycles) : IRequestHandler<Tick, int>
+    private sealed class TickHandler(Cycles cycles, ScopeMarker scope) : IRequestHandler<Tick, int>
     {
-        public Task<int> Handle(Tick command, CancellationToken cancellationToken) => Task.FromResult(cycles.Record(command));
+        public Task<int> Handle(Tick command, CancellationToken cancellationToken)
+        {
+            cycles.Scopes.Enqueue(scope);
+            return Task.FromResult(cycles.Record(command));
+        }
     }
 
     private sealed class PingHandler(Cycles cycles) : IRequestHandler<Ping, int>
@@ -370,6 +571,9 @@ public sealed class RecurringCommandTests
     private sealed class RecordingLoggerProvider : ILoggerProvider
     {
         public ConcurrentQueue<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = new();
+
+        // The messages that start with prefix, in order.
+        public string[] Messages(string prefix) => [.. Entries.Select(entry => entry.Message).Where(message => message.StartsWith(prefix, StringComparison.Ordinal))];
 
         public ILogger CreateLogger(string categoryName) => new Logger(Entries);
 

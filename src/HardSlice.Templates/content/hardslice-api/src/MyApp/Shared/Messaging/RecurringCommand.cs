@@ -19,8 +19,9 @@ public static class RecurringCommandServiceCollectionExtensions
     // Sends a new TCommand through IMediator at each instant of the schedule, such as every night at 04:30 in America/Toronto
     // with RecurringSchedule.DailyAt(new TimeOnly(4, 30), "America/Toronto"), and sends it again after a failed cycle with
     // WithRetries. Any command without parameter: a system command that only the application sends, or a command that its
-    // endpoint also sends. The keys Interval, DailyAt, TimeZone, RetryDelay and Retries of the configuration section replace the
-    // values passed here, such as Schedule:ImportNightlySchedule:DailyAt: an invalid one stops the start of the application.
+    // endpoint also sends. The keys Interval, DailyAt, TimeZone, RetryDelay, Retries and AtStart of the configuration section
+    // replace the values passed here, such as Schedule:ImportNightlySchedule:DailyAt: an invalid one stops the start of the
+    // application. Before each send, the IRecurringCommandCondition<TCommand> that the module registers decide whether it goes.
     public static IServiceCollection AddRecurringCommand<TCommand, TResponse>(this IServiceCollection services, string section, RecurringSchedule schedule)
         where TCommand : ICommand<TResponse>, new()
     {
@@ -42,6 +43,7 @@ public static class RecurringCommandServiceCollectionExtensions
                 options.TimeZone = schedule.TimeZone;
                 options.RetryDelay = schedule.RetryDelay;
                 options.Retries = schedule.Retries;
+                options.AtStart = schedule.AtStart;
             })
             .BindConfiguration(section)
             .Validate(
@@ -84,6 +86,9 @@ public sealed record RecurringSchedule
 
     public int Retries { get; private init; }
 
+    // Whether the command is also sent once when the application starts, before the first instant of the schedule.
+    public bool AtStart { get; private init; }
+
     public static RecurringSchedule Every(TimeSpan interval) => new() { Interval = interval };
 
     public static RecurringSchedule DailyAt(TimeOnly time, string timeZone)
@@ -96,8 +101,13 @@ public sealed record RecurringSchedule
     // schedule after the last one. A retry that succeeds ends the retries.
     public RecurringSchedule WithRetries(TimeSpan delay, int retries) => this with { RetryDelay = delay, Retries = retries };
 
+    // Also sends the command once when the application starts, such as an import that must not wait for the night: a cycle
+    // like the others, which the conditions of the command may hold back and the retries send again.
+    public RecurringSchedule AlsoAtStart() => this with { AtStart = true };
+
     public override string ToString() =>
         (Interval is { } interval ? $"every {interval}" : "every day at " + TimeOfDay?.ToString("HH':'mm", CultureInfo.InvariantCulture) + " in " + TimeZone)
+        + (AtStart ? ", and once at start" : "")
         + (Retries > 0 ? $", sent again at most {Retries} times {RetryDelay} apart after a failed cycle" : "");
 
     // The first instant of the schedule after after: on the grid of Interval from start, or the next TimeOfDay of the time zone.
@@ -155,12 +165,33 @@ internal sealed class RecurringCommandOptions<TCommand>
 
     public int Retries { get; set; }
 
+    public bool AtStart { get; set; }
+
     public RecurringSchedule ToSchedule()
     {
         var schedule = Interval is { } interval ? RecurringSchedule.Every(interval) : RecurringSchedule.DailyAt(DailyAt!.Value, TimeZone!);
+        schedule = AtStart ? schedule.AlsoAtStart() : schedule;
         return Retries > 0 ? schedule.WithRetries(RetryDelay!.Value, Retries) : schedule;
     }
 }
+
+// Decides whether a cycle of AddRecurringCommand sends TCommand, such as a key the command needs that is not set, or an import at
+// start that a version already stored makes useless. It lives in the folder of the slice of TCommand, named <Slice>Condition, and
+// its module registers it beside the handler with .AddScoped<IRecurringCommandCondition<TCommand>, TCondition>(). Before each
+// send, the service resolves every condition of the command in a scope of their own: the first reason ends the cycle without
+// sending the command, logged once until the reason changes or the command is sent again. A condition reads its options, or the
+// database through AppDbContext with AsNoTracking(), and never writes: what the cycle does is the work of the command.
+public interface IRecurringCommandCondition<TCommand>
+{
+    // Null to send the command at this cycle, or why it is not sent, such as "NextRip:ApiKey is not set". A condition that throws
+    // fails the cycle, as a failed command does.
+    Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken);
+}
+
+// The cycle that a condition decides on: its instant, whether it is the cycle at start of RecurringSchedule.AlsoAtStart or one of
+// its retries, and the number of the retry it sends, 0 for the first send of the cycle. A condition that only applies at start,
+// such as an import that must not wait for the night when no version covers the day, returns null when AtStart is false.
+public sealed record RecurringCycle(DateTimeOffset Due, bool AtStart, int Retry);
 
 // What RecurringCommandService tells the integration tests that watch it, through RecurringCommandCycles: the application
 // registers none.
@@ -172,13 +203,17 @@ internal interface IRecurringCommandMonitor<TCommand, TResponse>
     void Completed(TResponse response);
 
     void Failed(Exception exception);
+
+    // A condition held the command back: it was not sent, and the next instant of the schedule comes.
+    void Held(string reason);
 }
 
 // Sends a new TCommand at each instant of its schedule, on the TimeProvider of the container, each time in a scope of its own,
 // as an HTTP request would: the command goes through the whole pipeline, its transaction included. A failed cycle is logged and
 // sent again as many times as the schedule retries it, then the next instant of the schedule comes: the application keeps
-// running. Cycles never overlap: a cycle that ends after the next instant is followed at once by one cycle, and the schedule goes
-// on from there. The integration tests start it with AppFactory.KeepHostedService only.
+// running. A cycle that a condition holds back sends nothing and is not retried: the next instant of the schedule comes. Cycles
+// never overlap: a cycle that ends after the next instant is followed at once by one cycle, and the schedule goes on from there.
+// The integration tests start it with AppFactory.KeepHostedService only.
 internal sealed class RecurringCommandService<TCommand, TResponse>(
     IServiceScopeFactory scopes,
     TimeProvider timeProvider,
@@ -202,32 +237,49 @@ internal sealed class RecurringCommandService<TCommand, TResponse>(
         var schedule = options.Value.ToSchedule();
         var command = typeof(TCommand).Name;
         logger.LogInformation("{Command} is sent {Schedule}", command, schedule);
-        var due = schedule.NextAfter(_start, _start);
-        var retry = 0;
+        var cycle = schedule.AtStart ? new RecurringCycle(_start, true, 0) : NextOf(_start);
+        string? held = null;
         try
         {
             while (true)
             {
-                due = await WaitAsync(due, stoppingToken);
-                var failure = await SendAsync(stoppingToken);
+                cycle = cycle with { Due = await WaitAsync(cycle.Due, stoppingToken) };
+                var (reason, failure) = await CheckAsync(cycle, stoppingToken);
+                if (reason is not null)
+                {
+                    // Logged once for the same reason: a key missing for days would otherwise fill the logs.
+                    if (reason != held)
+                        logger.LogInformation("{Command} is not sent: {Reason}", command, reason);
+                    held = reason;
+                    cycle = NextOf(cycle.Due);
+                    foreach (var monitor in monitors)
+                        monitor.Held(reason);
+                    continue;
+                }
+
                 if (failure is null)
                 {
-                    if (retry > 0)
-                        logger.LogInformation("{Command} succeeded at retry {Retry} of {Retries}", command, retry, schedule.Retries);
-                    retry = 0;
-                    due = schedule.NextAfter(_start, due);
+                    if (held is not null)
+                        logger.LogInformation("{Command} is sent again: its conditions hold", command);
+                    held = null;
+                    failure = await SendAsync(stoppingToken);
                 }
-                else if (retry < schedule.Retries)
+
+                if (failure is null)
                 {
-                    retry++;
-                    due += schedule.RetryDelay!.Value;
-                    logger.LogError(failure, "{Command} failed: retry {Retry} of {Retries} is sent in {Delay}", command, retry, schedule.Retries, DelayUntil(due));
+                    if (cycle.Retry > 0)
+                        logger.LogInformation("{Command} succeeded at retry {Retry} of {Retries}", command, cycle.Retry, schedule.Retries);
+                    cycle = NextOf(cycle.Due);
+                }
+                else if (cycle.Retry < schedule.Retries)
+                {
+                    cycle = cycle with { Due = cycle.Due + schedule.RetryDelay!.Value, Retry = cycle.Retry + 1 };
+                    logger.LogError(failure, "{Command} failed: retry {Retry} of {Retries} is sent in {Delay}", command, cycle.Retry, schedule.Retries, DelayUntil(cycle.Due));
                 }
                 else
                 {
-                    retry = 0;
-                    due = schedule.NextAfter(_start, due);
-                    logger.LogError(failure, "{Command} failed: the next one is sent in {Delay}", command, DelayUntil(due));
+                    cycle = NextOf(cycle.Due);
+                    logger.LogError(failure, "{Command} failed: the next one is sent in {Delay}", command, DelayUntil(cycle.Due));
                 }
             }
         }
@@ -235,6 +287,9 @@ internal sealed class RecurringCommandService<TCommand, TResponse>(
         {
             // The application stops.
         }
+
+        // The cycle at the first instant of the schedule after after, which no retry sends.
+        RecurringCycle NextOf(DateTimeOffset after) => new(schedule.NextAfter(_start, after), false, 0);
     }
 
     // Waits for due, or not at all when it has passed: that late cycle is due now, and the schedule goes on from it. The timer
@@ -249,6 +304,29 @@ internal sealed class RecurringCommandService<TCommand, TResponse>(
             monitor.Waiting(due);
         await delay;
         return due;
+    }
+
+    // The first reason of a condition of the command not to send it, or the exception that failed a condition, or neither, in a
+    // scope of their own: a condition never shares the change tracker nor the transaction of the command.
+    private async Task<(string? Reason, Exception? Failure)> CheckAsync(RecurringCycle cycle, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            foreach (var condition in scope.ServiceProvider.GetServices<IRecurringCommandCondition<TCommand>>())
+            {
+                if (await condition.CheckAsync(cycle, stoppingToken) is { } reason)
+                    return (string.IsNullOrWhiteSpace(reason) ? $"{condition.GetType().Name} gives no reason" : reason, null);
+            }
+
+            return (null, null);
+        }
+        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+        {
+            foreach (var monitor in monitors)
+                monitor.Failed(exception);
+            return (null, exception);
+        }
     }
 
     // The exception that failed the cycle, or null.

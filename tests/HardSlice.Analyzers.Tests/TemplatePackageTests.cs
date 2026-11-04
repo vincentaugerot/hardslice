@@ -492,6 +492,47 @@ public sealed class TemplatePackageTests
         addSlice.ShouldContain("Its second argument configures the instance that runs the cycles");
     }
 
+    // PB-083: a recurring command checks the conditions that its module registers before each send, in a scope of their own, and
+    // may also be sent at start. RecurringCommandCycles throws a held cycle, ProgramTests names a condition its module forgot, and
+    // AppFactory logs each hosted service it removes.
+    [Fact]
+    public void Recurring_commands_check_their_conditions_before_each_send_and_AppFactory_logs_the_hosted_services_it_removes()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var service = File.ReadAllText(Path.Combine(template, "src", "MyApp", "Shared", "Messaging", "RecurringCommand.cs"));
+        var cycles = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "RecurringCommandCycles.cs"));
+        var appFactory = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "AppFactory.cs"));
+        var programTests = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "ProgramTests.cs"));
+
+        service.ShouldContain("public interface IRecurringCommandCondition<TCommand>\n{\n");
+        service.ShouldContain("    Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken);");
+        service.ShouldContain("public sealed record RecurringCycle(DateTimeOffset Due, bool AtStart, int Retry);");
+        service.ShouldContain("public RecurringSchedule AlsoAtStart() => this with { AtStart = true };");
+        service.ShouldContain("scope.ServiceProvider.GetServices<IRecurringCommandCondition<TCommand>>()");
+        service.ShouldContain("logger.LogInformation(\"{Command} is not sent: {Reason}\", command, reason);");
+        cycles.ShouldContain("public void Held(string reason) => _outcomes.Writer.TryWrite(() => throw new HeldCycleException(reason));");
+        cycles.ShouldContain("public sealed class HeldCycleException(string reason) : Exception(reason);");
+        appFactory.ShouldContain("\"AppFactory removed the hosted service {HostedService} of the application: a test that needs it calls KeepHostedService<{KeptService}>() on its AppFactory\"");
+        programTests.ShouldContain("typeof(IDomainEventHandler<>), typeof(IRecurringCommandCondition<>)];");
+    }
+
+    // PB-083: the agent kit says how a job decides whether to run, and how a setting is checked at start.
+    [Fact]
+    public void Agent_guidance_says_how_a_job_decides_whether_to_run()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+
+        agents.ShouldContain("A job decides whether to run through an `IRecurringCommandCondition<TCommand>` in the folder of its slice, checked before each send, which reads options or `AppDbContext` with `AsNoTracking()` and never writes: the setting a job needs is checked there, never by a hosted service that only logs it nor `ValidateOnStart`.");
+        agents.ShouldContain("and the logs name each one removed.");
+        addSlice.ShouldContain("registered after its handler with `.AddScoped<IRecurringCommandCondition<TCommand>, <Slice>Condition>()`");
+        addSlice.ShouldContain("the cycle sends nothing and is not retried, the reason is logged once until it changes");
+        addSlice.ShouldContain("`AlsoAtStart()` on the `RecurringSchedule`, or the key `<Module>:<Slice>:AtStart`");
+        addSlice.ShouldContain("its condition holds it back when `cycle.AtStart` and a version covers the day, and lets the nightly cycles go");
+        addSlice.ShouldContain("A cycle that a condition holds back throws `HeldCycleException`, whose message is the reason");
+    }
+
     // PB-081: --require <policy> protects the endpoint of a command or a query: it chains .RequireAuthorization("<policy>"), the tests
     // send the client of the policy that AppFactory holds, except a test of the 401 that sends none. Without the option, the tests keep
     // app.CreateClient(), and a command refuses it with --endpoint none or --every, which have no endpoint.
