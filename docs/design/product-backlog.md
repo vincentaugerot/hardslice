@@ -2386,6 +2386,8 @@ Le vérificateur passe sur les exécutions Claude Code consignées. Chaque exéc
 
 ### PB-051 : Publier la préversion `0.3.0-preview.1`
 
+Statut : prêt le 04/11/2026, en attente du feu vert du mainteneur. L'étiquette `v0.3.0-preview.1` vise le commit de `main` qui termine PB-074, celui dont le message finit par `(PB-074)`, sur lequel les paquets ont été revalidés.
+
 **Résultat observable**
 
 Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org, génère une application, ajoute une slice par `dotnet new hardslice-command` et passe `dotnet hardslice check`.
@@ -3261,6 +3263,8 @@ sondes des templates d'éléments de scripts/test-template.sh
 ```
 
 ### PB-074 : Revalider les paquets 0.3.0-preview.1 après les retours de Ghostline
+
+Statut : terminé le 04/11/2026. Ferme l'entrée « dotnet ef unusable after generating the solution » de `ghostline/docs/hardslice-friction.md`. `CHANGELOG.md` ajoute ce qui manquait encore à l'entrée `0.3.0-preview.1` : la restauration de `check --build` seulement quand un fichier lu par la restauration a changé (PB-061). Les autres tickets y avaient écrit leur ligne. Le README du paquet de templates liste `--route`, `--method`, `--parameters none`, `--endpoint none` et `--every` de `hardslice-command`, et `--route` de `hardslice-query`, avec des exemples qui passent `--route`. Le README racine nomme les mêmes options, étend les lignes de HS004 (commande système sans endpoint), HS006 (requêtes passées à une règle du domaine) et HS010 (`Task.Delay` et `new PeriodicTimer` sans `TimeProvider`), et sa limite sur les effets externes suit PB-063. Le README des analyseurs nomme la commande système et les minuteries de HS010. `docs/item-templates.md` ne dit plus que `hardslice-module` crée les dossiers du domaine et des tests (PB-073). `CONTRIBUTING.md` décrit le symptôme du cache des outils locaux (`Run "dotnet tool restore"` juste après une restauration réussie), sa cause (une restauration avec un `NUGET_PACKAGES` temporaire hors de `isolate_dotnet_cli_home`) et sa correction (supprimer le fichier du paquet dans `~/.dotnet/toolResolverCache/1/`). Passages locaux sur ce commit : `dotnet test --no-build` (1206 tests verts), `scripts/test-template.sh` complet (environ 1 h 15) et `scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages` sur les paquets reconstruits, tous verts. Contournement que Ghostline peut retirer : aucun code à changer, l'entrée de `dotnet-ef` est déjà supprimée de son cache, et le symptôme a maintenant sa correction écrite.
 
 **Résultat observable**
 

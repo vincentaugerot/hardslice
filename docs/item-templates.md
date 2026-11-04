@@ -4,7 +4,7 @@
 
 | Template | Generates | Skill that calls it |
 |---|---|---|
-| [`hardslice-module`](#a-module) | the public contract of a module, the folders of its domain and of its tests | `add-module` |
+| [`hardslice-module`](#a-module) | the public contract of a module, which registers and maps its slices | `add-module` |
 | [`hardslice-aggregate`](#an-aggregate) | an aggregate root, its identifier, its EF Core mapping and its unit tests | `add-aggregate` |
 | [`hardslice-entity`](#a-child-entity) | a child entity of an aggregate, its identifier, its EF Core mapping and its unit tests | `add-aggregate` |
 | [`hardslice-command`](#a-command-slice) | a command slice: command, validator, handler, endpoint and tests, or a system command without endpoint | `add-slice` |

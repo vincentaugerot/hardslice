@@ -26,6 +26,10 @@ scripts/measure-analyzers.sh
 
 CI runs on every push to `main` and every pull request, each job on a fresh runner from a fresh checkout, without cache: build and tests, template, demonstration, and generated workflow. A fifth job, performance, measures the analyzers on every push to `main` and on the pull requests that change the analyzers, the template, the tool or the measurement. [Releasing](docs/releasing.md) describes the release workflow.
 
+### When a local tool stays missing after `dotnet tool restore`
+
+`dotnet ef` or `dotnet hardslice` may answer `Run "dotnet tool restore" to make the "dotnet-ef" command available.` right after a successful `dotnet tool restore`. The cache of the local tools of your machine then points to a package folder that no longer exists. A `dotnet tool restore` run with a temporary `NUGET_PACKAGES` but your usual home records that folder in `~/.dotnet/toolResolverCache/1/`, and a later restore finds the package in its place and never corrects the entry. A probe of `scripts/test-template.sh` run alone without `isolate_dotnet_cli_home` (`scripts/dotnet-cli-home.sh`) does exactly that, while the full run gives every restore a home of its own. To fix it, delete the file named after the package in `~/.dotnet/toolResolverCache/1/`, such as `dotnet-ef` or `hardslice.tool`, then run `dotnet tool restore` again. A user of the published packages is not concerned.
+
 ## Repository map
 
 | Path | Contains |

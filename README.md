@@ -31,10 +31,10 @@ bash scripts/check.sh     # or: pwsh scripts/check.ps1
 The check builds the solution and runs its unit, architecture and integration tests. It exits 0 when everything passes. `Rooms` holds a `Bookings` sample module (`--no-sample` leaves it out). Then ask your agent to read `AGENTS.md` and give it a feature: it generates each element with a template, completes it, and is not done until the check passes. For example, the command slice it would generate to extend a booking:
 
 ```text
-dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking
+dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking --route extensions
 ```
 
-[Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the six element templates.
+`--route` and `--method` choose the endpoint of a slice, `--parameters none` makes a command without parameters, `--endpoint none` and `--every` a system command that only the application sends, once or at regular intervals, and `hardslice-query --result filtered` a list that a filter of the query string selects. [Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the six element templates.
 
 ## What you get
 
@@ -65,13 +65,13 @@ A native adapter refuses an edit of the files that set the rules, hands the buil
 | [HS000](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS000.md) | Every suppression of a HardSlice rule in source, `#pragma warning disable` or `[SuppressMessage]`, carries a `// hardslice-justification: <reason>` comment of at least ten characters on its line or the line above. HS000 itself cannot be suppressed. | Analyzer at build time, test projects included |
 | [HS001](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS001.md) | The domain project depends on the base class library only: no EF Core, ASP.NET Core or dependency injection. | Architecture tests |
 | [HS003](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS003.md) | An endpoint never reaches the database: it sends a command or a query through `IMediator`. | Analyzer at build time |
-| [HS004](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS004.md) | A slice `Features/<Module>/<Slice>/` holds one request named after it (`<Slice>Command` or `<Slice>Query`), its handler `<Slice>Handler`, its static endpoint `<Slice>Endpoint` and, if any, its validator `<Slice>Validator`, or, for a reaction slice, one domain event handler `<Slice>Handler` without request nor endpoint. No request, handler or validator lives outside a slice, and the folder and the namespace of a slice hold the same types. | Analyzer at build time |
+| [HS004](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS004.md) | A slice `Features/<Module>/<Slice>/` holds one request named after it (`<Slice>Command` or `<Slice>Query`), its handler `<Slice>Handler`, its static endpoint `<Slice>Endpoint` and, if any, its validator `<Slice>Validator`, or, for a reaction slice, one domain event handler `<Slice>Handler` without request nor endpoint. A system command, which only the application sends, has no endpoint, and a type of its module sends it. No request, handler or validator lives outside a slice, and the folder and the namespace of a slice hold the same types. | Analyzer at build time |
 | [HS005](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS005.md) | A command handler returns an identifier, a DTO of values or nothing: never an entity, directly, in a collection, an array, a tuple, a generic envelope such as `Result<T>` or a DTO. | Analyzer at build time |
-| [HS006](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS006.md) | A query handler never writes through EF Core, never turns tracking back on nor reconfigures it, never calls `Find`, and starts each query that materializes an entity with `AsNoTracking()` in the handler itself. | Analyzer at build time |
+| [HS006](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS006.md) | A query handler never writes through EF Core, never turns tracking back on nor reconfigures it, never calls `Find`, and starts each query that materializes an entity with `AsNoTracking()` in the handler itself, the queries it passes to a rule of the domain included. | Analyzer at build time |
 | [HS007](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS007.md) | An entity, root or child, has no `set` or `init` accessor reachable from outside its assembly, not even through a public interface, and no public field that is not `readonly`: its state changes through its methods. | Analyzer at build time |
 | [HS008](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS008.md) | An aggregate references another aggregate by its identifier only: neither its root nor its child entities hold another root, directly, in a collection, an array or a generic type, not even another instance of the same type. A child entity may reference the roots that reach it and any child entity. | Analyzer at build time |
 | [HS009](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS009.md) | A domain event, a type that implements `IDomainEvent` in any project, is a `record` or a `record struct`. | Analyzer at build time |
-| [HS010](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS010.md) | The domain and the slices never read the system clock (`DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today`, `DateTimeOffset.Now`, `DateTimeOffset.UtcNow`): handlers inject `TimeProvider` and pass the instant to the domain. | Analyzer at build time |
+| [HS010](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS010.md) | The domain and the slices never read the system clock (`DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today`, `DateTimeOffset.Now`, `DateTimeOffset.UtcNow`): handlers inject `TimeProvider` and pass the instant to the domain. A slice never waits with `Task.Delay` nor times with `new PeriodicTimer` without `TimeProvider`. | Analyzer at build time |
 | [HS011](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS011.md) | Code never blocks on asynchronous work (`.Result`, `.Wait()`, `GetAwaiter().GetResult()`) and never declares `async void`, lambdas converted to `void` delegates included. | Analyzer at build time |
 | [HS012](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS012.md) | A module uses another module only through its public contract. | Architecture tests |
 | [HS013](src/HardSlice.Templates/content/hardslice-api/docs/rules/HS013.md) | Every command with parameters has a validator. | Architecture tests |
@@ -99,7 +99,7 @@ These are demonstrations, not a benchmark: each agent ran once. A benchmark with
 
 - Only solutions generated by `hardslice-api` are supported. Adding HardSlice to an existing solution is planned for v0.5.
 - PostgreSQL is the only database. SQL Server and Aspire are planned for v1.0.
-- Domain events are handled inside the transaction of the command: no outbox, no bus, no external effect in a handler.
+- Domain events are handled inside the transaction of the command, without outbox nor bus: an external effect that a rollback must cancel, such as an e-mail, has no mechanism yet.
 - Gemini CLI stays at the fallback level: it could not be tried, as it no longer serves personal Google accounts.
 - The hooks, the pre-commit hook and the generated CI stop accidental drift, but they are not a security boundary until the branch is protected.
 
