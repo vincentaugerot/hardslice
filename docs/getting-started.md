@@ -15,7 +15,7 @@ From nothing to a running API in five steps: install the templates, generate a s
 dotnet new install HardSlice.Templates@0.3.0-preview.1
 ```
 
-This installs the `hardslice-api` solution template and the five [item templates](item-templates.md) from NuGet.org. They pin `HardSlice.Analyzers` and `HardSlice.Tool` at the same version, in `Directory.Packages.props` and `.config/dotnet-tools.json`: the generated solutions restore both from NuGet.org, with their other packages.
+This installs the `hardslice-api` solution template and the five [item templates](item-templates.md) from NuGet.org. They pin `HardSlice.Analyzers` and `HardSlice.Tool` at the same version, in `Directory.HardSlice.props` and `.config/dotnet-tools.json`: the generated solutions restore both from NuGet.org, with their other packages.
 
 To try a build of this repository instead, see [Try a local build of the packages](../CONTRIBUTING.md#try-a-local-build-of-the-packages).
 
@@ -51,7 +51,7 @@ Both scripts restore the local tools of `.config/dotnet-tools.json`, then run `d
 
 It exits with `0` when the check passes, `1` when a step fails, its output left as is, and `2` on a wrong argument only: this is the command an agent must bring back to green before it is done. The diagnostics are those of `dotnet build` and `dotnet test`, as they print them.
 
-The tool has the version of the analyzers: `check` fails before building if `Directory.Packages.props` references another version of `HardSlice.Analyzers`. It has no option to skip a step. `bash scripts/check.sh --build` (or `check.ps1 --build`, `dotnet hardslice check --build`) is the verification for a hook after an edit: the incremental build of the solution with `--no-restore`, after a restore only when a project needs one, printing the errors alone as the compiler wrote them, then the `TODO(hardslice):` markers. It runs no test, says so, and never decides that the work is done: only the check without argument does. Any other argument exits with code 2. Both fit the budgets of the hooks, 10 seconds after an edit and 60 seconds before an agent hands back, as [measured](performance/analyzers.md).
+The tool has the version of the analyzers: `check` fails before building if `Directory.HardSlice.props` references another version of `HardSlice.Analyzers` or if `Directory.Packages.props` no longer imports it, and after building if a project did not receive the package. `Directory.Packages.props` belongs to the application: add its packages there. It has no option to skip a step. `bash scripts/check.sh --build` (or `check.ps1 --build`, `dotnet hardslice check --build`) is the verification for a hook after an edit: the incremental build of the solution with `--no-restore`, after a restore only when a project needs one, printing the errors alone as the compiler wrote them, then the `TODO(hardslice):` markers. It runs no test, says so, and never decides that the work is done: only the check without argument does. Any other argument exits with code 2. Both fit the budgets of the hooks, 10 seconds after an edit and 60 seconds before an agent hands back, as [measured](performance/analyzers.md).
 
 To read the sheet of a rule without leaving the terminal:
 

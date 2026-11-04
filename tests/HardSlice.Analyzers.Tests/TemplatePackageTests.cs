@@ -42,19 +42,21 @@ public sealed class TemplatePackageTests
 
             using var archive = ZipFile.OpenRead(
                 Directory.EnumerateFiles(feedDirectory, $"HardSlice.Templates.{version}.nupkg").ShouldHaveSingleItem());
+            var packedReference = TemplateEntry(archive, "Directory.HardSlice.props");
             var packedPackages = TemplateEntry(archive, "Directory.Packages.props");
             var packedManifest = TemplateEntry(archive, ".config/dotnet-tools.json");
 
-            AnalyzerReferenceVersion(packedPackages).ShouldBe(version);
+            AnalyzerReferenceVersion(packedReference).ShouldBe(version);
             using var manifest = JsonDocument.Parse(packedManifest);
             var tools = manifest.RootElement.GetProperty("tools");
             tools.GetProperty("hardslice.tool").GetProperty("version").GetString().ShouldBe(version);
             tools.GetProperty("dotnet-ef").GetProperty("version").GetString()
                 .ShouldBe(PackageVersions(Path.Combine(templateRoot, "Directory.Packages.props"))["Microsoft.EntityFrameworkCore.Design"]);
 
-            // The pack replaces the token and nothing else.
-            packedPackages.TrimEnd().ShouldBe(
-                File.ReadAllText(Path.Combine(templateRoot, "Directory.Packages.props")).Replace(VersionToken, version).TrimEnd());
+            // The pack replaces the token and nothing else. PB-060: Directory.Packages.props, which the application owns, ships as is.
+            packedReference.TrimEnd().ShouldBe(
+                File.ReadAllText(Path.Combine(templateRoot, "Directory.HardSlice.props")).Replace(VersionToken, version).TrimEnd());
+            packedPackages.ShouldBe(File.ReadAllText(Path.Combine(templateRoot, "Directory.Packages.props")));
             packedManifest.TrimEnd().ShouldBe(
                 File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")).Replace(VersionToken, version).TrimEnd());
             archive.Entries.Select(entry => entry.FullName).ShouldContain("README.md");
@@ -523,11 +525,14 @@ public sealed class TemplatePackageTests
     public void Template_holds_the_version_token_where_it_pins_the_analyzers_and_the_tool()
     {
         var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var reference = File.ReadAllText(Path.Combine(templateRoot, "Directory.HardSlice.props"));
         var packages = File.ReadAllText(Path.Combine(templateRoot, "Directory.Packages.props"));
         using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(templateRoot, ".config", "dotnet-tools.json")));
 
-        AnalyzerReferenceVersion(packages).ShouldBe(VersionToken);
-        Regex.Count(packages, VersionToken).ShouldBe(1);
+        AnalyzerReferenceVersion(reference).ShouldBe(VersionToken);
+        Regex.Count(reference, VersionToken).ShouldBe(1);
+        packages.ShouldNotContain(VersionToken);
+        XDocument.Parse(packages).Descendants().Select(element => (string?)element.Attribute("Include")).ShouldNotContain("HardSlice.Analyzers");
         manifest.RootElement.GetProperty("tools").EnumerateObject()
             .Where(tool => tool.Value.GetProperty("version").GetString() == VersionToken)
             .Select(tool => tool.Name)
@@ -547,6 +552,25 @@ public sealed class TemplatePackageTests
             .Where(package => templateVersions.TryGetValue(package.Key, out var templateVersion) && templateVersion != package.Value)
             .Select(package => $"{package.Key}: repository {package.Value}, template {templateVersions[package.Key]}")
             .ShouldBeEmpty();
+    }
+
+    // PB-060: the application owns Directory.Packages.props, which brings HardSlice.Analyzers from the protected Directory.HardSlice.props
+    // by an unconditional import, and the tests of a generated solution can set and advance a FakeTimeProvider (docs/rules/HS010.md).
+    [Fact]
+    public void Template_imports_the_analyzers_from_a_protected_file_and_gives_its_tests_a_fake_clock()
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var packages = XDocument.Load(Path.Combine(templateRoot, "Directory.Packages.props"));
+
+        packages.Root!.Elements("Import").Select(import => ((string?)import.Attribute("Project"), (string?)import.Attribute("Condition")))
+            .ShouldBe([("$(MSBuildThisFileDirectory)Directory.HardSlice.props", null)]);
+        PackageVersions(Path.Combine(templateRoot, "Directory.Packages.props")).ShouldContainKey("Microsoft.Extensions.TimeProvider.Testing");
+        foreach (var project in new[] { "MyApp.Tests", "MyApp.IntegrationTests" })
+        {
+            XDocument.Load(Path.Combine(templateRoot, "tests", project, $"{project}.csproj")).Descendants("PackageReference")
+                .Select(reference => (string?)reference.Attribute("Include"))
+                .ShouldContain("Microsoft.Extensions.TimeProvider.Testing", $"{project} does not reference the package of FakeTimeProvider.");
+        }
     }
 
     // dotnet-ef must match the EF Core design-time and runtime packages it drives, or migrations may not load.

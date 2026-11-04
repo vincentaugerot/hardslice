@@ -224,8 +224,8 @@ verify_solution() {
   app="$work/$name"
   app_name="$name"
   app_src="$app/src/$name"
-  if ! grep -qF "<GlobalPackageReference Include=\"HardSlice.Analyzers\" Version=\"$version\" />" "$app/Directory.Packages.props"; then
-    echo "error: $name does not pin HardSlice.Analyzers $version in Directory.Packages.props." >&2
+  if ! grep -qF "<GlobalPackageReference Include=\"HardSlice.Analyzers\" Version=\"$version\" />" "$app/Directory.HardSlice.props"; then
+    echo "error: $name does not pin HardSlice.Analyzers $version in Directory.HardSlice.props." >&2
     exit 1
   fi
 

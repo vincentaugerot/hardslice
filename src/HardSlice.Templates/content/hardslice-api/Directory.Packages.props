@@ -4,15 +4,9 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
-  <!--#if (false)
-  The repository builds the template content without HardSlice.Analyzers: dotnet new uncomments the next block in generated solutions.
-  The pack of HardSlice.Templates writes the version of the HardSlice packages in place of the version of this reference.
-  #endif -->
-  <!--#if (true)
-  <ItemGroup Label="Analyzers">
-    <GlobalPackageReference Include="HardSlice.Analyzers" Version="HARDSLICE_VERSION" />
-  </ItemGroup>
-  #endif -->
+  <!-- The packages of the application: add a dependency here, with its version, and reference it from the project that uses it.
+       The import brings HardSlice.Analyzers, from a protected file: keep it. -->
+  <Import Project="$(MSBuildThisFileDirectory)Directory.HardSlice.props" />
 
   <ItemGroup Label="Persistence">
     <!-- Pins the EF Core version that Npgsql brings transitively to the one of the dotnet-ef tooling. -->
@@ -30,6 +24,8 @@
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
+    <!-- MIT. FakeTimeProvider, the clock that tests set and advance (docs/rules/HS010.md). -->
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <!-- Apache-2.0. Loads the compiled assemblies and their dependency graph for the architecture tests. -->
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.4" />
     <!-- MIT. Parses the test sources for HS014 and HS018, without building the test projects. -->

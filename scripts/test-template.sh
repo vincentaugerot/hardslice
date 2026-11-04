@@ -7,6 +7,9 @@
 # that a missing or invalid hardslice.json, or one of a later version, fails them explicitly, with HS900 for its contracts and its version, that the solution compiles with the All analysis mode,
 # that an unknown HardSliceAnalysisMode fails them with the list of modes, and that dotnet hardslice, which the scripts launch,
 # is pinned with the analyzers to that version, both restored from the local feed only, refuses another one before the build and explains every rule with the sheet of the template.
+# It adds CsvHelper to Directory.Packages.props, which the application owns, and a unit test that advances a FakeTimeProvider, and the check passes;
+# without the import of the protected Directory.HardSlice.props both scripts fail before the build, and a reference removed in Directory.Packages.props
+# or another Directory.Packages.props in a project folder fails them after the build, naming the project that no longer receives HardSlice.Analyzers.
 # It generates a second module Rooms with dotnet new hardslice-module through each of its refusals, routes and printed lines, registers it in Program.cs,
 # checks that the check passes on it and that HS012 fails both scripts when it reaches into a slice of Bookings.
 # It generates command slices with dotnet new hardslice-command through each of its refusals, registers them with the lines it prints, checks that the test of the host names a forgotten registration,
@@ -265,7 +268,7 @@ pwsh -NoProfile -File "$app/scripts/check.ps1"
 echo "==> Checking that dotnet hardslice is pinned to the version of the analyzers and explains every rule"
 (
   cd "$app"
-  analyzer_version="$(sed -n 's/.*<GlobalPackageReference Include="HardSlice.Analyzers" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)"
+  analyzer_version="$(sed -n 's/.*<GlobalPackageReference Include="HardSlice.Analyzers" Version="\([^"]*\)".*/\1/p' Directory.HardSlice.props)"
   tool_version="$(dotnet hardslice --version)"
   if [[ -z "$analyzer_version" || "$tool_version" != "$analyzer_version" ]]; then
     echo "error: dotnet hardslice is version '$tool_version' but $app_name references HardSlice.Analyzers '$analyzer_version'." >&2
@@ -1663,7 +1666,8 @@ probe_analyzer_settings_hooks() {
     echo "error: $app_name has no .agents/skills/add-slice/SKILL.md, the skill that Codex and Gemini CLI read." >&2
     exit 1
   fi
-  for file in "src/$app_name/.globalconfig|.globalconfig" "Directory.Build.rsp|Directory.Build.rsp" ".agents/skills/add-slice/SKILL.md|.agents/"; do
+  for file in "src/$app_name/.globalconfig|.globalconfig" "Directory.Build.rsp|Directory.Build.rsp" ".agents/skills/add-slice/SKILL.md|.agents/" \
+    "Directory.HardSlice.props|Directory.HardSlice.props"; do
     entry="${file#*|}"
     file="${file%%|*}"
     run_claude_hook PreToolUse "$(claude_payload PreToolUse "$app/$file")"
@@ -1687,7 +1691,31 @@ probe_analyzer_settings_hooks() {
       exit 1
     fi
   done
-  echo "    before an edit: Claude Code, Codex and Copilot CLI refuse src/$app_name/.globalconfig, Directory.Build.rsp and .agents/skills/add-slice/SKILL.md"
+  echo "    before an edit: Claude Code, Codex and Copilot CLI refuse src/$app_name/.globalconfig, Directory.Build.rsp, .agents/skills/add-slice/SKILL.md and Directory.HardSlice.props"
+
+  # PB-060: the application owns Directory.Packages.props and its project files, where it adds its own packages.
+  for file in Directory.Packages.props "src/$app_name/$app_name.csproj"; do
+    run_claude_hook PreToolUse "$(claude_payload PreToolUse "$app/$file")"
+    if [[ "$hook_status" != 0 || -n "$hook_error" ]]; then
+      printf '%s\n' "$hook_error" >&2
+      echo "error: the PreToolUse hook of Claude Code refused the edit of $file (code $hook_status)." >&2
+      exit 1
+    fi
+    run_hook codex PreToolUse "$(codex_payload PreToolUse "*** Begin Patch\\n*** Update File: $app/$file\\n@@\\n*** End Patch")"
+    if [[ "$hook_status" != 0 || -n "$hook_error" ]]; then
+      printf '%s\n' "$hook_error" >&2
+      echo "error: the PreToolUse hook of Codex refused a patch of $file (code $hook_status)." >&2
+      exit 1
+    fi
+    run_hook copilot preToolUse "$(copilot_payload edit "$app/$file")"
+    if [[ "$hook_status" != 0 || -n "$hook_error" || -s "$work/hook-output" ]]; then
+      printf '%s\n' "$hook_error" >&2
+      cat "$work/hook-output" >&2
+      echo "error: the preToolUse hook of Copilot CLI answered on the edit of $file (code $hook_status)." >&2
+      exit 1
+    fi
+  done
+  echo "    before an edit: Claude Code, Codex and Copilot CLI let the agent edit Directory.Packages.props and src/$app_name/$app_name.csproj"
 }
 
 # Fails unless <file> of the solution runs dotnet hardslice hook <cli> <event> for each event.
@@ -1908,18 +1936,134 @@ CODE
     echo "error: the job protected-files of the workflow did not fail on a .globalconfig that turns HS016 off (code $workflow_status)." >&2
     exit 1
   fi
-  printf 'The rooms close on Sundays.\n' >> "$app/docs/decisions.md"
-  app_git commit --quiet --no-verify --all --message "Change a decision"
+  # PB-060: the reference to HardSlice.Analyzers is protected, the packages of the application are not.
+  sed -i.bak 's|Version="[^"]*"|Version="0.0.1"|' "$app/Directory.HardSlice.props"
+  rm "$app/Directory.HardSlice.props.bak"
+  app_git commit --quiet --no-verify --all --message "Downgrade the analyzers"
   run_protected_files_job false
-  if [[ "$workflow_status" != 0 ]] || ! grep -Fq "HardSlice: none of the 1 paths read is protected." <<< "$workflow_output"; then
+  if [[ "$workflow_status" == 0 ]] || ! grep -Fq "HardSlice: 'Directory.HardSlice.props' is protected (Directory.HardSlice.props)." <<< "$workflow_output" ||
+    ! grep -Fq "::error::This pull request changes protected files" <<< "$workflow_output"; then
     printf '%s\n' "$workflow_output" >&2
-    echo "error: the job protected-files of the workflow failed on a change of documentation alone (code $workflow_status)." >&2
+    echo "error: the job protected-files of the workflow did not fail on a change of Directory.HardSlice.props (code $workflow_status)." >&2
     exit 1
   fi
-  echo "    CI: protected-files fails without a first parent, on a change of scripts/check.sh and on a .globalconfig that turns HS016 off, passes scripts/check.sh with the label hardslice-approved, and passes a change of documentation"
+  printf 'The rooms close on Sundays.\n' >> "$app/docs/decisions.md"
+  sed -i.bak 's|<ItemGroup Label="Validation">|<ItemGroup Label="Validation"><PackageVersion Include="CsvHelper" Version="33.1.0" />|' "$app/Directory.Packages.props"
+  rm "$app/Directory.Packages.props.bak"
+  app_git commit --quiet --no-verify --all --message "Change a decision and add a package"
+  run_protected_files_job false
+  if [[ "$workflow_status" != 0 ]] || ! grep -Fq "HardSlice: none of the 2 paths read is protected." <<< "$workflow_output"; then
+    printf '%s\n' "$workflow_output" >&2
+    echo "error: the job protected-files of the workflow failed on a change of documentation and of Directory.Packages.props alone (code $workflow_status)." >&2
+    exit 1
+  fi
+  echo "    CI: protected-files fails without a first parent, on a change of scripts/check.sh, on a .globalconfig that turns HS016 off and on a change of Directory.HardSlice.props, passes scripts/check.sh with the label hardslice-approved, and passes a change of documentation and of Directory.Packages.props"
 
   app_git reset --quiet --hard "$baseline"
   rm -rf "${app:?}/.git"
+}
+
+# Restores a root file of the solution from its backup, newer than the assets files: the next check --build restores again.
+restore_root_file() {
+  mv "$work/$1.backup" "$app/$1"
+  touch "$app/$1"
+}
+
+# Runs both check scripts, with the given argument if any: each must fail with <expected> in its output and <absent> nowhere.
+expect_check_message() {
+  local expected="$1" absent="$2" description="$3" script check_output
+  shift 3
+  for script in check.sh check.ps1; do
+    if check_output="$(run_check_mode "$script" "$@" 2>&1)"; then
+      echo "error: scripts/$script $* passed with $description." >&2
+      exit 1
+    fi
+    if ! grep -Fq -- "$expected" <<< "$check_output" || { [[ -n "$absent" ]] && grep -Fq -- "$absent" <<< "$check_output"; }; then
+      printf '%s\n' "$check_output" >&2
+      echo "error: scripts/$script $* failed with $description without '$expected'." >&2
+      exit 1
+    fi
+  done
+  echo "    $description: $expected"
+}
+
+# PB-060: the application owns Directory.Packages.props, which imports the reference to HardSlice.Analyzers from the protected
+# Directory.HardSlice.props. A package of the application, CsvHelper, and a unit test that advances a FakeTimeProvider pass the check.
+# Without the import, both scripts fail before the build, naming the file. A reference removed in Directory.Packages.props, or another
+# Directory.Packages.props in a project folder, fails them after the build, naming each project without the analyzers.
+probe_application_packages() {
+  local packages_project="src/$app_name/$app_name.csproj" clock_test="tests/$app_name.Tests/FakeClockTests.cs" test_output project
+  echo "==> Checking that the application adds its own packages and that its tests advance a FakeTimeProvider"
+  cp -p "$app/Directory.Packages.props" "$work/Directory.Packages.props.backup"
+  cp -p "$app/$packages_project" "$work/$app_name.csproj.backup"
+  sed -i.bak 's|<ItemGroup Label="Validation">|<ItemGroup Label="Validation"><PackageVersion Include="CsvHelper" Version="33.1.0" />|' "$app/Directory.Packages.props"
+  sed -i.bak 's|<PackageReference Include="FluentValidation" />|<PackageReference Include="FluentValidation" /><PackageReference Include="CsvHelper" />|' "$app/$packages_project"
+  rm "$app/Directory.Packages.props.bak" "$app/$packages_project.bak"
+  if ! grep -Fq '<PackageReference Include="CsvHelper" />' "$app/$packages_project" || ! grep -Fq '<PackageVersion Include="CsvHelper"' "$app/Directory.Packages.props"; then
+    echo "error: the probe could not add CsvHelper to Directory.Packages.props and $packages_project of $app_name." >&2
+    exit 1
+  fi
+  cat > "$app/$clock_test" <<CODE
+using Microsoft.Extensions.Time.Testing;
+
+namespace $app_name.Tests;
+
+public sealed class FakeClockTests
+{
+    [Fact]
+    public async Task A_delay_of_an_hour_ends_when_the_test_advances_the_clock_by_an_hour()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 4, 4, 30, 0, TimeSpan.Zero));
+        var delay = Task.Delay(TimeSpan.FromHours(1), clock, TestContext.Current.CancellationToken);
+
+        clock.Advance(TimeSpan.FromMinutes(59));
+        delay.IsCompleted.ShouldBeFalse();
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await delay;
+
+        clock.GetUtcNow().ShouldBe(new DateTimeOffset(2026, 11, 4, 5, 30, 0, TimeSpan.Zero));
+    }
+}
+CODE
+  run_check check.sh
+  test_output="$(cd "$app" && dotnet test --project "tests/$app_name.Tests/$app_name.Tests.csproj" --no-build --filter-class "$app_name.Tests.FakeClockTests" 2>&1 | strip_ansi)" || {
+    printf '%s\n' "$test_output" >&2
+    echo "error: the unit test that advances a FakeTimeProvider failed in $app_name.Tests." >&2
+    exit 1
+  }
+  if ! grep -Eq 'succeeded: 1$' <<< "$test_output"; then
+    printf '%s\n' "$test_output" >&2
+    echo "error: the check of $app_name did not run the unit test that advances a FakeTimeProvider." >&2
+    exit 1
+  fi
+  rm "$app/$clock_test"
+  mv "$work/$app_name.csproj.backup" "$app/$packages_project"
+  touch "$app/$packages_project"
+  echo "    CsvHelper added to Directory.Packages.props and $packages_project, a FakeTimeProvider advanced in $app_name.Tests: the check passes"
+
+  sed -i.bak '/Directory.HardSlice.props" \/>/d' "$app/Directory.Packages.props"
+  rm "$app/Directory.Packages.props.bak"
+  expect_check_message "error: Directory.Packages.props does not import Directory.HardSlice.props, which references HardSlice.Analyzers" "==> Building" \
+    "Directory.Packages.props without its import" --build
+  expect_check_message "error: Directory.Packages.props does not import Directory.HardSlice.props, which references HardSlice.Analyzers" "==> Building" \
+    "Directory.Packages.props without its import"
+  cp "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
+
+  sed -i.bak 's|<ItemGroup Label="Validation">|<ItemGroup Label="Validation"><GlobalPackageReference Remove="HardSlice.Analyzers" />|' "$app/Directory.Packages.props"
+  rm "$app/Directory.Packages.props.bak"
+  expect_check_message "error: $packages_project does not receive HardSlice.Analyzers $hardslice_version: it does not reference it for net10.0." "Build passed" \
+    "a GlobalPackageReference Remove of HardSlice.Analyzers in Directory.Packages.props" --build
+  cp "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
+  touch "$app/Directory.Packages.props"
+
+  # The nearest Directory.Packages.props wins: one in the folder of the domain hides the root one, and its import, from that project.
+  printf '<Project>\n  <PropertyGroup>\n    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n  </PropertyGroup>\n</Project>\n' \
+    > "$app/src/$app_name.Domain/Directory.Packages.props"
+  project="src/$app_name.Domain/$app_name.Domain.csproj"
+  expect_check_message "error: $project does not receive HardSlice.Analyzers $hardslice_version: it does not reference it for net10.0." "Running unit tests" \
+    "a Directory.Packages.props in the folder of the domain"
+  rm "$app/src/$app_name.Domain/Directory.Packages.props"
+  restore_root_file Directory.Packages.props
 }
 
 # Seeds a domain type of module <module> that blocks on a task: the analyzer of the domain reports HS011 in its own compilation.
@@ -2978,13 +3122,13 @@ mv "$work/Directory.Build.props.backup" "$app/Directory.Build.props"
 
 # The tool verifies the rules of the analyzers it ships with: another analyzer version stops both scripts before the build.
 echo "==> Checking that another HardSlice.Analyzers version fails both check scripts before the build"
-cp "$app/Directory.Packages.props" "$work/Directory.Packages.props.backup"
-sed 's|<GlobalPackageReference Include="HardSlice.Analyzers" Version="[^"]*" />|<GlobalPackageReference Include="HardSlice.Analyzers" Version="0.0.1" />|' "$work/Directory.Packages.props.backup" > "$app/Directory.Packages.props"
-if ! grep -Fq '<GlobalPackageReference Include="HardSlice.Analyzers" Version="0.0.1" />' "$app/Directory.Packages.props"; then
-  echo "error: the Directory.Packages.props of $app_name does not reference HardSlice.Analyzers." >&2
+cp -p "$app/Directory.HardSlice.props" "$work/Directory.HardSlice.props.backup"
+sed 's|<GlobalPackageReference Include="HardSlice.Analyzers" Version="[^"]*" />|<GlobalPackageReference Include="HardSlice.Analyzers" Version="0.0.1" />|' "$work/Directory.HardSlice.props.backup" > "$app/Directory.HardSlice.props"
+if ! grep -Fq '<GlobalPackageReference Include="HardSlice.Analyzers" Version="0.0.1" />' "$app/Directory.HardSlice.props"; then
+  echo "error: the Directory.HardSlice.props of $app_name does not reference HardSlice.Analyzers." >&2
   exit 1
 fi
-version_mismatch="error: Directory.Packages.props references HardSlice.Analyzers 0.0.1, but dotnet hardslice is version"
+version_mismatch="error: Directory.HardSlice.props references HardSlice.Analyzers 0.0.1, but dotnet hardslice is version"
 for script in check.sh check.ps1; do
   if check_output="$(run_check "$script" 2>&1)"; then
     echo "error: scripts/$script passed with another HardSlice.Analyzers version." >&2
@@ -2997,7 +3141,9 @@ for script in check.sh check.ps1; do
   fi
 done
 echo "    $version_mismatch ..."
-mv "$work/Directory.Packages.props.backup" "$app/Directory.Packages.props"
+mv "$work/Directory.HardSlice.props.backup" "$app/Directory.HardSlice.props"
+
+probe_application_packages
 
 # A second module beside Bookings, generated by dotnet new hardslice-module and registered in Program.cs: the check passes.
 probe_module_template Rooms MeetingRooms meeting-rooms

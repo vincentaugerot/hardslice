@@ -24,8 +24,8 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
 
     public const string ErrorsOnlyLogger = "-logger:Microsoft.Build.Logging.ConsoleLogger,Microsoft.Build;ErrorsOnly;NoSummary;Verbosity=minimal";
 
-    // The exit code of any failure: a step that fails, whatever its own code, no solution, another analyzer version, a test project
-    // left out of the .slnx, no container runtime, or a TODO(hardslice): marker left. The output of the failing step stays on
+    // The exit code of any failure: a step that fails, whatever its own code, no solution, another analyzer version, a project that
+    // does not receive the analyzers, a test project left out of the .slnx, no container runtime, or a TODO(hardslice): marker left. The output of the failing step stays on
     // screen as it wrote it. 2 is kept for a command line that the tool does not understand (Cli.UsageError), 0 for success.
     public const int Failure = 1;
 
@@ -51,6 +51,7 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
     private int RunFull(Solution solution) =>
         TestProjectsInSolution(solution)
             ?? Step(solution, $"Building {solution.File}", "build", solution.File)
+            ?? AnalyzersReceived(solution)
             ?? Step(solution, "Running unit tests", "test", "--project", solution.TestProject("Tests"), "--no-build")
             ?? Step(solution, "Running architecture tests", "test", "--project", solution.TestProject("ArchitectureTests"), "--no-build")
             ?? ContainerRuntime(solution)
@@ -67,6 +68,7 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
         var restore = RestoreState.Outdated(solution);
         return (restore is null ? null : Step(solution, $"Restoring {solution.File}: {restore}", "restore", solution.File, "-nologo", "-v:q"))
             ?? Step(solution, $"Building {solution.File}", "build", solution.File, "--no-restore", "-nologo", "-tl:off", "-noconsolelogger", ErrorsOnlyLogger)
+            ?? AnalyzersReceived(solution)
             ?? Markers(solution)
             ?? Passed("==> Build passed. Tests did not run: only the full check decides that the work is done.");
     }
@@ -100,6 +102,21 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
             $"error: {solution.File} does not build {string.Join(", ", missing)}: its tests would run on the binaries of an older build. "
             + $"Add {(missing.Length == 1 ? "it" : "them")} back to {solution.File}, as the template generated it.");
         return Failure;
+    }
+
+    // A project that the restore left without HardSlice.Analyzers builds without any rule, and no HS900 can say so: the restore
+    // that the build just ran, or the last one, tells what each project of the .slnx received.
+    private int? AnalyzersReceived(Solution solution)
+    {
+        output.WriteLine($"==> Checking that every project receives {AnalyzerVersion.PackageId}");
+        var projects = RestoreState.Projects(solution);
+        if (projects is null)
+        {
+            error.WriteLine($"error: {solution.File} is not valid XML: check cannot tell which projects it builds.");
+            return Failure;
+        }
+
+        return AnalyzerVersion.Received(solution, projects, ToolVersion.Current, error) ? null : Failure;
     }
 
     private int? ContainerRuntime(Solution solution)

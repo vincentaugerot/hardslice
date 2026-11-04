@@ -2757,6 +2757,8 @@ scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/pa
 
 ### PB-060 : Laisser l'application gérer ses propres paquets
 
+Statut : terminé le 04/11/2026. `Directory.HardSlice.props`, protégé à la racine, porte la `GlobalPackageReference` de `HardSlice.Analyzers` et `Directory.Packages.props` l'importe sans condition. En plus de l'import, `check` lit après le build le `obj/project.assets.json` de chaque projet du `.slnx` : le paquet à la version de l'outil, avec ses analyseurs et ses fichiers de build (un `Remove`, un `Update` de version, un `ExcludeAssets` ou un autre `Directory.Packages.props` dans un dossier de projet le font échouer en nommant le projet). `README.md` ne porte pas la liste des fichiers protégés : il n'a pas changé.
+
 **Résultat observable**
 
 Un agent ajoute `CsvHelper` ou `Google.Protobuf` à une solution générée sans toucher un fichier protégé, et la vérification reste verte. Retirer ou modifier la référence à `HardSlice.Analyzers` reste refusé par les hooks et fait échouer `check` et la CI. Les tests d'une solution générée peuvent utiliser `FakeTimeProvider`.

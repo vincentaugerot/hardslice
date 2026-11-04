@@ -1,0 +1,14 @@
+<Project>
+  <!-- The HardSlice entries of the solution, imported by Directory.Packages.props, which the application owns. This file is protected:
+       see "Forbidden" in AGENTS.md. dotnet hardslice check fails when the import is gone or when a project no longer receives this package. -->
+
+  <!--#if (false)
+  The repository builds the template content without HardSlice.Analyzers: dotnet new uncomments the next block in generated solutions.
+  The pack of HardSlice.Templates writes the version of the HardSlice packages in place of the version of this reference.
+  #endif -->
+  <!--#if (true)
+  <ItemGroup Label="Analyzers">
+    <GlobalPackageReference Include="HardSlice.Analyzers" Version="HARDSLICE_VERSION" />
+  </ItemGroup>
+  #endif -->
+</Project>

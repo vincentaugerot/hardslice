@@ -12,7 +12,7 @@ public sealed class ProtectedCommandTests : IDisposable
     [InlineData("hardslice.json", "hardslice.json")]
     [InlineData("src/Demo/.editorconfig", ".editorconfig")]
     [InlineData("tests/Demo.Tests/Directory.Build.props", "Directory.Build.props")]
-    [InlineData("Directory.Packages.props", "Directory.Packages.props")]
+    [InlineData("Directory.HardSlice.props", "Directory.HardSlice.props")]
     [InlineData(".config/dotnet-tools.json", ".config/dotnet-tools.json")]
     [InlineData("scripts/check.sh", "scripts/")]
     [InlineData("tests/Demo.ArchitectureTests/SliceTests.cs", "tests/Demo.ArchitectureTests/")]
@@ -45,10 +45,10 @@ public sealed class ProtectedCommandTests : IDisposable
         var (exitCode, output, error) = Run(
             "src/Demo/Program.cs\ntests/Demo.Tests/Features/Bookings/ConfirmBooking/ConfirmBookingTests.cs\n"
             + ".github/workflows/deploy.yml\ndocs/hardslice.json.md\nsrc/Demo/scripts/Seed.cs\ntests/Demo.ArchitectureTestsHelpers/Helper.cs\n"
-            + "src/Demo/nuget.config\nsrc/Demo/.agents/notes.md\n");
+            + "src/Demo/nuget.config\nsrc/Demo/.agents/notes.md\nDirectory.Packages.props\nsrc/Demo/Demo.csproj\n");
 
         exitCode.ShouldBe(0);
-        output.ShouldBe($"HardSlice: none of the 8 paths read is protected.{Environment.NewLine}");
+        output.ShouldBe($"HardSlice: none of the 10 paths read is protected.{Environment.NewLine}");
         error.ShouldBeEmpty();
     }
 

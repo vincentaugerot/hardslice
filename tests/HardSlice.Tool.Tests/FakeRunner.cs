@@ -7,6 +7,7 @@ internal sealed class FakeRunner : ICommandRunner
     private readonly Dictionary<string, int> _exitCodes = [];
     private readonly Dictionary<string, string> _outputs = [];
     private readonly List<string> _throwing = [];
+    private readonly Dictionary<string, Action> _effects = [];
     private TextWriter? _writer;
 
     public List<string> Commands { get; } = [];
@@ -25,6 +26,13 @@ internal sealed class FakeRunner : ICommandRunner
     public FakeRunner Throwing(string command)
     {
         _throwing.Add(command);
+        return this;
+    }
+
+    // The commands that start with the given text do what the action does before they exit, as a restore writes the assets files.
+    public FakeRunner After(string command, Action effect)
+    {
+        _effects[command] = effect;
         return this;
     }
 
@@ -48,6 +56,7 @@ internal sealed class FakeRunner : ICommandRunner
         WorkingDirectories.Add(workingDirectory);
         if (_throwing.Any(prefix => command.StartsWith(prefix, StringComparison.Ordinal)))
             throw new InvalidOperationException($"simulated failure of '{command}'");
+        _effects.FirstOrDefault(effect => command.StartsWith(effect.Key, StringComparison.Ordinal)).Value?.Invoke();
         var output = _outputs.FirstOrDefault(output => command.StartsWith(output.Key, StringComparison.Ordinal)).Value;
         if (output is not null)
             _writer?.WriteLine(output);

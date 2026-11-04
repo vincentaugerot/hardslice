@@ -11,6 +11,7 @@ public sealed class CheckCommandTests
     private const string IntegrationTests = "dotnet test --project tests/Demo.IntegrationTests/Demo.IntegrationTests.csproj --no-build";
     private const string IncrementalBuild = "dotnet build Demo.slnx --no-restore -nologo -tl:off -noconsolelogger -logger:Microsoft.Build.Logging.ConsoleLogger,Microsoft.Build;ErrorsOnly;NoSummary;Verbosity=minimal";
     private const string Restore = "dotnet restore Demo.slnx -nologo -v:q";
+    private const string AnalyzersReceived = "==> Checking that every project receives HardSlice.Analyzers";
 
     [Fact]
     public void A_passing_check_runs_every_step_in_order_from_the_solution_root()
@@ -25,6 +26,7 @@ public sealed class CheckCommandTests
         runner.WorkingDirectories.ShouldAllBe(directory => directory == solution.Root);
         Lines(output).ShouldBe([
             "==> Building Demo.slnx",
+            AnalyzersReceived,
             "==> Running unit tests",
             "==> Running architecture tests",
             "==> Checking the container runtime",
@@ -101,6 +103,7 @@ public sealed class CheckCommandTests
         Lines(output).ShouldBe([
             CheckCommand.BuildModeReduction,
             "==> Building Demo.slnx",
+            AnalyzersReceived,
             "==> Looking for TODO(hardslice): markers in src/ and tests/",
             "==> Build passed. Tests did not run: only the full check decides that the work is done.",
         ]);
@@ -113,7 +116,7 @@ public sealed class CheckCommandTests
     {
         using var solution = new TemporarySolution();
         solution.WriteProjects(("src/Demo/Demo.csproj", true), ("tests/Demo.Tests/Demo.Tests.csproj", false));
-        var runner = new FakeRunner();
+        var runner = new FakeRunner().After(Restore, () => solution.WriteAssets("tests/Demo.Tests/Demo.Tests.csproj", TemporarySolution.Assets()));
 
         var (exitCode, output, _) = Check(runner, solution.Root, "--build");
 
@@ -125,6 +128,7 @@ public sealed class CheckCommandTests
     [Theory]
     [InlineData("src/Demo/Demo.csproj")]
     [InlineData("Directory.Packages.props")]
+    [InlineData("Directory.HardSlice.props")]
     [InlineData("Directory.Build.props")]
     [InlineData("NuGet.Config")]
     public void Check_build_restores_first_when_a_file_read_by_the_restore_changed_since(string changed)
@@ -200,7 +204,7 @@ public sealed class CheckCommandTests
         exitCode.ShouldBe(1);
         runner.Commands.ShouldBeEmpty();
         output.ShouldBeEmpty();
-        error.ShouldStartWith("error: Directory.Packages.props references HardSlice.Analyzers 9.9.9");
+        error.ShouldStartWith("error: Directory.HardSlice.props references HardSlice.Analyzers 9.9.9");
     }
 
     [Fact]
@@ -264,9 +268,9 @@ public sealed class CheckCommandTests
         runner.Commands.ShouldBeEmpty();
         output.ShouldBeEmpty();
         error.ShouldBe(
-            $"error: Directory.Packages.props references HardSlice.Analyzers 9.9.9, but dotnet hardslice is version {ToolVersion.Current}. "
+            $"error: Directory.HardSlice.props references HardSlice.Analyzers 9.9.9, but dotnet hardslice is version {ToolVersion.Current}. "
             + "The tool and the analyzers must have the same version: set the 'hardslice.tool' entry of .config/dotnet-tools.json "
-            + "and the HardSlice.Analyzers reference of Directory.Packages.props to the same version, then run 'dotnet tool restore'."
+            + "and the HardSlice.Analyzers reference of Directory.HardSlice.props to the same version, then run 'dotnet tool restore'."
             + Environment.NewLine);
     }
 
@@ -277,28 +281,124 @@ public sealed class CheckCommandTests
     public void Check_fails_before_building_without_a_versioned_global_reference_to_the_analyzers(string items)
     {
         using var solution = new TemporarySolution();
-        solution.WritePackages(items);
+        solution.WriteReference(items);
         var runner = new FakeRunner();
 
         var (exitCode, _, error) = Check(runner, solution.Root);
 
         exitCode.ShouldBe(1);
         runner.Commands.ShouldBeEmpty();
-        error.ShouldStartWith("error: Directory.Packages.props must hold one GlobalPackageReference to HardSlice.Analyzers with its version");
+        error.ShouldStartWith("error: Directory.HardSlice.props must hold one GlobalPackageReference to HardSlice.Analyzers with its version");
+    }
+
+    [Theory]
+    [InlineData("Directory.HardSlice.props", "it must reference HardSlice.Analyzers")]
+    [InlineData("Directory.Packages.props", "it holds the versions of the packages and imports Directory.HardSlice.props")]
+    public void Check_fails_before_building_without_the_file_that_references_the_analyzers_or_imports_it(string file, string purpose)
+    {
+        using var solution = new TemporarySolution();
+        File.Delete(Path.Combine(solution.Root, file));
+        var runner = new FakeRunner();
+
+        var (exitCode, _, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(1);
+        runner.Commands.ShouldBeEmpty();
+        error.ShouldStartWith($"error: {file} was not found in ");
+        error.ShouldContain(purpose);
+    }
+
+    // PB-060: the application owns Directory.Packages.props. Without the import of Directory.HardSlice.props, no project
+    // receives HardSlice.Analyzers, and no diagnostic of the analyzers can say so.
+    [Theory]
+    [InlineData("")]
+    [InlineData("""<Import Project="Directory.Other.props" />""")]
+    [InlineData("""<ItemGroup><Import Project="Directory.HardSlice.props" /></ItemGroup>""")]
+    public void Check_fails_before_building_when_Directory_Packages_props_no_longer_imports_the_reference(string elements)
+    {
+        using var solution = new TemporarySolution();
+        solution.WritePackages(elements);
+        var runner = new FakeRunner();
+
+        var (exitCode, output, error) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(CheckCommand.Failure);
+        runner.Commands.ShouldBeEmpty();
+        output.ShouldBeEmpty();
+        error.ShouldBe(
+            "error: Directory.Packages.props does not import Directory.HardSlice.props, which references HardSlice.Analyzers: no project would receive the HardSlice rules. "
+            + "Add back <Import Project=\"$(MSBuildThisFileDirectory)Directory.HardSlice.props\" /> to Directory.Packages.props, as the template generated it."
+            + Environment.NewLine);
+    }
+
+    [Theory]
+    [InlineData("""<Import Project="Directory.HardSlice.props" />""")]
+    [InlineData("""<Import Project="$(MSBuildThisFileDirectory)\Directory.HardSlice.props" />""")]
+    public void The_import_of_the_reference_may_be_written_with_any_path_to_it(string elements)
+    {
+        using var solution = new TemporarySolution();
+        solution.WritePackages(elements);
+
+        Check(new FakeRunner(), solution.Root).ExitCode.ShouldBe(0);
+    }
+
+    // PB-060: what the restore brought to each project, after the build: a reference removed or changed in Directory.Packages.props
+    // or a project file, or another Directory.Packages.props below the root, leaves the project without any HardSlice rule.
+    public static TheoryData<string, string> AssetsWithoutTheAnalyzers => new()
+    {
+        { TemporarySolution.Assets(referenced: false), "it does not reference it for net10.0" },
+        { TemporarySolution.Assets(version: "0.0.1"), "its restore brought version 0.0.1" },
+        { TemporarySolution.Assets(include: "\"include\": \"Runtime, Build, Native, ContentFiles\","), "its reference for net10.0 leaves out the analyzers or the build files of the package (include: Runtime, Build, Native, ContentFiles)" },
+        { TemporarySolution.Assets(include: "\"include\": \"None\","), "its reference for net10.0 leaves out the analyzers or the build files of the package (include: None)" },
+        { "{\"version\": 4, \"libraries\": {}}", "its obj/project.assets.json lists no target framework" },
+        { TemporarySolution.Assets().Replace("\"HardSlice.Analyzers/", "\"Other.Package/"), "its restore did not bring it" },
+        { "{", "its obj/project.assets.json is not valid JSON" },
+    };
+
+    [Theory]
+    [MemberData(nameof(AssetsWithoutTheAnalyzers))]
+    public void Check_fails_after_the_build_when_a_project_does_not_receive_the_analyzers_and_names_it(string assets, string reason)
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteProjects([("src/Demo/Demo.csproj", true), .. solution.TestProjects.Select(project => (project, true))]);
+        solution.WriteAssets("src/Demo/Demo.csproj", assets);
+        var runner = new FakeRunner();
+
+        var (exitCode, output, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(CheckCommand.Failure);
+        runner.Commands.ShouldBe([Build]);
+        Lines(output).ShouldBe(["==> Building Demo.slnx", AnalyzersReceived]);
+        Lines(error)[0].ShouldBe($"error: src/Demo/Demo.csproj does not receive HardSlice.Analyzers {ToolVersion.Current}: {reason}.");
+        Lines(error)[1].ShouldStartWith("error: a project without HardSlice.Analyzers builds without the HardSlice rules. Directory.HardSlice.props, imported by Directory.Packages.props");
+        Lines(error).Length.ShouldBe(2);
     }
 
     [Fact]
-    public void Check_fails_without_Directory_Packages_props()
+    public void Check_build_fails_when_a_project_does_not_receive_the_analyzers_before_looking_for_markers()
     {
         using var solution = new TemporarySolution();
-        File.Delete(Path.Combine(solution.Root, "Directory.Packages.props"));
+        solution.WriteProjects(("src/Demo/Demo.csproj", true), ("src/Demo.Domain/Demo.Domain.csproj", true));
+        solution.WriteAssets("src/Demo.Domain/Demo.Domain.csproj", TemporarySolution.Assets(referenced: false));
         var runner = new FakeRunner();
 
-        var (exitCode, _, error) = Check(runner, solution.Root);
+        var (exitCode, output, error) = Check(runner, solution.Root, "--build");
 
-        exitCode.ShouldBe(1);
-        runner.Commands.ShouldBeEmpty();
-        error.ShouldStartWith("error: Directory.Packages.props was not found in ");
+        exitCode.ShouldBe(CheckCommand.Failure);
+        runner.Commands.ShouldBe([IncrementalBuild]);
+        output.ShouldNotContain("TODO(hardslice): markers");
+        error.ShouldStartWith($"error: src/Demo.Domain/Demo.Domain.csproj does not receive HardSlice.Analyzers {ToolVersion.Current}: it does not reference it for net10.0.");
+        error.ShouldNotContain("src/Demo/Demo.csproj");
+    }
+
+    // Without include, NuGet brings every asset of the package.
+    [Fact]
+    public void A_reference_that_brings_every_asset_passes()
+    {
+        using var solution = new TemporarySolution();
+        solution.WriteAssets(solution.TestProjects[0], TemporarySolution.Assets(include: ""));
+
+        Check(new FakeRunner(), solution.Root).ExitCode.ShouldBe(0);
     }
 
     [Fact]

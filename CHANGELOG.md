@@ -16,6 +16,7 @@ The first preview published on NuGet.org. No earlier version was published.
 - The agent kit of every generated solution: `AGENTS.md` and the instruction files of Claude Code, Codex, GitHub Copilot CLI and Gemini CLI, six skills, the hooks of Claude Code, Codex and Copilot CLI (they refuse an edit of a protected file, hand the build errors back after an edit and keep the agent working while the check fails), a pre-commit hook, and a GitHub Actions workflow that runs the check and fails a pull request that changes a protected file without the label `hardslice-approved`.
 - A rule sheet for every rule in `docs/rules/`, named by each diagnostic with the skill that fixes it.
 - `hardslice.json` declares `"version": 1`, the version of its format.
+- The application owns `Directory.Packages.props` and adds its packages there. `HardSlice.Analyzers` is referenced from the protected `Directory.HardSlice.props`, which it imports, and `check` fails when a project no longer receives the package. The test projects reference `Microsoft.Extensions.TimeProvider.Testing`, for `FakeTimeProvider`.
 
 ### Known limitations
 

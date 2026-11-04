@@ -1,36 +1,26 @@
+using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 
 namespace HardSlice.Tool;
 
-// The tool verifies the rules of the analyzers it ships with: both must have the same version.
+// The tool verifies the rules of the analyzers it ships with: both must have the same version, and every project of the solution
+// must receive them. The reference lives in a protected file, which Directory.Packages.props, owned by the application, imports.
 internal static class AnalyzerVersion
 {
     public const string PackageId = "HardSlice.Analyzers";
+    public const string ReferenceFile = "Directory.HardSlice.props";
     public const string PackagesFile = "Directory.Packages.props";
 
-    // Writes why the solution cannot be verified by this version of the tool, or returns true.
+    private const string AssetsFile = "obj/project.assets.json";
+
+    // Writes why the solution cannot be verified by this version of the tool, or returns true. Reads the files alone, before the build.
     public static bool Matches(Solution solution, string toolVersion, TextWriter error)
     {
-        var path = Path.Combine(solution.Root, PackagesFile);
-        if (!File.Exists(path))
-        {
-            error.WriteLine($"error: {PackagesFile} was not found in '{solution.Root}': it must reference {PackageId} {toolVersion}, the version of dotnet hardslice.");
+        if (Load(solution, ReferenceFile, $"it must reference {PackageId} {toolVersion}, the version of dotnet hardslice", error) is not { } reference)
             return false;
-        }
 
-        XDocument packages;
-        try
-        {
-            packages = XDocument.Load(path);
-        }
-        catch (XmlException exception)
-        {
-            error.WriteLine($"error: {PackagesFile} is not valid XML: {exception.Message}");
-            return false;
-        }
-
-        var versions = packages.Descendants()
+        var versions = reference.Descendants()
             .Where(element => element.Name.LocalName == "GlobalPackageReference"
                 && string.Equals((string?)element.Attribute("Include"), PackageId, StringComparison.OrdinalIgnoreCase))
             .Select(element => (string?)element.Attribute("Version"))
@@ -38,19 +28,127 @@ internal static class AnalyzerVersion
 
         if (versions.Length != 1 || string.IsNullOrEmpty(versions[0]))
         {
-            error.WriteLine($"error: {PackagesFile} must hold one GlobalPackageReference to {PackageId} with its version, {toolVersion} for this dotnet hardslice. Restore it: the HardSlice rules come from this package.");
+            error.WriteLine($"error: {ReferenceFile} must hold one GlobalPackageReference to {PackageId} with its version, {toolVersion} for this dotnet hardslice. Restore it: the HardSlice rules come from this package.");
             return false;
         }
 
         if (!string.Equals(versions[0], toolVersion, StringComparison.OrdinalIgnoreCase))
         {
             error.WriteLine(
-                $"error: {PackagesFile} references {PackageId} {versions[0]}, but dotnet hardslice is version {toolVersion}. "
+                $"error: {ReferenceFile} references {PackageId} {versions[0]}, but dotnet hardslice is version {toolVersion}. "
                 + $"The tool and the analyzers must have the same version: set the 'hardslice.tool' entry of {Solution.ToolManifest} "
-                + $"and the {PackageId} reference of {PackagesFile} to the same version, then run 'dotnet tool restore'.");
+                + $"and the {PackageId} reference of {ReferenceFile} to the same version, then run 'dotnet tool restore'.");
+            return false;
+        }
+
+        if (Load(solution, PackagesFile, $"it holds the versions of the packages and imports {ReferenceFile}", error) is not { } packages)
+            return false;
+
+        var imported = packages.Root?.Elements()
+            .Any(element => element.Name.LocalName == "Import"
+                && ((string?)element.Attribute("Project"))?.Replace('\\', '/').EndsWith(ReferenceFile, StringComparison.OrdinalIgnoreCase) == true)
+            ?? false;
+        if (!imported)
+        {
+            error.WriteLine(
+                $"error: {PackagesFile} does not import {ReferenceFile}, which references {PackageId}: no project would receive the HardSlice rules. "
+                + $"Add back <Import Project=\"$(MSBuildThisFileDirectory){ReferenceFile}\" /> to {PackagesFile}, as the template generated it.");
             return false;
         }
 
         return true;
+    }
+
+    // Writes which projects of the solution did not receive the analyzers of this version at their last restore, or returns true.
+    // Read after a restore: a GlobalPackageReference removed or changed in Directory.Packages.props, a project that excludes the
+    // assets of the package or another Directory.Packages.props in a folder of the project builds without any HardSlice rule,
+    // and no diagnostic can say so.
+    public static bool Received(Solution solution, IReadOnlyList<string> projects, string toolVersion, TextWriter error)
+    {
+        var failures = projects
+            .Select(project => (Project: project, Reason: NotReceived(solution, project, toolVersion)))
+            .Where(result => result.Reason is not null)
+            .ToArray();
+        if (failures.Length == 0)
+            return true;
+
+        foreach (var (project, reason) in failures)
+            error.WriteLine($"error: {project} does not receive {PackageId} {toolVersion}: {reason}.");
+        error.WriteLine(
+            $"error: a project without {PackageId} builds without the HardSlice rules. {ReferenceFile}, imported by {PackagesFile}, references it "
+            + $"for every project: keep the import, and remove what removes or changes the reference, such as a GlobalPackageReference "
+            + $"or PackageReference of {PackageId} with Remove, Update, a Version or ExcludeAssets, or a {PackagesFile} in a folder of the project.");
+        return false;
+    }
+
+    private static string? NotReceived(Solution solution, string project, string toolVersion)
+    {
+        var assets = Path.Combine(Path.GetDirectoryName(Path.Combine(solution.Root, project))!, AssetsFile);
+        if (!File.Exists(assets))
+            return $"it has no {AssetsFile}, which tells what its restore brought";
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(assets));
+            var root = document.RootElement;
+            if (!root.TryGetProperty("project", out var spec) || !spec.TryGetProperty("frameworks", out var frameworks) || frameworks.ValueKind != JsonValueKind.Object)
+                return $"its {AssetsFile} lists no target framework";
+
+            foreach (var framework in frameworks.EnumerateObject())
+            {
+                var dependency = framework.Value.TryGetProperty("dependencies", out var dependencies) && dependencies.ValueKind == JsonValueKind.Object
+                    ? dependencies.EnumerateObject().FirstOrDefault(entry => string.Equals(entry.Name, PackageId, StringComparison.OrdinalIgnoreCase))
+                    : default;
+                if (dependency.Value.ValueKind != JsonValueKind.Object)
+                    return $"it does not reference it for {framework.Name}";
+
+                // The analyzers are the assets of the package, its build files give them the analysis mode: a reference that leaves
+                // either out brings no rule. Without include, NuGet brings every asset.
+                if (dependency.Value.TryGetProperty("include", out var include) && !IncludesAnalyzers(include.GetString()))
+                    return $"its reference for {framework.Name} leaves out the analyzers or the build files of the package (include: {include.GetString()})";
+            }
+
+            // The version of the reference comes from Directory.HardSlice.props, unless something overrides it.
+            var restored = root.TryGetProperty("libraries", out var libraries) && libraries.ValueKind == JsonValueKind.Object
+                ? libraries.EnumerateObject().Select(library => library.Name)
+                    .Where(name => name.StartsWith(PackageId + "/", StringComparison.OrdinalIgnoreCase))
+                    .Select(name => name[(PackageId.Length + 1)..])
+                    .ToArray()
+                : [];
+            if (restored.Contains(toolVersion, StringComparer.OrdinalIgnoreCase))
+                return null;
+            return restored.Length == 0 ? "its restore did not bring it" : $"its restore brought version {string.Join(", ", restored)}";
+        }
+        catch (JsonException)
+        {
+            return $"its {AssetsFile} is not valid JSON";
+        }
+    }
+
+    private static bool IncludesAnalyzers(string? include)
+    {
+        var assets = (include ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return assets.Contains("All", StringComparer.OrdinalIgnoreCase)
+            || (assets.Contains("Analyzers", StringComparer.OrdinalIgnoreCase) && assets.Contains("Build", StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static XDocument? Load(Solution solution, string file, string purpose, TextWriter error)
+    {
+        var path = Path.Combine(solution.Root, file);
+        if (!File.Exists(path))
+        {
+            error.WriteLine($"error: {file} was not found in '{solution.Root}': {purpose}.");
+            return null;
+        }
+
+        try
+        {
+            return XDocument.Load(path);
+        }
+        catch (XmlException exception)
+        {
+            error.WriteLine($"error: {file} is not valid XML: {exception.Message}");
+            return null;
+        }
     }
 }

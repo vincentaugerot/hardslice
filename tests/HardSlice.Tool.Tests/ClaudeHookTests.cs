@@ -91,7 +91,7 @@ public sealed class ClaudeHookTests : IDisposable
     [InlineData("Directory.Build.props", "Directory.Build.props")]
     [InlineData("tests/Demo.Tests/Directory.Build.props", "Directory.Build.props")]
     [InlineData("Directory.Build.targets", "Directory.Build.targets")]
-    [InlineData("Directory.Packages.props", "Directory.Packages.props")]
+    [InlineData("Directory.HardSlice.props", "Directory.HardSlice.props")]
     [InlineData(".config/dotnet-tools.json", ".config/dotnet-tools.json")]
     [InlineData("scripts/check.sh", "scripts/")]
     [InlineData("scripts/check.ps1", "scripts/")]
@@ -143,6 +143,10 @@ public sealed class ClaudeHookTests : IDisposable
     [InlineData("src/Demo/.config/dotnet-tools.json")]
     [InlineData(".github/workflows/deploy.yml")]
     [InlineData("/home/dev/Other/scripts/check.sh")]
+    // PB-060: the application owns its packages. Only Directory.HardSlice.props, which it imports, holds HardSlice.Analyzers.
+    [InlineData("Directory.Packages.props")]
+    [InlineData("src/Demo/Demo.csproj")]
+    [InlineData("src/Demo/Directory.HardSlice.props")]
     public void A_file_that_only_looks_like_a_protected_one_is_not_refused(string file)
     {
         var path = file.StartsWith('/') ? file : $"{_solution.Root}/{file}";

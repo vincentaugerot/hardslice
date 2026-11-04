@@ -9,7 +9,7 @@ internal static class RestoreState
     private const string AssetsFile = "obj/project.assets.json";
 
     // The files of the root that every restore reads, besides the project files.
-    private static readonly string[] RootFiles = ["Directory.Packages.props", "Directory.Build.props", "Directory.Build.targets", "nuget.config"];
+    private static readonly string[] RootFiles = ["Directory.Packages.props", "Directory.HardSlice.props", "Directory.Build.props", "Directory.Build.targets", "nuget.config"];
 
     // Why a restore is needed, or null when every project of the solution has an assets file newer than what it was restored from.
     // A restore with nothing to change does not rewrite the assets files: after a change to a root file that changes no package,

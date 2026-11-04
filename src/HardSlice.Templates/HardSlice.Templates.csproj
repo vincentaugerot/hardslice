@@ -36,7 +36,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <VersionedTemplateFile Include="content/hardslice-api/Directory.Packages.props;content/hardslice-api/.config/dotnet-tools.json" />
+    <VersionedTemplateFile Include="content/hardslice-api/Directory.HardSlice.props;content/hardslice-api/.config/dotnet-tools.json" />
     <Content Remove="@(VersionedTemplateFile)" />
   </ItemGroup>
 

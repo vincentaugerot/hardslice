@@ -84,6 +84,7 @@ public sealed class CopilotHookTests : IDisposable
     [InlineData("src/Demo/.globalconfig", ".globalconfig")]
     [InlineData("Directory.Build.rsp", "Directory.Build.rsp")]
     [InlineData(".agents/skills/add-slice/SKILL.md", ".agents/")]
+    [InlineData("Directory.HardSlice.props", "Directory.HardSlice.props")]
     public void The_edit_of_a_protected_file_is_denied_with_the_reason(string file, string entry)
     {
         var runner = new FakeRunner();
@@ -107,6 +108,22 @@ public sealed class CopilotHookTests : IDisposable
         var runner = new FakeRunner();
 
         var (exitCode, output, error) = Hook("preToolUse", _hook.Payload(fixture), runner);
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldBeEmpty();
+        output.ShouldBeEmpty();
+        error.ShouldBeEmpty();
+    }
+
+    // PB-060: the application owns Directory.Packages.props and its project files, where it adds its own packages.
+    [Theory]
+    [InlineData("Directory.Packages.props")]
+    [InlineData("src/Demo/Demo.csproj")]
+    public void The_edit_of_the_packages_of_the_application_is_left_to_Copilot(string file)
+    {
+        var runner = new FakeRunner();
+
+        var (exitCode, output, error) = Hook("preToolUse", WithPath("copilot/preToolUse.edit.json", $"{_hook.Root}/{file}"), runner);
 
         exitCode.ShouldBe(0);
         runner.Commands.ShouldBeEmpty();

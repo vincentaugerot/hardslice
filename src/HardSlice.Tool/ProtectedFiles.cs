@@ -11,12 +11,14 @@ internal static class ProtectedFiles
     // MSBuild every Directory.Build.rsp of the folder it builds and its parents, whose properties, such as RunAnalyzers=false,
     // are global: no project file can set them back.
     private static readonly string[] AnyFolderFiles =
-        [".editorconfig", ".globalconfig", "Directory.Build.props", "Directory.Build.targets", "Directory.Build.rsp", "Directory.Packages.props"];
+        [".editorconfig", ".globalconfig", "Directory.Build.props", "Directory.Build.targets", "Directory.Build.rsp"];
 
+    // Directory.HardSlice.props references HardSlice.Analyzers for every project, through Directory.Packages.props, which the
+    // application owns for its own packages: check fails when the import is gone or a project no longer receives the package.
     // Directory.Solution.props and .targets are imported by the build of the .slnx, and nuget.config chooses where
     // HardSlice.Analyzers and the tool are restored from.
     private static readonly string[] RootFiles =
-        ["hardslice.json", ".config/dotnet-tools.json", ".github/workflows/hardslice.yml", "Directory.Solution.props", "Directory.Solution.targets", "nuget.config"];
+        ["hardslice.json", "Directory.HardSlice.props", ".config/dotnet-tools.json", ".github/workflows/hardslice.yml", "Directory.Solution.props", "Directory.Solution.targets", "nuget.config"];
 
     // The protected entries as AGENTS.md and the instruction files name them, for the solution of the given name.
     public static IReadOnlyList<string> Entries(string solutionName) =>

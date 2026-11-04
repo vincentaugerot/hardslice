@@ -80,6 +80,7 @@ public sealed class CodexHookTests : IDisposable
     [InlineData("*** Add File: {root}/src/Demo/.globalconfig", "src/Demo/.globalconfig", ".globalconfig")]
     [InlineData("*** Add File: {root}/Directory.Build.rsp", "Directory.Build.rsp", "Directory.Build.rsp")]
     [InlineData("*** Add File: {root}/.agents/skills/add-slice/SKILL.md", ".agents/skills/add-slice/SKILL.md", ".agents/")]
+    [InlineData("*** Update File: {root}/Directory.HardSlice.props", "Directory.HardSlice.props", "Directory.HardSlice.props")]
     public void A_patch_that_touches_a_protected_file_is_refused_with_the_reason(string header, string file, string entry)
     {
         var runner = new FakeRunner();
@@ -100,6 +101,21 @@ public sealed class CodexHookTests : IDisposable
         var runner = new FakeRunner();
 
         var (exitCode, output, error) = Hook("PreToolUse", _hook.Payload("codex/PreToolUse.apply_patch.json"), runner);
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldBeEmpty();
+        output.ShouldBeEmpty();
+        error.ShouldBeEmpty();
+    }
+
+    // PB-060: the application owns Directory.Packages.props and its project files, where it adds its own packages.
+    [Fact]
+    public void A_patch_that_adds_a_package_of_the_application_is_allowed()
+    {
+        var runner = new FakeRunner();
+        var patch = Patch($"*** Update File: {_hook.Root}/Directory.Packages.props", "@@", $"*** Update File: {_hook.Root}/src/Demo/Demo.csproj", "@@");
+
+        var (exitCode, output, error) = Hook("PreToolUse", WithPatch("codex/PreToolUse.apply_patch.json", patch), runner);
 
         exitCode.ShouldBe(0);
         runner.Commands.ShouldBeEmpty();
