@@ -12,7 +12,7 @@ dotnet build --no-restore
 dotnet test --no-build
 ```
 
-`dotnet test` needs a Docker-compatible container runtime. A change to the template, the item templates, the analyzers or the tool also runs the probes of its area from `scripts/test-template.sh`, on a solution generated from the local packages. The full scenario runs in CI.
+`dotnet test` needs a Docker-compatible container runtime. A change to the template, the item templates, the analyzers or the tool also runs the groups of its area from `scripts/test-template.sh`, with `--only`, as the table of [CONTRIBUTING.md](CONTRIBUTING.md) maps them: `scripts/test-template.sh --only sample-rules,blank-rules` for a rule. Do not run the full scenario on your machine, which takes about an hour: push the commits to a branch `ci/<ticket>` and wait for its CI, which runs every group in parallel, then push them to `main`. A failed group is fixed, then run again alone.
 
 ## Do not break
 

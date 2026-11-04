@@ -3827,6 +3827,33 @@ scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/pa
 dotnet hardslice upgrade, sur un clone jetable de Ghostline
 ```
 
+### PB-089 : Vérifier un changement par groupes de `scripts/test-template.sh`, et lancer les groupes en parallèle dans la CI
+
+Statut : terminé le 04/11/2026. Le scénario complet, lancé sans argument, est inchangé : mêmes sondes, même ordre. Vérifié sur la branche `ci/pb-089` : chacun des neuf groupes passe seul, sur un runner neuf, et la CI dure 10 min au lieu de 23 (le plus long, `sample-items`, 9 min 45 s, puis `sample-rules`, 6 min). Un premier passage a échoué sur quatre groupes, tous sur `RecurringCommandTests` (le test instable de PB-087 et PB-088), et vert avec sa correction de PB-088.
+
+**Constat**
+
+PB-088, six fichiers modifiés, a pris près de deux heures, dont un quart de travail. Le scénario complet de `scripts/test-template.sh` prend 23 min sur un runner GitHub et environ 1 h sur la machine de développement, 2,7 fois plus lente (4 cœurs partagés avec d'autres agents). Ce sont environ 110 passages du check, en séquence, dans un seul fichier de 5 800 lignes : rien ne permet d'en lancer une partie, sauf extraire les fonctions avec awk. Le passage a été relancé trois fois depuis le début : coupé par un redémarrage de l'agent, puis arrêté sur un test instable, puis relancé après sa correction.
+
+**Résultat observable**
+
+`scripts/test-template.sh --list` liste les groupes du scénario. `--only <groupe>[,<groupe>...]` lance ceux de la zone d'un changement, chacun sur la solution qu'il demande, ou reprend après un échec sans relancer ce qui est passé. La CI lance un job par groupe, en parallèle, sur `main`, sur toute branche `ci/<nom>` et sur les pull requests.
+
+**Périmètre**
+
+- Neuf groupes : `sample`, `sample-rules`, `sample-hooks`, `sample-items`, `blank`, `blank-rules`, `blank-items`, `names`, `upgrade`. Chaque bloc du script devient une fonction, appelée dans l'ordre d'aujourd'hui. Un groupe lancé sans le premier groupe de sa solution construit d'abord cette solution (`check.sh --build`). Codes de sortie : 0, 1, et 2 pour un argument inconnu.
+- `ci.yml` : la liste des groupes est lue dans `--list`, un groupe ajouté a donc son job sans changer le workflow. `release.yml` lance toujours le scénario complet, en un seul job.
+- `CONTRIBUTING.md` : la table des groupes à lancer selon la zone du changement. `AGENTS.md` : les groupes de sa zone en local, jamais le scénario complet, et la branche `ci/<ticket>` avant `main`.
+- Hors périmètre, pour un ticket suivant : semer les violations indépendantes d'un groupe de règles dans un seul build, et ne garder `check.ps1` que sur les sondes propres au lanceur (modes, codes de sortie, prérequis).
+
+**Acceptation**
+
+```text
+scripts/test-template.sh --list
+scripts/test-template.sh --only <groupe>, pour chaque groupe, sur un checkout neuf : les jobs template de la CI
+scripts/test-template.sh, sans argument : le job template de release.yml
+```
+
 ### Définition de fini
 
 L'incrément est terminé lorsque PB-064 à PB-088 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-088. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).

@@ -1,9 +1,11 @@
 name: CI
 
+# A branch ci/<name> runs the whole CI before its commits reach main, without a pull request (CONTRIBUTING.md, "Verify").
 on:
   push:
-    branches: [main]
+    branches: [main, "ci/**"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,10 +39,31 @@ jobs:
       - name: Test
         run: dotnet test --no-build
 
-  # Separate job: a fresh runner and checkout, without the build job's outputs or any NuGet cache,
-  # so the template scenario cannot depend on state left by a previous build. It also runs the path of docs/getting-started.md.
-  template:
+  # The groups of scripts/test-template.sh, as --list prints them: a new group gets its job without changing this workflow.
+  template-groups:
     runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.list.outputs.groups }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: List the groups of the template scenario
+        id: list
+        run: echo "groups=$(scripts/test-template.sh --list | cut -d ' ' -f 1 | jq --raw-input --slurp --compact-output 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+
+  # Separate jobs: a fresh runner and checkout, without the build job's outputs or any NuGet cache,
+  # so the template scenario cannot depend on state left by a previous build. It also runs the path of docs/getting-started.md.
+  # One job per group, in parallel: each group packs the packages and generates its solutions itself. The release runs them all in one job.
+  template:
+    needs: template-groups
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.template-groups.outputs.groups) }}
+    name: template (${{ matrix.group }})
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -53,8 +76,8 @@ jobs:
           global-json-file: global.json
           cache: false
 
-      - name: Test template from a clean checkout
-        run: scripts/test-template.sh
+      - name: Test the group ${{ matrix.group }} of the template from a clean checkout
+        run: scripts/test-template.sh --only "${{ matrix.group }}"
 
   # Separate job for the same reason: each fixture of demos/agent-fix/ must keep producing exactly its diagnostic on the current
   # template, verify must keep rejecting each known workaround, and the reference correction of each rule must pass it; each

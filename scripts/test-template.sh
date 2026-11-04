@@ -59,6 +59,59 @@
 # the repository.
 set -euo pipefail
 
+# The scenario runs in named groups, in the order of --list. Without argument it runs them all, as CI and the release do.
+# --only <group>[,<group>...] runs those groups alone, to verify a change in its area or to resume after a failure: the packages
+# are packed and Demo generated as for the full run, a group of Blank generates Blank, and a group run without the first group
+# of its solution (sample or blank) builds that solution first. Each group stays valid alone: CI runs them as parallel jobs.
+# Exit codes: 0 the groups passed, 1 a probe failed, 2 a wrong argument.
+list_groups() {
+  cat <<'GROUPS'
+sample        Demo, with the sample: both check scripts, the pinned tool, the migrations, the getting started path, the mediator, the container prerequisite, the HardSlice files, the packages of the application, the isolation of the integration tests and the folders of Shared
+sample-rules  Demo: a seeded violation of each rule fails both check scripts, then hardslice.json and the analysis modes
+sample-hooks  Demo: the modes of the check scripts, the hooks of Claude Code, Codex and Copilot CLI, the restore after an edit, the pre-commit hook and the generated CI
+sample-items  Demo: every item template through its refusals, its registration, its TODO(hardslice): tests and its reference completion
+blank         Blank, without the sample: no trace of Bookings, both check scripts, the migrations, the getting started path and the tests of the foundation
+blank-rules   Blank: each rule still fails both check scripts on the first slice, aggregate and event of the empty application
+blank-items   Blank: a first module, then the item templates in it
+names         Acme.Rooms and my-app: one safe form of the name everywhere, a module and a command slice, HS016
+upgrade       dotnet hardslice upgrade from the template of an earlier commit, without the sample and with it (needs the history)
+GROUPS
+}
+
+only=""
+if [[ $# -eq 1 && "$1" == --list ]]; then
+  list_groups
+  exit 0
+elif [[ $# -eq 2 && "$1" == --only && -n "$2" ]]; then
+  only="$2"
+  known_groups=",$(list_groups | cut -d ' ' -f 1 | paste -sd ,),"
+  for group in ${only//,/ }; do
+    if [[ "$known_groups" != *",$group,"* ]]; then
+      echo "error: unknown group '$group'. The groups are: $(list_groups | cut -d ' ' -f 1 | paste -sd ' ')." >&2
+      exit 2
+    fi
+  done
+elif [[ $# -ne 0 ]]; then
+  echo "error: scripts/test-template.sh takes no argument, --list, or --only <group>[,<group>...]. Unknown arguments: '$*'." >&2
+  exit 2
+fi
+
+# Whether the group <group> runs: every group without --only.
+selected() {
+  [[ -z "$only" || ",$only," == *",$1,"* ]]
+}
+
+# Whether one of the groups <group>... runs.
+selected_any() {
+  local group
+  for group in "$@"; do
+    if selected "$group"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/hardslice-template.XXXXXX")"
 postgres_container=""
@@ -276,6 +329,8 @@ run_documented_path() {
   echo "    $body"
 }
 
+# Group sample: the solution as generated, its check scripts, its tools and the getting started path.
+group_sample_checks() {
 # The check scripts are run from another directory: they must locate the solution themselves.
 # The documented 'bash scripts/check.sh' form works without the executable bit, which a clone may lose.
 echo "==> Verifying the generated solution with scripts/check.sh"
@@ -435,6 +490,7 @@ if ! printf '%s\n' "$check_output" | grep -Fq "$container_prerequisite"; then
   echo "error: scripts/check.ps1 failed without naming the container runtime prerequisite." >&2
   exit 1
 fi
+}
 
 
 # dotnet test colors its report on a CI runner, even with its output captured: "failed <test>" there reads ESC[31mfailed ESC[m <test>.
@@ -491,9 +547,27 @@ expect_failure() {
   echo "    $diagnostic"
 }
 
+# Runs the architecture tests alone: the probe slice is registered nowhere, so its tests only need to exist.
+expect_architecture_tests_pass() {
+  local description="$1"
+  local configuration="${2:-Debug}"
+  local check_output
+
+  if ! check_output="$(
+    cd "$app"
+    dotnet build "$app_name.slnx" --configuration "$configuration" 2>&1 &&
+      dotnet test --project "tests/$app_name.ArchitectureTests/$app_name.ArchitectureTests.csproj" --configuration "$configuration" --no-build 2>&1
+  )"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: the architecture tests failed with $description." >&2
+    exit 1
+  fi
+}
 app_src="$app/src/$app_name"
 domain_project="$app/src/$app_name.Domain/$app_name.Domain.csproj"
 
+# Group sample-rules, first part: the rules of the architecture tests and of the tests of a slice.
+group_sample_rules_1() {
 echo "==> Checking inherited domain dependencies used only by an assembly attribute"
 cp "$app/Directory.Build.targets" "$app/Directory.Build.original.targets"
 cat > "$app/Directory.Build.targets" <<EOF
@@ -823,23 +897,6 @@ EOF
 expect_failure "HS014: command handler 'PurgeArchivedBookingsHandler' in slice 'Bookings/PurgeArchivedBookings' has no test .* Fix: add an integration test that sends 'PurgeArchivedBookingsCommand' in '[^']*' and asserts its success, and a failure of the domain when one can happen. A command without parameters has no validator nor invalid request." "docs/rules/HS014.md" "a command handler without parameters nor tests" check.sh
 rm -r "$app_src/Features/Bookings/PurgeArchivedBookings" "$app/tests/$app_name.Tests/Features/Bookings/PurgeArchivedBookings"
 
-# Runs the architecture tests alone: the probe slice is registered nowhere, so its tests only need to exist.
-expect_architecture_tests_pass() {
-  local description="$1"
-  local configuration="${2:-Debug}"
-  local check_output
-
-  if ! check_output="$(
-    cd "$app"
-    dotnet build "$app_name.slnx" --configuration "$configuration" 2>&1 &&
-      dotnet test --project "tests/$app_name.ArchitectureTests/$app_name.ArchitectureTests.csproj" --configuration "$configuration" --no-build 2>&1
-  )"; then
-    printf '%s\n' "$check_output" >&2
-    echo "error: the architecture tests failed with $description." >&2
-    exit 1
-  fi
-}
-
 echo "==> Checking that HS014 and HS018 accept the tests of a slice in either test project"
 mkdir -p "$app/tests/$app_name.IntegrationTests/Features/Bookings/ArchiveBooking"
 # Only this test project defines the extra symbol. Neither the unit nor architecture project does.
@@ -1003,6 +1060,7 @@ public sealed class ConfirmBookngTests
 EOF
 expect_failure "HS018: test folder 'tests/$app_name.Tests/Features/Bookings/ConfirmBookng/' has no slice" "docs/rules/HS018.md" "a test folder without its slice" check.sh check.ps1
 rm -r "$app/tests/$app_name.Tests/Features/Bookings/ConfirmBookng"
+}
 
 # Seeds a domain type of module <module> without contract, mapped by its module: the analyzer of the web project reports HS902.
 probe_unclassified_entity() {
@@ -5022,6 +5080,8 @@ probe_event_template() {
   mv "$work/Program-event.backup" "$app_src/Program.cs"
 }
 
+# Group sample-rules, second part: HS003 to HS011.
+group_sample_rules_2() {
 echo "==> Checking that HS003 fails both check scripts on an endpoint that receives AppDbContext"
 probe_endpoint_database_access Bookings
 
@@ -5058,7 +5118,10 @@ probe_system_clock Bookings
 
 echo "==> Checking that HS011 fails both check scripts on a domain type that blocks on a task"
 probe_blocking_call Bookings
+}
 
+# Group sample-hooks: the modes of the check scripts, the hooks of the agents, the pre-commit hook and the generated CI.
+group_sample_hooks() {
 echo "==> Checking the modes of both check scripts: arguments, --build and the TODO(hardslice): markers"
 probe_check_modes Bookings "src/$app_name/Features/Bookings/ConfirmBooking/ConfirmBooking.cs" "tests/$app_name.IntegrationTests/Features/Bookings/ConfirmBooking/ConfirmBookingTests.cs"
 
@@ -5076,7 +5139,10 @@ probe_analyzer_settings_hooks
 
 echo "==> Checking the pre-commit hook and the CI of $app_name in a git repository: a commit that breaks a rule refused, a compliant one accepted, protected files"
 probe_pre_commit_and_ci Bookings
+}
 
+# Group sample-rules, last part: HS000, HS901, HS902, hardslice.json and the analysis modes.
+group_sample_rules_3() {
 echo "==> Checking that HS000 fails both check scripts on suppressions without justification, in a slice, the domain and a test project"
 probe_suppression_justification Bookings
 
@@ -5144,6 +5210,7 @@ for script in check.sh check.ps1; do
 done
 echo "    $unknown_mode"
 mv "$work/Directory.Build.props.backup" "$app/Directory.Build.props"
+}
 
 # The tool verifies the rules of the analyzers it ships with: another analyzer version stops both scripts before the build.
 # PB-076: that error, and the one on a missing Directory.HardSlice.props, give the probable cause, a Fix: that runs dotnet hardslice
@@ -5203,11 +5270,16 @@ probe_hardslice_files() {
   restore_root_file Directory.HardSlice.props
 }
 
+# Group sample, second part: the HardSlice files, the packages of the application, the isolation of the integration tests and the folders of Shared.
+group_sample_solution() {
 probe_hardslice_files
 probe_application_packages
 probe_integration_isolation
 probe_shared_folders check.sh
+}
 
+# Group sample-items: every item template on the solution with the sample.
+group_sample_items() {
 # A second module beside Bookings, generated by dotnet new hardslice-module and registered in Program.cs: the check passes.
 probe_module_template Rooms MeetingRooms meeting-rooms
 
@@ -5244,13 +5316,15 @@ probe_private_fields Bookings
 probe_aggregate_concurrency Bookings
 probe_event_template Bookings BookingExtended BookingArchived Housekeeping Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
+}
 
-echo "==> $app_name OK: it restores the HardSlice packages $hardslice_version from the local feed, passes both check scripts and the getting started path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS000, HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule, while they pass with the HS019 suggestion in the compiler log"
 
 sample_name="$app_name"
 blank_name="Blank"
 blank="$work/$blank_name"
 
+# Generates the solution without the sample, for any of its groups, and checks it before any build.
+generate_blank() {
 # Same package and hive as $app_name: generate-app.sh installed the template in $work/template-hive, next to the local nuget.config.
 echo "==> Generating $blank_name with --no-sample"
 dotnet new hardslice-api --name "$blank_name" --output "$blank" --no-sample --debug:custom-hive "$work/template-hive"
@@ -5289,7 +5363,10 @@ while read -r cited_path; do
     exit 1
   fi
 done < <(grep -o '`\(src\|tests\|docs\|scripts\)/[^`<>[:space:]]*`' "$blank/AGENTS.md" | tr -d '`' | sort -u)
+}
 
+# Group blank: its check scripts, its migrations, the getting started path and the tests of the foundation.
+group_blank_checks() {
 echo "==> Verifying $blank_name with scripts/check.sh"
 bash "$blank/scripts/check.sh"
 
@@ -5328,15 +5405,24 @@ echo "==> Checking that each test project of $blank_name runs tests of the found
     fi
   done
 )
+}
 
+# The probes of the groups of Blank run on it.
+use_blank() {
 # The probes below run on the empty application: each rule must still find its target and fail both scripts.
 app_name="$blank_name"
 app="$blank"
 app_src="$app/src/$app_name"
 domain_project="$app/src/$app_name.Domain/$app_name.Domain.csproj"
+}
 
+# Group blank, second part: the isolation of its integration tests.
+group_blank_isolation() {
 probe_integration_isolation
+}
 
+# Group blank-rules: each rule on the first slice, aggregate and event of the empty application.
+group_blank_rules() {
 echo "==> Checking that the HS016 analyzer fails both check scripts on a cross-slice reference in $app_name"
 mkdir -p "$app_src/Features/Orders/PlaceOrder" "$app_src/Features/Orders/CancelOrder"
 cat > "$app_src/Features/Orders/PlaceOrder/PlaceOrder.cs" <<EOF
@@ -5508,7 +5594,10 @@ EOF
 expect_failure "HS001: 'Hs001Probe' in the domain uses 'IServiceCollection'" "docs/rules/HS001.md" "a domain type of $app_name using dependency injection" check.sh check.ps1
 mv "$work/domain-project.backup" "$domain_project"
 rm "$app/src/$app_name.Domain/Hs001Probe.cs"
+}
 
+# Group blank-items: a first module, then the item templates in it.
+group_blank_items() {
 # The first module of $app_name is generated by dotnet new hardslice-module, as "Adding a first module" of AGENTS.md says, and
 # registered in Program.cs with the lines it prints: dotnet new hardslice-command then adds its first command slice, and
 # hardslice-query its first query slices.
@@ -5549,6 +5638,7 @@ if [[ -e "$app_src/Features" ]]; then
   echo "error: removing the module Rooms of $app_name left src/$app_name/Features." >&2
   exit 1
 fi
+}
 
 # PB-052: dotnet new turns the name of the application into one safe namespace, <form>, which names every folder, project,
 # assembly and namespace; only the output folder keeps <name>. Generates <name> with the remaining options next to $sample_name,
@@ -5626,8 +5716,11 @@ EOF
   rm -r "$app_src/Features/$module/Hs016Probe"
 }
 
+# Group names: names that are not plain identifiers.
+group_names() {
 probe_application_name Acme.Rooms Acme.Rooms Rooms RenameRoom
 probe_application_name my-app my_app Guests RegisterGuest --no-sample
+}
 
 # PB-086: dotnet hardslice upgrade, from a solution that an earlier build of the template generated under the same version, as
 # Ghostline was: the template of commit a1d50f4 (PB-074), packed from its sources, before the HTTP answers moved from
@@ -5770,7 +5863,74 @@ probe_upgrade() {
   rm -rf "${fresh:?}"
 }
 
+# Group upgrade: dotnet hardslice upgrade, without the sample and with it.
+group_upgrade() {
 probe_upgrade Legacy --no-sample
 probe_upgrade LegacySample
+}
 
-echo "==> Template OK: $sample_name and $blank_name, generated with --no-sample, pass both check scripts and the getting started path, and seeded violations fail them in both; Acme.Rooms and my-app, generated as my_app, pass the check with a generated module and command slice, and fail it on HS016; Legacy and LegacySample, generated by an earlier template, pass it once upgraded with dotnet hardslice upgrade and merged"
+# The groups run in the order of the full scenario, each from the state the groups before it leave: they restore what their
+# probes change. A group run alone builds its solution first, as the first group of that solution would have.
+if [[ -n "$only" ]]; then
+  echo "==> Running the groups $only of the scenario"
+fi
+if selected_any sample-rules sample-hooks sample-items && ! selected sample; then
+  echo "==> Building $app_name for the groups $only"
+  bash "$app/scripts/check.sh" --build
+fi
+if selected sample; then
+  group_sample_checks
+fi
+if selected sample-rules; then
+  group_sample_rules_1
+  group_sample_rules_2
+fi
+if selected sample-hooks; then
+  group_sample_hooks
+fi
+if selected sample-rules; then
+  group_sample_rules_3
+fi
+if selected sample; then
+  group_sample_solution
+fi
+if selected sample-items; then
+  group_sample_items
+fi
+if [[ -z "$only" ]]; then
+  echo "==> $app_name OK: it restores the HardSlice packages $hardslice_version from the local feed, passes both check scripts and the getting started path, holds the v0.1 deliverables, sends its commands through its own mediator, and the scripts fail without a container runtime, on HS000, HS001, HS003, HS004, HS005, HS006, HS007, HS008, HS009, HS010, HS011, HS012, HS013, HS014, HS015, HS016, HS017, HS018, HS901 and HS902 with their rule docs, on a missing or invalid hardslice.json and its contracts (HS900), on an unknown analysis mode, and on another analyzer version than the one of dotnet hardslice, which explains every rule, while they pass with the HS019 suggestion in the compiler log"
+fi
+
+if selected_any blank blank-rules blank-items; then
+  generate_blank
+  if selected blank; then
+    group_blank_checks
+  fi
+  use_blank
+  if ! selected blank; then
+    echo "==> Building $app_name for the groups $only"
+    bash "$app/scripts/check.sh" --build
+  fi
+  if selected blank; then
+    group_blank_isolation
+  fi
+  if selected blank-rules; then
+    group_blank_rules
+  fi
+  if selected blank-items; then
+    group_blank_items
+  fi
+fi
+
+if selected names; then
+  group_names
+fi
+if selected upgrade; then
+  group_upgrade
+fi
+
+if [[ -z "$only" ]]; then
+  echo "==> Template OK: $sample_name and $blank_name, generated with --no-sample, pass both check scripts and the getting started path, and seeded violations fail them in both; Acme.Rooms and my-app, generated as my_app, pass the check with a generated module and command slice, and fail it on HS016; Legacy and LegacySample, generated by an earlier template, pass it once upgraded with dotnet hardslice upgrade and merged"
+else
+  echo "==> Groups $only OK"
+fi

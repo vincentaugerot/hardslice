@@ -57,7 +57,7 @@ jobs:
       - name: Test
         run: dotnet test --no-build
 
-  # The scenario of the CI template job, from the tag: it packs the three packages and runs docs/getting-started.md on them, with and without Bookings.
+  # The scenario of the CI template jobs, all its groups in one job from the tag: it packs the three packages and runs docs/getting-started.md on them, with and without Bookings.
   template:
     runs-on: ubuntu-latest
     steps:
