@@ -2386,7 +2386,7 @@ Le vérificateur passe sur les exécutions Claude Code consignées. Chaque exéc
 
 ### PB-051 : Publier la préversion `0.3.0-preview.1`
 
-Statut : en attente du feu vert du mainteneur, et de PB-080, qui revalide les paquets après PB-075 à PB-079 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` de PB-080, sur lequel les paquets ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
+Statut : en attente du feu vert du mainteneur, et de PB-080, qui revalide les paquets après PB-075 à PB-079 et PB-085 (les textes des diagnostics, des erreurs de l'outil et des réponses de ses hooks sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` de PB-080, sur lequel les paquets ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
 
 **Résultat observable**
 
@@ -2400,7 +2400,7 @@ Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org,
 
 **Dépendances**
 
-PB-034 à PB-050, PB-033, PB-052 à PB-080 (PB-079 seulement si son arbitrage le garde avant la publication).
+PB-034 à PB-050, PB-033, PB-052 à PB-080, PB-085.
 
 **Acceptation**
 
@@ -2904,7 +2904,7 @@ L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jo
 
 Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux. PB-075, ajouté le même jour à partir d'une entrée du 04/11/2026, change le texte d'un diagnostic après PB-074. PB-076, ajouté le même jour à partir de l'entrée « no path to bring a generated solution to a newer template », change le texte des erreurs de l'outil sur les fichiers HardSlice. PB-077, ajouté le même jour à partir de l'entrée « the build hook reports the files not yet edited of a planned change », change la réponse du hook après une édition. PB-078, ajouté le même jour à partir de l'entrée « the Stop hook relaunches the agent on a failure only a protected file can fix », change la réponse du hook de fin de tour quand la vérification s'arrête sur un fichier HardSlice protégé. Un ticket de revalidation des paquets les suit.
 
-Complété le 04/11/2026 par PB-079 à PB-086, tirés des six tâches encore ouvertes issues des entrées du 04/11/2026 (authentification dans `Shared` et réponses du middleware, endpoint protégé, service hébergé non périodique, condition de démarrage d'un job, migration qui convertit des lignes, mise à niveau d'une solution générée), et des entrées sans tâche qui leur sont liées. Leurs arbitrages sont proposés, à valider par le mainteneur avant toute implémentation (bloc suivant). PB-079 corrige avant PB-051 des textes que la préversion figerait sous une forme trompeuse. PB-080 revalide les paquets après PB-075 à PB-079, et PB-051 en dépend. PB-081 à PB-086 ajoutent sans rien corriger de figé : ils passent après PB-051 et forment l'incrément `0.3.0-preview.2`. L'entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » n'a pas de tâche et attend une décision du mainteneur (verrou gardé, une seule instance, ou jeton de concurrence sur `ObservedTrip`) : elle n'est pas découpée ici.
+Complété le 04/11/2026 par PB-079 à PB-086, tirés des six tâches encore ouvertes issues des entrées du 04/11/2026 (authentification dans `Shared` et réponses du middleware, endpoint protégé, service hébergé non périodique, condition de démarrage d'un job, migration qui convertit des lignes, mise à niveau d'une solution générée), et des entrées sans tâche qui leur sont liées. Leurs arbitrages sont validés par le mainteneur le 04/11/2026 (bloc suivant). PB-079 corrige avant PB-051 des textes que la préversion figerait sous une forme trompeuse. PB-085, une consigne de plus, est avancé avant PB-080 par décision du mainteneur : il rejoint la seule reconstruction des paquets sans purge de plus pour Ghostline. PB-080 revalide les paquets après PB-075 à PB-079 et PB-085, et PB-051 en dépend. PB-081 à PB-084 et PB-086 ajoutent sans rien corriger de figé : ils passent après PB-051 et forment l'incrément `0.3.0-preview.2`. L'entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » n'a pas de tâche et attend une décision du mainteneur (verrou gardé, une seule instance, ou jeton de concurrence sur `ObservedTrip`) : elle n'est pas découpée ici.
 
 ### Résultat attendu
 
@@ -2920,9 +2920,9 @@ Validés par le mainteneur le 04/11/2026 :
 - **La route par défaut reste tirée du nom de la slice.** Elle ne peut pas entrer en collision avec celle d'une autre slice du module, alors qu'un défaut à la REST donnerait le même `GET /{id:guid}` à deux requêtes par identifiant, une ambiguïté visible seulement à l'exécution. La skill `add-slice` demande de toujours passer `--route`, choisie d'après la ressource.
 - **Aucune compatibilité à garder.** Rien n'est publié avant ces tickets : un nom ou une forme générée peut changer sans précaution pour des solutions existantes (noms des DTO de PB-070 compris).
 
-### Arbitrages proposés le 04/11/2026, à valider par le mainteneur
+### Arbitrages validés le 04/11/2026
 
-Pour PB-079 à PB-086. Critère de placement : un ticket passe avant PB-051 s'il corrige un texte, un format ou un contrat que la préversion figerait sous une forme fausse ou trompeuse. Un ajout (option, template, consigne, commande) passe après : il arrive dans `0.3.0-preview.2`, et une solution générée en `0.3.0-preview.1` le reçoit par la mise à niveau de PB-086. Une version publiée sur NuGet.org ne se remplace jamais, mais chaque reconstruction sous la même version oblige Ghostline à purger ses caches et à refaire sa migration : les tickets d'avant PB-051 passent tous avant la seule reconstruction, celle de PB-080, nécessaire de toute façon puisque PB-075 à PB-078 n'ont pas reconstruit les paquets.
+Pour PB-079 à PB-086. Validés par le mainteneur le 04/11/2026 : les recommandations ci-dessous, avec deux écarts. PB-085 passe avant PB-080, donc avant PB-051 (point 6). PB-086 se limite à l'option B, la fusion à trois voies de l'option C étant différée en section 9 (point 7). Critère de placement : un ticket passe avant PB-051 s'il corrige un texte, un format ou un contrat que la préversion figerait sous une forme fausse ou trompeuse. Un ajout (option, template, consigne, commande) passe après : il arrive dans `0.3.0-preview.2`, et une solution générée en `0.3.0-preview.1` le reçoit par la mise à niveau de PB-086. Une version publiée sur NuGet.org ne se remplace jamais, mais chaque reconstruction sous la même version oblige Ghostline à purger ses caches et à refaire sa migration : les tickets d'avant PB-051 passent tous avant la seule reconstruction, celle de PB-080, nécessaire de toute façon puisque PB-075 à PB-078 n'ont pas reconstruit les paquets.
 
 1. **Dossier de `Shared` pour l'authentification (PB-079).** `hardslice.json` autorise `Messaging`, `Persistence` et `Behaviors`. Son format est figé par la publication, et sa valeur générée l'est en pratique : le fichier est protégé, et une solution générée en `0.3.0-preview.1` ne reçoit un dossier ajouté plus tard que par un mainteneur ou par la mise à niveau.
    - Option A : un quatrième dossier autorisé par défaut, `Http`, pour le pipeline HTTP. Il porte l'authentification, les politiques d'autorisation, la limitation de débit et CORS, et reçoit les réponses HTTP aux requêtes illisibles et aux erreurs, qui quittent `Behaviors` (`BadRequestExceptionHandler`, `ValidationExceptionHandler`, `DomainExceptionHandler`, `ExplicitOffsetJsonConverter`). `Behaviors` ne garde que le pipeline du médiateur. Le format de `hardslice.json` ne change pas, seule sa liste générée.
@@ -2958,16 +2958,18 @@ Pour PB-079 à PB-086. Critère de placement : un ticket passe avant PB-051 s'il
    - Option B : une skill `reshape-entity` (nouvelle forme du domaine, mapping, migration qui convertit dans les deux sens, délai de commande), ou une option `--reshape` de `hardslice-entity`.
    - Option C : deux sections de `add-aggregate`, qui porte déjà le mapping et la migration d'un agrégat : « Changing the shape of stored rows » et « Mapping private fields ». `AGENTS.md` y renvoie dans une phrase existante.
    - Recommandation : C. Après PB-051 : c'est une consigne de plus, et la skill actuelle n'est pas fausse. Comme PB-080 reconstruit les paquets de toute façon, le mainteneur peut l'avancer avant PB-051 sans purge de plus pour Ghostline, au prix d'un ticket de plus avant la publication.
+   - Décision du mainteneur : C, avancé avant PB-080. Le piège qu'il documente fait perdre des données, et il ne coûte aucune reconstruction de plus.
 7. **Périmètre de `dotnet hardslice upgrade` (PB-086).**
    - Option A : aucune commande. La consigne de PB-076 reste, et chaque changement de la disposition générée reçoit une nouvelle version, ce que la publication rend automatique.
    - Option B : `upgrade` réécrit les fichiers que le template possède (fichiers protégés, fiches des règles, skills, hooks, scripts, tests d'architecture) depuis une génération à la version de l'outil, sous le nom et la variante de la solution, et liste avec leur diff les fichiers que l'application possède et qui diffèrent, à fusionner à la main ou par l'agent.
    - Option C : B, plus une fusion à trois voies des fichiers que le template a générés et que l'application a changés (`AGENTS.md`, `Program.cs`, `AppFactory.cs`, projets, `Shared/`). La base est la génération du template à la version de la solution, restaurée depuis NuGet.org où elle ne change jamais, et un conflit reste marqué dans le fichier. Elle règle aussi l'entrée « AGENTS.md mixes the text of the template and the text of the application » sans marqueurs dans `AGENTS.md`.
    - Ce qui devrait passer avant PB-051 : rien, si `upgrade` lit la version de la solution dans `Directory.HardSlice.props`, protégé, et reçoit la variante (`--no-sample`) ou la déduit. Écrire la version et les options du template dans un fichier de la solution figerait un fichier de plus, et une entrée de plus de la liste protégée, pour une information que la commande peut lire ou demander.
    - Recommandation : C, après PB-051, dans `0.3.0-preview.2`. Le premier cas réel est le passage d'une solution `0.3.0-preview.1` à `0.3.0-preview.2`, et la base d'une fusion n'existe que pour une version publiée. Une solution générée par une construction locale non publiée, comme Ghostline aujourd'hui, se migre à la main.
+   - Décision du mainteneur : B d'abord, après PB-051. La réécriture des fichiers que le template possède et la liste avec diff des autres règlent l'essentiel d'une migration, sans restaurer de génération d'origine. La fusion à trois voies de C est différée (section 9), à arbitrer une fois B utilisé sur une vraie mise à niveau.
 
-Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactory, with no way to configure the instance it builds » par PB-082, « FakeTimeProvider does not say which timers wait on it » par PB-082 pour une commande planifiée (l'horloge générique reste différée avec le template d'un service non périodique), « AddRecurringCommand has no start condition, so a missing key fails every cycle » et « AppFactory also removes the hosted services that only check the configuration at start » par PB-083, « AGENTS.md mixes the text of the template and the text of the application » par PB-086.
+Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactory, with no way to configure the instance it builds » par PB-082, « FakeTimeProvider does not say which timers wait on it » par PB-082 pour une commande planifiée (l'horloge générique reste différée avec le template d'un service non périodique), « AddRecurringCommand has no start condition, so a missing key fails every cycle » et « AppFactory also removes the hosted services that only check the configuration at start » par PB-083, « AGENTS.md mixes the text of the template and the text of the application » par PB-086 en partie (le diff d'`AGENTS.md` est listé), et par la fusion différée en section 9 pour le reste.
 
-| Point | Ticket | Placement proposé | Raison |
+| Point | Ticket | Placement | Raison |
 |---|---|---|---|
 | Dossier `Shared/Http` | PB-079 | avant PB-051 | liste générée de `hardslice.json`, disposition de `Shared`, `HS017.md` et `AGENTS.md` figés sous une forme trompeuse |
 | Réponses du middleware | PB-079 | avant PB-051 | `HS015.md` figerait une affirmation fausse sur la signature |
@@ -2977,8 +2979,9 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | Heure quotidienne et reprises | PB-082 | après PB-051 | ajout au service générique, la consigne actuelle n'est pas fausse |
 | Condition de démarrage | PB-083 | après PB-051 | ajout, dépend de PB-082 |
 | HS006 sur les services hébergés | PB-084 | après PB-051 | nouveaux diagnostics, dépend de PB-083 |
-| Migrations et champs privés | PB-085 | après PB-051, avançable | consigne de plus, sans purge de plus si elle rejoint PB-080 |
-| `dotnet hardslice upgrade` | PB-086 | après PB-051 | la base de la fusion n'existe que pour une version publiée |
+| Migrations et champs privés | PB-085 | avant PB-080, donc avant PB-051 | décision du mainteneur : consigne contre une perte de données, sans purge de plus puisqu'elle rejoint PB-080 |
+| `dotnet hardslice upgrade` (option B) | PB-086 | après PB-051 | ajout d'une commande, la consigne de PB-076 suffit d'ici là |
+| Fusion à trois voies de `upgrade` | aucun | section 9 | la base de la fusion n'existe que pour une version publiée, à arbitrer après PB-086 |
 
 ### Critères communs à tous les tickets de l'incrément
 
@@ -3005,16 +3008,16 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | PB-076 (`Fix:` et `Doc:` des erreurs de l'outil) | PB-075 | aucun |
 | PB-077 (erreurs des fichiers édités d'abord) | PB-076 | aucun |
 | PB-078 (fin de tour sur un fichier HardSlice protégé) | PB-076, PB-077 | aucun |
-| PB-079 (`Shared/Http` et réponses du middleware) | PB-078, arbitrages 1 et 2 validés | aucun |
-| PB-080 (paquets revalidés) | PB-075 à PB-079 | aucun |
-| PB-081 (endpoint protégé, `--require`) | PB-051, PB-079, arbitrage 3 validé | PB-082, PB-085, PB-086 |
-| PB-082 (heure quotidienne et reprises) | PB-051, arbitrage 4 validé | PB-081, PB-085, PB-086 |
-| PB-083 (condition de démarrage) | PB-082, arbitrage 5 validé | PB-081, PB-085, PB-086 |
-| PB-084 (HS006 sur les services hébergés d'une slice) | PB-083 | PB-081, PB-085, PB-086 |
-| PB-085 (migrations qui convertissent des lignes) | PB-051, arbitrage 6 validé | PB-081 à PB-084, PB-086 |
-| PB-086 (`dotnet hardslice upgrade`) | PB-051, arbitrage 7 validé | PB-081 à PB-085 |
+| PB-079 (`Shared/Http` et réponses du middleware) | PB-078 | aucun |
+| PB-080 (paquets revalidés) | PB-075 à PB-079, PB-085 | aucun |
+| PB-081 (endpoint protégé, `--require`) | PB-051, PB-079 | PB-082, PB-086 |
+| PB-082 (heure quotidienne et reprises) | PB-051 | PB-081, PB-086 |
+| PB-083 (condition de démarrage) | PB-082 | PB-081, PB-086 |
+| PB-084 (HS006 sur les services hébergés d'une slice) | PB-083 | PB-081, PB-086 |
+| PB-085 (migrations qui convertissent des lignes) | PB-079 | aucun |
+| PB-086 (`dotnet hardslice upgrade`) | PB-051 | PB-081 à PB-084 |
 
-PB-051 dépend de PB-080, et de PB-079 si son arbitrage le garde avant la publication. Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros, PB-051 entre PB-080 et PB-081.
+PB-051 dépend de PB-080. Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, PB-051, puis PB-081 à PB-084 et PB-086 dans l'ordre des numéros.
 
 ### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
@@ -3462,7 +3465,7 @@ sondes probe_hardslice_files, probe_claude_hooks et probe_codex_and_copilot_hook
 
 ### PB-079 : Donner au pipeline HTTP son dossier de `Shared`, et dire ce que HS015 attend des réponses du middleware
 
-Statut : à valider (arbitrages 1 et 2). Avant PB-051 : la liste des dossiers que génère `hardslice.json`, la disposition de `Shared`, `HS017.md`, `HS015.md` et `AGENTS.md` sont figés par la publication, et Ghostline les a trouvés trompeurs. Reprend la tâche « dire où va l'authentification dans Shared et ce que HS015 attend des réponses du middleware ».
+Statut : prêt, arbitrages 1 et 2 validés le 04/11/2026. Avant PB-051 : la liste des dossiers que génère `hardslice.json`, la disposition de `Shared`, `HS017.md`, `HS015.md` et `AGENTS.md` sont figés par la publication, et Ghostline les a trouvés trompeurs. Reprend la tâche « dire où va l'authentification dans Shared et ce que HS015 attend des réponses du middleware ».
 
 **Résultat observable**
 
@@ -3496,18 +3499,18 @@ dotnet build --no-restore && dotnet test --no-build
 sondes du template d'application et des règles de scripts/test-template.sh, dans les deux variantes
 ```
 
-### PB-080 : Revalider les paquets 0.3.0-preview.1 après PB-075 à PB-079
+### PB-080 : Revalider les paquets 0.3.0-preview.1 après PB-075 à PB-079 et PB-085
 
-Statut : à valider. Dernier ticket avant PB-051, dont l'étiquette vise son commit. Nécessaire quel que soit l'arbitrage de PB-079 : PB-075 à PB-078 n'ont pas reconstruit les paquets. Si PB-079 passe après PB-051, ce ticket revalide les paquets après PB-075 à PB-078 seulement.
+Statut : prêt. Dernier ticket avant PB-051, dont l'étiquette vise son commit. Il passe après PB-079 et PB-085 : PB-075 à PB-079 et PB-085 n'ont pas reconstruit les paquets.
 
 **Résultat observable**
 
-Le parcours de PB-059 passe à nouveau sur les paquets construits après PB-075 à PB-079, et l'étiquette de PB-051 peut viser ce commit.
+Le parcours de PB-059 passe à nouveau sur les paquets construits après PB-075 à PB-079 et PB-085, et l'étiquette de PB-051 peut viser ce commit.
 
 **Périmètre**
 
-- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-075 à PB-079 ont changé (correctif de HS902 pour un objet valeur, `Fix:` et `Doc:` des erreurs de l'outil sur les fichiers HardSlice, erreurs des fichiers édités d'abord après une édition, fin de tour sur un fichier HardSlice protégé, dossier `Shared/Http` et réponses du middleware dans HS015). Chaque ticket y a écrit sa ligne : ce ticket vérifie que l'entrée dit ce que livre la version.
-- `README.md` et README des paquets : ce que PB-075 à PB-079 changent de ce qu'ils présentent (dossiers de `Shared`, erreurs de l'outil, réponses de ses hooks).
+- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-075 à PB-079 ont changé (correctif de HS902 pour un objet valeur, `Fix:` et `Doc:` des erreurs de l'outil sur les fichiers HardSlice, erreurs des fichiers édités d'abord après une édition, fin de tour sur un fichier HardSlice protégé, dossier `Shared/Http` et réponses du middleware dans HS015, migrations qui convertissent des lignes et mapping de champs privés dans `add-aggregate`). Chaque ticket y a écrit sa ligne : ce ticket vérifie que l'entrée dit ce que livre la version.
+- `README.md` et README des paquets : ce que PB-075 à PB-079 et PB-085 changent de ce qu'ils présentent (dossiers de `Shared`, erreurs de l'outil, réponses de ses hooks).
 - Passage complet de `scripts/test-template.sh` et de `scripts/verify-published.sh --source artifacts/packages` sur les paquets reconstruits.
 - Les paquets ne sont reconstruits qu'ici : Ghostline purge ses caches et refait sa migration sur ce commit seulement.
 - Statut de PB-051 : le commit que vise l'étiquette.
@@ -3523,7 +3526,7 @@ scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/pa
 
 ### PB-081 : Générer et tester un endpoint protégé avec `--require`
 
-Statut : à valider (arbitrage 3). Après PB-051, dans `0.3.0-preview.2` : une option, un client de test et une consigne s'ajoutent sans rien corriger de figé. Dépend de PB-079, qui dit où vont le schéma et la politique. Reprend la tâche « générer et tester un endpoint protégé (--require, client authentifié d'AppFactory, skill) ».
+Statut : prêt après PB-051, arbitrage 3 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : une option, un client de test et une consigne s'ajoutent sans rien corriger de figé. Dépend de PB-079, qui dit où vont le schéma et la politique. Reprend la tâche « générer et tester un endpoint protégé (--require, client authentifié d'AppFactory, skill) ».
 
 **Résultat observable**
 
@@ -3556,7 +3559,7 @@ sondes des templates d'éléments de scripts/test-template.sh
 
 ### PB-082 : Envoyer une commande à heure fixe, avec reprises, par le service des commandes récurrentes
 
-Statut : à valider (arbitrage 4). Après PB-051, dans `0.3.0-preview.2` : une surcharge du service générique et des options s'ajoutent, et la puce « Background work » d'`AGENTS.md` n'est pas fausse. Reprend la tâche « arbitrer et livrer un service hébergé non périodique (heure quotidienne, reprises) » et l'élément de la section 9 « Template d'un service hébergé non périodique », à arbitrer après PB-068. Reprend aussi les entrées sans tâche « RecurringCommandCycles takes a bare AppFactory, with no way to configure the instance it builds » et, pour une commande planifiée, « FakeTimeProvider does not say which timers wait on it ».
+Statut : prêt après PB-051, arbitrage 4 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : une surcharge du service générique et des options s'ajoutent, et la puce « Background work » d'`AGENTS.md` n'est pas fausse. Reprend la tâche « arbitrer et livrer un service hébergé non périodique (heure quotidienne, reprises) » et l'élément de la section 9 « Template d'un service hébergé non périodique », à arbitrer après PB-068. Reprend aussi les entrées sans tâche « RecurringCommandCycles takes a bare AppFactory, with no way to configure the instance it builds » et, pour une commande planifiée, « FakeTimeProvider does not say which timers wait on it ».
 
 **Résultat observable**
 
@@ -3595,7 +3598,7 @@ sondes du template d'application et des templates d'éléments de scripts/test-t
 
 ### PB-083 : Donner une condition de démarrage à une commande planifiée
 
-Statut : à valider (arbitrage 5). Après PB-051, dans `0.3.0-preview.2` : un paramètre facultatif, une ligne de journal et une consigne s'ajoutent. Dépend de PB-082, dont il étend le service générique. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la condition, et les entrées sans tâche « AddRecurringCommand has no start condition, so a missing key fails every cycle » et « AppFactory also removes the hosted services that only check the configuration at start ». La règle va à PB-084.
+Statut : prêt après PB-051, arbitrage 5 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : un paramètre facultatif, une ligne de journal et une consigne s'ajoutent. Dépend de PB-082, dont il étend le service générique. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la condition, et les entrées sans tâche « AddRecurringCommand has no start condition, so a missing key fails every cycle » et « AppFactory also removes the hosted services that only check the configuration at start ». La règle va à PB-084.
 
 **Résultat observable**
 
@@ -3629,7 +3632,7 @@ sondes du template d'application de scripts/test-template.sh, dans les deux vari
 
 ### PB-084 : Étendre HS006 aux services hébergés et aux conditions d'une slice
 
-Statut : à valider (arbitrage 5). Après PB-051, dans `0.3.0-preview.2` : l'extension ajoute des diagnostics sur du code accepté jusque-là, ce qu'une préversion suivante peut faire, et aucun texte figé n'est faux. Dépend de PB-083, pour que la règle accepte la lecture d'une condition sanctionnée. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la règle.
+Statut : prêt après PB-051, arbitrage 5 validé le 04/11/2026. Après PB-051, dans `0.3.0-preview.2` : l'extension ajoute des diagnostics sur du code accepté jusque-là, ce qu'une préversion suivante peut faire, et aucun texte figé n'est faux. Dépend de PB-083, pour que la règle accepte la lecture d'une condition sanctionnée. Reprend la tâche « condition de démarrage d'un job et règles HS003/HS006 sur les services hébergés d'une slice » pour la règle.
 
 **Résultat observable**
 
@@ -3662,7 +3665,7 @@ sondes des règles de scripts/test-template.sh
 
 ### PB-085 : Documenter une migration qui convertit des lignes existantes et le mapping de champs privés
 
-Statut : à valider (arbitrage 6). Après PB-051, dans `0.3.0-preview.2` : c'est une consigne de plus, et `add-aggregate` n'est pas faux. Le mainteneur peut l'avancer avant PB-080 sans purge de plus pour Ghostline. Reprend la tâche « documenter une migration qui convertit des lignes existantes et le mapping de champs privés », partie de l'entrée « no template nor skill to change the shape of a child entity » que PB-066 laisse ouverte.
+Statut : prêt, arbitrage 6 validé le 04/11/2026. Avancé avant PB-080 par décision du mainteneur, donc avant PB-051 : c'est une consigne de plus, mais elle protège d'une perte de données, et elle rejoint la reconstruction de PB-080 sans purge de plus pour Ghostline. Reprend la tâche « documenter une migration qui convertit des lignes existantes et le mapping de champs privés », partie de l'entrée « no template nor skill to change the shape of a child entity » que PB-066 laisse ouverte.
 
 **Résultat observable**
 
@@ -3693,11 +3696,11 @@ sondes des templates d'éléments de scripts/test-template.sh
 
 ### PB-086 : Mettre à niveau une solution générée avec `dotnet hardslice upgrade`
 
-Statut : à valider (arbitrage 7). Après PB-051, dans `0.3.0-preview.2` : la base de la fusion est la génération d'une version publiée, qui n'existe qu'après PB-051, et rien n'est à figer avant, puisque la version de la solution se lit dans `Directory.HardSlice.props`. Reprend la tâche « mettre à niveau une solution générée vers un template plus récent », dont PB-076 a repris le `Fix:` et le `Doc:` de l'erreur, et l'entrée sans tâche « AGENTS.md mixes the text of the template and the text of the application ».
+Statut : prêt après PB-051, arbitrage 7 validé le 04/11/2026 avec l'option B : aucune fusion à trois voies, différée en section 9. Après PB-051, dans `0.3.0-preview.2` : une commande s'ajoute, et la consigne de PB-076 suffit d'ici là. Reprend la tâche « mettre à niveau une solution générée vers un template plus récent », dont PB-076 a repris le `Fix:` et le `Doc:` de l'erreur, et en partie l'entrée sans tâche « AGENTS.md mixes the text of the template and the text of the application ».
 
 **Résultat observable**
 
-Dans une solution générée en `0.3.0-preview.1`, après la mise à jour de l'outil local, `dotnet hardslice upgrade` réécrit les fichiers que le template possède, fusionne ceux que l'application a changés à partir de leur génération d'origine, laisse les conflits marqués, et liste ce qu'il a fait. `dotnet hardslice check` passe ensuite, ou ne s'arrête que sur les conflits à résoudre.
+Dans une solution générée, après la mise à jour de l'outil local, `dotnet hardslice upgrade` réécrit les fichiers que le template possède depuis une génération à la version de l'outil, ajoute les fichiers nouveaux du template, et liste avec leur diff les fichiers que l'application possède et qui diffèrent de la nouvelle génération, à fusionner à la main ou par l'agent. `dotnet hardslice check` passe ensuite, ou ne s'arrête que sur ce qui reste à fusionner.
 
 **Constat**
 
@@ -3705,17 +3708,17 @@ Ghostline, entrées « no path to bring a generated solution to a newer template
 
 **Périmètre**
 
-- `dotnet hardslice upgrade` lit la version de départ dans `Directory.HardSlice.props`, le nom de la solution, et sa variante (`--no-sample`, passée ou déduite). Il génère, dans des dossiers temporaires et une ruche de templates isolée, le template à la version de départ, restauré depuis NuGet.org, et à la version de l'outil.
-- Fichiers que le template possède (liste de l'outil, à partir de `ProtectedFiles` : fichiers protégés, fiches des règles, skills, hooks, scripts, tests d'architecture) : réécrits depuis la nouvelle génération. Fichiers que le template a générés et que l'application a changés : fusion à trois voies, conflit laissé marqué. Fichier généré que l'application a supprimé : laissé supprimé et listé. Fichier nouveau du template : ajouté.
-- Sortie : les fichiers réécrits, fusionnés, en conflit, ajoutés et laissés, et des codes de sortie documentés comme ceux de `check` (PB-055), dont un pour les conflits.
+- `dotnet hardslice upgrade` lit le nom de la solution et sa variante (`--no-sample`, passée ou déduite), et génère le template à la version de l'outil dans un dossier temporaire et une ruche de templates isolée. Aucune génération de la version de départ n'est restaurée.
+- Fichiers que le template possède (liste de l'outil, à partir de `ProtectedFiles` : fichiers protégés, fiches des règles, skills, hooks, scripts, tests d'architecture) : réécrits depuis la nouvelle génération. Fichier nouveau du template : ajouté. Fichiers que l'application possède et qui diffèrent de la nouvelle génération : laissés tels quels et listés avec leur diff, sans distinguer un changement de l'application d'un changement du template.
+- Sortie : les fichiers réécrits, ajoutés et à fusionner, et des codes de sortie documentés comme ceux de `check` (PB-055), dont un pour « reste à fusionner ».
 - Refus sur un arbre git qui a des changements, pour que le diff de la mise à niveau se relise seul. La commande écrit des fichiers protégés : elle est lancée par un mainteneur, et le job `protected-files` de la CI générée garde le libellé `hardslice-approved`.
 - Le `Fix:` des erreurs de PB-076 et la section « When check stops on a HardSlice file » de `docs/getting-started.md` nomment la commande. README de `HardSlice.Tool`, `CHANGELOG.md`.
-- Hors périmètre : une solution générée par une construction locale non publiée, comme Ghostline aujourd'hui, dont la base n'est pas restaurable. Elle se migre à la main.
+- Hors périmètre : la fusion à trois voies des fichiers que l'application a changés (section 9).
 
 **Cas vérifiés**
 
-- Solution `0.3.0-preview.1` avec un module, une slice et un `AGENTS.md` complété par l'application : mise à niveau sans conflit, vérification verte, parties de l'application gardées dans `AGENTS.md`.
-- Même ligne changée par l'application et par le template : conflit marqué, code de sortie des conflits.
+- Solution générée à une version antérieure, avec un module, une slice et un `AGENTS.md` complété par l'application : fichiers du template réécrits, fichiers nouveaux ajoutés, `AGENTS.md` listé avec son diff et laissé tel quel.
+- Fichier protégé changé à la main dans la solution : réécrit, et listé comme tel.
 - Arbre git avec des changements : refus, rien d'écrit.
 - Les deux variantes.
 
@@ -3723,12 +3726,12 @@ Ghostline, entrées « no path to bring a generated solution to a newer template
 
 ```text
 dotnet build --no-restore && dotnet test --no-build
-sonde de mise à niveau de scripts/test-template.sh, depuis 0.3.0-preview.1 publiée sur NuGet.org
+sonde de mise à niveau de scripts/test-template.sh, depuis une solution générée par une version antérieure du template
 ```
 
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-080 sont satisfaits (PB-079 selon son arbitrage), que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur. PB-081 à PB-086, une fois leurs arbitrages validés, forment l'incrément `0.3.0-preview.2`, avec ses critères communs, sa revalidation des paquets et sa publication, à découper à ce moment.
+L'incrément est terminé lorsque PB-064 à PB-080 et PB-085 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur. PB-081 à PB-084 et PB-086, arbitrages validés, forment l'incrément `0.3.0-preview.2`, avec ses critères communs, sa revalidation des paquets et sa publication, à découper à ce moment.
 
 ## 8. Incréments suivants
 
@@ -3756,13 +3759,14 @@ L'incrément est terminé lorsque PB-064 à PB-080 sont satisfaits (PB-079 selon
 | SQL Server en option et orchestration Aspire (`--aspire`) | 8 |
 | Contrat de données de référence immuables hors `IEntity` (HS902), vu par Ghostline | à arbitrer après PB-066 |
 | Effet externe d'une commande après la validation de sa transaction (boîte d'envoi), vu par Ghostline | à arbitrer après PB-063 |
-| Template d'un service hébergé que ne déclenche pas une horloge (consommer une file, par exemple), et horloge de test qui expose ses minuteries (`WaitingClock`, vu par Ghostline) | à arbitrer sur un cas réel, après PB-082 (arbitrage 4 proposé de la section 7 : l'heure quotidienne et les reprises passent par le service des commandes récurrentes) |
+| Template d'un service hébergé que ne déclenche pas une horloge (consommer une file, par exemple), et horloge de test qui expose ses minuteries (`WaitingClock`, vu par Ghostline) | à arbitrer sur un cas réel, après PB-082 (arbitrage 4 de la section 7 : l'heure quotidienne et les reprises passent par le service des commandes récurrentes) |
 | Aide d'écriture en masse et verrou consultatif dans `Shared/Persistence` | écarté par l'arbitrage de la section 7, documenté par PB-069 et PB-072 |
-| Règle qui exige qu'un endpoint d'écriture déclare son autorisation (`RequireAuthorization` ou `AllowAnonymous`), vue par Ghostline | à arbitrer après PB-081 (arbitrage 2 proposé) |
-| Skill `add-authorization` | écarté par l'arbitrage 3 proposé : la consigne va dans `add-slice` (PB-081) et `HS015.md` (PB-079) |
-| HS003 étendue, ou une nouvelle règle, pour les services hébergés d'une slice | écarté par l'arbitrage 5 proposé : HS006 étendue par PB-084 |
-| Skill `reshape-entity` ou option `--reshape` de `hardslice-entity` | écarté par l'arbitrage 6 proposé : documenté dans `add-aggregate` par PB-085 |
-| Version et options du template écrites dans la solution, marqueurs des parties de l'application dans `AGENTS.md` | écarté par l'arbitrage 7 proposé : `dotnet hardslice upgrade` les lit ou les demande, et fusionne à trois voies (PB-086) |
-| Mise à niveau d'une solution générée par une construction locale non publiée | écarté par l'arbitrage 7 proposé : la base de la fusion n'existe que pour une version publiée, une telle solution se migre à la main |
+| Règle qui exige qu'un endpoint d'écriture déclare son autorisation (`RequireAuthorization` ou `AllowAnonymous`), vue par Ghostline | à arbitrer après PB-081 (arbitrage 2) |
+| Skill `add-authorization` | écarté par l'arbitrage 3 : la consigne va dans `add-slice` (PB-081) et `HS015.md` (PB-079) |
+| HS003 étendue, ou une nouvelle règle, pour les services hébergés d'une slice | écarté par l'arbitrage 5 : HS006 étendue par PB-084 |
+| Skill `reshape-entity` ou option `--reshape` de `hardslice-entity` | écarté par l'arbitrage 6 : documenté dans `add-aggregate` par PB-085 |
+| Version et options du template écrites dans la solution, marqueurs des parties de l'application dans `AGENTS.md` | écarté par l'arbitrage 7 : `dotnet hardslice upgrade` lit ou demande ce dont il a besoin (PB-086) |
+| Fusion à trois voies de `dotnet hardslice upgrade` (base : génération de la version de départ, restaurée depuis NuGet.org), qui garderait sans diff manuel les parties de l'application dans `AGENTS.md` | à arbitrer après PB-086, sur une vraie mise à niveau (arbitrage 7 : option B d'abord) |
+| Mise à niveau d'une solution générée par une construction locale non publiée | couverte par PB-086 (option B), qui ne restaure aucune génération de départ |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
