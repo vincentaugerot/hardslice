@@ -737,6 +737,71 @@ public sealed class TemplatePackageTests
         addSlice.ShouldContain("change `Route` in the generated tests");
     }
 
+    // PB-063: a command without parameters has no validator (HS013) nor invalid request, and a command handler may read from outside
+    // through the services of its module, but an effect that a rollback must cancel has no mechanism in the solution yet.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_how_a_command_without_parameters_is_tested_and_what_a_command_handler_may_do_outside(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = string.Join('\n', AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample));
+        var addSlice = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-slice", "SKILL.md"));
+
+        agents.ShouldContain("an invalid request included for a command with parameters.");
+        agents.ShouldContain("The tests of a command without parameters cover a failure of the domain, or its success, instead");
+        agents.ShouldContain("A command without parameters, an empty record, has none: never an empty validator;");
+        agents.ShouldContain("A command handler may read from outside, such as a download or a file, through services its module registers, such as `IHttpClientFactory`");
+        agents.ShouldContain("An effect it has outside survives a rollback, so it must stay harmless then");
+        agents.ShouldContain("has no mechanism in this solution yet: tell the user instead of writing it.");
+        addSlice.ShouldContain("- command without parameters, such as an import that reads its source from the configuration: declare it as an empty record");
+        addSlice.ShouldContain("delete the validator, its unit tests `<Slice>ValidatorTests.cs` and the integration test of the invalid command");
+        addSlice.ShouldContain("A command without parameters has no invalid request: its integration tests assert its success, and a failure of the domain");
+        addSlice.ShouldContain("- command that reads from outside, such as a download or a file: the handler injects what it needs, registered in `Add<Module>Module`");
+        addSlice.ShouldContain("has no mechanism in this solution yet: stop and tell the user instead of writing it");
+    }
+
+    // PB-063: outside the code blocks that quote a diagnostic, every instruction of the agent kit that asks for an invalid request or
+    // for validator tests says which commands it concerns. HS013 is about commands with parameters only, and says so once.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_kit_never_asks_a_command_without_parameters_for_a_validator_or_an_invalid_request(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var request = new Regex(@"invalid (request|command|one)|validator tests|tests of its validator", RegexOptions.IgnoreCase);
+        var guidance = new List<(string File, string[] Lines)>
+        {
+            ("AGENTS.md", AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample)),
+            ("docs/rules/HS014.md", File.ReadAllLines(Path.Combine(templateRoot, "docs", "rules", "HS014.md"))),
+            ("docs/rules/HS018.md", File.ReadAllLines(Path.Combine(templateRoot, "docs", "rules", "HS018.md"))),
+        };
+        guidance.AddRange(Directory.EnumerateFiles(Path.Combine(templateRoot, ".claude", "skills"), "SKILL.md", SearchOption.AllDirectories)
+            .Select(skill => (Path.GetRelativePath(templateRoot, skill), File.ReadAllLines(skill))));
+
+        guidance
+            .SelectMany(file => OutsideCodeBlocks(file.Lines).Where(line => request.IsMatch(line) && !line.Contains("parameters", StringComparison.Ordinal))
+                .Select(line => $"{file.File}: {line.Trim()}"))
+            .ShouldBeEmpty("These instructions ask every command for a validator or an invalid request, which a command without parameters has not.");
+
+        var hs013 = File.ReadAllText(Path.Combine(templateRoot, "docs", "rules", "HS013.md"));
+        hs013.ShouldContain("has no input to check and needs no validator: an empty one is a forbidden workaround. "
+            + "Its tests cover a failure of the domain, or its success, instead of an invalid request.");
+        hs013.ShouldNotContain("required by the slice tests");
+    }
+
+    private static IEnumerable<string> OutsideCodeBlocks(IEnumerable<string> lines)
+    {
+        var inBlock = false;
+        foreach (var line in lines)
+        {
+            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+                inBlock = !inBlock;
+            else if (!inBlock)
+                yield return line;
+        }
+    }
+
     // PB-056: dotnet new does not keep the executable bit of a packed file: the template sets it back on the scripts it ships,
     // except on Windows, where Git for Windows runs the hook without it.
     [Fact]

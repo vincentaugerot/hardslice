@@ -2863,6 +2863,8 @@ sondes du template d'application de scripts/test-template.sh, dans les deux vari
 
 ### PB-063 : Dire dans le kit agents ce que fait une commande sans paramètre et ce qu'un command handler peut faire au dehors
 
+Statut : terminé le 04/11/2026. `AGENTS.md` le dit dans des paragraphes existants (149 lignes sans l'exemple, comme avant) : une commande sans paramètre est un record vide, sans validateur, et ses tests couvrent un échec du domaine, ou son succès, à la place de la requête invalide. Un command handler lit au dehors par des services enregistrés dans son module (`IHttpClientFactory`, les options du module). Un effet qu'il produit au dehors reste sans conséquence après un rollback, et un effet que le rollback doit annuler (un e-mail, un paiement) est signalé à l'utilisateur. `add-slice` détaille ce qu'il faut retirer de la slice générée en attendant PB-064, et où enregistrer ces services. Les fiches HS013, HS014 et HS018 et le message de HS014 ne demandent ni validateur ni requête invalide à une commande sans paramètre.
+
 **Résultat observable**
 
 Le kit agents ne demande plus ce qu'une règle interdit, et dit ce qu'un command handler peut faire hors de sa transaction.

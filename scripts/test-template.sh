@@ -788,7 +788,32 @@ internal static class ArchiveBookingFixture
     internal static readonly Guid BookingId = Guid.NewGuid();
 }
 EOF
-expect_failure "HS014: command handler 'ArchiveBookingHandler' in slice 'Bookings/ArchiveBooking' has no test" "docs/rules/HS014.md" "a command handler without tests" check.sh check.ps1
+expect_failure "HS014: command handler 'ArchiveBookingHandler' in slice 'Bookings/ArchiveBooking' has no test .* Fix: add an integration test that sends 'ArchiveBookingCommand', an invalid one included, in '[^']*', and the unit tests of its validator in" "docs/rules/HS014.md" "a command handler without tests" check.sh check.ps1
+
+# PB-063: a command without parameters has no validator (HS013) nor invalid request, and the fix of HS014 asks for neither.
+echo "==> Checking that HS014 asks a command without parameters for no validator nor invalid request"
+mkdir -p "$app_src/Features/Bookings/PurgeArchivedBookings" "$app/tests/$app_name.Tests/Features/Bookings/PurgeArchivedBookings"
+cat > "$app_src/Features/Bookings/PurgeArchivedBookings/PurgeArchivedBookings.cs" <<EOF
+using $app_name.Shared.Messaging;
+
+namespace $app_name.Features.Bookings.PurgeArchivedBookings;
+
+public sealed record PurgeArchivedBookingsCommand : ICommand<int>;
+
+internal sealed class PurgeArchivedBookingsHandler : IRequestHandler<PurgeArchivedBookingsCommand, int>
+{
+    public Task<int> Handle(PurgeArchivedBookingsCommand command, CancellationToken cancellationToken) => Task.FromResult(0);
+}
+
+internal static class PurgeArchivedBookingsEndpoint;
+EOF
+cat > "$app/tests/$app_name.Tests/Features/Bookings/PurgeArchivedBookings/PurgeArchivedBookingsFixture.cs" <<EOF
+namespace $app_name.Tests.Features.Bookings.PurgeArchivedBookings;
+
+internal static class PurgeArchivedBookingsFixture;
+EOF
+expect_failure "HS014: command handler 'PurgeArchivedBookingsHandler' in slice 'Bookings/PurgeArchivedBookings' has no test .* Fix: add an integration test that sends 'PurgeArchivedBookingsCommand' in '[^']*' and asserts its success, and a failure of the domain when one can happen. A command without parameters has no validator nor invalid request." "docs/rules/HS014.md" "a command handler without parameters nor tests" check.sh
+rm -r "$app_src/Features/Bookings/PurgeArchivedBookings" "$app/tests/$app_name.Tests/Features/Bookings/PurgeArchivedBookings"
 
 # Runs the architecture tests alone: the probe slice is registered nowhere, so its tests only need to exist.
 expect_architecture_tests_pass() {

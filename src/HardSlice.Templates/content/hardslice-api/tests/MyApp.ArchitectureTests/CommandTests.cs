@@ -40,8 +40,12 @@ public sealed class CommandTests
             where !Tests.HasTestsIn(folder, recursive: location.Slice is not null)
             select $"HS014: command handler '{Name(handler)}' {location.Describe()} has no test in {Tests.Describe(folder)}. "
                 + "Every command handler has at least one test at the path of its slice. "
-                + $"Fix: add an integration test that sends '{Name(command)}', an invalid one included, in '{TestSources.PathOf(Tests.IntegrationTests, folder)}', "
-                + $"and the unit tests of its validator in '{TestSources.PathOf(Tests.UnitTests, folder)}'. Skill: add-slice. Doc: 'docs/rules/HS014.md'.");
+                + (HasParameters(command)
+                    ? $"Fix: add an integration test that sends '{Name(command)}', an invalid one included, in '{TestSources.PathOf(Tests.IntegrationTests, folder)}', "
+                        + $"and the unit tests of its validator in '{TestSources.PathOf(Tests.UnitTests, folder)}'. "
+                    : $"Fix: add an integration test that sends '{Name(command)}' in '{TestSources.PathOf(Tests.IntegrationTests, folder)}' "
+                        + "and asserts its success, and a failure of the domain when one can happen. A command without parameters has no validator nor invalid request. ")
+                + "Skill: add-slice. Doc: 'docs/rules/HS014.md'.");
     }
 
     [Fact]
@@ -74,6 +78,9 @@ public sealed class CommandTests
 
         return ns.Replace('.', '/');
     }
+
+    // A command without parameters has no validator (HS013), so its tests send no invalid request. A type parameter may carry any input.
+    private static bool HasParameters(Type command) => command.IsGenericParameter || RequestTypes.ParametersOf(command).Count > 0;
 
     // A handler generic over its command names the type parameter: 'TCommand'.
     private static string Name(Type type) => type.IsGenericParameter ? type.Name : Application.DisplayName(ReferencedType.From(type));
