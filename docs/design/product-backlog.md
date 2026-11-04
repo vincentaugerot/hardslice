@@ -1628,7 +1628,7 @@ L'incrément est terminé lorsque PB-018 à PB-033 sont satisfaits et que les jo
 
 ## 5. Incrément 4 terminé : Boucle agent v0.3
 
-Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-059) terminée.
+Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-063) et les retours de Ghostline de la section 7 (PB-064 à PB-074) terminés.
 
 ### Résultat attendu
 
@@ -1679,7 +1679,7 @@ Décisions du mainteneur du 31/10/2026, reportées dans la [spécification](spec
 | PB-048 (pre-commit et CI générée) | PB-045 | PB-042 à PB-047 |
 | PB-049 (boucles E2E par règle) | PB-041, PB-044, PB-046 | PB-047, PB-048 |
 | PB-050 (scénario agent complet) | PB-043, PB-044, PB-046 | PB-049 |
-| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-059 (section 6) | aucun |
+| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-074 (sections 6 et 7) | aucun |
 
 ```text
 PB-034 état des CLI ────────────┬─ PB-042 instructions ──────────────┐
@@ -2392,13 +2392,13 @@ Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org,
 
 **Périmètre**
 
-- Étiquette `v0.3.0-preview.1` posée sur le commit de `main` qui termine PB-059, après le feu vert du mainteneur.
+- Étiquette `v0.3.0-preview.1` posée sur le commit de `main` qui termine PB-074, après le feu vert du mainteneur.
 - Workflow de publication de PB-033, avec le job de contrôle étendu par PB-059 aux templates d'éléments.
 - GitHub Release de la version, avec les notes de `CHANGELOG.md` (PB-058).
 
 **Dépendances**
 
-PB-034 à PB-050, PB-033, PB-052 à PB-059.
+PB-034 à PB-050, PB-033, PB-052 à PB-074.
 
 **Acceptation**
 
@@ -2421,7 +2421,7 @@ L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jo
 
 Statut : découpé le 03/11/2026 à partir d'une revue complète du dépôt avant publication (code, template, kit agents, outil, CI, documentation), arbitrages validés par le mainteneur le même jour. Une version publiée sur NuGet.org ne se remplace jamais : ce qui est figé dans les paquets (code généré, kit agents, liste des fichiers protégés, textes des diagnostics, README des paquets, format de `hardslice.json`, codes de sortie) est corrigé avant PB-051.
 
-Complété le 04/11/2026 par PB-060 à PB-064, tirés des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : ce sont les défauts qui seraient figés dans les paquets. Les autres frictions vont à l'incrément suivant (section 7).
+Complété le 04/11/2026 par les frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : PB-060 à PB-063 ici, PB-064 à PB-073 dans la section 7, et PB-074 qui revalide les paquets après eux. Décision du mainteneur du 04/11/2026 : tout est fait avant PB-051, pour publier d'emblée la préversion la plus stable possible.
 
 ### Résultat attendu
 
@@ -2464,7 +2464,6 @@ Décisions du mainteneur du 03/11/2026 :
 | PB-061 (restauration avant build) | PB-059 | PB-060, PB-062, PB-063 |
 | PB-062 (secrets et tests d'intégration) | PB-059 | PB-060, PB-061, PB-063 |
 | PB-063 (kit agents, commandes) | PB-059 | PB-060 à PB-062 |
-| PB-064 (paquets revalidés) | PB-060 à PB-063 | aucun |
 
 Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
 
@@ -2887,35 +2886,13 @@ dotnet build --no-restore && dotnet test --no-build
 sondes « instructions des agents » de scripts/test-template.sh
 ```
 
-### PB-064 : Revalider les paquets 0.3.0-preview.1 après les retours de Ghostline
-
-**Résultat observable**
-
-Le parcours de PB-059 passe à nouveau sur les paquets construits après PB-060 à PB-063, et l'étiquette de PB-051 peut viser ce commit.
-
-**Périmètre**
-
-- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-060 à PB-063 ont changé (paquets de l'application, restauration, secrets et tests d'intégration, kit agents).
-- `CONTRIBUTING.md` : le symptôme d'un cache des outils locaux qui vise un dossier supprimé (`Run "dotnet tool restore"` juste après une restauration réussie) et sa correction (supprimer l'entrée concernée de `~/.dotnet/toolResolverCache/1/`). Ghostline l'a rencontré le 03/11/2026 (entrée « dotnet ef unusable after generating the solution ») : `scripts/test-template.sh` isole ce cache depuis PB-021, l'entrée venait d'une sonde lancée hors de `isolate_dotnet_cli_home` sur la machine du mainteneur. Un utilisateur des paquets publiés n'est pas concerné.
-- Passage complet de `scripts/test-template.sh` et de `scripts/verify-published.sh --source artifacts/packages`.
-- Statut de PB-051 : le commit que vise l'étiquette.
-
-**Acceptation**
-
-```text
-dotnet build --no-restore && dotnet test --no-build
-scripts/test-template.sh
-for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o artifacts/packages; done
-scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/packages
-```
-
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-052 à PB-064 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. PB-051 peut alors être lancé sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. La publication attend la section 7 : PB-051 est lancé après PB-074, sur le feu vert du mainteneur.
 
-## 7. Incrément suivant : Retours de Ghostline, 0.3.0-preview.2
+## 7. Incrément actif, suite : Retours de Ghostline avant la publication
 
-Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Les défauts qui seraient figés dans les paquets sont traités avant la publication, par PB-060 à PB-064. Les tickets de cet incrément commencent après PB-064 et ne changent pas les paquets `0.3.0-preview.1` : l'étiquette de PB-051 vise le commit de PB-064.
+Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux.
 
 ### Résultat attendu
 
@@ -2923,12 +2900,12 @@ Statut : découpé le 04/11/2026 à partir des frictions relevées en construisa
 
 ### Arbitrages de l'incrément
 
-Proposés le 04/11/2026, à valider par le mainteneur avant PB-068 :
+Proposés le 04/11/2026, à valider par le mainteneur avant PB-067 :
 
 - **Une commande interne n'a pas d'endpoint HTTP.** Un contrat de messagerie dédié (par exemple `IInternalCommand<TResponse>`) marque une commande envoyée seulement depuis l'application (tâche de fond, réaction à un événement externe). HS004 l'accepte sans endpoint et signale à la place une commande interne que rien n'envoie dans son module. Une commande ordinaire garde l'endpoint obligatoire.
 - **Le travail en arrière-plan passe par un service hébergé généré**, dans le dossier de la slice qu'il déclenche, qui envoie la commande par `IMediator` dans un scope par cycle, sur un `PeriodicTimer` construit avec `TimeProvider`. Aucun planificateur générique n'entre dans `Shared/`.
 - **Aucune aide d'écriture en masse ni de verrou consultatif n'entre dans `Shared/Persistence`.** Ces besoins sont documentés, pas générés.
-- **Les routes par défaut ne changent pas.** Les options de PB-066 s'ajoutent sans modifier ce que génèrent les commandes sans option.
+- **Les routes par défaut ne changent pas.** Les options de PB-065 s'ajoutent sans modifier ce que génèrent les commandes sans option.
 
 ### Critères communs à tous les tickets de l'incrément
 
@@ -2940,20 +2917,21 @@ Proposés le 04/11/2026, à valider par le mainteneur avant PB-068 :
 
 | Ticket | Dépend de | Peut avancer en parallèle de |
 |---|---|---|
-| PB-065 (commande sans paramètre) | PB-064 | PB-067, PB-070, PB-072 |
-| PB-066 (route et verbe) | PB-065 | PB-067, PB-070, PB-072 |
-| PB-067 (entités enfants) | PB-064 | PB-065, PB-066, PB-070 |
-| PB-068 (commande interne) | PB-065, arbitrage validé | PB-067, PB-070 |
-| PB-069 (tâche de fond) | PB-060, PB-062, PB-068 | PB-070 à PB-072 |
-| PB-070 (unicité sous concurrence) | PB-064 | PB-065 à PB-069 |
-| PB-071 (requête filtrée) | PB-066 | PB-069, PB-070 |
-| PB-072 (HS006 et règles du domaine) | PB-064 | PB-065 à PB-071 |
-| PB-073 (écritures en masse) | PB-067 | PB-072 |
-| PB-074 (`.gitkeep` des modules) | PB-067 | PB-073 |
+| PB-064 (commande sans paramètre) | PB-063 | PB-066, PB-069, PB-071 |
+| PB-065 (route et verbe) | PB-064 | PB-066, PB-069, PB-071 |
+| PB-066 (entités enfants) | PB-063 | PB-064, PB-065, PB-069 |
+| PB-067 (commande interne) | PB-064, arbitrage validé | PB-066, PB-069 |
+| PB-068 (tâche de fond) | PB-060, PB-062, PB-067 | PB-069 à PB-071 |
+| PB-069 (unicité sous concurrence) | PB-063 | PB-064 à PB-068 |
+| PB-070 (requête filtrée) | PB-065 | PB-068, PB-069 |
+| PB-071 (HS006 et règles du domaine) | PB-063 | PB-064 à PB-070 |
+| PB-072 (écritures en masse) | PB-066 | PB-071 |
+| PB-073 (`.gitkeep` des modules) | PB-066 | PB-072 |
+| PB-074 (paquets revalidés) | PB-060 à PB-073 | aucun |
 
 Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
 
-### PB-065 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
+### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
 **Résultat observable**
 
@@ -2982,7 +2960,7 @@ dotnet build --no-restore && dotnet test --no-build
 sondes des templates d'éléments de scripts/test-template.sh
 ```
 
-### PB-066 : Choisir la route et le verbe d'une slice à la génération
+### PB-065 : Choisir la route et le verbe d'une slice à la génération
 
 **Résultat observable**
 
@@ -3012,7 +2990,7 @@ dotnet build --no-restore && dotnet test --no-build
 sondes des templates d'éléments de scripts/test-template.sh
 ```
 
-### PB-067 : Générer une entité enfant avec `dotnet new hardslice-entity`
+### PB-066 : Générer une entité enfant avec `dotnet new hardslice-entity`
 
 **Résultat observable**
 
@@ -3052,7 +3030,7 @@ dotnet build --no-restore && dotnet test --no-build
 sondes des templates d'éléments de scripts/test-template.sh
 ```
 
-### PB-068 : Accepter une commande interne sans endpoint HTTP
+### PB-067 : Accepter une commande interne sans endpoint HTTP
 
 **Résultat observable**
 
@@ -3085,7 +3063,7 @@ scripts/measure-analyzers.sh
 sondes des templates d'éléments et des règles de scripts/test-template.sh
 ```
 
-### PB-069 : Générer une tâche de fond avec `dotnet new hardslice-job`
+### PB-068 : Générer une tâche de fond avec `dotnet new hardslice-job`
 
 **Résultat observable**
 
@@ -3097,7 +3075,7 @@ Ghostline, entrée « no template nor documentation for a background service » 
 
 **Périmètre**
 
-- Template `hardslice-job` : `--module`, `--name`, `--command` (une commande interne de PB-068 ou ordinaire du même module), `--every`. Le service, ses options liées par le module, son enregistrement, et un test d'intégration qui le garde (PB-062) et avance un `FakeTimeProvider` (PB-060).
+- Template `hardslice-job` : `--module`, `--name`, `--command` (une commande interne de PB-067 ou ordinaire du même module), `--every`. Le service, ses options liées par le module, son enregistrement, et un test d'intégration qui le garde (PB-062) et avance un `FakeTimeProvider` (PB-060).
 - Comportement généré : un scope et un envoi par cycle, exception d'un cycle journalisée sans arrêter l'hôte, configuration manquante journalisée en critique.
 - `AGENTS.md` : un paragraphe « Background work », sous 150 lignes en `--no-sample`, ou un renvoi vers la skill qui le porte.
 - HS010 : dans les espaces de noms de slice, `new PeriodicTimer(TimeSpan)` et `Task.Delay(TimeSpan)` sans `TimeProvider` produisent le diagnostic. Fiche, cas positifs et négatifs, seuils de `scripts/measure-analyzers.sh` tenus.
@@ -3117,7 +3095,7 @@ scripts/measure-analyzers.sh
 sondes des templates d'éléments et des règles de scripts/test-template.sh
 ```
 
-### PB-070 : Répondre 409 à deux commandes qui créent le même agrégat
+### PB-069 : Répondre 409 à deux commandes qui créent le même agrégat
 
 **Résultat observable**
 
@@ -3145,7 +3123,7 @@ dotnet build --no-restore && dotnet test --no-build
 sondes du template d'application de scripts/test-template.sh, dans les deux variantes
 ```
 
-### PB-071 : Générer une requête filtrée et des DTO nommés sans le verbe
+### PB-070 : Générer une requête filtrée et des DTO nommés sans le verbe
 
 **Résultat observable**
 
@@ -3175,7 +3153,7 @@ dotnet build --no-restore && dotnet test --no-build
 sondes des templates d'éléments de scripts/test-template.sh
 ```
 
-### PB-072 : Dire quand une règle du domaine peut composer une requête (HS006)
+### PB-071 : Dire quand une règle du domaine peut composer une requête (HS006)
 
 **Résultat observable**
 
@@ -3203,7 +3181,7 @@ Ghostline, entrée « HS006 and a rule of the domain that a query needs as SQL �
 dotnet build --no-restore && dotnet test --no-build
 ```
 
-### PB-073 : Documenter les écritures en masse d'une commande
+### PB-072 : Documenter les écritures en masse d'une commande
 
 **Résultat observable**
 
@@ -3216,7 +3194,7 @@ Ghostline, entrée « bulk import against "one transaction per command, never Sa
 **Périmètre**
 
 - `AGENTS.md` : l'exception « save early » couvre aussi l'enregistrement de la racine avant une écriture en masse de ses enfants, dans la même transaction. Le reste de la règle ne change pas.
-- `add-aggregate` (ou la skill qui porte PB-067) : une écriture en masse passe par la connexion et la transaction du `AppDbContext`, après l'enregistrement de la racine, avec des clés étrangères immédiates. Le délai de commande s'ajuste pour la commande concernée.
+- `add-aggregate` (ou la skill qui porte PB-066) : une écriture en masse passe par la connexion et la transaction du `AppDbContext`, après l'enregistrement de la racine, avec des clés étrangères immédiates. Le délai de commande s'ajuste pour la commande concernée.
 - Aucune aide générée (arbitrage de l'incrément). Une vérification par les analyseurs ou les tests d'architecture que l'exception reste admise, si l'une d'elles interdit aujourd'hui `SaveChangesAsync` dans un command handler.
 - `AGENTS.md` sous 150 lignes en `--no-sample`.
 
@@ -3227,7 +3205,7 @@ dotnet build --no-restore && dotnet test --no-build
 sondes « instructions des agents » de scripts/test-template.sh
 ```
 
-### PB-074 : Ne pas laisser les `.gitkeep` d'un module derrière ses premiers fichiers
+### PB-073 : Ne pas laisser les `.gitkeep` d'un module derrière ses premiers fichiers
 
 **Résultat observable**
 
@@ -3249,9 +3227,31 @@ dotnet build --no-restore && dotnet test --no-build
 sondes des templates d'éléments de scripts/test-template.sh
 ```
 
+### PB-074 : Revalider les paquets 0.3.0-preview.1 après les retours de Ghostline
+
+**Résultat observable**
+
+Le parcours de PB-059 passe à nouveau sur les paquets construits après PB-060 à PB-073, et l'étiquette de PB-051 peut viser ce commit.
+
+**Périmètre**
+
+- `CHANGELOG.md` : l'entrée `0.3.0-preview.1` dit ce que PB-060 à PB-073 ont changé (paquets de l'application, restauration, secrets et tests d'intégration, kit agents, options de `hardslice-command` et `hardslice-query`, `hardslice-entity`, `hardslice-job`, commande interne, HS004 et HS010 étendues, 409 sur une clé unique, consignes des cas avancés). `docs/item-templates.md`, `README.md` et les README des paquets listent les nouveaux templates.
+- `CONTRIBUTING.md` : le symptôme d'un cache des outils locaux qui vise un dossier supprimé (`Run "dotnet tool restore"` juste après une restauration réussie) et sa correction (supprimer l'entrée concernée de `~/.dotnet/toolResolverCache/1/`). Ghostline l'a rencontré le 03/11/2026 (entrée « dotnet ef unusable after generating the solution ») : `scripts/test-template.sh` isole ce cache depuis PB-021, l'entrée venait d'une sonde lancée hors de `isolate_dotnet_cli_home` sur la machine du mainteneur. Un utilisateur des paquets publiés n'est pas concerné.
+- Passage complet de `scripts/test-template.sh` et de `scripts/verify-published.sh --source artifacts/packages`.
+- Statut de PB-051 : le commit que vise l'étiquette.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh
+for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o artifacts/packages; done
+scripts/verify-published.sh 0.3.0-preview.1 "$(mktemp -d)" --source artifacts/packages
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-065 à PB-074 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que Ghostline a retiré les contournements que ces tickets rendent inutiles. La préversion `0.3.0-preview.2` est alors préparée et publiée sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-064 à PB-074 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur.
 
 ## 8. Incréments suivants
 
@@ -3277,8 +3277,8 @@ L'incrément est terminé lorsque PB-065 à PB-074 sont satisfaits, que les jobs
 | Benchmark couches contre slices | 7 |
 | Paquets stables et site public | 8 |
 | SQL Server en option et orchestration Aspire (`--aspire`) | 8 |
-| Contrat de données de référence immuables hors `IEntity` (HS902), vu par Ghostline | à arbitrer après PB-067 |
+| Contrat de données de référence immuables hors `IEntity` (HS902), vu par Ghostline | à arbitrer après PB-066 |
 | Effet externe d'une commande après la validation de sa transaction (boîte d'envoi), vu par Ghostline | à arbitrer après PB-063 |
-| Aide d'écriture en masse et verrou consultatif dans `Shared/Persistence` | écarté par l'arbitrage de la section 7, documenté par PB-070 et PB-073 |
+| Aide d'écriture en masse et verrou consultatif dans `Shared/Persistence` | écarté par l'arbitrage de la section 7, documenté par PB-069 et PB-072 |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
