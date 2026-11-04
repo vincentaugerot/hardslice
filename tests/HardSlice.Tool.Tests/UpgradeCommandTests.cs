@@ -81,7 +81,7 @@ public sealed class UpgradeCommandTests : IDisposable
             " ",
             "-- `Rooms`: the rooms of the building.",
             "+- None yet.",
-            "==> Upgrade done, 1 file left to merge or to review: 1 HardSlice file rewritten, 2 files added. Merge the files listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.",
+            "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 1 file left to merge or to review. Merge the files listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.",
         ]);
     }
 
@@ -239,7 +239,7 @@ public sealed class UpgradeCommandTests : IDisposable
         Lines(output).ShouldContain(
             "==> HardSlice files that the template does not generate, left as is (1). Delete each one that an older template generated, keep one that a maintainer added:");
         Lines(output).ShouldContain("    tests/Demo.ArchitectureTests/SliceTests.cs");
-        Lines(output)[^1].ShouldStartWith("==> Upgrade done, 1 file left to merge or to review: ");
+        Lines(output)[^1].ShouldContain(" added, 1 file left to merge or to review. Merge the files listed above");
     }
 
     // Ghostline: the template moved the HTTP answers from Shared/Behaviors to Shared/Http. The new file is added, and the old one,
@@ -261,7 +261,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "==> Files of the solution that the template may have moved, left as is (1). Each one has the name of a file added from the template: "
             + "merge what the application changed in it into the new file, then delete it:");
         lines.ShouldContain("    src/Demo/Shared/Behaviors/DomainExceptionHandler.cs -> src/Demo/Shared/Http/DomainExceptionHandler.cs");
-        lines[^1].ShouldStartWith("==> Upgrade done, 1 file left to merge or to review: ");
+        lines[^1].ShouldContain(" added, 1 file left to merge or to review. Merge the files listed above");
     }
 
     [Fact]

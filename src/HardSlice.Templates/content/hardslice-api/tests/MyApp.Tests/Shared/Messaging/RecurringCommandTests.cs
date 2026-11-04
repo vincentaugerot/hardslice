@@ -11,7 +11,8 @@ using MyApp.Shared.Messaging;
 namespace MyApp.Tests.Shared.Messaging;
 
 // AddRecurringCommand on a host of its own and a FakeTimeProvider: each cycle runs when the test advances the clock, without
-// any real wait.
+// any real wait. A test moves the clock only once Waits heard the instant the service waits for: the service arms its timer
+// first, so a clock moved earlier, while the service reads the time or ends a cycle, never pushes a cycle back nor changes a log.
 public sealed class RecurringCommandTests
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
@@ -22,15 +23,20 @@ public sealed class RecurringCommandTests
     public async Task Sends_a_new_command_at_each_interval_and_never_before_the_first_one()
     {
         var cycles = new Cycles();
-        using var host = await StartAsync(cycles);
+        var waits = new Waits();
+        using var host = await StartAsync(cycles, waits: waits);
         var clock = host.Services.GetRequiredService<FakeTimeProvider>();
 
+        (await waits.NextAsync()).ShouldBe(Start + Interval);
         clock.Advance(Interval - TimeSpan.FromMilliseconds(1));
         cycles.Sent.ShouldBe(0);
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        (await cycles.NextAsync()).ShouldBe(1);
 
-        for (var cycle = 1; cycle <= 3; cycle++)
+        for (var cycle = 2; cycle <= 3; cycle++)
         {
-            clock.Advance(cycle == 1 ? TimeSpan.FromMilliseconds(1) : Interval);
+            (await waits.NextAsync()).ShouldBe(Start + cycle * Interval);
+            clock.Advance(Interval);
             (await cycles.NextAsync()).ShouldBe(cycle);
         }
 
@@ -42,13 +48,15 @@ public sealed class RecurringCommandTests
     public async Task Logs_a_failed_cycle_and_runs_the_next_one_without_stopping_the_host()
     {
         var cycles = new Cycles(1);
+        var waits = new Waits();
         var logs = new RecordingLoggerProvider();
-        using var host = await StartAsync(cycles, logs: logs);
+        using var host = await StartAsync(cycles, waits: waits, logs: logs);
         var clock = host.Services.GetRequiredService<FakeTimeProvider>();
 
-        clock.Advance(Interval);
+        clock.SetUtcNow(await waits.NextAsync());
         (await cycles.NextAsync()).ShouldBe(1);
-        clock.Advance(Interval);
+        // The failure is logged before the service waits for the next cycle, with the delay until it.
+        clock.SetUtcNow(await waits.NextAsync());
         (await cycles.NextAsync()).ShouldBe(2);
 
         host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested.ShouldBeFalse();
@@ -62,11 +70,13 @@ public sealed class RecurringCommandTests
     public async Task Stops_with_the_host_while_it_waits_for_the_next_cycle()
     {
         var cycles = new Cycles();
-        using var host = await StartAsync(cycles);
+        var waits = new Waits();
+        using var host = await StartAsync(cycles, waits: waits);
         var service = host.Services.GetServices<IHostedService>().OfType<RecurringCommandService<Tick, int>>().ShouldHaveSingleItem();
         // After a first cycle, the service waits for the next tick: stopping before, it may never have run.
-        host.Services.GetRequiredService<FakeTimeProvider>().Advance(Interval);
+        host.Services.GetRequiredService<FakeTimeProvider>().SetUtcNow(await waits.NextAsync());
         (await cycles.NextAsync()).ShouldBe(1);
+        (await waits.NextAsync()).ShouldBe(Start + 2 * Interval);
 
         await host.StopAsync(TestContext.Current.CancellationToken);
 
@@ -77,9 +87,11 @@ public sealed class RecurringCommandTests
     public async Task Reads_its_interval_from_its_configuration_section()
     {
         var cycles = new Cycles();
-        using var host = await StartAsync(cycles, configuration: new() { ["Ticks:Interval"] = "00:01:00" });
+        var waits = new Waits();
+        using var host = await StartAsync(cycles, waits: waits, configuration: new() { ["Ticks:Interval"] = "00:01:00" });
         var clock = host.Services.GetRequiredService<FakeTimeProvider>();
 
+        (await waits.NextAsync()).ShouldBe(Start + TimeSpan.FromMinutes(1));
         clock.Advance(Interval);
         cycles.Sent.ShouldBe(0);
         clock.Advance(Interval);
@@ -201,18 +213,20 @@ public sealed class RecurringCommandTests
     public async Task Sends_a_command_that_an_endpoint_also_sends()
     {
         var cycles = new Cycles();
+        var waits = new Waits();
         var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
         var clock = new FakeTimeProvider(Start);
         builder.Services
             .AddSingleton<TimeProvider>(clock)
             .AddSingleton(cycles)
+            .AddSingleton<IRecurringCommandMonitor<Ping, int>>(waits)
             .AddMediator()
             .AddScoped<IRequestHandler<Ping, int>, PingHandler>()
             .AddRecurringCommand<Ping, int>("Pings", Interval);
         using var host = builder.Build();
         await host.StartAsync(TestContext.Current.CancellationToken);
 
-        clock.Advance(Interval);
+        clock.SetUtcNow(await waits.NextAsync());
 
         (await cycles.NextAsync()).ShouldBe(1);
         await host.StopAsync(TestContext.Current.CancellationToken);
@@ -522,8 +536,8 @@ public sealed class RecurringCommandTests
         public Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken) => Task.FromResult(gate.Check(cycle, scope));
     }
 
-    // The instants that the service waits for, in order, and the reasons of the cycles that a condition held back.
-    private sealed class Waits : IRecurringCommandMonitor<Tick, int>
+    // The instants that the service of Tick, or of Ping, waits for, in order, and the reasons of the cycles that a condition held back.
+    private sealed class Waits : IRecurringCommandMonitor<Tick, int>, IRecurringCommandMonitor<Ping, int>
     {
         private readonly Channel<DateTimeOffset> _waits = Channel.CreateUnbounded<DateTimeOffset>();
         private readonly Channel<string> _held = Channel.CreateUnbounded<string>();

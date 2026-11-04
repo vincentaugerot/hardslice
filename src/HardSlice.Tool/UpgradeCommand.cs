@@ -153,7 +153,7 @@ internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator g
         }
 
         output.WriteLine(
-            $"==> Upgrade done, {left} {(left == 1 ? "file" : "files")} left to merge or to review: {summary}. "
+            $"==> Upgrade done: {summary}, {left} {(left == 1 ? "file" : "files")} left to merge or to review. "
             + "Merge the files listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.");
         return MergeLeft;
     }

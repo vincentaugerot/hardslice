@@ -5759,7 +5759,7 @@ probe_upgrade() {
   app_git add --all
   app_git commit --quiet -m "Upgrade $name"
   run_upgrade
-  if [[ "$upgrade_status" != 3 || "$upgrade_output" != *"left to merge or to review: 0 HardSlice files rewritten, 0 files added."* ||
+  if [[ "$upgrade_status" != 3 || "$upgrade_output" != *"Upgrade done: 0 HardSlice files rewritten, 0 files added, "* ||
     "$(upgrade_list "Files of the application that differ from the template")" != "AGENTS.md"$'\n'"src/$name/Program.cs" ||
     -n "$(git -C "$app" status --porcelain)" ]]; then
     printf '%s\n' "$upgrade_output" >&2
