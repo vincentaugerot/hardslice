@@ -1628,7 +1628,7 @@ L'incrément est terminé lorsque PB-018 à PB-033 sont satisfaits et que les jo
 
 ## 5. Incrément 4 terminé : Boucle agent v0.3
 
-Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-063) et les retours de Ghostline de la section 7 (PB-064 à PB-075, et la revalidation des paquets qui les suit) terminés.
+Statut : découpé le 31/10/2026, arbitrages validés par le mainteneur le même jour. PB-034 à PB-050 terminés le 02/11/2026. PB-051 publie une seule préversion, `0.3.0-preview.1`, qui reprend PB-033, une fois la préparation de la section 6 (PB-052 à PB-063) et les retours de Ghostline de la section 7 (PB-064 à PB-076, et la revalidation des paquets qui les suit) terminés.
 
 ### Résultat attendu
 
@@ -1679,7 +1679,7 @@ Décisions du mainteneur du 31/10/2026, reportées dans la [spécification](spec
 | PB-048 (pre-commit et CI générée) | PB-045 | PB-042 à PB-047 |
 | PB-049 (boucles E2E par règle) | PB-041, PB-044, PB-046 | PB-047, PB-048 |
 | PB-050 (scénario agent complet) | PB-043, PB-044, PB-046 | PB-049 |
-| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-075 (sections 6 et 7) | aucun |
+| PB-051 (préversion `0.3.0-preview.1`) | PB-034 à PB-050, le workflow de PB-033, puis PB-052 à PB-076 (sections 6 et 7) | aucun |
 
 ```text
 PB-034 état des CLI ────────────┬─ PB-042 instructions ──────────────┐
@@ -2386,7 +2386,7 @@ Le vérificateur passe sur les exécutions Claude Code consignées. Chaque exéc
 
 ### PB-051 : Publier la préversion `0.3.0-preview.1`
 
-Statut : en attente du feu vert du mainteneur, et de la revalidation des paquets après PB-075 (les textes des diagnostics sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` du dernier ticket de revalidation des paquets, celui sur lequel ils ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
+Statut : en attente du feu vert du mainteneur, et de la revalidation des paquets après PB-075 et PB-076 (les textes des diagnostics et des erreurs de l'outil sont figés par la publication). L'étiquette `v0.3.0-preview.1` vise le commit de `main` du dernier ticket de revalidation des paquets, celui sur lequel ils ont été revalidés en dernier. PB-074 les a revalidés après PB-060 à PB-073.
 
 **Résultat observable**
 
@@ -2400,7 +2400,7 @@ Un utilisateur installe `HardSlice.Templates::0.3.0-preview.1` depuis NuGet.org,
 
 **Dépendances**
 
-PB-034 à PB-050, PB-033, PB-052 à PB-075.
+PB-034 à PB-050, PB-033, PB-052 à PB-076.
 
 **Acceptation**
 
@@ -2423,7 +2423,7 @@ L'incrément est terminé lorsque PB-034 à PB-051 sont satisfaits et que les jo
 
 Statut : découpé le 03/11/2026 à partir d'une revue complète du dépôt avant publication (code, template, kit agents, outil, CI, documentation), arbitrages validés par le mainteneur le même jour. Une version publiée sur NuGet.org ne se remplace jamais : ce qui est figé dans les paquets (code généré, kit agents, liste des fichiers protégés, textes des diagnostics, README des paquets, format de `hardslice.json`, codes de sortie) est corrigé avant PB-051.
 
-Complété le 04/11/2026 par les frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : PB-060 à PB-063 ici, PB-064 à PB-073 dans la section 7, PB-074 qui revalide les paquets après eux, et PB-075, qui change un diagnostic après cette revalidation. Décision du mainteneur du 04/11/2026 : tout est fait avant PB-051, pour publier d'emblée la préversion la plus stable possible.
+Complété le 04/11/2026 par les frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`) : PB-060 à PB-063 ici, PB-064 à PB-073 dans la section 7, PB-074 qui revalide les paquets après eux, PB-075, qui change un diagnostic après cette revalidation, et PB-076, qui change les erreurs de l'outil sur les fichiers HardSlice. Décision du mainteneur du 04/11/2026 : tout est fait avant PB-051, pour publier d'emblée la préversion la plus stable possible.
 
 ### Résultat attendu
 
@@ -2898,11 +2898,11 @@ sondes « instructions des agents » de scripts/test-template.sh
 
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. La publication attend la section 7 : PB-051 est lancé après PB-075 et le dernier ticket de revalidation des paquets, sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-052 à PB-063 sont satisfaits et que les jobs CI build, template, démonstration et performance sont verts sur `main`. La publication attend la section 7 : PB-051 est lancé après PB-076 et le dernier ticket de revalidation des paquets, sur le feu vert du mainteneur.
 
 ## 7. Incrément actif, suite : Retours de Ghostline avant la publication
 
-Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux. PB-075, ajouté le même jour à partir d'une entrée du 04/11/2026, change le texte d'un diagnostic après PB-074 : un ticket de revalidation le suit.
+Statut : découpé le 04/11/2026 à partir des frictions relevées en construisant Ghostline, la première application réelle sur la préversion (`ghostline/docs/hardslice-friction.md`, entrées du 03/11/2026), triées par pertinence et priorité. Décision du mainteneur du 04/11/2026 : ces tickets passent avant PB-051, pour que la première préversion publiée soit la plus stable possible (une version publiée sur NuGet.org ne se remplace jamais). Ils suivent PB-063, et PB-074 revalide les paquets après eux. PB-075, ajouté le même jour à partir d'une entrée du 04/11/2026, change le texte d'un diagnostic après PB-074. PB-076, ajouté le même jour à partir de l'entrée « no path to bring a generated solution to a newer template », change le texte des erreurs de l'outil sur les fichiers HardSlice. Un ticket de revalidation des paquets les suit.
 
 ### Résultat attendu
 
@@ -2940,6 +2940,7 @@ Validés par le mainteneur le 04/11/2026 :
 | PB-073 (`.gitkeep` des modules) | PB-066 | PB-072 |
 | PB-074 (paquets revalidés) | PB-060 à PB-073 | aucun |
 | PB-075 (HS902 et objets valeur) | PB-074 | aucun |
+| PB-076 (`Fix:` et `Doc:` des erreurs de l'outil) | PB-075 | aucun |
 
 Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre des numéros.
 
@@ -3312,9 +3313,34 @@ dotnet build --no-restore && dotnet test --no-build
 sonde HS902 de scripts/test-template.sh
 ```
 
+### PB-076 : Donner un `Fix:` et un `Doc:` aux erreurs de l'outil sur les fichiers HardSlice de la solution
+
+Statut : terminé le 04/11/2026. Ferme l'entrée « no path to bring a generated solution to a newer template » de `ghostline/docs/hardslice-friction.md` pour sa partie « misleading message ». La commande de mise à niveau reste dans la tâche « mettre à niveau une solution générée vers un template plus récent ». Chaque erreur de `AnalyzerVersion` (`Directory.HardSlice.props` absent, sans une seule `GlobalPackageReference` versionnée ou à une autre version, `Directory.Packages.props` absent ou sans l'import, un de ces deux fichiers en XML invalide, un projet qui n'a pas reçu `HardSlice.Analyzers`) et celle de `Solution.Find` sans `.config/dotnet-tools.json` portent désormais un `Fix:` et finissent par `Doc: https://github.com/vincentaugerot/hardslice/blob/v<version>/docs/getting-started.md#when-check-stops-on-a-hardslice-file`, à l'étiquette de la version de l'outil. Un fichier absent, ou à une autre version, dit sa cause probable : « The solution was probably generated by another template or another version of dotnet hardslice, whose HardSlice files differ », ou, pour une autre version, une autre version des templates ou l'une des deux versions changée seule. Le `Fix:` d'un fichier protégé dit qu'un mainteneur, puisque `Directory.HardSlice.props` et `.config/dotnet-tools.json` sont protégés, copie le fichier d'une solution générée à neuf par le même template dans un dossier temporaire, `dotnet new hardslice-api -n <nom de la solution> --no-sample` avec `HardSlice.Templates` à la version de l'outil, ou remet l'entrée `hardslice.tool` à la version de la solution puis lance `dotnet tool restore`. Celui de `Directory.Packages.props`, que l'application possède, dit de le reprendre de la même génération puis d'y remettre les versions des paquets de l'application. `docs/getting-started.md` a la section « When check stops on a HardSlice file » : les trois fichiers lus, la cause probable, les deux correctifs et qui les fait, et l'absence de commande de mise à niveau. Le README de `HardSlice.Tool` le dit. Tests qui échouaient avant (19 cas de `CheckCommandTests`) : les messages attendus d'une autre version, de l'import absent, de la référence non versionnée, du manifeste absent et d'un projet sans les analyseurs, et les nouveaux tests de `Directory.HardSlice.props` absent (sous le nom `Ghostline`), de `Directory.Packages.props` absent et du XML invalide. Un test vérifie que la section existe dans `getting-started.md` et nomme ce que disent les erreurs. Dans `scripts/test-template.sh`, le bloc de l'autre version devient la sonde `probe_hardslice_files`, qui exige le `Fix:` et le `Doc:` sur les deux scripts, puis retire `Directory.HardSlice.props` et exige la cause, la génération sous le nom de la solution et le `Doc:`, avec et sans `--build`. `CHANGELOG.md` a sa ligne. `AGENTS.md` généré n'est pas modifié (142 et 149 lignes). Passages locaux : `dotnet build --no-restore`, `dotnet test --no-build` (1212 tests verts) et la sonde `probe_hardslice_files` lancée seule. Les paquets ne sont pas reconstruits : un ticket de revalidation suit, sur lequel l'étiquette de PB-051 sera posée. Contournement que Ghostline peut retirer : aucun, ses fichiers HardSlice restent à mettre à niveau par un mainteneur, ce que le message dit désormais.
+
+**Résultat observable**
+
+Sur une solution dont un fichier HardSlice manque ou porte une autre version, `dotnet hardslice check` dit la cause probable (solution générée par un autre template ou une autre version de l'outil), un `Fix:` (reprendre le fichier d'une génération neuve du même template, par un mainteneur s'il est protégé, ou remettre l'outil à la version de la solution) et un `Doc:` vers la section de `getting-started.md` qui le décrit.
+
+**Constat**
+
+Ghostline, entrée « no path to bring a generated solution to a newer template » (04/11/2026) : avec l'outil reconstruit après PB-060 à PB-074, `scripts/check.sh` s'arrête aussitôt sur « error: Directory.HardSlice.props was not found in '/root/Github/ghostline': it must reference HardSlice.Analyzers 0.3.0-preview.1, the version of dotnet hardslice. » (`src/HardSlice.Tool/AnalyzerVersion.cs`). Le message n'a ni `Fix:` ni `Doc:`, contrairement aux diagnostics, et ne dit pas que la solution a été générée par un template d'une autre disposition, ni quoi faire.
+
+**Périmètre**
+
+- Les erreurs de `AnalyzerVersion` et de `Solution.Find` sur un fichier HardSlice manquant, invalide ou à une autre version : cause probable, `Fix:` et `Doc:`.
+- La section de `docs/getting-started.md` que vise le `Doc:`, à l'étiquette de la version de l'outil.
+- Le texte de ces erreurs est lu par les agents et figé par la publication : ce ticket passe avant PB-051, et un ticket de revalidation des paquets le suit. La commande de mise à niveau d'une solution générée n'en fait pas partie.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+sonde probe_hardslice_files de scripts/test-template.sh
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-075 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur.
+L'incrément est terminé lorsque PB-064 à PB-076 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. PB-051 peut alors être lancé sur le feu vert du mainteneur.
 
 ## 8. Incréments suivants
 
