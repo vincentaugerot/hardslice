@@ -5,7 +5,7 @@ description: Adds a module to this HardSlice solution with dotnet new hardslice-
 
 # Add a module
 
-A module is a business area: its domain in `src/MyApp.Domain/<Module>/`, its slices in `src/MyApp/Features/<Module>/`, and its public contract `<Module>Module.cs`, the only types other modules may use. The template creates them: never write them by hand.
+A module is a business area: its domain in `src/MyApp.Domain/<Module>/`, its slices in `src/MyApp/Features/<Module>/`, and its public contract `<Module>Module.cs`, the only types other modules may use. `hardslice-module` creates the contract alone, and the templates of its aggregates and slices create the folders of its domain and of its tests as they fill them: never write them by hand.
 
 Run every command from the root of the solution, the folder of `MyApp.slnx`. If the solution was never built, run `dotnet build` first: the template reads the web project.
 
@@ -34,7 +34,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
 
 These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the check cannot pass without one, stop and explain the conflict instead.
 
-- Write `<Module>Module.cs` or the folders of the module yourself, or rename the generated contract.
+- Write `<Module>Module.cs` yourself, create an empty folder of the module ahead of its files, with a `.gitkeep` or otherwise, or rename the generated contract.
 - Make a module use a type of another module outside its public contract, such as a slice or a mapping.
 - Suppress a HardSlice diagnostic, lower its severity or turn the analyzers off.
 - Create, edit or delete a protected file: the list of [Forbidden](../../../AGENTS.md#forbidden) names them all.

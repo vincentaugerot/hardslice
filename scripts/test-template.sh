@@ -2393,48 +2393,64 @@ generate_command() {
   done
 }
 
-# The files that dotnet new hardslice-module creates for the module <name>: its contract, then a .gitkeep in the folder of its
-# domain and in each of its test folders, which dotnet new could not create empty.
-module_files() {
+# The folders of the module <name>: its slices and its contract, its domain, then its test folders. dotnet new hardslice-module
+# creates the first one alone, with the contract, and the templates of its aggregates, slices and events create the others.
+module_folders() {
   local name="$1"
-  printf '%s\n' "src/$app_name/Features/$name/${name}Module.cs" \
-    "src/$app_name.Domain/$name/.gitkeep" \
-    "tests/$app_name.Tests/Domain/$name/.gitkeep" \
-    "tests/$app_name.Tests/Features/$name/.gitkeep" \
-    "tests/$app_name.IntegrationTests/Features/$name/.gitkeep"
+  printf '%s\n' "src/$app_name/Features/$name" \
+    "src/$app_name.Domain/$name" \
+    "tests/$app_name.Tests/Domain/$name" \
+    "tests/$app_name.Tests/Features/$name" \
+    "tests/$app_name.IntegrationTests/Features/$name"
 }
 
-# Generates the module <name> with the remaining options, checks that its files exist, and leaves the printed instructions in
-# $module_output.
+# PB-073: dotnet new never deletes a file, so a placeholder of an empty folder would stay next to the files of the templates that
+# fill it. Fails when the solution holds a .gitkeep after <step>.
+expect_no_placeholder() {
+  local step="$1"
+  local placeholders
+
+  placeholders="$(cd "$app" && find . -name .gitkeep -not -path './.git/*')"
+  if [[ -n "$placeholders" ]]; then
+    printf '%s\n' "$placeholders" >&2
+    echo "error: $app_name holds the .gitkeep files above after $step." >&2
+    exit 1
+  fi
+}
+
+# Generates the module <name> with the remaining options, checks that it creates its contract and no other file, and leaves the
+# printed instructions in $module_output.
 generate_module() {
   local name="$1"
   shift
-  local generated
+  local contract="src/$app_name/Features/$name/${name}Module.cs"
+  local before
+  local created
 
+  before="$(cd "$app" && find src tests -type f -not -path '*/bin/*' -not -path '*/obj/*' | LC_ALL=C sort)"
   if ! module_output="$(new_item hardslice-module --project "src/$app_name/$app_name.csproj" --name "$name" "$@")"; then
     printf '%s\n' "$module_output" >&2
     echo "error: dotnet new hardslice-module failed on the module $name of $app_name." >&2
     exit 1
   fi
-  while read -r generated; do
-    if [[ ! -f "$app/$generated" ]]; then
-      printf '%s\n' "$module_output" >&2
-      echo "error: dotnet new hardslice-module did not create $generated in $app_name." >&2
-      exit 1
-    fi
-  done < <(module_files "$name")
+  created="$(LC_ALL=C comm -13 <(printf '%s\n' "$before") <(cd "$app" && find src tests -type f -not -path '*/bin/*' -not -path '*/obj/*' | LC_ALL=C sort))"
+  if [[ "$created" != "$contract" ]]; then
+    printf '%s\n' "$module_output" "created:" "$created" >&2
+    echo "error: dotnet new hardslice-module did not create $contract alone in $app_name: the templates that fill the other folders of the module create them." >&2
+    exit 1
+  fi
+  expect_no_placeholder "dotnet new hardslice-module --name $name"
 }
 
-# Removes the folders that dotnet new hardslice-module created for the module <name>, with what was added to them, then the
-# parent folders they leave empty.
+# Removes the folders of the module <name>, with what the templates added to them, then the parent folders they leave empty.
 remove_module() {
   local name="$1"
   local generated
   local folder
 
   while read -r generated; do
-    rm -r "$app/$(dirname "$generated")"
-  done < <(module_files "$name")
+    [[ ! -e "$app/$generated" ]] || rm -r "${app:?}/$generated"
+  done < <(module_folders "$name")
   for folder in "src/$app_name/Features" "tests/$app_name.Tests/Domain" "tests/$app_name.Tests/Features" "tests/$app_name.IntegrationTests/Features"; do
     [[ ! -d "$app/$folder" ]] || rmdir --ignore-fail-on-non-empty "$app/$folder"
   done
@@ -4528,6 +4544,15 @@ probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoom
 # completed with the aggregate Room.
 probe_event_template Rooms RoomRenamed RoomClosed Housekeeping Room 'Room.Create()'
 rm -r "$app_src/Shared/Persistence/Migrations"
+
+# PB-073: the module Rooms, its aggregate, its child entities, its slices and its events leave no .gitkeep in its folders.
+echo "==> Checking that the module Rooms of $app_name and the elements generated in it leave no .gitkeep"
+if [[ ! -f "$app/src/$app_name.Domain/Rooms/Room.cs" ]]; then
+  echo "error: the domain of the module Rooms of $app_name has no aggregate Room to check the folders of the module with." >&2
+  exit 1
+fi
+expect_no_placeholder "the generation of the module Rooms, its aggregate, its entities, its slices and its events"
+echo "    $(module_folders Rooms | while read -r folder; do [[ ! -d "$app/$folder" ]] || printf '%s ' "$folder"; done)hold their files alone"
 
 remove_module Rooms
 mv "$work/Program.cs.backup" "$app_src/Program.cs"

@@ -630,10 +630,10 @@ public sealed class TemplatePackageTests
         postActions.Last().GetProperty("condition").GetString().ShouldBe("(Accepted)");
     }
 
-    // hardslice-module generates the contract of the module and, since dotnet new creates no empty folder, a .gitkeep in the folder
-    // of its domain and in each of its test folders: no C# file that HS018 would read as a test.
+    // hardslice-module generates the contract of the module alone. dotnet new creates no empty folder and never deletes a file: a
+    // .gitkeep in the folder of its domain or in a test folder would stay next to the files of the templates that fill it (PB-073).
     [Fact]
-    public void Module_item_template_generates_the_contract_of_the_module_and_its_folders_only()
+    public void Module_item_template_generates_the_contract_of_the_module_only()
     {
         var root = ModuleTemplateRoot(FindRepositoryRoot());
         using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
@@ -1245,6 +1245,35 @@ public sealed class TemplatePackageTests
             text.ShouldNotContain("change `Route`");
     }
 
+    // PB-073: no template ships a placeholder for an empty folder. The templates that fill a folder create it, and none deletes a
+    // .gitkeep that an earlier template would have left there.
+    [Fact]
+    public void Templates_ship_no_placeholder_that_a_later_template_would_leave_behind()
+    {
+        var content = Path.Combine(FindRepositoryRoot(), "src", "HardSlice.Templates", "content");
+
+        Directory.EnumerateFiles(content, ".gitkeep", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(content, file).Replace('\\', '/'))
+            .ShouldBeEmpty();
+    }
+
+    // PB-073: the agent kit says that hardslice-module creates the contract alone, and that the templates of the aggregates and
+    // slices create the other folders of the module: an agent never keeps an empty folder with a .gitkeep.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_that_the_templates_of_the_module_create_its_folders(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = string.Join('\n', AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample));
+        var addModule = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-module", "SKILL.md"));
+
+        if (noSample)
+            agents.ShouldContain("the public contract `src/MyApp/Features/<Module>/<Module>Module.cs` alone: the templates below create the folder of its domain and its test folders.");
+        addModule.ShouldContain("`hardslice-module` creates the contract alone, and the templates of its aggregates and slices create the folders of its domain and of its tests as they fill them");
+        addModule.ShouldContain("create an empty folder of the module ahead of its files, with a `.gitkeep` or otherwise");
+    }
+
     // PB-063: a command without parameters has no validator (HS013) nor invalid request, and a command handler may read from outside
     // through the services of its module, but an effect that a rollback must cancel has no mechanism in the solution yet.
     [Theory]
@@ -1749,11 +1778,7 @@ public sealed class TemplatePackageTests
     [
         ".template.config/dotnetcli.host.json",
         ".template.config/template.json",
-        "src/MyApp.Domain/ModuleName/.gitkeep",
-        "src/MyApp/Features/ModuleName/ModuleNameModule.cs",
-        "tests/MyApp.IntegrationTests/Features/ModuleName/.gitkeep",
-        "tests/MyApp.Tests/Domain/ModuleName/.gitkeep",
-        "tests/MyApp.Tests/Features/ModuleName/.gitkeep"
+        "src/MyApp/Features/ModuleName/ModuleNameModule.cs"
     ];
 
     private static readonly string[] AggregateTemplateFiles =

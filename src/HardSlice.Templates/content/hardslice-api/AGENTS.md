@@ -52,7 +52,7 @@ Modules and slices:
 
 Use the skills `add-module`, then `add-aggregate`, then `add-slice` for each use case. They run, from the root of the solution:
 
-1. `dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name <Module>`, with `--route <route>` for a group other than the module name in kebab-case: the public contract `src/MyApp/Features/<Module>/<Module>Module.cs`, the folder of its domain and its test folders. Add the lines it prints to `Program.cs`.
+1. `dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name <Module>`, with `--route <route>` for a group other than the module name in kebab-case: the public contract `src/MyApp/Features/<Module>/<Module>Module.cs` alone: the templates below create the folder of its domain and its test folders. Add the lines it prints to `Program.cs`.
 2. `dotnet new hardslice-aggregate --project src/MyApp/MyApp.csproj --module <Module> --name <Aggregate>`: the aggregate, its `<Aggregate>Id`, its mapping and its unit tests. Rename its factory method `Create` after the business fact, give it its state and its rules, map that state, and add the migration it prints: see [Changing the database](#changing-the-database). Then add its slices as below, and the module to the map above.
 <!--#endif -->
 

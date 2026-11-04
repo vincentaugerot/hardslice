@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Module",
   "name": "HardSlice module",
-  "description": "A module of a hardslice-api solution: its public contract <Module>Module, which registers and maps its slices on one route group, the folder of its domain and its test folders. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A module of a hardslice-api solution: its public contract <Module>Module, which registers and maps its slices on one route group. The templates of its aggregates and slices create the folder of its domain and its test folders. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-module",
   "sourceName": "ModuleName",
   "preferNameDirectory": false,
@@ -249,7 +249,7 @@
       "applyFileRenamesToManualInstructions": true,
       "manualInstructions": [
         {
-          "text": "Register the module in src/MyApp/Program.cs:\n1. Add the using:\nusing MyApp.Features.ModuleName;\n2. Register its services, before 'var app = builder.Build();':\nbuilder.Services.AddModuleNameModule();\n3. Map its endpoints, before 'app.Run();':\napp.MapModuleNameModule();\nIts endpoints answer under /module-route. Then add its aggregates with dotnet new hardslice-aggregate, its slices with dotnet new hardslice-command and hardslice-query, its events and their reactions with dotnet new hardslice-event, and the module to the map of AGENTS.md."
+          "text": "Register the module in src/MyApp/Program.cs:\n1. Add the using:\nusing MyApp.Features.ModuleName;\n2. Register its services, before 'var app = builder.Build();':\nbuilder.Services.AddModuleNameModule();\n3. Map its endpoints, before 'app.Run();':\napp.MapModuleNameModule();\nIts endpoints answer under /module-route. Then add its aggregates with dotnet new hardslice-aggregate, its slices with dotnet new hardslice-command and hardslice-query, its events and their reactions with dotnet new hardslice-event, which create the folder of its domain and its test folders, and the module to the map of AGENTS.md."
         }
       ],
       "continueOnError": true

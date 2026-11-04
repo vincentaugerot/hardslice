@@ -100,8 +100,8 @@ prepare() {
   echo "    Run the agent from that directory with $demo/prompt.md and DOTNET_CLI_HOME=$work/dotnet-cli, then: $0 verify $work <trace>"
 }
 
-# A change stays in the C# of src/ and of the unit and integration tests, the empty folders the module template keeps with
-# .gitkeep, and the map of AGENTS.md. No project file and no protected file, as the trusted dotnet hardslice protected reads them.
+# A change stays in the C# of src/ and of the unit and integration tests, the .gitkeep that the module template left in its
+# folders before PB-073, which the recorded runs hold, and the map of AGENTS.md. No project file and no protected file, as the trusted dotnet hardslice protected reads them.
 validate_changed_paths() {
   local trusted_app="$1"
   local changed_paths="$2"
