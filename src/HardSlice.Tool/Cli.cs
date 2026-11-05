@@ -26,9 +26,11 @@ internal static class Cli
                           and merges the files of the application in three ways from the generation recorded in
                           .hardslice/generation/: updates those the application did not change, merges with git merge-file
                           those both changed, writing a conflict between git markers, and lists with their diff those
-                          without a recorded generation, to merge. Then records the new generation there. Leaves out the
-                          sample when the solution has no src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/,
-                          unless --sample or --no-sample says. Writes protected files: a maintainer runs it, never an agent.
+                          without a recorded generation, to merge, and the files the template may have moved with their
+                          diff against the new file. Each diff has the headers of git and applies with git apply. Then
+                          records the new generation there. Leaves out the sample when the solution has no
+                          src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless --sample or --no-sample
+                          says. Writes protected files: a maintainer runs it, never an agent.
           hook <cli> <event>
                           The hooks of an agent: reads the payload of the CLI on the standard input, refuses the edit
                           of a protected file, runs check --build after the edit of a .cs file and check before the

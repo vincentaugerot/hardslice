@@ -1,19 +1,44 @@
 namespace HardSlice.Tool;
 
-// The unified diff of two texts, line by line, as git diff prints it: hunks of the changed lines with three lines of context
-// around them. dotnet hardslice upgrade prints it for each file of the application that differs from the template.
+// The unified diff of two texts, line by line, as git diff prints it: the headers of git, then hunks of the changed lines with
+// three lines of context around them, and '\ No newline at end of file' after a last line without a line break. dotnet hardslice
+// upgrade prints it for each file of the application that differs from the template, and for each file that the template may have
+// moved, against its new path: the block of one file, cut out of the output, applies with git apply.
 internal static class UnifiedDiff
 {
     public const int Context = 3;
+
+    // What git prints after a last line without a line break, which is then a line of its own.
+    public const string NoNewlineAtEnd = "\\ No newline at end of file";
 
     // Above this many pairs of lines left after their common start and end, the lines between are shown as removed then added
     // instead of being matched: a longest common subsequence would need too much memory.
     private const long MaxMatchedPairs = 4_000_000;
 
-    // Writes the hunks that turn the lines of before into the lines of after, and returns how many it wrote: none for equal lines.
-    public static int Write(TextWriter writer, IReadOnlyList<string> before, IReadOnlyList<string> after)
+    // Lines never hold '\n': it marks the last line of a text that has no line break at its end, which then differs from the same
+    // line with one, as git sees it.
+    private const char NoNewline = '\n';
+
+    // Writes the diff that turns before, the text of beforePath, into after, the text of afterPath, with the headers of git, and
+    // returns whether the texts differ by a line: nothing is written when they do not.
+    public static bool Write(TextWriter writer, string beforePath, string afterPath, string before, string after)
     {
-        var edits = Edits(before, after);
+        var hunks = new StringWriter { NewLine = writer.NewLine };
+        if (WriteHunks(hunks, before, after) == 0)
+            return false;
+
+        writer.WriteLine($"diff --git a/{beforePath} b/{afterPath}");
+        writer.WriteLine($"--- a/{beforePath}");
+        writer.WriteLine($"+++ b/{afterPath}");
+        writer.Write(hunks.ToString());
+        return true;
+    }
+
+    // Writes the hunks that turn the text before into the text after, and returns how many it wrote: none for the same lines, \r\n
+    // read as \n.
+    public static int WriteHunks(TextWriter writer, string before, string after)
+    {
+        var edits = Edits(Lines(before), Lines(after));
         var hunks = 0;
         var index = 0;
         while (index < edits.Count)
@@ -53,12 +78,15 @@ internal static class UnifiedDiff
         return hunks;
     }
 
-    // The lines of a text, without their line breaks, \r\n or \n: a text that ends with a line break has no empty last line.
-    public static IReadOnlyList<string> Lines(string text)
+    // The lines of a text, without their line breaks, \r\n or \n: a text that ends with a line break has no empty last line, and
+    // the last line of one that does not ends with NoNewline.
+    private static List<string> Lines(string text)
     {
         var lines = text.Split('\n').Select(line => line.EndsWith('\r') ? line[..^1] : line).ToList();
-        if (lines.Count > 0 && lines[^1].Length == 0)
+        if (lines[^1].Length == 0)
             lines.RemoveAt(lines.Count - 1);
+        else
+            lines[^1] += NoNewline;
         return lines;
     }
 
@@ -79,7 +107,13 @@ internal static class UnifiedDiff
                 EditKind.Added => '+',
                 _ => ' ',
             };
-            writer.WriteLine($"{prefix}{edit.Text}");
+            if (edit.Text.EndsWith(NoNewline))
+            {
+                writer.WriteLine($"{prefix}{edit.Text[..^1]}");
+                writer.WriteLine(NoNewlineAtEnd);
+            }
+            else
+                writer.WriteLine($"{prefix}{edit.Text}");
         }
     }
 

@@ -209,9 +209,11 @@ public sealed class CliTests
                               and merges the files of the application in three ways from the generation recorded in
                               .hardslice/generation/: updates those the application did not change, merges with git merge-file
                               those both changed, writing a conflict between git markers, and lists with their diff those
-                              without a recorded generation, to merge. Then records the new generation there. Leaves out the
-                              sample when the solution has no src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/,
-                              unless --sample or --no-sample says. Writes protected files: a maintainer runs it, never an agent.
+                              without a recorded generation, to merge, and the files the template may have moved with their
+                              diff against the new file. Each diff has the headers of git and applies with git apply. Then
+                              records the new generation there. Leaves out the sample when the solution has no
+                              src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless --sample or --no-sample
+                              says. Writes protected files: a maintainer runs it, never an agent.
 
             Exit codes of upgrade: 0 nothing left to merge (merged files listed, to review), 1 the upgrade failed (with a change in the
             git tree, nothing is written), 2 a wrong command line, 3 conflicts to resolve or files left to merge or to review, listed.

@@ -6082,6 +6082,12 @@ upgrade_list() {
   TITLE="$title" awk 'index($0, "==> " ENVIRON["TITLE"]) == 1 { listing = 1; next } /^==> / { listing = 0 } listing && /^    / { print substr($0, 5) }' <<< "$upgrade_output"
 }
 
+# The diff that the upgrade printed from <old> to <new> (<old> when not given), from its 'diff --git' line to the next '==> ' line.
+upgrade_diff() {
+  local old="$1" new="${2:-$1}"
+  HEADER="diff --git a/$old b/$new" awk '$0 == ENVIRON["HEADER"] { printing = 1 } printing && /^==> / { exit } printing { print }' <<< "$upgrade_output"
+}
+
 run_upgrade() {
   upgrade_status=0
   upgrade_output="$(cd "$app" && dotnet hardslice upgrade "$@" 2>&1)" || upgrade_status=$?
@@ -6090,8 +6096,9 @@ run_upgrade() {
 # Generates <name> with the earlier template and its options, completes it as an application would (a module and a command slice of
 # the item templates of that build, AGENTS.md completed, a protected file changed by hand and approved), commits it, then:
 # the upgrade refuses a tree with a change; it rewrites every file that the template owns as the current template generates it,
-# adds the new files, lists the files the template moved, and lists AGENTS.md and Program.cs with their diff, left as is.
-# Merged as the listed diffs say, the solution passes the check, and a second upgrade rewrites and adds nothing.
+# adds the new files, lists the files the template moved with their diff against the new file, which says that they differ only by
+# their namespace, and lists AGENTS.md and Program.cs with their diff in the format of git, left as is. Merged with git apply from
+# the listed diffs, the solution passes the check, and a second upgrade rewrites and adds nothing.
 probe_upgrade() {
   local name="$1"
   shift
@@ -6166,7 +6173,17 @@ probe_upgrade() {
     echo "error: dotnet hardslice upgrade changed the AGENTS.md of $name, or its diff does not show the part that the application wrote." >&2
     exit 1
   fi
-  echo "    every protected file and rule sheet is the one of the current template, AGENTS.md is left with its diff"
+  # PB-096: the headers of git, and the diff of a moved file against its new path, which says that only the namespace differs.
+  old="src/$name/Shared/Behaviors/DomainExceptionHandler.cs"
+  path="src/$name/Shared/Http/DomainExceptionHandler.cs"
+  if [[ "$(upgrade_diff AGENTS.md | sed -n '1,3p')" != "diff --git a/AGENTS.md b/AGENTS.md"$'\n'"--- a/AGENTS.md"$'\n'"+++ b/AGENTS.md" ||
+    "$upgrade_output" == *" (solution)"* ||
+    "$(upgrade_diff "$old" "$path" | grep '^[-+]')" != "--- a/$old"$'\n'"+++ b/$path"$'\n'"-namespace $name.Shared.Behaviors;"$'\n'"+namespace $name.Shared.Http;" ||
+    "$upgrade_output" != *$'\n'"==> $old differs from $path only by its namespace declaration: nothing to merge, delete it."$'\n'* ]]; then
+    echo "error: dotnet hardslice upgrade did not write the diffs of $name with the headers of git, or the diff of $old against $path with its line of the namespace." >&2
+    exit 1
+  fi
+  echo "    every protected file and rule sheet is the one of the current template, AGENTS.md is left with its diff, the moved files differ only by their namespace"
   # PB-095: the solution had no recorded generation, as Ghostline: the upgrade records the one of the template for the next one,
   # each project with the UserSecretsId of the solution.
   if ! diff -r -I '<UserSecretsId>' "$fresh/.hardslice/generation" "$app/.hardslice/generation" ||
@@ -6177,12 +6194,16 @@ probe_upgrade() {
   fi
   echo "    .hardslice/generation/ records the generation of the template"
 
-  echo "==> Merging the files that the upgrade of $name lists, then checking it"
+  echo "==> Merging the files that the upgrade of $name lists, each with git apply on its diff, then checking it"
   while read -r path; do
     rm "${app:?}/${path%% -> *}"
   done < <(upgrade_list "Files of the solution that the template may have moved"; upgrade_list "HardSlice files that the template does not generate")
   while read -r path; do
-    cp "$fresh/$path" "$app/$path"
+    # The block of the file, cut out of the output, applies with git apply and gives the file of the template.
+    if ! upgrade_diff "$path" | git -C "$app" apply - || { [[ "$path" != *.csproj ]] && ! cmp -s "$fresh/$path" "$app/$path"; }; then
+      echo "error: the diff of $path that dotnet hardslice upgrade printed for $name does not apply with git apply, or does not give the file of the template." >&2
+      exit 1
+    fi
     case "$path" in
       AGENTS.md) printf '\n## %s\n\nThe fleet of vehicles, renamed by RenameVehicle.\n' "$name" >> "$app/AGENTS.md" ;;
       "src/$name/Program.cs") register_module "$module_output" ;;

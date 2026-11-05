@@ -8,8 +8,9 @@ namespace HardSlice.Tool;
 // application are merged in three ways, from the generation that the solution records in .hardslice/generation/, as the template
 // generated them the last time: one that the application did not change is updated, one that both changed is merged with git
 // merge-file, its conflicts written between git markers. A file without a recorded generation, as in a solution generated before
-// it was recorded, is never written over: it is listed with its diff, for a maintainer or the agent to merge. Last, the generation
-// of the template replaces .hardslice/generation/, the base of the next upgrade.
+// it was recorded, is never written over: it is listed with its diff, in the format of git, for a maintainer or the agent to
+// merge. A file that the template may have moved is listed with its diff against its new path. Last, the generation of the
+// template replaces .hardslice/generation/, the base of the next upgrade.
 internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator generator, TextWriter output, TextWriter error)
 {
     // The upgrade wrote what it could, and conflicts or files of the application are left to merge, or HardSlice files are no
@@ -172,8 +173,9 @@ internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator g
             .SelectMany(path => tracked
                 .Where(old => Path.GetFileName(old).Equals(Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)
                     && !generatedPaths.Contains(old) && !InGeneration(old) && !plan.Removed.Contains(old) && File.Exists(Path.Combine(solution.Root, old)))
-                .Select(old => $"{old} -> {path}"))
-            .Order(StringComparer.Ordinal)
+                .Select(old => (Old: old, New: path)))
+            .OrderBy(move => move.Old, StringComparer.Ordinal)
+            .ThenBy(move => move.New, StringComparer.Ordinal)
             .ToArray();
 
         // The generation of the template replaces the recorded one, each project with the UserSecretsId of the solution.
@@ -208,14 +210,16 @@ internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator g
         WriteList(plan.Updated, $"Files of the application updated from the template, unchanged by the application ({plan.Updated.Count})");
         WriteList(plan.Merged, $"Files of the application merged with the template, without conflict ({plan.Merged.Count}). Review each one with 'git diff'");
         WriteList(plan.Removed, $"Files of the application removed, which the template no longer generates and the application did not change ({plan.Removed.Count})");
-        WriteList(moved, $"Files of the solution that the template may have moved, left as is ({moved.Length}). Each one has the name of a file added from the template: merge what the application changed in it into the new file, then delete it");
+        WriteList([.. moved.Select(move => $"{move.Old} -> {move.New}")], $"Files of the solution that the template may have moved, left as is ({moved.Length}). Each one has the name of a file added from the template: merge what the application changed in it into the new file, then delete it. In the diffs below, '-' lines are in the file of the solution only, '+' lines in the new file of the template {version} only");
+        foreach (var (old, path) in moved)
+            DiffMoved(old, path, Path.Combine(solution.Root, old), Path.Combine(target, path));
         WriteList(notGenerated, $"HardSlice files that the template does not generate, left as is ({notGenerated.Length}). Delete each one that an older template generated, keep one that a maintainer added");
         WriteList(plan.NoLongerGenerated, $"Files of the application that the template no longer generates, changed by the application, left as is ({plan.NoLongerGenerated.Count}). Delete each one that the application no longer needs");
         WriteList(plan.DeletedChanged, $"Files that the application deleted and the template changed, left deleted ({plan.DeletedChanged.Count}). Restore one that the application needs from {GenerationFolder}, which holds the new generation");
         WriteList(plan.Conflicts, $"Conflicts to resolve ({plan.Conflicts.Count}). Each file holds both changes between git conflict markers: '<<<<<<< solution', then '||||||| {plan.BaseLabel}' before the lines as the template generated them, then '=======' before '>>>>>>> template {version}'. Keep what each side needs, then remove the markers");
-        WriteList(plan.ToMerge, $"Files of the application that differ from the template, with no generation recorded in {GenerationFolder} to merge from, left as is ({plan.ToMerge.Count}). Merge into each one what the template changed, by hand or with the agent: in the diffs below, '-' lines are in the solution only, '+' lines in the template only");
+        WriteList(plan.ToMerge, $"Files of the application that differ from the template, with no generation recorded in {GenerationFolder} to merge from, left as is ({plan.ToMerge.Count}). Merge into each one what the template changed, by hand or with the agent: in the diffs below, '-' lines are in the solution only, '+' lines in the template {version} only");
         foreach (var path in plan.ToMerge)
-            Diff(path, Path.Combine(solution.Root, path), Path.Combine(target, path), version);
+            Diff(path, Path.Combine(solution.Root, path), Path.Combine(target, path));
         if (baseChanged > 0)
             output.WriteLine(recorded.Length == 0
                 ? $"==> The generation of the template is recorded in {GenerationFolder} ({generation.Length} files): the next upgrade merges the files of the application from it."
@@ -372,15 +376,30 @@ internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator g
             output.WriteLine($"    {path}");
     }
 
-    private void Diff(string path, string solutionFile, string templateFile, string version)
+    // The diff of a file of the application without a recorded generation, from the solution to the template, with the headers of
+    // git: cut out of the output, from its 'diff --git' line, it applies with git apply. Its title line ends the list above it.
+    private void Diff(string path, string solutionFile, string templateFile)
     {
         output.WriteLine($"==> Diff of {path}");
-        output.WriteLine($"--- {path} (solution)");
-        output.WriteLine($"+++ {path} (template {version})");
-        var hunks = UnifiedDiff.Write(output, UnifiedDiff.Lines(Text(solutionFile)), UnifiedDiff.Lines(Text(templateFile)));
-        if (hunks == 0)
-            output.WriteLine("    Only the line break at the end of the file differs.");
+        if (!UnifiedDiff.Write(output, path, path, Text(solutionFile), Text(templateFile)))
+            output.WriteLine($"==> {path} differs from the template only by its line breaks.");
     }
+
+    // The diff of a file that the template may have moved, from the old file of the solution to the new file of the template, and a
+    // line when they differ only by their namespace declaration, as the HTTP answers moved from Shared/Behaviors to Shared/Http.
+    private void DiffMoved(string old, string path, string solutionFile, string templateFile)
+    {
+        var before = Normalized(Text(solutionFile), null);
+        var after = Normalized(Text(templateFile), null);
+        output.WriteLine($"==> Diff of {old} against {path}");
+        if (!UnifiedDiff.Write(output, old, path, before, after))
+            output.WriteLine($"==> {old} is the same as {path}: nothing to merge, delete it.");
+        else if (NamespaceDeclaration.Replace(before, "namespace;") == NamespaceDeclaration.Replace(after, "namespace;"))
+            output.WriteLine($"==> {old} differs from {path} only by its namespace declaration: nothing to merge, delete it.");
+    }
+
+    // The declaration of a namespace on a line of its own, file-scoped or block-scoped.
+    private static readonly Regex NamespaceDeclaration = new(@"^[ \t]*namespace[ \t]+[\w.]+[ \t]*;?[ \t]*$", RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     private static string Text(string file) => Encoding.UTF8.GetString(File.ReadAllBytes(file));
 

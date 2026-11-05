@@ -66,11 +66,12 @@ public sealed class UpgradeCommandTests : IDisposable
             "==> Files added from the template (2):",
             "    docs/rules/HS020.md",
             "    src/Demo/Shared/Http/DomainExceptionHandler.cs",
-            "==> Files of the application that differ from the template, with no generation recorded in .hardslice/generation/ to merge from, left as is (1). Merge into each one what the template changed, by hand or with the agent: in the diffs below, '-' lines are in the solution only, '+' lines in the template only:",
+            $"==> Files of the application that differ from the template, with no generation recorded in .hardslice/generation/ to merge from, left as is (1). Merge into each one what the template changed, by hand or with the agent: in the diffs below, '-' lines are in the solution only, '+' lines in the template {ToolVersion.Current} only:",
             "    AGENTS.md",
             "==> Diff of AGENTS.md",
-            "--- AGENTS.md (solution)",
-            $"+++ AGENTS.md (template {ToolVersion.Current})",
+            "diff --git a/AGENTS.md b/AGENTS.md",
+            "--- a/AGENTS.md",
+            "+++ b/AGENTS.md",
             "@@ -3,7 +3,8 @@",
             " Golden rules:",
             " ",
@@ -251,25 +252,100 @@ public sealed class UpgradeCommandTests : IDisposable
     }
 
     // Ghostline: the template moved the HTTP answers from Shared/Behaviors to Shared/Http. The new file is added, and the old one,
-    // which the application may have changed and which would clash with it, is left and listed with the file that replaces it.
+    // which the application may have changed and which would clash with it, is left and listed with the file that replaces it, and
+    // its diff against it (PB-096): the five files of Ghostline differed only by their namespace, which a diff by hand showed.
     [Fact]
-    public void A_file_of_the_solution_with_the_name_of_an_added_file_is_listed_as_maybe_moved()
+    public void A_file_of_the_solution_with_the_name_of_an_added_file_is_listed_as_maybe_moved_with_its_diff_against_the_new_one()
     {
-        _solution.Write("src/Demo/Shared/Behaviors/DomainExceptionHandler.cs", "namespace Demo.Shared.Behaviors;\n");
+        _solution.Write("src/Demo/Shared/Behaviors/DomainExceptionHandler.cs", "namespace Demo.Shared.Behaviors;\n\npublic sealed class DomainExceptionHandler;\n");
         Commit();
         _generator.Files["AGENTS.md"] = Read("AGENTS.md");
+        _generator.Files["src/Demo/Shared/Http/DomainExceptionHandler.cs"] = "namespace Demo.Shared.Http;\n\npublic sealed class DomainExceptionHandler;\n";
 
         var (exitCode, output, _) = Upgrade();
 
         exitCode.ShouldBe(UpgradeCommand.MergeLeft);
-        Read("src/Demo/Shared/Behaviors/DomainExceptionHandler.cs").ShouldBe("namespace Demo.Shared.Behaviors;\n");
-        Read("src/Demo/Shared/Http/DomainExceptionHandler.cs").ShouldBe("namespace Demo.Shared.Http;\n");
+        Read("src/Demo/Shared/Behaviors/DomainExceptionHandler.cs").ShouldBe("namespace Demo.Shared.Behaviors;\n\npublic sealed class DomainExceptionHandler;\n");
+        Read("src/Demo/Shared/Http/DomainExceptionHandler.cs").ShouldBe("namespace Demo.Shared.Http;\n\npublic sealed class DomainExceptionHandler;\n");
         var lines = Lines(output);
-        lines.ShouldContain(
+        var title = Array.IndexOf(lines,
             "==> Files of the solution that the template may have moved, left as is (1). Each one has the name of a file added from the template: "
-            + "merge what the application changed in it into the new file, then delete it:");
-        lines.ShouldContain("    src/Demo/Shared/Behaviors/DomainExceptionHandler.cs -> src/Demo/Shared/Http/DomainExceptionHandler.cs");
+            + "merge what the application changed in it into the new file, then delete it. In the diffs below, '-' lines are in the file of the solution only, "
+            + $"'+' lines in the new file of the template {ToolVersion.Current} only:");
+        title.ShouldBeGreaterThan(0);
+        lines[(title + 1)..(title + 10)].ShouldBe([
+            "    src/Demo/Shared/Behaviors/DomainExceptionHandler.cs -> src/Demo/Shared/Http/DomainExceptionHandler.cs",
+            "==> Diff of src/Demo/Shared/Behaviors/DomainExceptionHandler.cs against src/Demo/Shared/Http/DomainExceptionHandler.cs",
+            "diff --git a/src/Demo/Shared/Behaviors/DomainExceptionHandler.cs b/src/Demo/Shared/Http/DomainExceptionHandler.cs",
+            "--- a/src/Demo/Shared/Behaviors/DomainExceptionHandler.cs",
+            "+++ b/src/Demo/Shared/Http/DomainExceptionHandler.cs",
+            "@@ -1,3 +1,3 @@",
+            "-namespace Demo.Shared.Behaviors;",
+            "+namespace Demo.Shared.Http;",
+            " ",
+        ]);
+        lines[title + 11].ShouldBe(
+            "==> src/Demo/Shared/Behaviors/DomainExceptionHandler.cs differs from src/Demo/Shared/Http/DomainExceptionHandler.cs only by its namespace declaration: nothing to merge, delete it.");
         lines[^1].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
+    }
+
+    // A moved file that the application changed has its diff, without the line of the namespace: what the application changed is
+    // left to merge into the new file.
+    [Fact]
+    public void A_moved_file_that_differs_by_more_than_its_namespace_gets_its_diff_alone()
+    {
+        _solution.Write("src/Demo/Shared/Behaviors/DomainExceptionHandler.cs", "namespace Demo.Shared.Behaviors\n{\n    // changed by the application\n}\n");
+        Commit();
+        _generator.Files["AGENTS.md"] = Read("AGENTS.md");
+        _generator.Files["src/Demo/Shared/Http/DomainExceptionHandler.cs"] = "namespace Demo.Shared.Http\n{\n}\n";
+
+        var (_, output, _) = Upgrade();
+
+        var lines = Lines(output);
+        var diff = Array.IndexOf(lines, "diff --git a/src/Demo/Shared/Behaviors/DomainExceptionHandler.cs b/src/Demo/Shared/Http/DomainExceptionHandler.cs");
+        diff.ShouldBeGreaterThan(0);
+        lines[(diff + 3)..(diff + 8)].ShouldBe(["@@ -1,4 +1,3 @@", "-namespace Demo.Shared.Behaviors", "+namespace Demo.Shared.Http", " {", "-    // changed by the application"]);
+        output.ShouldNotContain("only by its namespace declaration");
+    }
+
+    // A moved file whose namespace and text are those of the new file: no diff, and nothing to merge.
+    [Fact]
+    public void A_moved_file_the_same_as_the_new_one_is_said_so_without_a_diff()
+    {
+        _solution.Write("src/Demo/Shared/Behaviors/DomainExceptionHandler.cs", "namespace Demo.Shared.Http;\r\n");
+        Commit();
+        _generator.Files["AGENTS.md"] = Read("AGENTS.md");
+
+        var (_, output, _) = Upgrade();
+
+        Lines(output).ShouldContain(
+            "==> src/Demo/Shared/Behaviors/DomainExceptionHandler.cs is the same as src/Demo/Shared/Http/DomainExceptionHandler.cs: nothing to merge, delete it.");
+        output.ShouldNotContain("diff --git");
+    }
+
+    // The block of a file, cut out of the output from its 'diff --git' line to the next '==> ' line, applies with git apply on the
+    // solution and gives the file of the template (PB-096).
+    [Fact]
+    public void The_diff_of_a_file_to_merge_applies_with_git_apply()
+    {
+        _solution.Write("src/Demo/Program.cs", "var app = builder.Build();\napp.MapRooms();\napp.Run();");
+        Commit();
+        _generator.Files["src/Demo/Program.cs"] = "var app = builder.Build();\nawait app.RunAsync();\n";
+
+        var (_, output, _) = Upgrade();
+
+        var lines = Lines(output);
+        var start = Array.IndexOf(lines, "diff --git a/src/Demo/Program.cs b/src/Demo/Program.cs");
+        start.ShouldBeGreaterThan(0);
+        var end = Array.FindIndex(lines, start, line => line.StartsWith("==> ", StringComparison.Ordinal));
+        lines[start..end].ShouldContain("\\ No newline at end of file");
+        var patch = Path.GetTempFileName();
+        File.WriteAllText(patch, string.Join('\n', lines[start..end]) + "\n");
+        var apply = Runner.Capture("git", ["apply", patch], _solution.Root);
+        File.Delete(patch);
+
+        apply.ExitCode.ShouldBe(0, apply.Error);
+        Read("src/Demo/Program.cs").ShouldBe(_generator.Files["src/Demo/Program.cs"]);
     }
 
     [Fact]
