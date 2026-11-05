@@ -2908,7 +2908,7 @@ Complété le 04/11/2026 par PB-079 à PB-086, tirés des six tâches encore ouv
 
 Décision du mainteneur du 04/11/2026, après PB-080 : aucune version n'est publiée sur NuGet.org pour l'instant, PB-051 compris. Le but est la version la plus stable possible, quel que soit son numéro, et Ghostline sert à itérer tout de suite. PB-081 à PB-084 et PB-086 ne dépendent donc plus de PB-051 et passent maintenant, avec PB-087, tiré de l'entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » (arbitrage 8, option B validée le même jour). PB-088 revalide ensuite les paquets, toujours sous `0.3.0-preview.1`, et Ghostline se met à niveau sur son commit avec `dotnet hardslice upgrade` (PB-086). Le critère de placement des arbitrages ci-dessous (avant ou après PB-051) ne décide plus que de l'ordre des tickets.
 
-Complété le 05/11/2026 par PB-090 à PB-097, tirés des sept entrées du 04/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-088 (d78ba83) : la fusion à trois voies de `dotnet hardslice upgrade`, que la section 9 attendait d'arbitrer sur une vraie mise à niveau, la sortie de `upgrade`, la condition d'une commande planifiée, le test du jeton de concurrence, la constante d'une politique, `--help` sur chaque commande et le texte de HS006 sur une lecture sans entité. Leurs arbitrages (9 à 13) sont validés par le mainteneur le 05/11/2026. PB-097 revalide les paquets après eux, toujours sous `0.3.0-preview.1`.
+Complété le 05/11/2026 par PB-090 à PB-097, tirés des sept entrées du 04/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-088 (d78ba83) : la fusion à trois voies de `dotnet hardslice upgrade`, que la section 9 attendait d'arbitrer sur une vraie mise à niveau, la sortie de `upgrade`, la condition d'une commande planifiée, le test du jeton de concurrence, la constante d'une politique, `--help` sur chaque commande et le texte de HS006 sur une lecture sans entité. Leurs arbitrages (9 à 13) sont validés par le mainteneur le 05/11/2026. PB-098, ajouté le même jour à partir de l'entrée du 05/11/2026 « nothing says whether a slice may query the aggregates of another module » (arbitrage 14), passe entre PB-094 et PB-095. PB-097 revalide les paquets après eux, toujours sous `0.3.0-preview.1`.
 
 ### Résultat attendu
 
@@ -3035,11 +3035,12 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | PB-092 (constante d'une politique) | PB-089 | aucun |
 | PB-093 (test du jeton de concurrence) | PB-089 | aucun |
 | PB-094 (condition et cycle au démarrage) | PB-090 | aucun |
-| PB-095 (fusion à trois voies de `upgrade`) | PB-090 à PB-094 | aucun |
+| PB-098 (lecture des agrégats d'un autre module) | PB-094 | aucun |
+| PB-095 (fusion à trois voies de `upgrade`) | PB-090 à PB-094, PB-098 | aucun |
 | PB-096 (sortie de `upgrade`) | PB-095 | aucun |
-| PB-097 (paquets revalidés) | PB-090 à PB-096 | aucun |
+| PB-097 (paquets revalidés) | PB-090 à PB-096, PB-098 | aucun |
 
-Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. Puis PB-089, et PB-090 à PB-097 dans l'ordre de leur numéro : PB-095 passe après les tickets qui changent le template, pour que la base qu'il enregistre et sa sonde les voient. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
+Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. Puis PB-089, et PB-090 à PB-097 dans l'ordre de leur numéro, PB-098 passant entre PB-094 et PB-095 : PB-095 passe après les tickets qui changent le template, pour que la base qu'il enregistre et sa sonde les voient. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
 
 ### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
@@ -3867,7 +3868,7 @@ scripts/test-template.sh, sans argument : le job template de release.yml
 
 ### Arbitrages validés le 05/11/2026
 
-Pour PB-090 à PB-097, tirés des entrées du 04/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-088 (d78ba83). Validés par le mainteneur le 05/11/2026 : les recommandations ci-dessous, sans écart. PB-051 restant suspendu, aucun placement avant ou après la publication n'est à décider : les tickets passent l'un après l'autre, et PB-097 reconstruit les paquets une seule fois, après eux.
+Pour PB-090 à PB-097, tirés des entrées du 04/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-088 (d78ba83). Validés par le mainteneur le 05/11/2026 : les recommandations ci-dessous, sans écart. PB-051 restant suspendu, aucun placement avant ou après la publication n'est à décider : les tickets passent l'un après l'autre, et PB-097 reconstruit les paquets une seule fois, après eux. L'arbitrage 14, pour PB-098, est tiré de l'entrée du 05/11/2026 « nothing says whether a slice may query the aggregates of another module » et validé par le mainteneur le même jour.
 
 9. **Ce que l'application a changé, pour `dotnet hardslice upgrade` (PB-095).** Entrées « AGENTS.md mixes the text of the template and the text of the application » et « first run of dotnet hardslice upgrade ». La première vraie mise à niveau, celle que la section 9 attendait pour arbitrer la fusion à trois voies, a pris environ 15 min, dont un tiers sur `AGENTS.md` : environ 45 des 119 lignes de son diff étaient les parties de Ghostline, montrées comme lignes à retirer. 5 des 10 fichiers de l'application listés n'avaient aucun changement de l'application, ce que seul `git log` a montré. Une base restaurée depuis NuGet.org, prévue par l'arbitrage 7, est impossible : rien n'est publié, et toutes les reconstructions portent `0.3.0-preview.1`, donc le numéro ne désigne pas une génération.
    - Option A : la base dans la solution. La génération (`dotnet new hardslice-api`) et chaque mise à niveau écrivent dans `.hardslice/generation/`, protégé et versionné, les fichiers de l'application tels que le template les a générés. `upgrade` fusionne alors à trois voies, avec `git merge-file`.
@@ -3891,6 +3892,12 @@ Pour PB-090 à PB-097, tirés des entrées du 04/11/2026 que `ghostline/docs/har
     - `--require` (PB-092), entrée « --require writes the name of the policy, never the constant of the application » : une phrase de `add-slice` fait remplacer le littéral par la constante de l'application quand elle en a une. Aucune option de plus : un renommage de la politique fait déjà échouer les tests générés.
     - HS006 et une lecture qui ne charge aucune entité (PB-090), entrée « HS006 lets a condition count tracked rows » : `AGENTS.md`, `add-slice` et le commentaire de `IRecurringCommandCondition` s'alignent sur la règle et sur `HS006.md`. Aucun diagnostic de plus.
     - `--help` et `-h` sur chaque commande de l'outil (PB-091), entrée « dotnet hardslice upgrade --help is refused ».
+14. **Lecture des agrégats d'un autre module (PB-098).** Entrée « nothing says whether a slice may query the aggregates of another module ». Le rapport du spike de Ghostline joint les trajets du module `Schedule` aux observations du module `Realtime` en une requête SQL, et la réconciliation de la phase 2 en aura besoin. `db.Set<Trip>()` depuis une slice de `Realtime` compile et passe le check, alors que `HS012.md` propose pour une donnée d'un autre module une abstraction du contrat public.
+    - Option A : une slice lit les agrégats d'un autre module par `AppDbContext`, en `AsNoTracking()`, jointure en SQL comprise, sans jamais les écrire. Documentation seule.
+    - Option B : A, plus un diagnostic sur une écriture d'un agrégat d'un autre module.
+    - Option C : un `IQueryable` exposé par le contrat public du module propriétaire, et un test d'architecture qui interdit `Set()` sur l'agrégat d'un autre module.
+    - Option D : un modèle de lecture copié par réaction aux événements de domaine.
+    - Décision : A. HS012 autorise déjà le projet de domaine à tous les modules, et la base est partagée : c'est la forme d'un monolithe modulaire, et la seule qui tienne pour une jointure de milliers de lignes. Une écriture passe par le module propriétaire (sa commande, ou une réaction à un événement de domaine du module qui écrit). La règle de B est différée en section 9 : aucun cas réel d'écriture entre modules.
 
 | Point | Ticket | Raison de l'ordre |
 |---|---|---|
@@ -3899,9 +3906,10 @@ Pour PB-090 à PB-097, tirés des entrées du 04/11/2026 que `ghostline/docs/har
 | Constante d'une politique | PB-092 | consigne seule |
 | Test du jeton de concurrence | PB-093 | template d'élément |
 | Condition et cycle au démarrage | PB-094 | après PB-090 |
-| Fusion à trois voies | PB-095 | après PB-090 à PB-094, pour que la base et sa sonde voient tout ce qu'ils changent du template |
+| Lecture des agrégats d'un autre module | PB-098 | texte seul, après PB-094, avant PB-095 pour que sa base voie le nouveau texte |
+| Fusion à trois voies | PB-095 | après PB-090 à PB-094 et PB-098, pour que la base et sa sonde voient tout ce qu'ils changent du template |
 | Sortie de `upgrade` | PB-096 | après PB-095 |
-| Paquets revalidés | PB-097 | après PB-090 à PB-096, Ghostline se met à niveau sur ce commit |
+| Paquets revalidés | PB-097 | après PB-090 à PB-096 et PB-098, Ghostline se met à niveau sur ce commit |
 
 Les entrées « decision » du 04/11/2026 n'appellent aucun ticket. L'entrée « AGENTS.md keeps "Never run dotnet hardslice upgrade" » est la consigne voulue. `AGENTS.override.md` périmé relève de l'agent Side Hub, qui le régénère.
 
@@ -4078,9 +4086,43 @@ scripts/test-template.sh --only sample-items,blank-items
 
 Contournement que Ghostline peut retirer : aucun à retirer, ses conditions écrites à la main ont la forme générée. Son test du cycle au démarrage peut passer `start` au lieu de `SetUtcNow`.
 
+### PB-098 : Dire qu'une slice peut lire les agrégats d'un autre module, sans jamais les écrire
+
+Statut : terminé le 05/11/2026. Ferme l'entrée « nothing says whether a slice may query the aggregates of another module » de `ghostline/docs/hardslice-friction.md` (arbitrage 14, option A). Texte seul, aucune règle ni aucun message ne change. `HS012.md` : le paragraphe « Reading the aggregates of another module » dit qu'une slice lit les agrégats d'un autre module par `AppDbContext`, dans une requête qui les joint aux siens en SQL, en `AsNoTracking()` (HS006 pour un handler de requête, une condition ou un service hébergé) et en projetant vers un DTO de valeurs. Son exemple, `GetUnpaidInvoicesHandler` d'un module `Invoicing`, joint `Invoice` à `Booking` sur le `BookingId` typé que tient la facture. Il dit de joindre sur des clés du même type : EF Core ne traduit aucun `.Value` d'un identifiant converti dans une jointure ou un filtre, et une référence `Guid` comparée à `booking.Id.Value` compile puis échoue à l'exécution (vérifié avec `ToQueryString()` sur Npgsql 10.0.3, la jointure typée donne un seul `INNER JOIN`). Le mapping reste au module propriétaire. Interdit : ajouter, supprimer, changer ou suivre l'agrégat d'un autre module, un handler de commande le lit aussi en `AsNoTracking()`, et un changement passe par le module propriétaire (sa commande, ou sa réaction à un événement de domaine). « Allowed references » renvoie au paragraphe, l'option 3 de « How to fix » garde l'abstraction du contrat public pour un service ou une donnée isolée et renvoie à la lecture directe pour une jointure. `add-slice` : une phrase dans la requête pour une requête qui lit deux modules, qui renvoie à `HS012.md`. `AGENTS.md` : la règle d'or 3 le dit, sans ligne de plus dans les deux variantes. La ligne de HS012 de la spécification (« les types d'un autre module ») devient « les types des slices d'un autre module » et dit la lecture permise. `docs/rules.md` inchangé, son texte ne dit rien de contraire. Tests : dans `TemplatePackageTests`, `Agent_guidance_says_that_a_slice_reads_the_aggregates_of_another_module_and_never_writes_them`, avec et sans l'exemple (copie `.agents/` comprise par le test du paquet), le message de HS012 inchangé. Passages : `dotnet build --no-restore`, `dotnet test --no-build` (1379 tests verts), `scripts/test-template.sh --only sample,blank,sample-rules` en local, CI verte sur `ci/pb-098`. Contournement que Ghostline peut retirer : aucun, la réconciliation de la phase 2 suit la forme documentée.
+
+**Résultat observable**
+
+`HS012.md`, `add-slice` et `AGENTS.md` disent qu'une slice peut lire les agrégats d'un autre module par `AppDbContext`, en `AsNoTracking()` (HS006 pour une requête), dans une requête qui les joint aux siens et projette en DTO de valeurs, et qu'elle ne les ajoute, ne les supprime ni ne les modifie jamais : l'écriture reste au module propriétaire. L'option 3 de « How to fix » de `HS012.md` garde l'abstraction du contrat public pour un service ou une donnée isolée, et renvoie à la lecture directe pour une jointure.
+
+**Constat**
+
+Ghostline, entrée du 05/11/2026 : le rapport du spike joint les trajets du module `Schedule` (`Trips`, `ServiceCalendars`, `ServiceExceptions`, `Routes`, enfants de `ScheduleVersion`) avec `ObservedTrips` et `TripObservations` du module `Realtime`, en une requête SQL sur environ 8 200 trajets et 300 000 observations par jour, et la slice de réconciliation de la phase 2 en aura besoin. `db.Set<Trip>()` depuis une slice de `Realtime` compile et passe le check. `HS012.md` propose, pour « a module needs data of another module », une abstraction du contrat public comme `Task<bool> HasConfirmedBookingsAsync(...)`, qui pour une telle jointure charge les deux côtés en mémoire ou expose un `IQueryable`. Ni `AGENTS.md`, ni `add-slice`, ni `HS012.md` ne dit laquelle des formes est voulue.
+
+**Périmètre**
+
+- `src/HardSlice.Templates/content/hardslice-api/docs/rules/HS012.md` : un paragraphe « Reading the aggregates of another module », avec un exemple de jointure entre deux modules (requête avec `AsNoTracking()` et `Select` vers un DTO de valeurs), et ce qui est interdit (écrire l'agrégat d'un autre module, le suivre). Le texte de « Allowed references » et de l'option 3 ajusté en conséquence. Aucun message de diagnostic ne change.
+- La skill `add-slice` (copies `.claude/` et `.agents/`) : une phrase pour une requête qui lit deux modules, qui renvoie à `HS012.md`.
+- `AGENTS.md` du template : la règle d'or 3 le dit en une demi-phrase, sous 150 lignes dans les deux variantes.
+- `docs/rules.md` et la spécification (`docs/design/specifications.md`, ligne de HS012) seulement si leur texte laisse croire le contraire. `CHANGELOG.md`.
+- Hors périmètre : toute règle, analyseur ou test d'architecture nouveau.
+
+**Cas vérifiés**
+
+- `TemplatePackageTests` : le paragraphe dans `HS012.md`, la phrase dans `add-slice`, copie `.agents/` comprise, `AGENTS.md` sous 150 lignes.
+- Les tests de HS012 et HS006 inchangés et verts.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank,sample-rules
+```
+
+Contournement que Ghostline peut retirer : aucun, la réconciliation de la phase 2 suit la forme documentée.
+
 ### PB-095 : Fusionner à trois voies dans `dotnet hardslice upgrade`, depuis la génération enregistrée dans la solution
 
-Statut : à faire, après PB-090 à PB-094. Ferme l'entrée « AGENTS.md mixes the text of the template and the text of the application » et la suggestion « know which files the application never changed » de l'entrée « first run of dotnet hardslice upgrade » (arbitrage 9, option A). Retire de la section 9 la fusion à trois voies.
+Statut : à faire, après PB-090 à PB-094 et PB-098. Ferme l'entrée « AGENTS.md mixes the text of the template and the text of the application » et la suggestion « know which files the application never changed » de l'entrée « first run of dotnet hardslice upgrade » (arbitrage 9, option A). Retire de la section 9 la fusion à trois voies.
 
 **Résultat observable**
 
@@ -4157,21 +4199,21 @@ scripts/test-template.sh --only upgrade
 
 Contournement que Ghostline peut retirer : le script qui découpait la sortie et le `diff` à la main des fichiers déplacés.
 
-### PB-097 : Revalider les paquets après PB-090 à PB-096, pour la mise à niveau de Ghostline
+### PB-097 : Revalider les paquets après PB-090 à PB-096 et PB-098, pour la mise à niveau de Ghostline
 
-Statut : à faire, après PB-090 à PB-096. Comme PB-088 : reconstruction sous `0.3.0-preview.1`, rien n'est publié et aucune étiquette n'est posée.
+Statut : à faire, après PB-090 à PB-096 et PB-098. Comme PB-088 : reconstruction sous `0.3.0-preview.1`, rien n'est publié et aucune étiquette n'est posée.
 
 **Résultat observable**
 
-Les paquets de `artifacts/packages`, reconstruits sur ce commit, portent PB-090 à PB-096, la CI de la branche `ci/pb-097` est verte sur tous les groupes, et le statut de ce ticket donne à Ghostline la procédure de sa mise à niveau, essayée sur un clone jetable.
+Les paquets de `artifacts/packages`, reconstruits sur ce commit, portent PB-090 à PB-096 et PB-098, la CI de la branche `ci/pb-097` est verte sur tous les groupes, et le statut de ce ticket donne à Ghostline la procédure de sa mise à niveau, essayée sur un clone jetable.
 
 **Périmètre**
 
-- `CHANGELOG.md` : une ligne par ticket, rien ne manque. README racine, de l'outil et du paquet de templates : `hardslice-condition`, `--at-start`, la base de `upgrade` et sa fusion.
+- `CHANGELOG.md` : une ligne par ticket, rien ne manque. README racine, de l'outil et du paquet de templates : `hardslice-condition`, `--at-start`, la base de `upgrade` et sa fusion. Le paragraphe de `HS012.md` sur la lecture des agrégats d'un autre module (PB-098) dans les paquets reconstruits.
 - Paquets reconstruits, `scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages`.
 - CI de `ci/pb-097` : chaque groupe vert, puis `main`.
 - Essai sur un clone jetable de Ghostline (jamais le dépôt lui-même), dans un dossier du bloc-notes, avec le home de `isolate_dotnet_cli_home` et un `NUGET_PACKAGES` à lui, comme PB-088 : purge des caches de `CONTRIBUTING.md`, `dotnet tool restore`, `dotnet hardslice upgrade`. Attendu : sans base, la sortie de PB-086 au format de PB-096, puis `.hardslice/generation/` écrit. Une seconde mise à niveau sur le même clone, le résultat fusionné et commité, ne réécrit ni ne liste rien.
-- Statut : la procédure pour Ghostline, les listes vues sur le clone, et les contournements que Ghostline peut retirer d'après les statuts de PB-090 à PB-096.
+- Statut : la procédure pour Ghostline, les listes vues sur le clone, et les contournements que Ghostline peut retirer d'après les statuts de PB-090 à PB-096 et PB-098.
 
 **Acceptation**
 
@@ -4183,7 +4225,7 @@ scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages
 
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-097 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-097, comme il l'a fait sur celui de PB-088. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
+L'incrément est terminé lorsque PB-064 à PB-098 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-097, comme il l'a fait sur celui de PB-088. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
 
 ## 8. Incréments suivants
 
@@ -4219,6 +4261,7 @@ L'incrément est terminé lorsque PB-064 à PB-097 sont satisfaits, que les jobs
 | Skill `reshape-entity` ou option `--reshape` de `hardslice-entity` | écarté par l'arbitrage 6 : documenté dans `add-aggregate` par PB-085 |
 | Marqueurs des parties de l'application dans `AGENTS.md` | écarté par l'arbitrage 9 : la base que PB-095 enregistre dans la solution les garde par la fusion à trois voies |
 | Base de la fusion de `dotnet hardslice upgrade` restaurée depuis NuGet.org | écarté par l'arbitrage 9 : la base est enregistrée dans la solution (PB-095), ce qui marche aussi sous une version reconstruite |
+| Diagnostic sur l'écriture d'un agrégat d'un autre module (arbitrage 14, option B), vu par Ghostline | à arbitrer sur un cas réel : aucune écriture entre modules à ce jour, la lecture est documentée par PB-098 dans `HS012.md` |
 | Mise à niveau d'une solution générée par une construction locale non publiée | couverte par PB-086 (option B), qui ne restaure aucune génération de départ, puis par la fusion de PB-095 une fois la base enregistrée |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.

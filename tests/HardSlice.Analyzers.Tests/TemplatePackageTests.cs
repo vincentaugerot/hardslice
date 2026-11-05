@@ -592,6 +592,44 @@ public sealed class TemplatePackageTests
         sheet.ShouldContain("A hosted service or a condition projects to the values it needs, or asks `AnyAsync` or `CountAsync`.");
     }
 
+    // PB-098: a slice reads the aggregates of another module through AppDbContext, joined to its own in one SQL query, without
+    // tracking, and never writes them. HS012.md shows the join and keeps the abstraction of the public contract for a service or an
+    // isolated piece of data, add-slice and AGENTS.md point to it. No diagnostic changes. The pack copies add-slice into
+    // .agents/skills/ as is, which the test of the pack checks.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_that_a_slice_reads_the_aggregates_of_another_module_and_never_writes_them(bool noSample)
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(template, "AGENTS.md")), noSample);
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+        var sheet = File.ReadAllText(Path.Combine(template, "docs", "rules", "HS012.md"));
+
+        agents.Length.ShouldBeLessThan(150);
+        agents.SkipWhile(line => line != "## Golden rules").Single(line => line.StartsWith("3. A module uses", StringComparison.Ordinal)).ShouldBe(
+            "3. A module uses another module only through its public contract: the types directly in `MyApp.Features.<Module>` (HS012). "
+            + "A slice may still read the aggregates of another module with `AsNoTracking()`, joined to its own, but never writes them (`docs/rules/HS012.md`).");
+
+        addSlice.ShouldContain("A query that reads two modules joins the aggregates of the other module the same way, through `AppDbContext` and in one SQL query, "
+            + "on keys of the same type, and never writes them: their changes go through their own module, as `docs/rules/HS012.md` shows in \"Reading the aggregates of another module\"");
+
+        sheet.ShouldContain("This includes the aggregates of another module, which a slice reads but never writes: see [Reading the aggregates of another module](#reading-the-aggregates-of-another-module).");
+        var paragraph = sheet[sheet.IndexOf("\n## Reading the aggregates of another module\n", StringComparison.Ordinal)..sheet.IndexOf("\n## Diagnostic\n", StringComparison.Ordinal)];
+        paragraph.ShouldContain("A slice may read the aggregates of another module through `AppDbContext`, in a query that joins them to its own aggregates in SQL");
+        paragraph.ShouldContain("`AsNoTracking()` on each query that loads an entity, and a projection with `Select` to a DTO of values, never the aggregate of the other module itself.");
+        paragraph.ShouldContain("join booking in db.Set<Booking>().AsNoTracking() on invoice.BookingId equals booking.Id");
+        paragraph.ShouldContain("from invoice in db.Set<Invoice>().AsNoTracking()");
+        paragraph.ShouldContain("select new UnpaidInvoiceDto(");
+        paragraph.ShouldContain("Join on keys of the same type");
+        paragraph.ShouldContain("A slice never writes the aggregates of another module: it never adds, removes nor changes one, through `Add`, `Remove`, `ExecuteUpdate`, `ExecuteDelete` or a method of the aggregate, and never tracks one.");
+        paragraph.ShouldContain("a change goes through that module: one of its own commands, or a reaction of that module to a domain event of the module that needs the change");
+
+        sheet.ShouldContain("3. **A module needs a service of another module, or an isolated piece of its data**");
+        sheet.ShouldContain("A query that joins the aggregates of the other module to its own reads them directly instead, as [Reading the aggregates of another module](#reading-the-aggregates-of-another-module) shows");
+        sheet.ShouldContain("HS012: 'RoomsModule' in module 'Rooms' uses 'BookingDto' from slice 'Bookings/GetBooking' of module 'Bookings'. A module uses another module only through its public contract.");
+    }
+
     // PB-094: hardslice-condition generates the condition of a command that AddRecurringCommand sends, in the folder of its slice, and
     // its integration tests at the same path (HS004, HS018), and nothing else. It reads the slices from Directory.Build.targets.
     [Fact]

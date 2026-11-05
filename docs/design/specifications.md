@@ -216,7 +216,7 @@ Chaque règle a un identifiant Roslyn propre, une sévérité par défaut (modif
 | HS009 | Les événements de domaine (`IDomainEvent`) sont des `record` | Analyseur | Les deux |
 | HS010 | Pas de `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today`, `DateTimeOffset.Now` ni `DateTimeOffset.UtcNow` dans le domaine et les slices : utiliser `TimeProvider` | Analyseur | Les deux |
 | HS011 | Pas de `.Result`, `.Wait()`, `GetAwaiter().GetResult()` sur une tâche, ni `async void` (méthodes et lambdas converties en délégués `void`) | Analyseur | Les deux |
-| HS012 | Un module n'utilise pas les types d'un autre module : il passe par un événement de domaine ou le contrat public du module (`XxxModule`) | Test d'architecture | Les deux |
+| HS012 | Un module n'utilise pas les types des slices d'un autre module : il passe par un événement de domaine ou le contrat public du module (`XxxModule`). Une slice peut lire les agrégats d'un autre module par `AppDbContext`, en `AsNoTracking()`, sans jamais les écrire | Test d'architecture | Les deux |
 | HS013 | Toute commande qui a des paramètres a un validateur | Test d'architecture | Les deux |
 | HS014 | Tout handler de commande et tout gestionnaire d'événement de domaine a des tests au chemin de sa slice | Test d'architecture | Les deux |
 | HS015 | L'endpoint d'une slice est dans la slice, s'enregistre dans le `MapGroup` du module et renvoie des `TypedResults` | Analyseur | Slices |
