@@ -2908,6 +2908,8 @@ Complété le 04/11/2026 par PB-079 à PB-086, tirés des six tâches encore ouv
 
 Décision du mainteneur du 04/11/2026, après PB-080 : aucune version n'est publiée sur NuGet.org pour l'instant, PB-051 compris. Le but est la version la plus stable possible, quel que soit son numéro, et Ghostline sert à itérer tout de suite. PB-081 à PB-084 et PB-086 ne dépendent donc plus de PB-051 et passent maintenant, avec PB-087, tiré de l'entrée « the 409 on a unique violation does not cover a command that merges into existing aggregates » (arbitrage 8, option B validée le même jour). PB-088 revalide ensuite les paquets, toujours sous `0.3.0-preview.1`, et Ghostline se met à niveau sur son commit avec `dotnet hardslice upgrade` (PB-086). Le critère de placement des arbitrages ci-dessous (avant ou après PB-051) ne décide plus que de l'ordre des tickets.
 
+Complété le 05/11/2026 par PB-090 à PB-097, tirés des sept entrées du 04/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-088 (d78ba83) : la fusion à trois voies de `dotnet hardslice upgrade`, que la section 9 attendait d'arbitrer sur une vraie mise à niveau, la sortie de `upgrade`, la condition d'une commande planifiée, le test du jeton de concurrence, la constante d'une politique, `--help` sur chaque commande et le texte de HS006 sur une lecture sans entité. Leurs arbitrages (9 à 13) sont validés par le mainteneur le 05/11/2026. PB-097 revalide les paquets après eux, toujours sous `0.3.0-preview.1`.
+
 ### Résultat attendu
 
 > Les deux modules de Ghostline se construisent avec les templates et les skills, sans réécrire de code généré ni écrire à la main ce qu'un template devrait produire : commande sans paramètre, route choisie, entité enfant, commande lancée par une tâche de fond, requête filtrée. Les cas avancés rencontrés (unicité sous concurrence, règle du domaine dans une requête, grandes collections, écritures en masse) ont une consigne écrite.
@@ -3027,8 +3029,17 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | PB-086 (`dotnet hardslice upgrade`) | PB-080 | PB-081 à PB-084, PB-087 |
 | PB-087 (jeton de concurrence des agrégats) | PB-080 | PB-081 à PB-084, PB-086 |
 | PB-088 (paquets revalidés) | PB-081 à PB-087 | aucun |
+| PB-089 (groupes de `test-template.sh`) | PB-088 | aucun |
+| PB-090 (HS006 et une lecture sans entité) | PB-089 | aucun |
+| PB-091 (`--help` et `-h`) | PB-089 | aucun |
+| PB-092 (constante d'une politique) | PB-089 | aucun |
+| PB-093 (test du jeton de concurrence) | PB-089 | aucun |
+| PB-094 (condition et cycle au démarrage) | PB-090 | aucun |
+| PB-095 (fusion à trois voies de `upgrade`) | PB-090 à PB-094 | aucun |
+| PB-096 (sortie de `upgrade`) | PB-095 | aucun |
+| PB-097 (paquets revalidés) | PB-090 à PB-096 | aucun |
 
-Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
+Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. Puis PB-089, et PB-090 à PB-097 dans l'ordre de leur numéro : PB-095 passe après les tickets qui changent le template, pour que la base qu'il enregistre et sa sonde les voient. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
 
 ### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
@@ -3854,9 +3865,325 @@ scripts/test-template.sh --only <groupe>, pour chaque groupe, sur un checkout ne
 scripts/test-template.sh, sans argument : le job template de release.yml
 ```
 
+### Arbitrages validés le 05/11/2026
+
+Pour PB-090 à PB-097, tirés des entrées du 04/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-088 (d78ba83). Validés par le mainteneur le 05/11/2026 : les recommandations ci-dessous, sans écart. PB-051 restant suspendu, aucun placement avant ou après la publication n'est à décider : les tickets passent l'un après l'autre, et PB-097 reconstruit les paquets une seule fois, après eux.
+
+9. **Ce que l'application a changé, pour `dotnet hardslice upgrade` (PB-095).** Entrées « AGENTS.md mixes the text of the template and the text of the application » et « first run of dotnet hardslice upgrade ». La première vraie mise à niveau, celle que la section 9 attendait pour arbitrer la fusion à trois voies, a pris environ 15 min, dont un tiers sur `AGENTS.md` : environ 45 des 119 lignes de son diff étaient les parties de Ghostline, montrées comme lignes à retirer. 5 des 10 fichiers de l'application listés n'avaient aucun changement de l'application, ce que seul `git log` a montré. Une base restaurée depuis NuGet.org, prévue par l'arbitrage 7, est impossible : rien n'est publié, et toutes les reconstructions portent `0.3.0-preview.1`, donc le numéro ne désigne pas une génération.
+   - Option A : la base dans la solution. La génération (`dotnet new hardslice-api`) et chaque mise à niveau écrivent dans `.hardslice/generation/`, protégé et versionné, les fichiers de l'application tels que le template les a générés. `upgrade` fusionne alors à trois voies, avec `git merge-file`.
+   - Option B : un manifeste des empreintes des fichiers générés. Les fichiers jamais changés sont mis à jour d'office, mais `AGENTS.md`, `Program.cs` et `AppFactory.cs` restent en diff à deux voies.
+   - Option C : des marqueurs des parties de l'application dans `AGENTS.md`. Ne règle qu'`AGENTS.md`.
+   - Option D : rien de plus, la fusion reste différée.
+   - Décision : A. Elle règle `AGENTS.md` sans marqueurs, met à jour d'office ce que l'application n'a pas changé, et marche sous une version reconstruite. L'arbitrage 7 écartait un fichier de plus dans la solution parce que la publication l'aurait figé : rien n'étant publié, la raison ne tient plus. Une solution sans base, comme Ghostline aujourd'hui, garde le comportement de PB-086 à sa première mise à niveau, qui enregistre la base pour la suivante.
+10. **Sortie de `dotnet hardslice upgrade` (PB-096).** Même entrée « first run of dotnet hardslice upgrade » : les en-têtes `--- <path> (solution)` et `+++ <path> (template <version>)` ne sont pas ceux de `git apply`, et un fichier déplacé est listé sans son diff contre son nouveau chemin.
+    - Décision : les en-têtes de git (`diff --git a/<path> b/<path>`, `--- a/<path>`, `+++ b/<path>`), et le diff d'un fichier déplacé contre son nouveau chemin, avec une ligne qui dit quand il ne diffère que par son namespace. Après PB-095, qui réduit ce qui reste listé.
+11. **Condition d'une commande planifiée (PB-094).** Entrée « no template for the condition of a recurring command, nor for a schedule on an existing command ». Les deux conditions de Ghostline (`ImportScheduleCondition`, `CollectRealtimeFeedsCondition`) ont été ajoutées à des commandes qui existaient déjà.
+    - Option A : un template d'élément `hardslice-condition`, pour une commande nouvelle ou existante, plus `hardslice-command --at-start` et un paramètre `start` de `RecurringCommandCycles`. L'horaire d'une commande existante reste une ligne et un test décrits dans `add-slice`.
+    - Option B : une option `--condition` de `hardslice-command`, qui ne sert pas pour une commande existante.
+    - Option C : un exemple complet dans `add-slice`, rien de généré.
+    - Décision : A.
+12. **Test du jeton de concurrence (PB-093).** Entrée « a concurrency token added to an existing aggregate gets no test ».
+    - Option A : `hardslice-aggregate` génère un test qui vérifie que le modèle mappe `Version` sur `xmin` comme jeton. Le test de comportement (deux contextes, 409) s'écrit avec la première commande qui change l'agrégat, comme `add-slice` le dit depuis PB-087.
+    - Option B : un test de comportement généré, qui devrait construire et changer un agrégat dont le domaine n'existe pas encore (marqueurs à remplir à chaque génération).
+    - Option C : un test d'architecture qui exige un jeton sur chaque racine, l'équivalent d'une règle que l'arbitrage 8 a écartée (option C).
+    - Décision : A, avec une consigne de `add-aggregate` pour un agrégat qui reçoit son jeton plus tard.
+13. **Trois corrections sans autre option.**
+    - `--require` (PB-092), entrée « --require writes the name of the policy, never the constant of the application » : une phrase de `add-slice` fait remplacer le littéral par la constante de l'application quand elle en a une. Aucune option de plus : un renommage de la politique fait déjà échouer les tests générés.
+    - HS006 et une lecture qui ne charge aucune entité (PB-090), entrée « HS006 lets a condition count tracked rows » : `AGENTS.md`, `add-slice` et le commentaire de `IRecurringCommandCondition` s'alignent sur la règle et sur `HS006.md`. Aucun diagnostic de plus.
+    - `--help` et `-h` sur chaque commande de l'outil (PB-091), entrée « dotnet hardslice upgrade --help is refused ».
+
+| Point | Ticket | Raison de l'ordre |
+|---|---|---|
+| HS006 et une lecture sans entité | PB-090 | texte seul, avant PB-094 qui touche la même consigne |
+| `--help` et `-h` | PB-091 | outil seul |
+| Constante d'une politique | PB-092 | consigne seule |
+| Test du jeton de concurrence | PB-093 | template d'élément |
+| Condition et cycle au démarrage | PB-094 | après PB-090 |
+| Fusion à trois voies | PB-095 | après PB-090 à PB-094, pour que la base et sa sonde voient tout ce qu'ils changent du template |
+| Sortie de `upgrade` | PB-096 | après PB-095 |
+| Paquets revalidés | PB-097 | après PB-090 à PB-096, Ghostline se met à niveau sur ce commit |
+
+Les entrées « decision » du 04/11/2026 n'appellent aucun ticket. L'entrée « AGENTS.md keeps "Never run dotnet hardslice upgrade" » est la consigne voulue. `AGENTS.override.md` périmé relève de l'agent Side Hub, qui le régénère.
+
+### Critères communs à PB-090 à PB-097
+
+- Les critères communs des sections 5 à 7 restent applicables, dont la sonde, l'entrée de `docs/item-templates.md` et la consigne de la skill de chaque template ou option ajouté.
+- Chaque ticket cite l'entrée de `ghostline/docs/hardslice-friction.md` qu'il ferme, et dit dans son statut le contournement que Ghostline peut retirer.
+- Chaque ticket ajoute sa ligne à `CHANGELOG.md`, sous `0.3.0-preview.1`.
+- Vérification : `dotnet build --no-restore`, `dotnet test --no-build`, et en local les groupes de `scripts/test-template.sh` de sa zone (`--only`, table de `CONTRIBUTING.md`), jamais le scénario complet. Les commits passent par une branche `ci/<ticket>` dont la CI est verte, puis sur `main`.
+- Aucun ticket ne reconstruit les paquets, ne pose d'étiquette ni ne publie : PB-097 reconstruit une fois après eux.
+
+### PB-090 : Aligner le kit agents sur HS006 pour une lecture qui ne charge aucune entité
+
+Statut : à faire. Ferme l'entrée « HS006 lets a condition count tracked rows » de `ghostline/docs/hardslice-friction.md` (arbitrage 13).
+
+**Résultat observable**
+
+`AGENTS.md`, `add-slice` et le commentaire de `IRecurringCommandCondition<TCommand>` disent la même chose que HS006 et `HS006.md` : une condition, un service hébergé ou un handler de requête met `AsNoTracking()` sur une requête qui charge une entité, et une lecture qui n'en charge aucune (`AnyAsync`, `CountAsync`, projection en valeurs) n'en a pas besoin.
+
+**Constat**
+
+Ghostline, entrée du 04/11/2026 : sans son `AsNoTracking()`, `ScheduleVersion.InForceOn(db.Set<ScheduleVersion>(), today).AnyAsync()` dans `ImportScheduleCondition` compile sans diagnostic, alors que `FirstOrDefaultAsync()` fait échouer le build. HS006 a raison, rien n'est suivi. Mais la puce « Background work » d'`AGENTS.md` dit qu'une condition « reads options or `AppDbContext` with `AsNoTracking()` », et `add-slice` comme le commentaire de `IRecurringCommandCondition` (`Shared/Messaging/RecurringCommand.cs`) le répètent, alors que `HS006.md` dit déjà qu'un service hébergé ou une condition « asks `AnyAsync` or `CountAsync` ».
+
+**Périmètre**
+
+- `src/HardSlice.Templates/content/hardslice-api/AGENTS.md` : la puce « Background work », et la règle d'or 5 si elle dit la même chose des handlers de requête, sans dépasser 150 lignes dans les deux variantes.
+- La skill `add-slice` (copies `.claude/` et `.agents/`), le commentaire de `IRecurringCommandCondition<TCommand>`.
+- `HS006.md` seulement si sa phrase sur `AnyAsync` et `CountAsync` doit nommer aussi la projection en valeurs. HS006 ne change pas.
+- Hors périmètre : un diagnostic sur une lecture qui ne charge aucune entité.
+
+**Cas vérifiés**
+
+- `TemplatePackageTests` : la phrase alignée dans `AGENTS.md` et `add-slice`, copie `.agents/` comprise.
+- Les deux variantes d'`AGENTS.md` sous 150 lignes.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+Contournement que Ghostline peut retirer : aucun, `ImportScheduleCondition` peut garder son `AsNoTracking()`.
+
+### PB-091 : Afficher l'aide d'une commande de l'outil avec `--help` ou `-h`
+
+Statut : à faire. Ferme l'entrée « dotnet hardslice upgrade --help is refused » (arbitrage 13).
+
+**Résultat observable**
+
+`dotnet hardslice <commande> --help` et `-h`, pour `check`, `explain`, `protected`, `upgrade` et `hook`, affichent le paragraphe de cette commande dans l'usage, avec ses options et ses codes de sortie, et sortent avec le code 0. `dotnet hardslice -h` vaut `--help`.
+
+**Constat**
+
+Ghostline, entrée du 04/11/2026 : `dotnet hardslice upgrade --help` répond « error: upgrade takes no argument, or --sample or --no-sample to choose the variant of the template. Unknown arguments: '--help'. » avec le code 2. `check` et `protected` refusent `--help` de la même façon (`src/HardSlice.Tool/Cli.cs`). C'est pourtant le premier réflexe avant une commande qui réécrit des fichiers protégés.
+
+**Périmètre**
+
+- `Cli.cs` : `--help` et `-h` reconnus seuls après le nom de chaque commande, avant toute autre validation de ses arguments. L'aide d'une commande est tirée de `Usage`, pour qu'un seul texte décrive chaque commande. Un `--help` mêlé à d'autres arguments reste une erreur de ligne de commande (code 2), comme aujourd'hui.
+- README de `HardSlice.Tool`, `CHANGELOG.md`.
+
+**Cas vérifiés**
+
+- `CliTests` : `--help` et `-h` pour chaque commande, sortie exacte et code 0, rien d'écrit sur la sortie d'erreur. `upgrade --help` ne touche pas au dépôt git, même avec un arbre modifié.
+- Les erreurs actuelles des arguments inconnus inchangées.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+```
+
+Contournement que Ghostline peut retirer : aucun, `dotnet hardslice` sans argument suffisait.
+
+### PB-092 : Dire dans `add-slice` de remplacer le nom littéral d'une politique par la constante de l'application
+
+Statut : à faire. Ferme l'entrée « --require writes the name of the policy, never the constant of the application » (arbitrage 13).
+
+**Résultat observable**
+
+La section « Protected endpoints » de `add-slice` dit que `--require <policy>` écrit le nom de la politique en littéral, dans l'endpoint et dans les tests (`.RequireAuthorization("<policy>")`, `app.CreateAuthorizedClient("<policy>")`), et qu'une application qui nomme sa politique dans une constante, comme `AdminKey.Policy` dans `Shared/Http`, remplace les littéraux par cette constante.
+
+**Constat**
+
+Ghostline, entrée du 04/11/2026 : sa politique est nommée une fois, `AdminKey.Policy`, que son schéma enregistre. Chaque slice générée avec `--require Admin` répète le littéral, que l'agent remplace à la main. Un renommage de la politique compile toujours, mais fait échouer les tests générés (le 401, et le client absent de `AuthorizedClients`), donc le check l'attrape.
+
+**Périmètre**
+
+- `add-slice` (copies `.claude/` et `.agents/`), section « Protected endpoints ».
+- La description de `--require` dans `template.json` de `hardslice-command` et `hardslice-query`, et `docs/item-templates.md`, d'une demi-phrase si leur texte laisse croire que le littéral doit rester.
+- Hors périmètre : une option qui génère la constante.
+
+**Cas vérifiés**
+
+- `TemplatePackageTests` : la consigne dans `add-slice`, copie `.agents/` comprise.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items
+```
+
+Contournement que Ghostline peut retirer : aucun, `ImportSchedule` chaîne déjà `.RequireAuthorization(AdminKey.Policy)`.
+
+### PB-093 : Générer le test du jeton de concurrence d'un agrégat
+
+Statut : à faire. Ferme l'entrée « a concurrency token added to an existing aggregate gets no test » (arbitrage 12).
+
+**Résultat observable**
+
+`dotnet new hardslice-aggregate` génère, à côté du mapping, un test d'intégration qui vérifie que le modèle de `AppDbContext` mappe la propriété fantôme `Version` de l'agrégat sur `xmin` comme jeton de concurrence. Si le mapping du jeton est retiré ou cassé, ce test échoue. `add-aggregate` dit quoi faire pour un agrégat mappé avant son jeton : la migration à part, avec le commentaire de celle de l'exemple (aucun SQL, l'instantané seul), et ce même test.
+
+**Constat**
+
+Ghostline, entrée du 04/11/2026 : `hardslice-aggregate` mappe le jeton depuis PB-087 mais ne génère aucun test, ni pour un nouvel agrégat ni pour un agrégat qui le reçoit plus tard. `dotnet ef migrations add` a généré la migration de `ScheduleVersion` et `ObservedTrip` sans le commentaire que porte `AddBookingConcurrencyToken`. Ghostline a écrit à la main un test du modèle pour `ScheduleVersion`, et un test de modification concurrente pour `ObservedTrip` (deux contextes, `DbUpdateConcurrencyException` à la seconde sauvegarde). Le jeton protège du pire cas retenu par l'arbitrage 8, une écriture perdue sans erreur.
+
+**Périmètre**
+
+- `hardslice-aggregate` : `tests/<App>.IntegrationTests/Features/<Module>/<Aggregate>ConfigurationTests.cs`, comme `BookingConfigurationTests` de l'exemple, avec un test qui lit `FindEntityType(typeof(<Aggregate>))` et vérifie la propriété `Version` : `IsConcurrencyToken`, nom de colonne `xmin`, générée à l'ajout et à la mise à jour. Sans marqueur `TODO(hardslice):` : le test passe tel quel.
+- L'exemple : le même test pour `Booking`, s'il n'en a pas.
+- `add-aggregate` : la consigne pour un agrégat qui reçoit son jeton plus tard (migration commentée, test du modèle), et le rappel que le test de comportement s'écrit avec la première commande qui change l'agrégat, comme `add-slice` le dit.
+- `docs/item-templates.md`, `CHANGELOG.md`.
+- Hors périmètre : un test de comportement généré, un test d'architecture sur toutes les racines.
+
+**Cas vérifiés**
+
+- `probe_aggregate_template`, dans les deux variantes : le test généré passe, et échoue quand la sonde retire la ligne `IsRowVersion()` du mapping.
+- `probe_aggregate_concurrency` inchangée et verte.
+- `TemplatePackageTests` : la consigne dans `add-aggregate`, copie `.agents/` comprise.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+Contournement que Ghostline peut retirer : aucun, ses deux tests écrits à la main gardent leur forme. Un agrégat suivant reçoit le test généré.
+
+### PB-094 : Générer la condition d'une commande planifiée, et le cycle au démarrage
+
+Statut : à faire, après PB-090. Ferme l'entrée « no template for the condition of a recurring command, nor for a schedule on an existing command » (arbitrage 11).
+
+**Résultat observable**
+
+`dotnet new hardslice-condition --module <Module> --command <Slice>` ajoute à une slice de commande, nouvelle ou existante, `<Slice>Condition` dans le dossier de la slice, qui implémente `IRecurringCommandCondition<<Slice>Command>`, et un test d'intégration qui fait retenir un cycle par la condition (`HeldCycleException`, avec sa raison) et passer un cycle quand elle le laisse aller. Il affiche la ligne d'enregistrement à ajouter après le handler dans `Add<Module>Module`, comme `--every` affiche la sienne. `hardslice-command --at-start`, avec `--every` ou `--daily-at`, chaîne `AlsoAtStart()` à l'horaire et génère le test du cycle au démarrage. `RecurringCommandCycles` reçoit un paramètre `start`, l'instant de départ de son horloge, `TestInstants.Start` par défaut.
+
+**Constat**
+
+Ghostline, entrée du 04/11/2026 : `add-slice` décrit une condition en prose et donne la ligne d'un horaire sur une commande qui garde son endpoint, mais aucun template ne génère l'une ni l'autre. `ImportScheduleCondition`, `CollectRealtimeFeedsCondition`, leur enregistrement et les tests des cycles (au démarrage retenu ou envoyé, nuits, reprises) ont été écrits à la main, sur des commandes qui existaient déjà. Le test généré par `--daily-at` ne couvre ni `AlsoAtStart()` ni une condition. Pour tester le cycle au démarrage à 02:00 UTC (la veille à Ottawa), le test déplace `Clock` avec `SetUtcNow` avant le premier usage de `Services`, ce qu'aucun commentaire ne dit.
+
+**Périmètre**
+
+- Nouveau template d'élément `hardslice-condition`, dans `src/HardSlice.Templates/content/`, sur le modèle de `hardslice-command` : `--module` et `--command` obligatoires, refusé (code 105, message qui dit quoi faire) quand la slice ou sa commande n'existe pas, ou quand la condition existe déjà. La condition générée est `internal sealed`, reçoit ce qu'elle lit par son constructeur, et porte un marqueur `TODO(hardslice):` à la place de sa règle. Le test généré utilise `RecurringCommandCycles` et porte un marqueur à la place de l'état qui retient le cycle. `ProgramTests` nomme déjà une condition non enregistrée.
+- `hardslice-command --at-start` : refusé sans `--every` ni `--daily-at`. Le test généré lance le cycle au démarrage à `TestInstants.Start`.
+- `RecurringCommandCycles(app, configure, start)` : un `DateTimeOffset?` qui fixe l'heure de `Clock` avant que l'application démarre. Le commentaire de la classe le dit.
+- `add-slice` : la section des commandes planifiées nomme `hardslice-condition` et `--at-start`, et garde pour l'horaire d'une commande existante sa ligne d'enregistrement, avec le test de ses cycles décrit par `RecurringCommandCycles`. `AGENTS.md` nomme le template dans la puce « Background work », sous 150 lignes.
+- `docs/item-templates.md`, README du paquet de templates, `CHANGELOG.md`.
+
+**Cas vérifiés**
+
+- Sonde de `hardslice-condition` dans les groupes des templates d'éléments, dans les deux variantes : sur une commande générée avec `--every`, puis sur une commande avec endpoint à laquelle la sonde ajoute un horaire. Refus d'une slice inconnue, d'une condition qui existe, marqueurs listés par `check`, puis complétion de référence verte.
+- `--at-start` avec `--every` et avec `--daily-at` : test du cycle au démarrage vert après complétion. Refus sans horaire.
+- `RecurringCommandTests` et les tests qui utilisent `RecurringCommandCycles` sans `start`, inchangés et verts.
+- `TemplatePackageTests` : le nouveau template dans le paquet, la consigne dans `add-slice`, copie `.agents/` comprise.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+Contournement que Ghostline peut retirer : aucun à retirer, ses conditions écrites à la main ont la forme générée. Son test du cycle au démarrage peut passer `start` au lieu de `SetUtcNow`.
+
+### PB-095 : Fusionner à trois voies dans `dotnet hardslice upgrade`, depuis la génération enregistrée dans la solution
+
+Statut : à faire, après PB-090 à PB-094. Ferme l'entrée « AGENTS.md mixes the text of the template and the text of the application » et la suggestion « know which files the application never changed » de l'entrée « first run of dotnet hardslice upgrade » (arbitrage 9, option A). Retire de la section 9 la fusion à trois voies.
+
+**Résultat observable**
+
+Une solution générée garde dans `.hardslice/generation/` les fichiers de l'application tels que le template les a générés. `dotnet hardslice upgrade` s'en sert de base : un fichier que l'application n'a pas changé est mis à jour d'office, un fichier que l'application et le template ont changés est fusionné à trois voies, un conflit est écrit dans le fichier avec les marqueurs de git, et la base est remplacée par la nouvelle génération. Sur une solution sans base, `upgrade` fait ce que fait PB-086, puis enregistre la base pour la mise à niveau suivante.
+
+**Constat**
+
+Ghostline, entrées du 04/11/2026 : la première vraie mise à niveau (d78ba83) a pris environ 15 min jusqu'au check vert, dont un tiers sur `AGENTS.md`. Les diffs vont de la solution vers le template : environ 45 des 119 lignes du diff d'`AGENTS.md` étaient les parties de Ghostline (carte des modules, clé d'administration, deux paragraphes de « Running the API », section « Ghostline »), qu'un diff appliqué tel quel supprime. 5 des 10 fichiers listés (`RecurringCommand.cs`, `AppDbContext.cs`, `ProgramTests.cs`, `RecurringCommandTests.cs`, `RecurringCommandCycles.cs`) n'avaient aucun changement de l'application, ce que seul `git log` a montré. `Program.cs` et `AppFactory.cs` auraient fusionné sans conflit. Une base restaurée depuis NuGet.org est impossible tant que rien n'est publié, et toutes les reconstructions portent le même numéro.
+
+**Périmètre**
+
+- La base : `.hardslice/generation/<chemin>`, pour chaque fichier que le template génère et que l'application possède (tout sauf `ProtectedFiles` et `docs/rules/`), sous le nom et la variante de la solution. Elle ne contient aucun fichier du kit agents, pour qu'aucun CLI ne lise une skill, un hook ou une consigne en double. Le dossier entre dans la liste de `ProtectedFiles` : un agent ne l'édite jamais, et la CI générée demande le libellé `hardslice-approved` pour un changement, comme pour les autres fichiers que `upgrade` écrit. Aucun projet ne compile ses fichiers, et `check` ne cherche les marqueurs `TODO(hardslice):` que dans `src/` et `tests/`.
+- Écrite par la génération : une seconde source de `template.json` de `hardslice-api`, cible `.hardslice/generation/`, avec les modificateurs de la variante et les exclusions de la liste protégée. Un test de `TemplatePackageTests` vérifie que ces exclusions suivent `ProtectedFiles`, pour que la liste reste unique (PB-053). Si `dotnet new` ne permet pas d'écrire la base ainsi dans les deux variantes et sous tous les noms de la sonde `names`, le ticket s'arrête avec un blocker qui dit ce qui manque, sans choisir une autre forme.
+- `upgrade`, pour chaque fichier de l'application, avec la base `B`, la solution `S` et la nouvelle génération `T` (fins de ligne et `UserSecretsId` normalisés comme aujourd'hui, le `UserSecretsId` de la solution reporté dans `B` et `T`) :
+  - `S` égal à `B` : remplacé par `T`, listé « updated, unchanged by the application ».
+  - `T` égal à `B` : laissé, non listé.
+  - Sinon, `git merge-file` : une fusion propre est écrite et listée « merged », un conflit est écrit avec ses marqueurs (`<<<<<<< solution`, `||||||| generation <version>`, `>>>>>>> template <version>`) et listé « conflicts to resolve ».
+  - Fichier supprimé par l'application et changé par le template : listé, laissé supprimé.
+  - Fichier de la base que la nouvelle génération n'a plus : supprimé si `S` égal `B`, listé sinon. Un déplacement de PB-086 dont l'ancien fichier est égal à sa base est supprimé et n'est plus listé.
+  - Fichier sans base : comportement et diff de PB-086.
+  - Puis `.hardslice/generation/` est remplacé par celui de la nouvelle génération.
+- Codes de sortie : 0 quand il ne reste ni conflit ni fichier à fusionner à la main (les fichiers fusionnés sont listés, à relire avec `git diff`), 3 sinon, 1 et 2 inchangés. La dernière ligne compte chaque liste.
+- `UpgradeCommand` et son commentaire de tête, `Cli.Usage`, `docs/getting-started.md` (« Upgrading a generated solution »), `agent-loop.md` si elle décrit la mise à niveau, README de l'outil et du paquet de templates, `CHANGELOG.md`. `AGENTS.md` du template ne change que si une ligne nomme ce que `upgrade` laisse à fusionner.
+- Section 9 : la ligne de la fusion à trois voies part, celle des marqueurs d'`AGENTS.md` reste écartée avec sa raison mise à jour (la base les remplace).
+- Hors périmètre : une base restaurée depuis NuGet.org, le format des diffs (PB-096).
+
+**Cas vérifiés**
+
+- `UpgradeCommandTests`, dépôt git réel, génération simulée : chacun des cas du périmètre, une fusion propre de deux changements sur des lignes différentes, un conflit et ses marqueurs, le `UserSecretsId` qui ne crée aucun conflit, une solution sans base puis la base écrite, une seconde mise à niveau qui ne réécrit ni ne liste rien.
+- Sonde de mise à niveau du groupe `upgrade`, dans les deux variantes : la sonde actuelle, depuis le template de PB-074 sans base, inchangée et suivie de la vérification que la base est écrite. Une nouvelle sonde packe le template de ce commit, génère la solution, lui ajoute un module, complète `AGENTS.md` et change `Program.cs`, puis packe une copie du template où elle change une ligne d'`AGENTS.md` loin des parties de l'application, une ligne de `Program.cs` et un fichier que la solution n'a pas changé, et lance `upgrade`. Les parties de l'application dans `AGENTS.md` restent, les trois changements du template sont appliqués sans liste à fusionner, code 0, check vert. Un changement du template sur une ligne que la solution a changée finit en conflit, code 3.
+- Sonde `names` : la base porte le nom de la solution, sous ses deux formes.
+- `TemplatePackageTests` : la seconde source et ses exclusions alignées sur `ProtectedFiles`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only upgrade,names,sample,blank
+```
+
+Contournement que Ghostline peut retirer : le script qui remettait ses parties dans `AGENTS.md` et le `git log` sur chaque fichier listé, à partir de sa deuxième mise à niveau. La première après ce ticket (PB-097) se passe comme avec PB-086 et enregistre la base.
+
+### PB-096 : Écrire les diffs de `dotnet hardslice upgrade` au format de git, et comparer un fichier déplacé à son nouveau chemin
+
+Statut : à faire, après PB-095. Ferme le reste de l'entrée « first run of dotnet hardslice upgrade » (arbitrage 10).
+
+**Résultat observable**
+
+Chaque diff que `upgrade` écrit porte les en-têtes de git (`diff --git a/<path> b/<path>`, `--- a/<path>`, `+++ b/<path>`), et le bloc d'un fichier, coupé de la sortie, s'applique avec `git apply`. Un fichier que le template a peut-être déplacé, et que PB-095 ne supprime pas, est listé avec son diff contre son nouveau chemin, et une ligne dit quand ils ne diffèrent que par la déclaration du namespace.
+
+**Constat**
+
+Ghostline, entrée du 04/11/2026 : les en-têtes `--- <path> (solution)` et `+++ <path> (template 0.3.0-preview.1)` ne sont pas ceux de `git apply`. Un script a découpé les 1 585 lignes de sortie par fichier, puis `patch` a appliqué chaque diff. Les cinq fichiers déplacés de `Shared/Behaviors` vers `Shared/Http` étaient listés sans diff : un `diff` à la main a montré qu'ils ne différaient que par leur namespace.
+
+**Périmètre**
+
+- `UnifiedDiff` et `UpgradeCommand` : les en-têtes de git, sens inchangé (`-` dans la solution, `+` dans le template), la version du template dite une fois dans le titre de la liste et non plus dans chaque en-tête. Un fichier sans fin de ligne finale porte `\ No newline at end of file`, comme git.
+- Déplacement : diff de l'ancien fichier contre le nouveau (`diff --git a/<ancien> b/<nouveau>`), et la ligne « differs only by its namespace » quand c'est le cas.
+- `Cli.Usage`, `docs/getting-started.md`, README de l'outil, `CHANGELOG.md`.
+- Hors périmètre : un dossier de fichiers patch, un autre sens des diffs.
+
+**Cas vérifiés**
+
+- `UnifiedDiffTests` : les en-têtes, la fin de fichier sans saut de ligne, et un diff que `git apply --check` accepte sur un dépôt réel.
+- `UpgradeCommandTests` : le diff d'un déplacement, la ligne du namespace seul, un déplacement qui change autre chose.
+- Groupe `upgrade` : les sorties attendues mises à jour.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only upgrade
+```
+
+Contournement que Ghostline peut retirer : le script qui découpait la sortie et le `diff` à la main des fichiers déplacés.
+
+### PB-097 : Revalider les paquets après PB-090 à PB-096, pour la mise à niveau de Ghostline
+
+Statut : à faire, après PB-090 à PB-096. Comme PB-088 : reconstruction sous `0.3.0-preview.1`, rien n'est publié et aucune étiquette n'est posée.
+
+**Résultat observable**
+
+Les paquets de `artifacts/packages`, reconstruits sur ce commit, portent PB-090 à PB-096, la CI de la branche `ci/pb-097` est verte sur tous les groupes, et le statut de ce ticket donne à Ghostline la procédure de sa mise à niveau, essayée sur un clone jetable.
+
+**Périmètre**
+
+- `CHANGELOG.md` : une ligne par ticket, rien ne manque. README racine, de l'outil et du paquet de templates : `hardslice-condition`, `--at-start`, la base de `upgrade` et sa fusion.
+- Paquets reconstruits, `scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages`.
+- CI de `ci/pb-097` : chaque groupe vert, puis `main`.
+- Essai sur un clone jetable de Ghostline (jamais le dépôt lui-même), dans un dossier du bloc-notes, avec le home de `isolate_dotnet_cli_home` et un `NUGET_PACKAGES` à lui, comme PB-088 : purge des caches de `CONTRIBUTING.md`, `dotnet tool restore`, `dotnet hardslice upgrade`. Attendu : sans base, la sortie de PB-086 au format de PB-096, puis `.hardslice/generation/` écrit. Une seconde mise à niveau sur le même clone, le résultat fusionné et commité, ne réécrit ni ne liste rien.
+- Statut : la procédure pour Ghostline, les listes vues sur le clone, et les contournements que Ghostline peut retirer d'après les statuts de PB-090 à PB-096.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+CI de ci/pb-097, chaque groupe vert
+scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-088 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-088. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
+L'incrément est terminé lorsque PB-064 à PB-097 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-097, comme il l'a fait sur celui de PB-088. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
 
 ## 8. Incréments suivants
 
@@ -3890,8 +4217,8 @@ L'incrément est terminé lorsque PB-064 à PB-088 sont satisfaits, que les jobs
 | Skill `add-authorization` | écarté par l'arbitrage 3 : la consigne va dans `add-slice` (PB-081) et `HS015.md` (PB-079) |
 | HS003 étendue, ou une nouvelle règle, pour les services hébergés d'une slice | écarté par l'arbitrage 5 : HS006 étendue par PB-084 |
 | Skill `reshape-entity` ou option `--reshape` de `hardslice-entity` | écarté par l'arbitrage 6 : documenté dans `add-aggregate` par PB-085 |
-| Version et options du template écrites dans la solution, marqueurs des parties de l'application dans `AGENTS.md` | écarté par l'arbitrage 7 : `dotnet hardslice upgrade` lit ou demande ce dont il a besoin (PB-086) |
-| Fusion à trois voies de `dotnet hardslice upgrade` (base : génération de la version de départ, restaurée depuis NuGet.org), qui garderait sans diff manuel les parties de l'application dans `AGENTS.md` | à arbitrer après PB-086, sur une vraie mise à niveau (arbitrage 7 : option B d'abord) |
-| Mise à niveau d'une solution générée par une construction locale non publiée | couverte par PB-086 (option B), qui ne restaure aucune génération de départ |
+| Marqueurs des parties de l'application dans `AGENTS.md` | écarté par l'arbitrage 9 : la base que PB-095 enregistre dans la solution les garde par la fusion à trois voies |
+| Base de la fusion de `dotnet hardslice upgrade` restaurée depuis NuGet.org | écarté par l'arbitrage 9 : la base est enregistrée dans la solution (PB-095), ce qui marche aussi sous une version reconstruite |
+| Mise à niveau d'une solution générée par une construction locale non publiée | couverte par PB-086 (option B), qui ne restaure aucune génération de départ, puis par la fusion de PB-095 une fois la base enregistrée |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
