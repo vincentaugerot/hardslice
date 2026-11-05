@@ -44,7 +44,7 @@ dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings 
 | Seven item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-entity`, `hardslice-command`, `hardslice-query`, `hardslice-event` and `hardslice-condition` generate an element in its place with its tests, which fail until the element is completed. |
 | `HardSlice.Analyzers` | Roslyn analyzers that report the rules at build time and in the IDE. |
 | Architecture tests | The rules that span projects, modules and test folders, in every generated solution. |
-| `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification and gives a `Fix:` to each error on a HardSlice file, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files, `upgrade` brings a solution to the template of its version. |
+| `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification and gives a `Fix:` to each error on a HardSlice file, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files, `upgrade` brings a solution to the template of its version, and merges in three ways the files of the application from the generation that the solution records in `.hardslice/generation/`. |
 | Agent kit | `AGENTS.md` and the instruction file of each agent, six skills, the hooks of Claude Code, Codex and Copilot CLI, a pre-commit hook and a GitHub Actions workflow. |
 
 ## Supported agents
