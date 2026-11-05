@@ -741,6 +741,12 @@ public sealed class TemplatePackageTests
         section.ShouldContain("dotnet new hardslice-command --project src/MyApp/MyApp.csproj --module <Module> --name <Slice> --route <route> --require <policy>");
         section.ShouldContain("`--require` is refused with `--endpoint none`, `--every` and `--daily-at`");
         section.ShouldContain("an entry of `AuthorizedClients` named after the policy");
+        // PB-092: the generated literal gives way to the constant of the application, so that a renamed policy keeps one name. The pack
+        // copies add-slice into .agents/skills/ as is, which the test of the pack checks.
+        section.ShouldContain(
+            "`--require` writes the name of the policy as a literal, in the endpoint and in the tests: when the application names its policy in a "
+            + "constant, such as `AdminKey.Policy` in `Shared/Http`, replace each literal with that constant, `.RequireAuthorization(AdminKey.Policy)` "
+            + "and `app.CreateAuthorizedClient(AdminKey.Policy)`, with the `using` of its namespace, so that the policy keeps one name.");
         section.ShouldContain("`docs/rules/HS015.md`");
         addSlice.ShouldNotContain("add-authorization");
     }
