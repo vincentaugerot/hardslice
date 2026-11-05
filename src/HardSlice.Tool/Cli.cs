@@ -38,13 +38,53 @@ internal static class Cli
                                                                       JSON on the standard output, code 0.
 
         Options:
-          --help          Prints this help.
+          --help, -h      Prints this help, or after a command the help of that command alone, such as upgrade --help.
           --version       Prints the version of the tool.
 
         Exit codes of check and check --build: 0 the check passed, 1 a step failed, 2 a wrong command line only.
         Exit codes of upgrade: 0 nothing left to merge, 1 the upgrade failed (with a change in the git tree, nothing is written),
         2 a wrong command line, 3 files left to merge or to review, listed.
+        Exit codes of explain: 0 the sheet printed, 2 a rule without a sheet or a wrong command line.
+        Exit codes of hook: those of its CLI above, 1 an unknown CLI or event, or a payload that is not JSON.
         """;
+
+    // The commands that take --help or -h alone, before any other check of their arguments.
+    private static readonly string[] Commands = ["check", "explain", "protected", "upgrade", "hook"];
+
+    // The help of a command, drawn from Usage so that one text describes each command: its paragraphs under Commands, the
+    // entries whose first word is the command, then the lines of its exit codes.
+    public static string HelpOf(string command)
+    {
+        var lines = Usage.Split(["\r\n", "\n"], StringSplitOptions.None);
+        var paragraphs = new List<string>();
+        var inCommand = false;
+        foreach (var line in lines.SkipWhile(line => line != "Commands:").Skip(1).TakeWhile(line => line.Length > 0))
+        {
+            // An entry starts at the column of the commands, its other lines are indented further.
+            if (line.Length > 2 && line[2] != ' ')
+                inCommand = line[2..].Split(' ')[0] == command;
+            if (inCommand)
+                paragraphs.Add(line);
+        }
+
+        var exitCodes = new List<string>();
+        var inExitCodes = false;
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("Exit codes of ", StringComparison.Ordinal) || line.Length == 0)
+                inExitCodes = line.StartsWith($"Exit codes of {command} ", StringComparison.Ordinal)
+                    || line.StartsWith($"Exit codes of {command}:", StringComparison.Ordinal);
+            if (inExitCodes)
+                exitCodes.Add(line);
+        }
+
+        // The command column of its first entry: the command and its arguments, such as explain <rule>.
+        var synopsis = paragraphs[0].Trim().Split("  ")[0];
+        List<string> help = [$"Usage: dotnet hardslice {synopsis}", "", .. paragraphs];
+        if (exitCodes.Count > 0)
+            help.AddRange(["", .. exitCodes]);
+        return string.Join(Environment.NewLine, help);
+    }
 
     // Where the end hook counts its relaunches for each failure, one file per session, in a folder of the user: a shared folder,
     // created by the first account of the machine that ran a hook, would refuse the writes of every other account.
@@ -65,6 +105,10 @@ internal static class Cli
     {
         switch (args)
         {
+            // --help or -h alone after a command, which never runs it: a maintainer reads what upgrade writes before running it.
+            case [var command, "--help" or "-h"] when Commands.Contains(command):
+                output.WriteLine(HelpOf(command));
+                return 0;
             case ["hook", var name, var eventName] when HookCli.Find(name) is { } cli && cli.Events.Contains(eventName):
                 return new AgentHook(cli, runner, output, error, environment, hookStateDirectory).Run(eventName, input, currentDirectory);
             case ["hook", ..]:
