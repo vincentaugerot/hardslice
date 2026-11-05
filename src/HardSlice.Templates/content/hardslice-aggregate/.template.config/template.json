@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Aggregate",
   "name": "HardSlice aggregate",
-  "description": "An aggregate of a module of a hardslice-api solution: its root, its typed identifier, its EF Core mapping in the module and its unit tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "An aggregate of a module of a hardslice-api solution: its root, its typed identifier, its EF Core mapping in the module, its unit tests and the integration test of its concurrency token. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-aggregate",
   "sourceName": "AggregateName",
   "preferNameDirectory": false,

@@ -625,6 +625,51 @@ public sealed class TemplatePackageTests
         addAggregate.ShouldContain("- Remove the concurrency token `Version` from a mapping");
     }
 
+    // PB-093: hardslice-aggregate generates the test of the model that holds its concurrency token, which passes as generated, the
+    // sample has the same test for Booking, and add-aggregate says how an aggregate mapped before its token gets the token, its
+    // migration and that test. The pack copies add-aggregate into .agents/skills/ as is, which the test of the pack checks.
+    [Fact]
+    public void Aggregates_get_the_test_of_their_concurrency_token_and_the_agent_kit_says_how_a_mapped_aggregate_gets_it()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var template = TemplateRoot(repositoryRoot);
+        var generated = File.ReadAllText(Path.Combine(AggregateTemplateRoot(repositoryRoot), "tests", "MyApp.IntegrationTests", "Features", "ModuleName",
+            "AggregateNameConfigurationTests.cs"));
+        var sample = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "Features", "Bookings", "BookingConfigurationTests.cs"));
+        var addAggregate = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-aggregate", "SKILL.md"));
+        string[] assertions =
+        [
+            "        version.IsShadowProperty().ShouldBeTrue();\n",
+            "        version.ClrType.ShouldBe(typeof(uint));\n",
+            "        version.IsConcurrencyToken.ShouldBeTrue();\n",
+            "        version.ValueGenerated.ShouldBe(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate);\n",
+            "        version.GetColumnName().ShouldBe(\"xmin\");\n",
+        ];
+
+        generated.ShouldContain("namespace MyApp.IntegrationTests.Features.ModuleName;");
+        generated.ShouldContain("public sealed class AggregateNameConfigurationTests(PostgresDatabase database)");
+        generated.ShouldContain("    public async Task Maps_the_Version_of_AggregateName_on_xmin_as_its_concurrency_token()");
+        generated.ShouldContain("db.Model.FindEntityType(typeof(AggregateName))?.FindProperty(\"Version\");");
+        generated.ShouldNotContain("TODO(hardslice):");
+        sample.ShouldContain("    public async Task Maps_the_Version_of_Booking_on_xmin_as_its_concurrency_token()");
+        sample.ShouldContain("db.Model.FindEntityType(typeof(Booking))?.FindProperty(\"Version\");");
+        foreach (var assertion in assertions)
+        {
+            generated.ShouldContain(assertion);
+            sample.ShouldContain(assertion);
+            // The method of the skill sits in an item of a list, without its class: two spaces of the item instead of four.
+            addAggregate.ShouldContain("\n" + assertion[2..]);
+        }
+
+        addAggregate.ShouldContain("and the integration test of its concurrency token in `tests/MyApp.IntegrationTests/Features/<Module>/<Aggregate>ConfigurationTests.cs`");
+        addAggregate.ShouldContain("and `<Aggregate>ConfigurationTests` fails without it.");
+        addAggregate.ShouldContain("- An aggregate mapped before its token, by hand or by an earlier template, gets the line `builder.Property<uint>(\"Version\").IsRowVersion();` in its mapping, then a migration of its own");
+        addAggregate.ShouldContain("write above it the comment `// xmin is a system column of every PostgreSQL table: Npgsql generates no SQL for it, and this migration only records the concurrency token of <Aggregate>Configuration in the model.`, and add no SQL.");
+        addAggregate.ShouldContain("Then add the test that the template generates for a new aggregate");
+        addAggregate.ShouldContain("  public async Task Maps_the_Version_of_<Aggregate>_on_xmin_as_its_concurrency_token()");
+        addAggregate.ShouldContain("The integration test of the 409 comes with the first command that changes the aggregate, as `add-slice` says");
+    }
+
     // PB-081: --require <policy> protects the endpoint of a command or a query: it chains .RequireAuthorization("<policy>"), the tests
     // send the client of the policy that AppFactory holds, except a test of the 401 that sends none. Without the option, the tests keep
     // app.CreateClient(), and a command refuses it with --endpoint none or --every, which have no endpoint.
@@ -2314,6 +2359,7 @@ public sealed class TemplatePackageTests
         "src/MyApp.Domain/ModuleName/AggregateName.cs",
         "src/MyApp.Domain/ModuleName/AggregateNameId.cs",
         "src/MyApp/Features/ModuleName/AggregateNameConfiguration.cs",
+        "tests/MyApp.IntegrationTests/Features/ModuleName/AggregateNameConfigurationTests.cs",
         "tests/MyApp.Tests/Domain/ModuleName/AggregateNameTests.cs"
     ];
 

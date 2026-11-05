@@ -5,7 +5,7 @@ description: Adds an aggregate to a module of this HardSlice solution with dotne
 
 # Add an aggregate
 
-An aggregate is the root of a consistency boundary in `src/MyApp.Domain/<Module>/`: it holds the business rules of its state, which changes only through its methods. The template creates the aggregate, its identifier `<Aggregate>Id`, its EF Core mapping in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs` and its unit tests in `tests/MyApp.Tests/Domain/<Module>/`: never write that structure by hand.
+An aggregate is the root of a consistency boundary in `src/MyApp.Domain/<Module>/`: it holds the business rules of its state, which changes only through its methods. The template creates the aggregate, its identifier `<Aggregate>Id`, its EF Core mapping in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`, its unit tests in `tests/MyApp.Tests/Domain/<Module>/` and the integration test of its concurrency token in `tests/MyApp.IntegrationTests/Features/<Module>/<Aggregate>ConfigurationTests.cs`: never write that structure by hand.
 
 A child entity has an identity of its own but belongs to one aggregate, such as the lines of an order: `dotnet new hardslice-entity` generates it, its identifier, its mapping and its unit tests, as [Child entities](#child-entities) says.
 
@@ -28,7 +28,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    - keep every property without public setter nor `init` accessor: add a method for each change of state, which checks the same invariants;
    - an instant comes as a parameter, never from the system clock.
 5. Replace the `TODO(hardslice):` marker of `tests/MyApp.Tests/Domain/<Module>/<Aggregate>Tests.cs` with real assertions: the state given by the factory method, then one test per invariant it refuses (`Should.Throw<DomainException>`), and the same for each method you added.
-6. Map the state in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`, in fluent API: column types, lengths and required values that match the invariants. A state that the table stores in another shape than the one the aggregate shows lives in private fields, as [Mapping private fields](#mapping-private-fields) says. Keep the line `builder.Property<uint>("Version").IsRowVersion();`: it is the concurrency token of the aggregate, as [Concurrent changes](#concurrent-changes) says. `AppDbContext` applies the mapping by itself: there is nothing to register. Never add EF Core attributes or references to the domain.
+6. Map the state in `src/MyApp/Features/<Module>/<Aggregate>Configuration.cs`, in fluent API: column types, lengths and required values that match the invariants. A state that the table stores in another shape than the one the aggregate shows lives in private fields, as [Mapping private fields](#mapping-private-fields) says. Keep the line `builder.Property<uint>("Version").IsRowVersion();`: it is the concurrency token of the aggregate, as [Concurrent changes](#concurrent-changes) says, and `<Aggregate>ConfigurationTests` fails without it. That test passes as generated: add the integration tests of the mapping next to it. `AppDbContext` applies the mapping by itself: there is nothing to register. Never add EF Core attributes or references to the domain.
 7. Add the migration that the template printed, once the mapping is complete:
 
    ```text
@@ -73,9 +73,27 @@ Two commands that change the same aggregate at the same time, from two requests,
 - The token of the root covers its children held in its collection. A command that adds or changes only a child leaves the row of the root as it is, and EF Core would check no token: `AppDbContext` saves the tracked root of each child added, changed or removed, so that two commands that each add a line to the same order, each checking a maximum of lines, never both commit. The root must be loaded with its children, as a change of a child always is, through a method of the root. It also needs a column of its own besides its identifier: EF Core sends no update for a row without one, and the save of a root whose only state is its children fails with `The children of the aggregate <Aggregate> changed, but its mapping has no column besides its key and its concurrency token` until its mapping holds a state of the root.
 - Children that hold the identifier of their root (`--link id`), and those written in bulk, are written apart from the root, which they leave as it is: its token does not cover them.
 - The token never covers a creation: two commands that create the same aggregate rely on its unique index and the 409 of its violation. A merge that must never fail, such as a collection that enriches what a concurrent run stored and would lose its work on a 409, takes a transaction lock instead. `add-slice` details both.
-- An aggregate mapped before its token gets it with a migration of its own, whose `AddColumn` of `xmin` creates nothing either.
+- An aggregate mapped before its token, by hand or by an earlier template, gets the line `builder.Property<uint>("Version").IsRowVersion();` in its mapping, then a migration of its own, `dotnet ef migrations add Add<Aggregate>ConcurrencyToken --project src/MyApp --output-dir Shared/Persistence/Migrations`. Its `AddColumn` of `xmin` creates nothing either: write above it the comment `// xmin is a system column of every PostgreSQL table: Npgsql generates no SQL for it, and this migration only records the concurrency token of <Aggregate>Configuration in the model.`, and add no SQL. Then add the test that the template generates for a new aggregate, in `tests/MyApp.IntegrationTests/Features/<Module>/<Aggregate>ConfigurationTests.cs`, next to the other tests of its mapping, in a class that receives `PostgresDatabase database` and uses `Microsoft.EntityFrameworkCore`:
 
-The integration test of a command that changes the aggregate lets two commands load it before either saves, then asserts that one commits and the other throws `ConflictException`.
+  ```csharp
+  // The concurrency token of <Aggregate>Configuration, read from the model of AppDbContext.
+  [Fact]
+  public async Task Maps_the_Version_of_<Aggregate>_on_xmin_as_its_concurrency_token()
+  {
+      await using var db = database.CreateDbContext();
+
+      var version = db.Model.FindEntityType(typeof(<Aggregate>))?.FindProperty("Version");
+
+      version.ShouldNotBeNull("<Aggregate>Configuration maps no concurrency token: keep builder.Property<uint>(\"Version\").IsRowVersion();.");
+      version.IsShadowProperty().ShouldBeTrue();
+      version.ClrType.ShouldBe(typeof(uint));
+      version.IsConcurrencyToken.ShouldBeTrue();
+      version.ValueGenerated.ShouldBe(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate);
+      version.GetColumnName().ShouldBe("xmin");
+  }
+  ```
+
+The test of the model proves that the token is mapped: a migration that records its removal leaves the other tests green, those of the 409 aside, and this one fails. The integration test of the 409 comes with the first command that changes the aggregate, as `add-slice` says: it lets two commands load the aggregate before either saves, then asserts that one commits and the other throws `ConflictException`.
 
 ## Children written in bulk
 

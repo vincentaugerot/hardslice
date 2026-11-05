@@ -74,6 +74,23 @@ public sealed class BookingConfigurationTests(PostgresDatabase database)
         }
     }
 
+    // The concurrency token of BookingConfiguration, read from the model of AppDbContext. Without it, a command that changes a booking
+    // that another request changed since it loaded it overwrites that change without error. CancelBookingTests covers the 409 itself.
+    [Fact]
+    public async Task Maps_the_Version_of_Booking_on_xmin_as_its_concurrency_token()
+    {
+        await using var db = database.CreateDbContext();
+
+        var version = db.Model.FindEntityType(typeof(Booking))?.FindProperty("Version");
+
+        version.ShouldNotBeNull("BookingConfiguration maps no concurrency token: keep builder.Property<uint>(\"Version\").IsRowVersion();.");
+        version.IsShadowProperty().ShouldBeTrue();
+        version.ClrType.ShouldBe(typeof(uint));
+        version.IsConcurrencyToken.ShouldBeTrue();
+        version.ValueGenerated.ShouldBe(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate);
+        version.GetColumnName().ShouldBe("xmin");
+    }
+
     // Domain events describe what happened during one use case: they are not stored with the booking.
     [Fact]
     public async Task Reloads_a_booking_without_its_domain_events()

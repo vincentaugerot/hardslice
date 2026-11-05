@@ -456,6 +456,7 @@ echo "==> Checking that commands go through the generated solution's own mediato
     "Features.Bookings.ConfirmBooking.ConfirmBookingTests.Reads_and_cancels_a_period_at_its_persisted_precision" \
     "Features.Bookings.BookingConfigurationTests.Database_rejects_an_empty_period_even_when_bypassing_the_domain" \
     "Features.Bookings.BookingConfigurationTests.Upgrade_preserves_bookings_and_requires_explicit_repair_of_legacy_empty_periods" \
+    "Features.Bookings.BookingConfigurationTests.Maps_the_Version_of_Booking_on_xmin_as_its_concurrency_token" \
     "Features.Bookings.CancelBooking.CancelBookingTests.Rejects_an_empty_booking_id_with_a_validation_problem" \
     "Features.Bookings.GetBooking.GetBookingTests.Reads_a_confirmed_booking_at_the_location_returned_by_its_creation" \
     "Features.Bookings.GetBooking.GetBookingTests.Reads_a_booking_without_tracking_any_entity"; do
@@ -4008,7 +4009,8 @@ aggregate_files() {
   printf '%s\n' "src/$app_name.Domain/$module/$name.cs" \
     "src/$app_name.Domain/$module/${name}Id.cs" \
     "src/$app_name/Features/$module/${name}Configuration.cs" \
-    "tests/$app_name.Tests/Domain/$module/${name}Tests.cs"
+    "tests/$app_name.Tests/Domain/$module/${name}Tests.cs" \
+    "tests/$app_name.IntegrationTests/Features/$module/${name}ConfigurationTests.cs"
 }
 
 # Generates the aggregate <module>/<name> with the remaining options, checks that its files exist, and leaves the printed
@@ -4046,6 +4048,8 @@ probe_aggregate_template() {
   local project="src/$app_name/$app_name.csproj"
   local migrations="$app_src/Shared/Persistence/Migrations"
   local unit_test="$app/tests/$app_name.Tests/Domain/$module/${name}Tests.cs"
+  local configuration="$app_src/Features/$module/${name}Configuration.cs"
+  local token_test="$app_name.IntegrationTests.Features.$module.${name}ConfigurationTests.Maps_the_Version_of_${name}_on_xmin_as_its_concurrency_token"
   local migration
   local migration_file
   local build_output
@@ -4114,6 +4118,14 @@ probe_aggregate_template() {
     echo "error: dotnet new hardslice-aggregate did not map the concurrency token Version of $name on xmin, or declared it in the domain." >&2
     exit 1
   fi
+  # PB-093: the test of the model that holds that token, next to the integration tests of the module, with no marker to replace.
+  if ! grep -Fxq "public sealed class ${name}ConfigurationTests(PostgresDatabase database)" "$app/tests/$app_name.IntegrationTests/Features/$module/${name}ConfigurationTests.cs" ||
+    ! grep -Fxq "        var version = db.Model.FindEntityType(typeof($name))?.FindProperty(\"Version\");" "$app/tests/$app_name.IntegrationTests/Features/$module/${name}ConfigurationTests.cs" ||
+    grep -q 'TODO(hardslice):' "$app/tests/$app_name.IntegrationTests/Features/$module/${name}ConfigurationTests.cs"; then
+    cat "$app/tests/$app_name.IntegrationTests/Features/$module/${name}ConfigurationTests.cs" >&2
+    echo "error: dotnet new hardslice-aggregate did not generate the test of the concurrency token of $name, or left a TODO(hardslice): marker in it." >&2
+    exit 1
+  fi
   expect_item_refused hardslice-aggregate "an aggregate that exists" "--force" --project "$project" --module "$module" --name "$name"
 
   # The analyzers of the domain and of the web project see the aggregate and its mapping: HS007, HS008, HS901 and HS902 stay silent.
@@ -4178,6 +4190,38 @@ probe_aggregate_template() {
     exit 1
   fi
   bash "$app/scripts/check.sh"
+  echo "    ${name}ConfigurationTests: the concurrency token of $name is mapped on xmin"
+
+  # PB-093: a mapping without its token, recorded by a migration, leaves MigrationsTests green: the generated test alone fails.
+  # Npgsql generates no SQL for the DropColumn of xmin, so the database of the tests migrates.
+  echo "==> Checking that the test of the concurrency token of $module/$name fails once the token leaves the mapping, with its migration"
+  cp "$configuration" "$work/token-configuration.backup"
+  cp -r "$migrations" "$work/token-migrations.backup"
+  sed '/^        builder\.Property<uint>("Version")\.IsRowVersion();$/d' "$configuration" > "$work/configuration.cs"
+  mv "$work/configuration.cs" "$configuration"
+  if grep -q 'IsRowVersion' "$configuration"; then
+    echo "error: the probe did not remove the concurrency token from the mapping of $module/$name." >&2
+    exit 1
+  fi
+  (
+    cd "$app"
+    dotnet ef migrations add "Remove${name}Version" --project "src/$app_name" --output-dir Shared/Persistence/Migrations
+  )
+  if check_output="$(run_check check.sh 2>&1)"; then
+    echo "error: scripts/check.sh passed on the aggregate $module/$name without its concurrency token." >&2
+    exit 1
+  fi
+  check_output="$(strip_ansi <<< "$check_output")"
+  failures="$(sed -n 's/^failed \([^ ]*\) (.*/\1/p' <<< "$check_output" | LC_ALL=C sort -u)"
+  if [[ "$failures" != "$token_test" || "$check_output" != *"${name}Configuration maps no concurrency token: keep builder.Property<uint>(\"Version\").IsRowVersion();."* ]]; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh did not fail on $token_test alone, with its message, for the aggregate $module/$name without its concurrency token." >&2
+    exit 1
+  fi
+  echo "    $token_test: fails without the token"
+  mv "$work/token-configuration.backup" "$configuration"
+  rm -r "${migrations:?}"
+  mv "$work/token-migrations.backup" "$migrations"
 
   if [[ "$keep" == remove ]]; then
     while read -r generated; do
@@ -4578,7 +4622,7 @@ EOF
   while read -r generated; do
     rm "${app:?}/${generated:?}"
   done < <(aggregate_files "$module" Trip)
-  rm "$value_object" "$integration_test"
+  rm "$value_object"
   rm -r "${migrations:?}"
   [[ ! -d "$work/private-fields-migrations.backup" ]] || mv "$work/private-fields-migrations.backup" "$migrations"
 }
@@ -4599,6 +4643,8 @@ probe_aggregate_concurrency() {
   local generated
 
   [[ ! -d "$migrations" ]] || cp -r "$migrations" "$work/concurrency-migrations.backup"
+  # A module without slice has no integration test folder yet: the generation of Inventory creates it.
+  [[ -d "$(dirname "$integration_test")" ]] || created_folder="$(dirname "$integration_test")"
 
   echo "==> Generating the aggregates $module/Inventory and $module/Shelf of $app_name, each with a child entity held in its collection"
   generate_aggregate "$module" Inventory --table Inventories
@@ -4652,9 +4698,7 @@ probe_aggregate_concurrency() {
   done
   sed -i 's/InventoryItem\.Create()/InventoryItem.Create(1)/g' "$app/tests/$app_name.Tests/Domain/$module/InventoryItemTests.cs"
 
-  # A module without slice has no integration test folder yet.
-  [[ -d "$(dirname "$integration_test")" ]] || created_folder="$(dirname "$integration_test")"
-  mkdir -p "$(dirname "$integration_test")"
+  # The races replace the test of the model that dotnet new hardslice-aggregate generates for Inventory: ShelfConfigurationTests keeps it.
   cat > "$integration_test" <<EOF
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -4816,7 +4860,7 @@ EOF
   while read -r generated; do
     rm "${app:?}/${generated:?}"
   done < <(aggregate_files "$module" Inventory; aggregate_files "$module" Shelf; entity_files "$module" InventoryItem; entity_files "$module" ShelfSlot)
-  rm "$app_src/Features/$module/InventoryIdConverter.cs" "$app_src/Features/$module/ShelfIdConverter.cs" "$integration_test"
+  rm "$app_src/Features/$module/InventoryIdConverter.cs" "$app_src/Features/$module/ShelfIdConverter.cs"
   [[ -z "$created_folder" ]] || rmdir "$created_folder"
   rm -r "${migrations:?}"
   [[ ! -d "$work/concurrency-migrations.backup" ]] || mv "$work/concurrency-migrations.backup" "$migrations"
