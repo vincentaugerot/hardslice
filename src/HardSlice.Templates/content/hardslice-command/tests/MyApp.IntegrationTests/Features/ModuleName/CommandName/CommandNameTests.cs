@@ -46,6 +46,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
         var cycles = new RecurringCommandCycles<CommandNameCommand, ResponseTypeName>(app);
 #endif
         var zone = TimeZoneInfo.FindSystemTimeZoneById("RecurringTimeZone");
+#if (AtStart)
+
+        // The cycle at start comes first, at TestInstants.Start: Runs_a_cycle_at_start_before_the_first_instant_of_its_schedule tests it.
+        await cycles.RunNextAsync();
+#endif
 
         for (var day = 1; day <= 2; day++)
         {
@@ -67,6 +72,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
 #else
         var cycles = new RecurringCommandCycles<CommandNameCommand, ResponseTypeName>(app);
 #endif
+#if (AtStart)
+
+        // The cycle at start comes first, at TestInstants.Start: Runs_a_cycle_at_start_before_the_first_instant_of_its_schedule tests it.
+        await cycles.RunNextAsync();
+#endif
 
         for (var cycle = 1; cycle <= 3; cycle++)
         {
@@ -75,6 +85,30 @@ public sealed class CommandNameTests(PostgresDatabase database)
         }
 
         Assert.Fail("TODO(hardslice): assert the business outcome of three cycles of CommandName, such as the state stored in PostgreSQL, read with database.CreateDbContext().");
+    }
+#endif
+#if (AtStart)
+
+    // AlsoAtStart sends the command once when the application starts, before the first instant of its schedule: the cycles start
+    // the application at start, TestInstants.Start here, and its first cycle is due then, without moving the clock. Pass another
+    // instant to test the cycle at start at a time of day, such as the evening before in the time zone of a daily schedule.
+    [Fact]
+    public async Task Runs_a_cycle_at_start_before_the_first_instant_of_its_schedule()
+    {
+        await using var app = new AppFactory(database);
+#if (ResponseIsId)
+        var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app, start: TestInstants.Start);
+#else
+        var cycles = new RecurringCommandCycles<CommandNameCommand, ResponseTypeName>(app, start: TestInstants.Start);
+#endif
+
+        (await cycles.NextDueAsync()).ShouldBe(TestInstants.Start);
+        // CommandNameHandler throws its NotImplementedException until it is replaced by the use case.
+        var response = await cycles.RunNextAsync();
+        cycles.Clock.GetUtcNow().ShouldBe(TestInstants.Start);
+        (await cycles.NextDueAsync()).ShouldBeGreaterThan(TestInstants.Start, "The schedule goes on after the cycle at start.");
+
+        Assert.Fail("TODO(hardslice): assert the business outcome of the cycle at start of CommandName, such as the state stored in PostgreSQL, read with database.CreateDbContext().");
     }
 #endif
 #if (RetryIsGiven)

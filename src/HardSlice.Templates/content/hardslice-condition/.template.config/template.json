@@ -1,0 +1,480 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Vincent Augerot",
+  "classifications": [
+    "Web",
+    "API",
+    "Vertical Slices",
+    "DDD"
+  ],
+  "identity": "HardSlice.Templates.Condition",
+  "name": "HardSlice condition of a recurring command",
+  "description": "The condition of a command that AddRecurringCommand sends, new or existing: <Command>Condition in the folder of its slice, which implements IRecurringCommandCondition<<Command>Command> and decides before each cycle whether the command is sent, and its integration tests, which hold a cycle back with its reason and let one go. It prints the line that registers it after the handler, in the module. --response names what the command returns when it is not a Guid. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "shortName": "hardslice-condition",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "Module": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The module of the command, in PascalCase, such as Schedule: src/<App>/Features/<Module>/<Module>Module.cs must exist.",
+      "replaces": "ModuleName",
+      "fileRename": "ModuleName"
+    },
+    "Command": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The command slice that the condition decides on, by the name of its folder in PascalCase, without the Command suffix, such as ImportSchedule for ImportScheduleCommand: src/<App>/Features/<Module>/<Command>/ must hold <Command>.cs, where dotnet new hardslice-command declares the command, or <Command>Command.cs, and no <Command>Condition.cs yet.",
+      "replaces": "CommandName",
+      "fileRename": "CommandName"
+    },
+    "Response": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "id",
+      "description": "What the command returns, the second type argument of its AddRecurringCommand: id (a Guid, by default), none (a bool) or the PascalCase name of the DTO that its slice declares, such as ImportedScheduleDto.",
+      "fileRename": "ResponseOption"
+    },
+    "AppName": {
+      "type": "bind",
+      "binding": "msbuild:RootNamespace",
+      "replaces": "MyApp",
+      "fileRename": "MyApp"
+    },
+    "ModuleFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceModuleFiles"
+    },
+    "SliceFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceSliceFiles"
+    },
+    "Unbound": {
+      "type": "generated",
+      "generator": "constant",
+      "parameters": {
+        "value": ""
+      }
+    },
+    "AppNameOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "AppName",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "SliceFilesOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "SliceFiles",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "ResponseType": {
+      "type": "generated",
+      "generator": "regex",
+      "replaces": "ResponseTypeName",
+      "parameters": {
+        "source": "Response",
+        "steps": [
+          {
+            "regex": "^id$",
+            "replacement": "Guid"
+          },
+          {
+            "regex": "^none$",
+            "replacement": "bool"
+          }
+        ]
+      }
+    },
+    "AppIsKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppNameOrEmpty",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      }
+    },
+    "ModuleIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Module",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ModuleProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "ModuleExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ModuleProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "CommandIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Command",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "CommandHasSuffix": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Command",
+        "pattern": "(?:Command|Condition)$"
+      }
+    },
+    "SliceFilesAreKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceFilesOrEmpty",
+        "pattern": "."
+      }
+    },
+    "SliceProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "Command"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "SliceFilesOrEmpty"
+          }
+        ]
+      }
+    },
+    "SliceExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\2[/\\\\][^;/\\\\]+\\.cs(?:;|$)"
+      }
+    },
+    "CommandExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\2[/\\\\]\\2(?:Command)?\\.cs(?:;|$)"
+      }
+    },
+    "ConditionExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "SliceProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\2[/\\\\]\\2Condition\\.cs(?:;|$)"
+      }
+    },
+    "ResponseIsId": {
+      "type": "computed",
+      "value": "(Response == \"id\")"
+    },
+    "ResponseIsNone": {
+      "type": "computed",
+      "value": "(Response == \"none\")"
+    },
+    "ResponseIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Response",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ResponseIsAccepted": {
+      "type": "computed",
+      "value": "(ResponseIsId || ResponseIsNone || ResponseIsPascalCase)"
+    },
+    "ModuleIsAccepted": {
+      "type": "computed",
+      "value": "(AppIsKnown && ModuleIsPascalCase && ModuleExists)"
+    },
+    "CommandIsAccepted": {
+      "type": "computed",
+      "value": "(CommandIsPascalCase && !CommandHasSuffix)"
+    },
+    "SliceIsAccepted": {
+      "type": "computed",
+      "value": "(ModuleIsAccepted && CommandIsAccepted && SliceFilesAreKnown && SliceExists && CommandExists && !ConditionExists)"
+    },
+    "Accepted": {
+      "type": "computed",
+      "value": "(SliceIsAccepted && ResponseIsAccepted)"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!Accepted)",
+          "exclude": [
+            "**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "postActions": [
+    {
+      "id": "refuseUnknownApplication",
+      "condition": "(!AppIsKnown)",
+      "description": "Refuses a solution whose web project it cannot read.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: hardslice-condition reads the application from its web project, which it could not evaluate. Run it from the root of the solution with --project src/<App>/<App>.csproj, once the solution is restored (after a first build or check), such as: dotnet new hardslice-condition --project src/<App>/<App>.csproj --module <Module> --command <Command>. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidModule",
+      "condition": "(AppIsKnown && !ModuleIsPascalCase)",
+      "description": "Refuses a module name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --module 'ModuleName' is not PascalCase: pass the name of an existing module, such as the folder of src/MyApp/Features/<Module>/. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingModule",
+      "condition": "(AppIsKnown && ModuleIsPascalCase && !ModuleExists)",
+      "description": "Refuses a module that does not exist.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: module 'ModuleName' does not exist: src/MyApp/Features/ModuleName/ModuleNameModule.cs was not found. Pass the module of the command, the folder of src/MyApp/Features/<Module>/ that holds its slice. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidCommand",
+      "condition": "(!CommandIsPascalCase)",
+      "description": "Refuses a command name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --command 'CommandName' is not PascalCase: pass the name of the folder of the command slice, such as --command ImportSchedule. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseCommandSuffix",
+      "condition": "(CommandIsPascalCase && CommandHasSuffix)",
+      "description": "Refuses a command name with the Command or Condition suffix.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --command 'CommandName' ends with Command or Condition: pass the name of the slice alone, the folder of src/MyApp/Features/ModuleName/<Command>/, such as --command ImportSchedule for ImportScheduleCommand. The template names the condition <Command>Condition. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseUnknownSlices",
+      "condition": "(ModuleIsAccepted && !SliceFilesAreKnown)",
+      "description": "Refuses a solution whose Directory.Build.targets does not list the files of its slices.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: hardslice-condition reads the files of the slices from HardSliceSliceFiles, which Directory.Build.targets does not define: it comes from a template older than hardslice-condition. Directory.Build.targets is protected: a maintainer updates it with dotnet hardslice upgrade. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingSlice",
+      "condition": "(ModuleIsAccepted && CommandIsAccepted && SliceFilesAreKnown && !SliceExists)",
+      "description": "Refuses a slice that does not exist.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: slice 'CommandName' does not exist in module 'ModuleName': src/MyApp/Features/ModuleName/CommandName/ holds no source file. Generate the command first with dotnet new hardslice-command --project src/MyApp/MyApp.csproj --module ModuleName --name CommandName and --every or --daily-at, or pass the folder of an existing command. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingCommand",
+      "condition": "(ModuleIsAccepted && CommandIsAccepted && SliceExists && !CommandExists)",
+      "description": "Refuses a slice without the file of its command.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: the slice CommandName of module 'ModuleName' has no command file: neither src/MyApp/Features/ModuleName/CommandName/CommandName.cs, where dotnet new hardslice-command declares CommandNameCommand, nor CommandNameCommand.cs exists. A condition decides on a command that AddRecurringCommand sends: pass the folder of that command. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseExistingCondition",
+      "condition": "(ModuleIsAccepted && CommandIsAccepted && ConditionExists)",
+      "description": "Refuses a condition that exists.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: the command CommandNameCommand already has its condition: src/MyApp/Features/ModuleName/CommandName/CommandNameCondition.cs exists. Add the new rule to that condition, or write a second IRecurringCommandCondition<CommandNameCommand> of another name in the same folder by hand: every condition registered for the command is checked before each send. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidResponse",
+      "condition": "(!ResponseIsAccepted)",
+      "description": "Refuses an unknown response.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-condition.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --response 'ResponseOption' is neither id, none nor the PascalCase name of the DTO that the command returns, such as --response ImportedScheduleDto. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "registerCondition",
+      "condition": "(Accepted)",
+      "description": "The line to add to the module of the command.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "text": "Register the condition in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the condition by its contract, after the handler of CommandNameCommand:\n            .AddScoped<IRecurringCommandCondition<CommandNameCommand>, CommandNameCondition>()\nUntil it is registered, ProgramTests fails and names it. AddRecurringCommand checks it before each send of CommandNameCommand: a command generated with --every or --daily-at is sent by it, and a command without parameter that keeps its endpoint gets its schedule by one more line after its handler, as the skill add-slice shows. Without it, the tests of the condition wait for a cycle that never comes and fail.\nThen complete the condition and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        }
+      ],
+      "continueOnError": true
+    }
+  ]
+}

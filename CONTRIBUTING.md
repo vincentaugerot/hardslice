@@ -45,7 +45,7 @@ CI runs on every push to `main`, to a branch `ci/<name>` and on every pull reque
 |---|---|
 | `src/HardSlice.Analyzers/` | The Roslyn analyzer package. |
 | `src/HardSlice.Templates/content/hardslice-api/` | The solution template, `MyApp` being replaced by the name you choose, in its safe namespace form. |
-| `src/HardSlice.Templates/content/hardslice-module/`, `-aggregate/`, `-entity/`, `-command/`, `-query/`, `-event/` | The item templates, `MyApp`, `ModuleName` and the names of the element being replaced by the application, the module and the element. |
+| `src/HardSlice.Templates/content/hardslice-module/`, `-aggregate/`, `-entity/`, `-command/`, `-query/`, `-event/`, `-condition/` | The item templates, `MyApp`, `ModuleName` and the names of the element being replaced by the application, the module and the element. |
 | `src/HardSlice.Tool/` | The `dotnet hardslice` local tool, which embeds the rule sheets of the template. |
 | `tests/HardSlice.Analyzers.Tests/` | Analyzer tests, tests that compile the template content as is, and the tests of this documentation. |
 | `tests/HardSlice.Tool.Tests/` | Tests of `check`, `explain`, the hooks and `protected`, with the payloads recorded from each CLI. |

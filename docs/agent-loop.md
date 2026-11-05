@@ -63,7 +63,7 @@ Six skills, in the Agent Skills format (`SKILL.md`), are shipped. Four turn a bu
 |---|---|---|
 | `add-module` | a module, registered in `Program.cs` and the map of `AGENTS.md` | `hardslice-module` |
 | `add-aggregate` | an aggregate with its invariants, their unit tests, its mapping and its migration, and its child entities | `hardslice-aggregate`, `hardslice-entity` |
-| `add-slice` | a command or a query, its business rule in the aggregate, its registration and its tests | `hardslice-command`, `hardslice-query` |
+| `add-slice` | a command or a query, its business rule in the aggregate, its registration and its tests, and the condition of a scheduled command | `hardslice-command`, `hardslice-query`, `hardslice-condition` |
 | `add-domain-event` | a domain event raised by its aggregate, and the reaction that handles it with its tests | `hardslice-event` |
 
 Two fix the code that a failure names. `extract-to-domain` moves a business rule that slices share, or that a slice writes into an entity, into its aggregate with its unit tests, and makes each slice call it. `fix-architecture-violation` reads the diagnostic, applies the first fix of the sheet of its rule, runs the check again, and stops to explain the conflict when only a workaround would pass.

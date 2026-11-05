@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval> or --daily-at <hh:mm> --time-zone <id>, one that AddRecurringCommand sends at regular intervals or every day, with --retry <delay>x<count> to send it again after a failed cycle. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval> or --daily-at <hh:mm> --time-zone <id>, one that AddRecurringCommand sends at regular intervals or every day, with --retry <delay>x<count> to send it again after a failed cycle and --at-start to send it once when the application starts too. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -100,6 +100,12 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Sends the command again after a failed cycle of --every or --daily-at: <delay>x<count>, the delay as [d.]hh:mm:ss, longer than zero and under 49 days, and the count from 1 to 99, such as 01:00:00x3 for three retries an hour apart, which the keys <Module>:<Name>:RetryDelay and <Module>:<Name>:Retries of the configuration replace. A retry that succeeds ends them, and the next instant of the schedule comes after the last one. Its integration test fails a cycle and each retry. Refused without --every or --daily-at."
+    },
+    "AtStart": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Also sends the command of --every or --daily-at once when the application starts, before the first instant of its schedule, such as an import that must not wait for the night: the registration chains AlsoAtStart() to its schedule, which the key <Module>:<Name>:AtStart of the configuration replaces, and an integration test runs the cycle at start at TestInstants.Start. The conditions of the command decide on it as on any cycle (dotnet new hardslice-condition), and --retry sends it again after a failure. Refused without --every or --daily-at."
     },
     "AppName": {
       "type": "bind",
@@ -806,6 +812,10 @@
       "type": "computed",
       "value": "(RetryIsGiven && !ScheduleIsGiven)"
     },
+    "AtStartWithoutSchedule": {
+      "type": "computed",
+      "value": "(AtStart && !ScheduleIsGiven)"
+    },
     "CommandContract": {
       "type": "generated",
       "generator": "switch",
@@ -838,7 +848,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule && !AtStartWithoutSchedule)"
     }
   },
   "sources": [
@@ -1288,6 +1298,24 @@
       "continueOnError": false
     },
     {
+      "id": "refuseAtStartWithoutSchedule",
+      "condition": "(AtStartWithoutSchedule)",
+      "description": "Refuses --at-start without --every or --daily-at.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --at-start sends a recurring command once when the application starts too, while the slice has no schedule: pass --every <interval> or --daily-at <hh:mm> with it, or remove it. To send a command that keeps its endpoint at start too, register it with AddRecurringCommand and a RecurringSchedule that chains AlsoAtStart(), as the skill add-slice shows. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "refuseInvalidPolicy",
       "condition": "(!RequireIsValid)",
       "description": "Refuses a policy name that the generated code could not hold.",
@@ -1372,36 +1400,68 @@
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n3. CommandNameCommand is a system command, which has no endpoint: send it from a type of module ModuleName other than its handler and its validator, such as a hosted service in src/MyApp/Features/ModuleName/CommandName/ that creates it and sends it through IMediator in a scope of its own, registered in AddModuleNameModule. HS004 fails the build until a type of the module sends it.\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsId)",
+          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsId && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsDto)",
+          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsDto && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsId)",
+          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsId && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsDto)",
+          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsDto && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)",
+          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\"))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto)",
+          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\"))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsId)",
+          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsId && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto)",
+          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto && !AtStart)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsId && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).AlsoAtStart())\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && !RetryIsGiven && ResponseIsDto && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).AlsoAtStart())\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsId && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).AlsoAtStart().WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(EveryIsGiven && RetryIsGiven && ResponseIsDto && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every RecurringInterval, or every ModuleName:CommandName:Interval of the configuration when it is set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).AlsoAtStart().WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").AlsoAtStart())\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").AlsoAtStart())\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsId && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, Guid>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").AlsoAtStart().WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto && AtStart)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing System.Globalization;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract, without validator since the command has no parameter, and send the command every day at RecurringDailyAt in RecurringTimeZone, or at ModuleName:CommandName:DailyAt in ModuleName:CommandName:TimeZone of the configuration when they are set, and again at most RecurringCountOfRetries times, RecurringDelayOfRetries apart, after a failed cycle, or as ModuleName:CommandName:Retries and ModuleName:CommandName:RetryDelay of the configuration say, and once when the application starts, before the first instant of its schedule, or as ModuleName:CommandName:AtStart of the configuration says:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\").AlsoAtStart().WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

@@ -30,6 +30,10 @@ namespace MyApp.Features.ModuleName.CommandName;
 // through IMediator in a scope of its own, such as a hosted service of this slice. It has no endpoint (HS004), and goes through
 // the pipeline of every command: validation, then the transaction.
 #endif
+#if (AtStart)
+// It is also sent once when the application starts, before the first instant of its schedule, unless
+// ModuleName:CommandName:AtStart of the configuration is false.
+#endif
 #if (ParametersIsNone)
 // No parameter: what the command needs comes from the database, the configuration or a service that its module registers,
 // never from the request. It has no validator (HS013), and its tests cover its success or a failure of the domain.

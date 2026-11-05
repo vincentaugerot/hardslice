@@ -71,6 +71,7 @@ public sealed class TemplatePackageTests
             PackedFiles(archive, "/hardslice-aggregate/").ShouldBe(AggregateTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-entity/").ShouldBe(EntityTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-event/").ShouldBe(EventTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-condition/").ShouldBe(ConditionTemplateFiles.Order(StringComparer.Ordinal));
             // docs/agents/support.md: .claude/skills/ is the only source, the pack copies it into .agents/skills/ for Codex and Gemini CLI.
             PackedFiles(archive, "/hardslice-api/.claude/skills/").ShouldBe(SkillNames.Select(skill => $"{skill}/SKILL.md").Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-api/.agents/skills/").ShouldBe(SkillNames.Select(skill => $"{skill}/SKILL.md").Order(StringComparer.Ordinal));
@@ -181,7 +182,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(25);
+        refusals.Length.ShouldBe(26);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -227,10 +228,14 @@ public sealed class TemplatePackageTests
             "(!EndpointIsNone && ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && ParametersIsNone && ResponseIsDto)",
             "(EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
             "(EndpointIsNone && ParametersIsNone && ResponseIsId && !ScheduleIsGiven)", "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !ScheduleIsGiven)",
-            "(EveryIsGiven && !RetryIsGiven && ResponseIsId)", "(EveryIsGiven && !RetryIsGiven && ResponseIsDto)",
-            "(EveryIsGiven && RetryIsGiven && ResponseIsId)", "(EveryIsGiven && RetryIsGiven && ResponseIsDto)",
-            "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)", "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto)",
-            "(DailyAtIsGiven && RetryIsGiven && ResponseIsId)", "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto)"]);
+            "(EveryIsGiven && !RetryIsGiven && ResponseIsId && !AtStart)", "(EveryIsGiven && !RetryIsGiven && ResponseIsDto && !AtStart)",
+            "(EveryIsGiven && RetryIsGiven && ResponseIsId && !AtStart)", "(EveryIsGiven && RetryIsGiven && ResponseIsDto && !AtStart)",
+            "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId && !AtStart)", "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto && !AtStart)",
+            "(DailyAtIsGiven && RetryIsGiven && ResponseIsId && !AtStart)", "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto && !AtStart)",
+            "(EveryIsGiven && !RetryIsGiven && ResponseIsId && AtStart)", "(EveryIsGiven && !RetryIsGiven && ResponseIsDto && AtStart)",
+            "(EveryIsGiven && RetryIsGiven && ResponseIsId && AtStart)", "(EveryIsGiven && RetryIsGiven && ResponseIsDto && AtStart)",
+            "(DailyAtIsGiven && !RetryIsGiven && ResponseIsId && AtStart)", "(DailyAtIsGiven && !RetryIsGiven && ResponseIsDto && AtStart)",
+            "(DailyAtIsGiven && RetryIsGiven && ResponseIsId && AtStart)", "(DailyAtIsGiven && RetryIsGiven && ResponseIsDto && AtStart)"]);
         registrations.Where(registration => registration.Key.Contains("&& ParametersIsNone", StringComparison.Ordinal)
                 || registration.Key.StartsWith("(EveryIsGiven", StringComparison.Ordinal) || registration.Key.StartsWith("(DailyAtIsGiven", StringComparison.Ordinal))
             .ShouldAllBe(registration => !registration.Value.Contains("Validator") && !registration.Value.Contains("FluentValidation"));
@@ -339,7 +344,8 @@ public sealed class TemplatePackageTests
         postActions.Single(action => action.GetProperty("id").GetString() == "refuseEveryWithOptions").GetProperty("condition").GetString().ShouldBe("(EveryContradictsOptions)");
         var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
             .GetProperty("manualInstructions").EnumerateArray()
-            .Where(instruction => instruction.GetProperty("condition").GetString()!.StartsWith("(EveryIsGiven && !RetryIsGiven", StringComparison.Ordinal))
+            .Where(instruction => instruction.GetProperty("condition").GetString()!.StartsWith("(EveryIsGiven && !RetryIsGiven", StringComparison.Ordinal)
+                && instruction.GetProperty("condition").GetString()!.EndsWith(" && !AtStart)", StringComparison.Ordinal))
             .Select(instruction => instruction.GetProperty("text").GetString()!)
             .ToArray();
         registrations.Length.ShouldBe(2);
@@ -434,13 +440,13 @@ public sealed class TemplatePackageTests
         var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
             .GetProperty("manualInstructions").EnumerateArray()
             .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
-        registrations["(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)"].ShouldContain(
+        registrations["(DailyAtIsGiven && !RetryIsGiven && ResponseIsId && !AtStart)"].ShouldContain(
             "            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\"))\n");
-        registrations["(DailyAtIsGiven && !RetryIsGiven && ResponseIsId)"].ShouldNotContain("using System.Globalization;");
-        registrations["(DailyAtIsGiven && RetryIsGiven && ResponseIsDto)"].ShouldContain(
+        registrations["(DailyAtIsGiven && !RetryIsGiven && ResponseIsId && !AtStart)"].ShouldNotContain("using System.Globalization;");
+        registrations["(DailyAtIsGiven && RetryIsGiven && ResponseIsDto && !AtStart)"].ShouldContain(
             "            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\")"
             + ".WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\n");
-        registrations["(EveryIsGiven && RetryIsGiven && ResponseIsId)"].ShouldContain(
+        registrations["(EveryIsGiven && RetryIsGiven && ResponseIsId && !AtStart)"].ShouldContain(
             "            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture))"
             + ".WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\n");
         registrations.Where(registration => registration.Key.Contains("RetryIsGiven && ", StringComparison.Ordinal) && !registration.Key.Contains("!RetryIsGiven", StringComparison.Ordinal))
@@ -469,7 +475,7 @@ public sealed class TemplatePackageTests
         service.ShouldContain("public static RecurringSchedule DailyAt(TimeOnly time, string timeZone)");
         service.ShouldContain("public RecurringSchedule WithRetries(TimeSpan delay, int retries)");
         service.ShouldContain("Task.Delay(due - now, timeProvider, stoppingToken)");
-        cycles.ShouldContain("public RecurringCommandCycles(AppFactory app, Action<IWebHostBuilder>? configure = null)");
+        cycles.ShouldContain("public RecurringCommandCycles(AppFactory app, Action<IWebHostBuilder>? configure = null, DateTimeOffset? start = null)");
         cycles.ShouldContain("public async Task<DateTimeOffset> NextDueAsync()");
         cycles.ShouldContain("public void FailNext(int cycles)");
         cycles.ShouldContain("where TCommand : ICommand<TResponse>, new()");
@@ -529,7 +535,7 @@ public sealed class TemplatePackageTests
         agents.ShouldContain("and the logs name each one removed.");
         addSlice.ShouldContain("registered after its handler with `.AddScoped<IRecurringCommandCondition<TCommand>, <Slice>Condition>()`");
         addSlice.ShouldContain("the cycle sends nothing and is not retried, the reason is logged once until it changes");
-        addSlice.ShouldContain("`AlsoAtStart()` on the `RecurringSchedule`, or the key `<Module>:<Slice>:AtStart`");
+        addSlice.ShouldContain("`AlsoAtStart()` on the `RecurringSchedule`, which `--at-start` chains, or the key `<Module>:<Slice>:AtStart`");
         addSlice.ShouldContain("its condition holds it back when `cycle.AtStart` and a version covers the day, and lets the nightly cycles go");
         addSlice.ShouldContain("A cycle that a condition holds back throws `HeldCycleException`, whose message is the reason");
     }
@@ -584,6 +590,180 @@ public sealed class TemplatePackageTests
             + "// starts with AsNoTracking(), and a read that loads none, such as AnyAsync, CountAsync or a projection to values, needs none (HS006).");
         sheet.ShouldContain("A query whose result holds no entity is compliant without `AsNoTracking()`");
         sheet.ShouldContain("A hosted service or a condition projects to the values it needs, or asks `AnyAsync` or `CountAsync`.");
+    }
+
+    // PB-094: hardslice-condition generates the condition of a command that AddRecurringCommand sends, in the folder of its slice, and
+    // its integration tests at the same path (HS004, HS018), and nothing else. It reads the slices from Directory.Build.targets.
+    [Fact]
+    public void Condition_item_template_generates_the_condition_of_a_command_and_its_integration_tests_only()
+    {
+        var root = ConditionTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(ConditionTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-condition");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        symbols.GetProperty("AppName").GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        symbols.GetProperty("ModuleFiles").GetProperty("binding").GetString().ShouldBe("msbuild:HardSliceModuleFiles");
+        symbols.GetProperty("SliceFiles").GetProperty("binding").GetString().ShouldBe("msbuild:HardSliceSliceFiles");
+        foreach (var (symbol, option, token) in new[] { ("Module", "module", "ModuleName"), ("Command", "command", "CommandName") })
+        {
+            symbols.GetProperty(symbol).GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+            symbols.GetProperty(symbol).GetProperty("replaces").GetString().ShouldBe(token);
+            host.RootElement.GetProperty("symbolInfo").GetProperty(symbol).GetProperty("longName").GetString().ShouldBe(option);
+        }
+        symbols.GetProperty("Response").GetProperty("defaultValue").GetString().ShouldBe("id");
+        host.RootElement.GetProperty("symbolInfo").GetProperty("Response").GetProperty("longName").GetString().ShouldBe("response");
+        var steps = symbols.GetProperty("ResponseType").GetProperty("parameters").GetProperty("steps").EnumerateArray().ToArray();
+        foreach (var (response, written) in new[] { ("id", "Guid"), ("none", "bool"), ("ImportedScheduleDto", "ImportedScheduleDto") })
+            steps.Aggregate(response, (value, step) => Regex.Replace(value, step.GetProperty("regex").GetString()!, step.GetProperty("replacement").GetString()!)).ShouldBe(written);
+        symbols.GetProperty("ResponseType").GetProperty("replaces").GetString().ShouldBe("ResponseTypeName");
+        config.GetProperty("sources")[0].GetProperty("modifiers")[0].GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), "Directory.Build.targets"))
+            .ShouldContain("<HardSliceSliceFiles>$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceSliceFiles>");
+    }
+
+    // PB-094: the condition is internal sealed, implements IRecurringCommandCondition<TCommand> and holds a marker in place of its
+    // rule. Its tests hold a cycle back with its reason and let one go, through RecurringCommandCycles, with a marker in place of
+    // the state of each.
+    [Fact]
+    public void Condition_item_template_decides_on_each_cycle_and_tests_a_held_cycle_and_a_sent_one()
+    {
+        var root = ConditionTemplateRoot(FindRepositoryRoot());
+        var condition = File.ReadAllLines(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandNameCondition.cs"));
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameConditionTests.cs"));
+
+        condition.ShouldContain("namespace MyApp.Features.ModuleName.CommandName;");
+        condition.ShouldContain("internal sealed class CommandNameCondition : IRecurringCommandCondition<CommandNameCommand>");
+        condition.ShouldContain("    public Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken) =>");
+        condition.Count(line => Regex.IsMatch(line, @"^(public|internal) ")).ShouldBe(1);
+        string.Join('\n', condition).ShouldContain("\"TODO(hardslice): implement CommandNameCondition: receive what it reads by its constructor");
+        string.Join('\n', condition).ShouldContain("Never write.");
+        tests.ShouldContain("namespace MyApp.IntegrationTests.Features.ModuleName.CommandName;");
+        tests.ShouldContain("    public async Task Holds_a_cycle_back_with_its_reason()");
+        tests.ShouldContain("    public async Task Lets_a_cycle_go_and_sends_the_command()");
+        Regex.Count(tests, Regex.Escape("        var cycles = new RecurringCommandCycles<CommandNameCommand, ResponseTypeName>(app);")).ShouldBe(2);
+        Regex.Count(tests, Regex.Escape("        // TODO(hardslice): set up the state in which CommandNameCondition ")).ShouldBe(2);
+        tests.ShouldContain("var held = await Should.ThrowAsync<HeldCycleException>(cycles.RunNextAsync());");
+        tests.ShouldContain("held.Message.ShouldBe(\"TODO(hardslice): ");
+        tests.ShouldContain("(await cycles.NextDueAsync()).ShouldBeGreaterThan(cycles.Clock.GetUtcNow(), ");
+    }
+
+    // PB-094: every refusal fails the generation, after excluding every file, and says that nothing was created. The last action prints
+    // the registration of the condition after the handler of the command.
+    [Fact]
+    public void Condition_item_template_refuses_with_an_error_that_creates_nothing()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ConditionTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Select(action => action.GetProperty("id").GetString()).ShouldBe([
+            "refuseUnknownApplication", "refuseInvalidModule", "refuseMissingModule", "refuseInvalidCommand", "refuseCommandSuffix",
+            "refuseUnknownSlices", "refuseMissingSlice", "refuseMissingCommand", "refuseExistingCondition", "refuseInvalidResponse"]);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        template.RootElement.GetProperty("symbols").GetProperty("Accepted").GetProperty("value").GetString().ShouldBe("(SliceIsAccepted && ResponseIsAccepted)");
+        template.RootElement.GetProperty("symbols").GetProperty("SliceIsAccepted").GetProperty("value").GetString()
+            .ShouldBe("(ModuleIsAccepted && CommandIsAccepted && SliceFilesAreKnown && SliceExists && CommandExists && !ConditionExists)");
+        var registration = postActions.Last();
+        registration.GetProperty("condition").GetString().ShouldBe("(Accepted)");
+        registration.GetProperty("continueOnError").GetBoolean().ShouldBeTrue();
+        registration.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldContain(
+            "register the condition by its contract, after the handler of CommandNameCommand:\n            .AddScoped<IRecurringCommandCondition<CommandNameCommand>, CommandNameCondition>()\n");
+    }
+
+    // PB-094: the slice exists when its folder holds a source file, its command when it holds <Command>.cs or <Command>Command.cs, and
+    // its condition when it holds <Command>Condition.cs, in the files that HardSliceSliceFiles lists, separated by ';'.
+    [Theory]
+    [InlineData("Schedule|ImportSchedule|/app/src/App/Features/Schedule/ScheduleModule.cs;/app/src/App/Features/Schedule/ImportSchedule/ImportSchedule.cs", true, true, false)]
+    [InlineData("Schedule|ImportSchedule|/app/src/App/Features/Schedule/ImportSchedule/GtfsFeed.cs;/app/src/App/Features/Schedule/ImportSchedule/ImportScheduleCommand.cs", true, true, false)]
+    [InlineData("Schedule|ImportSchedule|C:\\app\\src\\App\\Features\\Schedule\\ImportSchedule\\ImportSchedule.cs;C:\\app\\src\\App\\Features\\Schedule\\ImportSchedule\\ImportScheduleCondition.cs", true, true, true)]
+    [InlineData("Schedule|ImportSchedule|/app/src/App/Features/Schedule/ImportSchedule/GtfsFeed.cs", true, false, false)]
+    [InlineData("Schedule|ImportSchedule|/app/src/App/Features/Schedule/ImportScheduleNotes/ImportSchedule.cs", false, false, false)]
+    [InlineData("Schedule|ImportSchedule|/app/src/App/Features/Realtime/ImportSchedule/ImportSchedule.cs", false, false, false)]
+    [InlineData("Schedule|ImportSchedule|/app/src/App/Features/Schedule/ImportSchedule/Nested/ImportSchedule.cs", false, false, false)]
+    [InlineData("Schedule|ImportSchedule|", false, false, false)]
+    public void Condition_item_template_finds_the_slice_its_command_and_its_condition_in_the_files_of_the_slices(
+        string probe, bool sliceExists, bool commandExists, bool conditionExists)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ConditionTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+
+        Matches(symbols, "SliceExists", probe).ShouldBe(sliceExists);
+        Matches(symbols, "CommandExists", probe).ShouldBe(commandExists);
+        Matches(symbols, "ConditionExists", probe).ShouldBe(conditionExists);
+    }
+
+    // PB-094: --at-start, with --every or --daily-at, chains AlsoAtStart() to the schedule that the template prints and generates the
+    // test of the cycle at start, at TestInstants.Start. It is refused without a schedule.
+    [Fact]
+    public void Command_item_template_sends_a_recurring_command_at_start_too_and_refuses_it_without_a_schedule()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+
+        symbols.GetProperty("AtStart").GetProperty("datatype").GetString().ShouldBe("bool");
+        host.RootElement.GetProperty("symbolInfo").GetProperty("AtStart").GetProperty("longName").GetString().ShouldBe("at-start");
+        symbols.GetProperty("AtStartWithoutSchedule").GetProperty("value").GetString().ShouldBe("(AtStart && !ScheduleIsGiven)");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldEndWith(" && !AtStartWithoutSchedule)");
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        postActions.Single(action => action.GetProperty("id").GetString() == "refuseAtStartWithoutSchedule")
+            .GetProperty("condition").GetString().ShouldBe("(AtStartWithoutSchedule)");
+        var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        registrations.Keys.Where(condition => condition.StartsWith("(EveryIsGiven", StringComparison.Ordinal) || condition.StartsWith("(DailyAtIsGiven", StringComparison.Ordinal))
+            .ShouldAllBe(condition => condition.EndsWith(" && AtStart)", StringComparison.Ordinal) || condition.EndsWith(" && !AtStart)", StringComparison.Ordinal));
+        var atStart = registrations.Where(registration => registration.Key.EndsWith(" && AtStart)", StringComparison.Ordinal)).ToArray();
+        atStart.Length.ShouldBe(8);
+        atStart.ShouldAllBe(registration => registration.Value.Contains(".AlsoAtStart()") && registration.Value.Contains("ModuleName:CommandName:AtStart of the configuration"));
+        registrations.Where(registration => registration.Key.EndsWith(" && !AtStart)", StringComparison.Ordinal)).Count().ShouldBe(8);
+        registrations.Where(registration => !registration.Key.EndsWith(" && AtStart)", StringComparison.Ordinal)).ShouldAllBe(registration => !registration.Value.Contains("AlsoAtStart"));
+        registrations["(EveryIsGiven && !RetryIsGiven && ResponseIsId && AtStart)"].ShouldContain(
+            "            .AddRecurringCommand<CommandNameCommand, Guid>(\"ModuleName:CommandName\", RecurringSchedule.Every(TimeSpan.Parse(\"RecurringInterval\", CultureInfo.InvariantCulture)).AlsoAtStart())\n");
+        registrations["(DailyAtIsGiven && RetryIsGiven && ResponseIsDto && AtStart)"].ShouldContain(
+            "            .AddRecurringCommand<CommandNameCommand, ResponseTypeName>(\"ModuleName:CommandName\", RecurringSchedule.DailyAt(new TimeOnly(RecurringHour, RecurringMinute), \"RecurringTimeZone\")"
+            + ".AlsoAtStart().WithRetries(TimeSpan.Parse(\"RecurringDelayOfRetries\", CultureInfo.InvariantCulture), RecurringCountOfRetries))\n");
+
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        tests.ShouldContain("    public async Task Runs_a_cycle_at_start_before_the_first_instant_of_its_schedule()");
+        tests.ShouldContain("        var cycles = new RecurringCommandCycles<CommandNameCommand, Guid>(app, start: TestInstants.Start);");
+        tests.ShouldContain("        (await cycles.NextDueAsync()).ShouldBe(TestInstants.Start);");
+        Regex.Count(tests, Regex.Escape("#if (AtStart)\n\n        // The cycle at start comes first, at TestInstants.Start")).ShouldBe(2);
+    }
+
+    // PB-094: RecurringCommandCycles starts the application of its cycles at start, TestInstants.Start by default, so that a test of
+    // the cycle at start never moves Clock before the first use of Services. The agent kit names hardslice-condition and --at-start.
+    [Fact]
+    public void Recurring_command_cycles_start_at_a_chosen_instant_and_the_agent_kit_generates_conditions_and_cycles_at_start()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var cycles = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "RecurringCommandCycles.cs"));
+        var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+
+        cycles.ShouldContain("public RecurringCommandCycles(AppFactory app, Action<IWebHostBuilder>? configure = null, DateTimeOffset? start = null)");
+        cycles.ShouldContain("        Clock = new FakeTimeProvider(start ?? TestInstants.Start);");
+        cycles.ShouldContain("Clock is\n    // set to it before the host starts, so a test never moves Clock with SetUtcNow before the first use of Services.");
+        agents.ShouldContain("`dotnet new hardslice-condition --project src/MyApp/MyApp.csproj --module <Module> --command <Slice>` generates it with its tests, for a new or an existing command.");
+        agents.ShouldContain("which `--every`, `--daily-at`, `--retry` and `--at-start` (`AlsoAtStart()`, also sent once at start) print");
+        addSlice.ShouldContain("dotnet new hardslice-condition --project src/MyApp/MyApp.csproj --module <Module> --command <Slice>\n");
+        addSlice.ShouldContain("With either, `--at-start` also sends the command once when the application starts, before the first instant of its schedule");
+        addSlice.ShouldContain("An existing command without parameter gets its schedule the same way. No template writes that line: test its cycles with `RecurringCommandCycles`");
+        addSlice.ShouldContain("`TestInstants.Start` unless the third argument of `RecurringCommandCycles`, `start`, gives another instant");
     }
 
     // PB-087: hardslice-aggregate maps a concurrency token on xmin, AppDbContext saves the root of a changed child so that the
@@ -2038,6 +2218,7 @@ public sealed class TemplatePackageTests
     [InlineData("add-aggregate", "hardslice-entity")]
     [InlineData("add-slice", "hardslice-command")]
     [InlineData("add-slice", "hardslice-query")]
+    [InlineData("add-slice", "hardslice-condition")]
     [InlineData("add-domain-event", "hardslice-event")]
     public void Skill_generates_its_element_with_dotnet_new_commands_that_exist_in_the_package(string skill, string template)
     {
@@ -2383,6 +2564,14 @@ public sealed class TemplatePackageTests
         "tests/MyApp.IntegrationTests/Features/ReactionModule/ReactionSlice/ReactionSliceTests.cs"
     ];
 
+    private static readonly string[] ConditionTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp/Features/ModuleName/CommandName/CommandNameCondition.cs",
+        "tests/MyApp.IntegrationTests/Features/ModuleName/CommandName/CommandNameConditionTests.cs"
+    ];
+
     // The files of the item template under <folder> of the package, relative to that folder.
     private static IEnumerable<string> PackedFiles(ZipArchive archive, string folder) =>
         archive.Entries.Select(entry => entry.FullName.Replace('\\', '/'))
@@ -2407,6 +2596,9 @@ public sealed class TemplatePackageTests
 
     private static string EventTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-event");
+
+    private static string ConditionTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-condition");
 
     private static string TemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-api");

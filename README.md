@@ -34,14 +34,14 @@ The check builds the solution and runs its unit, architecture and integration te
 dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings --name ExtendBooking --route extensions
 ```
 
-`--route` and `--method` choose the endpoint of a slice, `--parameters none` makes a command without parameters, `--endpoint none`, `--every` and `--daily-at` a system command that only the application sends, once, at regular intervals or every day at a local time, with `--retry` after a failed cycle, `hardslice-query --result filtered` a list that a filter of the query string selects, and `--require <policy>` an endpoint protected by an authorization policy, with the test of its 401. [Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the six element templates.
+`--route` and `--method` choose the endpoint of a slice, `--parameters none` makes a command without parameters, `--endpoint none`, `--every` and `--daily-at` a system command that only the application sends, once, at regular intervals or every day at a local time, with `--retry` after a failed cycle and `--at-start` once at start too, `hardslice-condition` the condition that decides before each cycle whether such a command is sent, `hardslice-query --result filtered` a list that a filter of the query string selects, and `--require <policy>` an endpoint protected by an authorization policy, with the test of its 401. [Getting started](docs/getting-started.md) has every step in detail, how to run the API against PostgreSQL, and what the check does. [Item templates](docs/item-templates.md) covers the seven element templates.
 
 ## What you get
 
 | Part | What it does |
 |---|---|
 | `hardslice-api` solution template | An ASP.NET Core API in vertical slices around a separate domain project, with PostgreSQL, EF Core, a small in-house mediator and FluentValidation, its unit, integration and architecture tests, and the `Bookings` sample or none. |
-| Six item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-entity`, `hardslice-command`, `hardslice-query` and `hardslice-event` generate an element in its place with its tests, which fail until the element is completed. |
+| Seven item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-entity`, `hardslice-command`, `hardslice-query`, `hardslice-event` and `hardslice-condition` generate an element in its place with its tests, which fail until the element is completed. |
 | `HardSlice.Analyzers` | Roslyn analyzers that report the rules at build time and in the IDE. |
 | Architecture tests | The rules that span projects, modules and test folders, in every generated solution. |
 | `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification and gives a `Fix:` to each error on a HardSlice file, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files, `upgrade` brings a solution to the template of its version. |

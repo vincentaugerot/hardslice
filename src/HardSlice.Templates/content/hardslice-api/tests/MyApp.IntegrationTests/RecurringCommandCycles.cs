@@ -10,7 +10,9 @@ using MyApp.Shared.Messaging;
 namespace MyApp.IntegrationTests;
 
 // Runs the cycles of a command that AddRecurringCommand sends, one at a time, in an instance of AppFactory that keeps its
-// RecurringCommandService and replaces the clock of the application with Clock, a FakeTimeProvider set to TestInstants.Start.
+// RecurringCommandService and replaces the clock of the application with Clock, a FakeTimeProvider set to the instant start of
+// the constructor, TestInstants.Start by default: the application starts at that instant, its schedule counts from it, and its
+// cycle at start of RecurringSchedule.AlsoAtStart is due then.
 // RunNextAsync waits until the service waits for its next instant, moves Clock to it and waits for the end of the cycle it
 // starts, whatever the schedule: an interval, a time of day or a retry. No test waits for the real instant. The other instances
 // of AppFactory never start the recurring command.
@@ -26,9 +28,12 @@ public sealed class RecurringCommandCycles<TCommand, TResponse>
 
     // Call it before the first request and the first use of Services of app. configure sets up the instance that runs the
     // cycles, as WithWebHostBuilder would, such as a fake HTTP handler of a client that the command reads, or a setting with
-    // builder.UseSetting: it runs before the clock of the cycles replaces the one of the application.
-    public RecurringCommandCycles(AppFactory app, Action<IWebHostBuilder>? configure = null)
+    // builder.UseSetting: it runs before the clock of the cycles replaces the one of the application. start is the instant at
+    // which the application starts, such as 02:00 UTC for a cycle at start on the evening before in America/Toronto: Clock is
+    // set to it before the host starts, so a test never moves Clock with SetUtcNow before the first use of Services.
+    public RecurringCommandCycles(AppFactory app, Action<IWebHostBuilder>? configure = null, DateTimeOffset? start = null)
     {
+        Clock = new FakeTimeProvider(start ?? TestInstants.Start);
         _app = app.KeepHostedService<RecurringCommandService<TCommand, TResponse>>().WithWebHostBuilder(builder =>
         {
             configure?.Invoke(builder);
@@ -45,7 +50,7 @@ public sealed class RecurringCommandCycles<TCommand, TResponse>
         });
     }
 
-    public FakeTimeProvider Clock { get; } = new(TestInstants.Start);
+    public FakeTimeProvider Clock { get; }
 
     // The services of the instance that runs the cycles, such as a scope to read the database or the options of the module.
     public IServiceProvider Services => _app.Services;
@@ -64,7 +69,8 @@ public sealed class RecurringCommandCycles<TCommand, TResponse>
     // Moves Clock to the instant of the next cycle, then returns the response of that cycle, or throws the exception that failed
     // it. RecurringCommandService logs that exception, then sends the command again or waits for the next instant of its schedule.
     // A cycle that an IRecurringCommandCondition<TCommand> holds back throws a HeldCycleException, whose message is the reason.
-    // With RecurringSchedule.AlsoAtStart, the first cycle is due at TestInstants.Start: RunNextAsync runs it without moving Clock.
+    // With RecurringSchedule.AlsoAtStart, the first cycle is due at the start of the constructor: RunNextAsync runs it without
+    // moving Clock.
     public async Task<TResponse> RunNextAsync()
     {
         var due = await NextDueAsync();
