@@ -524,7 +524,8 @@ public sealed class TemplatePackageTests
         var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
         var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
 
-        agents.ShouldContain("A job decides whether to run through an `IRecurringCommandCondition<TCommand>` in the folder of its slice, checked before each send, which reads options or `AppDbContext` with `AsNoTracking()` and never writes (HS006): the setting a job needs is checked there, never by a hosted service that only logs it nor `ValidateOnStart`.");
+        agents.ShouldContain("A job decides whether to run through an `IRecurringCommandCondition<TCommand>` in the folder of its slice, checked before each send, which reads options or `AppDbContext` and never writes (HS006)");
+        agents.ShouldContain("The setting a job needs is checked there, never by a hosted service that only logs it nor `ValidateOnStart`.");
         agents.ShouldContain("and the logs name each one removed.");
         addSlice.ShouldContain("registered after its handler with `.AddScoped<IRecurringCommandCondition<TCommand>, <Slice>Condition>()`");
         addSlice.ShouldContain("the cycle sends nothing and is not retried, the reason is logged once until it changes");
@@ -544,11 +545,45 @@ public sealed class TemplatePackageTests
 
         agents.ShouldContain("Any other hosted service lives in the folder of the slice it triggers, sends each command through `IMediator` in a scope of its own, never writes nor tracks (HS006)");
         addSlice.ShouldContain("HS006 reports a write or a tracked read in a condition");
-        addSlice.ShouldContain("never writes itself and reads, if it must, with `AsNoTracking()` (HS006)");
+        addSlice.ShouldContain("never writes itself and reads, if it must, with `AsNoTracking()` on a query that loads an entity");
         sheet.ShouldStartWith("# HS006: a query handler, a hosted service or a condition of a slice reads without tracking and never writes");
         sheet.ShouldContain("- **A hosted service**: a class that implements `IHostedService`, directly or through `BackgroundService`");
         sheet.ShouldContain("- **A condition of a recurring command**: a class that implements `IRecurringCommandCondition<TCommand>`");
         sheet.ShouldContain("The hosted services of `Shared`, such as `RecurringCommandService<TCommand, TResponse>`, and those declared in the namespace of a module outside its slices, are not.");
+    }
+
+    // PB-090: HS006 asks AsNoTracking() only of a query that loads an entity. AGENTS.md, add-slice and the comment of
+    // IRecurringCommandCondition say so for a query handler, a condition and a hosted service, as HS006.md does: AnyAsync, CountAsync
+    // and a projection to values need none. The pack copies add-slice into .agents/skills/ as is, which the test of the pack checks.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_that_a_read_that_loads_no_entity_needs_no_AsNoTracking(bool noSample)
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(template, "AGENTS.md")), noSample);
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+        var service = File.ReadAllText(Path.Combine(template, "src", "MyApp", "Shared", "Messaging", "RecurringCommand.cs"));
+        var sheet = File.ReadAllText(Path.Combine(template, "docs", "rules", "HS006.md"));
+        const string noEntity = "such as `AnyAsync`, `CountAsync` or a projection to values";
+
+        agents.Length.ShouldBeLessThan(150);
+        agents.SkipWhile(line => line != "## Golden rules").Single(line => line.StartsWith("5. A command handler", StringComparison.Ordinal)).ShouldContain(
+            "A query handler never writes, never calls `Find` nor `AsTracking`, starts each query that loads an entity with `AsNoTracking()`, "
+            + $"and projects to a DTO of values: a read that loads no entity, {noEntity}, needs no `AsNoTracking()` (HS006).");
+        var background = agents.Single(line => line.StartsWith("   - **Background work**", StringComparison.Ordinal));
+        background.ShouldContain($"which reads options or `AppDbContext` and never writes (HS006): `AsNoTracking()` on a query that loads an entity, none on a read that loads none, {noEntity}.");
+        background.ShouldNotContain("`AppDbContext` with `AsNoTracking()`");
+
+        addSlice.ShouldContain($"A query that loads an entity starts with `AsNoTracking()`, and a read that loads none, {noEntity}, needs none: HS006 reports a write or a tracked read in a condition.");
+        addSlice.ShouldContain($"with `AsNoTracking()` on a query that loads an entity, which a read that loads none, {noEntity}, does not need (HS006)");
+        addSlice.ShouldContain($"HS006 requires it on each query that loads an entity, while a read that loads none, {noEntity}, needs none.");
+        addSlice.ShouldNotContain("`AppDbContext` with `AsNoTracking()`");
+
+        service.ShouldContain("// database through AppDbContext, and never writes: what the cycle does is the work of the command. A query that loads an entity\n"
+            + "// starts with AsNoTracking(), and a read that loads none, such as AnyAsync, CountAsync or a projection to values, needs none (HS006).");
+        sheet.ShouldContain("A query whose result holds no entity is compliant without `AsNoTracking()`");
+        sheet.ShouldContain("A hosted service or a condition projects to the values it needs, or asks `AnyAsync` or `CountAsync`.");
     }
 
     // PB-087: hardslice-aggregate maps a concurrency token on xmin, AppDbContext saves the root of a changed child so that the

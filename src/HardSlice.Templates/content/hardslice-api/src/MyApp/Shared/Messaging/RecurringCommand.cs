@@ -180,7 +180,8 @@ internal sealed class RecurringCommandOptions<TCommand>
 // its module registers it beside the handler with .AddScoped<IRecurringCommandCondition<TCommand>, TCondition>(). Before each
 // send, the service resolves every condition of the command in a scope of their own: the first reason ends the cycle without
 // sending the command, logged once until the reason changes or the command is sent again. A condition reads its options, or the
-// database through AppDbContext with AsNoTracking(), and never writes: what the cycle does is the work of the command.
+// database through AppDbContext, and never writes: what the cycle does is the work of the command. A query that loads an entity
+// starts with AsNoTracking(), and a read that loads none, such as AnyAsync, CountAsync or a projection to values, needs none (HS006).
 public interface IRecurringCommandCondition<TCommand>
 {
     // Null to send the command at this cycle, or why it is not sent, such as "NextRip:ApiKey is not set". A condition that throws
