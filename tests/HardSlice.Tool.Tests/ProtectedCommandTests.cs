@@ -30,6 +30,7 @@ public sealed class ProtectedCommandTests : IDisposable
     [InlineData("nuget.config", "nuget.config")]
     [InlineData("NuGet.Config", "nuget.config")]
     [InlineData(".agents/skills/add-slice/SKILL.md", ".agents/")]
+    [InlineData(".hardslice/generation/src/Demo/Program.cs", ".hardslice/generation/")]
     public void A_protected_path_is_listed_with_its_entry_and_exits_1(string path, string entry)
     {
         var (exitCode, output, error) = Run($"src/Demo/Program.cs\n{path}\nREADME.md\n");

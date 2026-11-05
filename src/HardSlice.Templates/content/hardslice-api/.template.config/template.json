@@ -69,6 +69,53 @@
           ]
         }
       ]
+    },
+    {
+      "target": "./.hardslice/generation/",
+      "exclude": [
+        "**/[Bb]in/**",
+        "**/[Oo]bj/**",
+        ".template.config/**/*",
+        "**/*.filelist",
+        "**/*.user",
+        "**/*.lock.json",
+        "**/.editorconfig",
+        "**/.globalconfig",
+        "**/Directory.Build.props",
+        "**/Directory.Build.targets",
+        "**/Directory.Build.rsp",
+        "hardslice.json",
+        "Directory.HardSlice.props",
+        ".config/dotnet-tools.json",
+        ".github/workflows/hardslice.yml",
+        "Directory.Solution.props",
+        "Directory.Solution.targets",
+        "nuget.config",
+        "scripts/**",
+        "tests/MyApp.ArchitectureTests/**",
+        ".claude/**",
+        ".agents/**",
+        ".codex/**",
+        ".github/hooks/**",
+        ".githooks/**",
+        ".hardslice/generation/**",
+        "docs/rules/**",
+        "GEMINI.md",
+        ".github/copilot-instructions.md"
+      ],
+      "modifiers": [
+        {
+          "condition": "(NoSample)",
+          "exclude": [
+            "src/MyApp.Domain/Bookings/**",
+            "src/MyApp/Features/Bookings/**",
+            "src/MyApp/Shared/Persistence/Migrations/**",
+            "tests/MyApp.Tests/Domain/Bookings/**",
+            "tests/MyApp.Tests/Features/Bookings/**",
+            "tests/MyApp.IntegrationTests/Features/Bookings/**"
+          ]
+        }
+      ]
     }
   ],
   "postActions": [

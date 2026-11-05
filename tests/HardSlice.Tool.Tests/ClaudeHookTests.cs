@@ -107,6 +107,7 @@ public sealed class ClaudeHookTests : IDisposable
     [InlineData(".agents/skills/add-slice/SKILL.md", ".agents/")]
     [InlineData("Directory.Solution.props", "Directory.Solution.props")]
     [InlineData("nuget.config", "nuget.config")]
+    [InlineData(".hardslice/generation/AGENTS.md", ".hardslice/generation/")]
     public void The_edit_of_a_protected_file_is_refused_with_the_reason(string file, string entry)
     {
         var runner = new FakeRunner();

@@ -124,6 +124,31 @@ public sealed class TemplatePackageTests
         template.RootElement.GetProperty("guids").EnumerateArray().Select(guid => guid.GetString()).ShouldBe([userSecretsId]);
     }
 
+    // PB-095: a second source writes the files of the application into .hardslice/generation/, as the template generates them, for
+    // dotnet hardslice upgrade to merge from. It leaves out the files that the template owns, the list of ProtectedFiles and the rule
+    // sheets, and the instruction files of the agents, with the exclusions of the variant: one list of the protected files (PB-053).
+    [Fact]
+    public void Api_template_records_its_generation_without_the_protected_files_nor_the_instructions_of_the_agents()
+    {
+        var root = TemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var sources = template.RootElement.GetProperty("sources").EnumerateArray().ToArray();
+
+        sources.Length.ShouldBe(2);
+        sources[0].TryGetProperty("target", out _).ShouldBeFalse();
+        sources[0].TryGetProperty("exclude", out _).ShouldBeFalse();
+        var generation = sources[1];
+        generation.GetProperty("target").GetString().ShouldBe("./" + HardSlice.Tool.UpgradeCommand.GenerationFolder);
+        generation.TryGetProperty("source", out _).ShouldBeFalse();
+        generation.GetProperty("exclude").EnumerateArray().Select(glob => glob.GetString()).ShouldBe(HardSlice.Tool.UpgradeCommand.GenerationExclusions("MyApp"));
+        JsonElement.DeepEquals(generation.GetProperty("modifiers"), sources[0].GetProperty("modifiers")).ShouldBeTrue("the generation leaves out the files of the sample as the solution does");
+        HardSlice.Tool.UpgradeCommand.GenerationExclusions("MyApp").ShouldContain("**/Directory.Build.props");
+        HardSlice.Tool.UpgradeCommand.GenerationExclusions("MyApp").ShouldContain("tests/MyApp.ArchitectureTests/**");
+        HardSlice.Tool.UpgradeCommand.GenerationExclusions("MyApp").ShouldContain("docs/rules/**");
+        HardSlice.Tool.UpgradeCommand.GenerationExclusions("MyApp").ShouldContain("GEMINI.md");
+        HardSlice.Tool.UpgradeCommand.GenerationExclusions("MyApp").ShouldNotContain("AGENTS.md");
+    }
+
     // hardslice-command generates the three files of a command slice, at the paths of HS004 and HS018, and nothing else.
     [Fact]
     public void Command_item_template_generates_a_slice_its_validator_tests_and_its_integration_tests_only()

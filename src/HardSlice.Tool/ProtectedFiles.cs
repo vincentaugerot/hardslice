@@ -2,7 +2,7 @@ namespace HardSlice.Tool;
 
 // The files of a generated solution that an agent never edits: they hold the rules, their severities, the versions of the
 // analyzers and of the tool, the check scripts, the architecture tests, the hooks of the agents and the pre-commit hook and CI
-// that run the check. The section "Forbidden" of AGENTS.md lists the workarounds they would allow. The hooks refuse their edit,
+// that run the check, and the generation that dotnet hardslice upgrade merges from. The section "Forbidden" of AGENTS.md lists the workarounds they would allow. The hooks refuse their edit,
 // and the CI of the solution fails a pull request that changes one without the approval of a maintainer (dotnet hardslice protected).
 internal static class ProtectedFiles
 {
@@ -36,8 +36,14 @@ internal static class ProtectedFiles
         return file ?? RootFolders(solutionName).FirstOrDefault(folder => relativePath.StartsWith(folder, StringComparison.OrdinalIgnoreCase));
     }
 
+    // The globs of dotnet new that match the protected entries, relative to the root of the template, for the solution of the given
+    // name: the generation of the template that the solution records leaves them out (UpgradeCommand.GenerationFolder).
+    public static IReadOnlyList<string> Globs(string solutionName) =>
+        [.. AnyFolderFiles.Select(name => $"**/{name}"), .. RootFiles, .. RootFolders(solutionName).Select(folder => $"{folder}**")];
+
     // .claude/, .codex/ and .github/hooks/ hold the hooks of Claude Code, Codex and Copilot CLI, .claude/ the skills too and
-    // .agents/ their copy, which Codex, Gemini CLI and Copilot CLI read; .githooks/ holds the pre-commit hook.
+    // .agents/ their copy, which Codex, Gemini CLI and Copilot CLI read; .githooks/ holds the pre-commit hook. .hardslice/generation/
+    // holds the files of the application as the template generated them, which dotnet hardslice upgrade merges from and replaces.
     private static string[] RootFolders(string solutionName) =>
-        ["scripts/", $"tests/{solutionName}.ArchitectureTests/", ".claude/", ".agents/", ".codex/", ".github/hooks/", ".githooks/"];
+        ["scripts/", $"tests/{solutionName}.ArchitectureTests/", ".claude/", ".agents/", ".codex/", ".github/hooks/", ".githooks/", UpgradeCommand.GenerationFolder];
 }

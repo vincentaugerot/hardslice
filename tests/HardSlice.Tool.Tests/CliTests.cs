@@ -83,7 +83,7 @@ public sealed class CliTests
         output.ShouldContain("check --build");
         output.ShouldContain("explain <rule>");
         output.ShouldContain("upgrade");
-        output.ShouldContain("Exit codes of upgrade: 0 nothing left to merge, 1 the upgrade failed");
+        output.ShouldContain("Exit codes of upgrade: 0 nothing left to merge (merged files listed, to review), 1 the upgrade failed");
     }
 
     // PB-086: upgrade takes the variant of the template, or deduces it, and nothing else. A wrong command line runs nothing.
@@ -206,12 +206,15 @@ public sealed class CliTests
               upgrade         Brings the solution to the template of the version of the tool, from a git tree without changes
                               but the tool manifest: generates hardslice-api anew under its name in a temporary folder, rewrites
                               the files the template owns (protected files and rule sheets), adds the files the solution lacks,
-                              and lists with their diff the files of the application that differ, to merge. Leaves out the sample
-                              when the solution has no src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless
-                              --sample or --no-sample says. Writes protected files: a maintainer runs it, never an agent.
+                              and merges the files of the application in three ways from the generation recorded in
+                              .hardslice/generation/: updates those the application did not change, merges with git merge-file
+                              those both changed, writing a conflict between git markers, and lists with their diff those
+                              without a recorded generation, to merge. Then records the new generation there. Leaves out the
+                              sample when the solution has no src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/,
+                              unless --sample or --no-sample says. Writes protected files: a maintainer runs it, never an agent.
 
-            Exit codes of upgrade: 0 nothing left to merge, 1 the upgrade failed (with a change in the git tree, nothing is written),
-            2 a wrong command line, 3 files left to merge or to review, listed.
+            Exit codes of upgrade: 0 nothing left to merge (merged files listed, to review), 1 the upgrade failed (with a change in the
+            git tree, nothing is written), 2 a wrong command line, 3 conflicts to resolve or files left to merge or to review, listed.
             """,
         ["hook"] = """
             Usage: dotnet hardslice hook <cli> <event>

@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HardSlice.Tool.Tests" />
+    <!-- TemplatePackageTests: the generation that template.json records leaves out the protected files of ProtectedFiles. -->
+    <InternalsVisibleTo Include="HardSlice.Analyzers.Tests" />
   </ItemGroup>
 
 </Project>

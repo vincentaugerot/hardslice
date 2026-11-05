@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" />
+    <!-- The list of the protected files, which the generation recorded by template.json leaves out. -->
+    <ProjectReference Include="../../src/HardSlice.Tool/HardSlice.Tool.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

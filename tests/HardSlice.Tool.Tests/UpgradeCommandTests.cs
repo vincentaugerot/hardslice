@@ -66,7 +66,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "==> Files added from the template (2):",
             "    docs/rules/HS020.md",
             "    src/Demo/Shared/Http/DomainExceptionHandler.cs",
-            "==> Files of the application that differ from the template, left as is (1). Merge into each one what the template changed, by hand or with the agent: in the diffs below, '-' lines are in the solution only, '+' lines in the template only:",
+            "==> Files of the application that differ from the template, with no generation recorded in .hardslice/generation/ to merge from, left as is (1). Merge into each one what the template changed, by hand or with the agent: in the diffs below, '-' lines are in the solution only, '+' lines in the template only:",
             "    AGENTS.md",
             "==> Diff of AGENTS.md",
             "--- AGENTS.md (solution)",
@@ -81,8 +81,15 @@ public sealed class UpgradeCommandTests : IDisposable
             " ",
             "-- `Rooms`: the rooms of the building.",
             "+- None yet.",
-            "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 1 file left to merge or to review. Merge the files listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.",
+            "==> The generation of the template is recorded in .hardslice/generation/ (8 files): the next upgrade merges the files of the application from it.",
+            "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 0 updated, 0 merged, 0 removed, 0 conflicts to resolve, 1 file left to merge or to review. Merge the files listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.",
         ]);
+        // PB-095: the solution recorded no generation, as Ghostline before its first upgrade: it now records the one of the template.
+        Read(".hardslice/generation/AGENTS.md").ShouldBe(_generator.Files["AGENTS.md"]);
+        Read(".hardslice/generation/src/Demo/Shared/Http/DomainExceptionHandler.cs").ShouldBe("namespace Demo.Shared.Http;\n");
+        Directory.EnumerateFiles(Path.Combine(_solution.Root, ".hardslice", "generation"), "*", SearchOption.AllDirectories).Count().ShouldBe(8);
+        File.Exists(Path.Combine(_solution.Root, ".hardslice/generation/.claude/skills/add-slice/SKILL.md")).ShouldBeFalse();
+        File.Exists(Path.Combine(_solution.Root, ".hardslice/generation/docs/rules/HS020.md")).ShouldBeFalse();
     }
 
     // The generation runs once, under the name of the solution, at the version of the tool, in a folder that it then deletes.
@@ -118,7 +125,8 @@ public sealed class UpgradeCommandTests : IDisposable
         Lines(output)[2..].ShouldBe([
             "==> HardSlice files rewritten from the template (1). A change made to one of them in the solution is gone: 'git diff' shows it, for a maintainer to put back one that still applies:",
             "    tests/Demo.ArchitectureTests/SliceTests.cs",
-            "==> Upgrade done: 1 HardSlice file rewritten, 0 files added, nothing to merge. Review the changes with 'git diff', then run 'dotnet hardslice check'.",
+            "==> The generation of the template is recorded in .hardslice/generation/ (7 files): the next upgrade merges the files of the application from it.",
+            "==> Upgrade done: 1 HardSlice file rewritten, 0 files added, 0 updated, 0 merged, 0 removed, 0 conflicts to resolve, 0 files left to merge or to review. Review the changes with 'git diff', then run 'dotnet hardslice check'.",
         ]);
     }
 
@@ -239,7 +247,7 @@ public sealed class UpgradeCommandTests : IDisposable
         Lines(output).ShouldContain(
             "==> HardSlice files that the template does not generate, left as is (1). Delete each one that an older template generated, keep one that a maintainer added:");
         Lines(output).ShouldContain("    tests/Demo.ArchitectureTests/SliceTests.cs");
-        Lines(output)[^1].ShouldContain(" added, 1 file left to merge or to review. Merge the files listed above");
+        Lines(output)[^1].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
     }
 
     // Ghostline: the template moved the HTTP answers from Shared/Behaviors to Shared/Http. The new file is added, and the old one,
@@ -261,7 +269,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "==> Files of the solution that the template may have moved, left as is (1). Each one has the name of a file added from the template: "
             + "merge what the application changed in it into the new file, then delete it:");
         lines.ShouldContain("    src/Demo/Shared/Behaviors/DomainExceptionHandler.cs -> src/Demo/Shared/Http/DomainExceptionHandler.cs");
-        lines[^1].ShouldContain(" added, 1 file left to merge or to review. Merge the files listed above");
+        lines[^1].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
     }
 
     [Fact]
@@ -329,8 +337,216 @@ public sealed class UpgradeCommandTests : IDisposable
         owned.ShouldContain("scripts/check.sh");
         owned.ShouldContain("tests/MyApp.ArchitectureTests/SliceTests.cs");
         owned.ShouldContain("docs/rules/HS016.md");
+        UpgradeCommand.OwnedByTemplate(".hardslice/generation/AGENTS.md", "MyApp").ShouldBeTrue();
         foreach (var path in new[] { "AGENTS.md", "Directory.Packages.props", "src/MyApp/Program.cs", "src/MyApp/MyApp.csproj", "tests/MyApp.IntegrationTests/AppFactory.cs", "src/MyApp/Shared/Messaging/Mediator.cs", "GEMINI.md", ".gitignore" })
             UpgradeCommand.OwnedByTemplate(path, "MyApp").ShouldBeFalse(path);
+    }
+
+    // PB-095: Ghostline's first upgrade listed AGENTS.md with its own parts as lines to remove, and 5 of its 10 files that the
+    // application never changed. With the generation that the solution records, the upgrade tells the changes of the application
+    // from those of the template: it updates a file the application did not change, merges two changes on different lines, and
+    // leaves a file that only the application changed.
+    [Fact]
+    public void The_files_of_the_application_are_merged_in_three_ways_from_the_recorded_generation()
+    {
+        RecordThreeWayCase();
+
+        var (exitCode, output, error) = Upgrade();
+
+        exitCode.ShouldBe(0);
+        error.ShouldBeEmpty();
+        Read("AGENTS.md").ShouldBe(
+            "# Demo\n\nGolden rules:\n\n1. One slice per use case.\n2. Test every slice.\n\n## Modules\n\n- `Rooms`: the rooms of the building.\n\n## Running\n\nRun it.\n");
+        Read("src/Demo/Program.cs").ShouldBe(
+            "var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddMediator();\nbuilder.Services.AddRooms();\n\nvar app = builder.Build();\napp.MapHealth();\n\nawait app.RunAsync();\n");
+        Read("src/Demo/Shared/Messaging/Mediator.cs").ShouldBe("namespace Demo.Shared.Messaging;\n// version 2\n");
+        Read("src/Demo/Shared/Persistence/AppDbContext.cs").ShouldBe("namespace Demo.Shared.Persistence;\n// changed by the application\n");
+        Lines(output)[2..].ShouldBe([
+            "==> HardSlice files rewritten from the template (1). A change made to one of them in the solution is gone: 'git diff' shows it, for a maintainer to put back one that still applies:",
+            "    .claude/skills/add-slice/SKILL.md",
+            "==> Files added from the template (2):",
+            "    docs/rules/HS020.md",
+            "    src/Demo/Shared/Http/DomainExceptionHandler.cs",
+            "==> Files of the application updated from the template, unchanged by the application (1):",
+            "    src/Demo/Shared/Messaging/Mediator.cs",
+            "==> Files of the application merged with the template, without conflict (2). Review each one with 'git diff':",
+            "    AGENTS.md",
+            "    src/Demo/Program.cs",
+            "==> .hardslice/generation/ now holds the generation of the template " + ToolVersion.Current + ", the base of the next upgrade.",
+            "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 1 updated, 2 merged, 0 removed, 0 conflicts to resolve, 0 files left to merge or to review. Review the changes with 'git diff', then run 'dotnet hardslice check'.",
+        ]);
+        foreach (var path in new[] { "AGENTS.md", "src/Demo/Program.cs", "src/Demo/Shared/Messaging/Mediator.cs", "src/Demo/Shared/Persistence/AppDbContext.cs", "src/Demo/Shared/Http/DomainExceptionHandler.cs" })
+            Read(".hardslice/generation/" + path).ShouldBe(_generator.Files[path], path);
+    }
+
+    // The upgrade after a merge has nothing to write: the solution and the recorded generation already hold the template.
+    [Fact]
+    public void A_second_upgrade_rewrites_and_lists_nothing()
+    {
+        RecordThreeWayCase();
+        Upgrade().ExitCode.ShouldBe(0);
+        Commit();
+
+        var (exitCode, output, error) = Upgrade();
+
+        exitCode.ShouldBe(0);
+        error.ShouldBeEmpty();
+        Lines(output)[2..].ShouldBe([
+            "==> Upgrade done: 0 HardSlice files rewritten, 0 files added, 0 updated, 0 merged, 0 removed, 0 conflicts to resolve, 0 files left to merge or to review. Review the changes with 'git diff', then run 'dotnet hardslice check'.",
+        ]);
+        Runner.Capture("git", ["status", "--porcelain"], _solution.Root).Output.ShouldBeEmpty();
+    }
+
+    // A line that both changed: the file holds both changes between the markers of git, with the recorded generation, and the
+    // upgrade exits 3.
+    [Fact]
+    public void A_line_changed_by_the_application_and_the_template_is_written_as_a_conflict()
+    {
+        RecordThreeWayCase();
+        _solution.Write("AGENTS.md", "# Demo\n\nGolden rules:\n\n1. One slice per use case, always.\n\n## Modules\n\n- `Rooms`: the rooms of the building.\n\n## Running\n\nRun it.\n");
+        Commit();
+        _generator.Files["AGENTS.md"] = "# Demo\n\nGolden rules:\n\n1. One slice per use case, tested.\n\n## Modules\n\n- None yet.\n\n## Running\n\nRun it.\n";
+
+        var (exitCode, output, error) = Upgrade();
+
+        exitCode.ShouldBe(UpgradeCommand.MergeLeft);
+        error.ShouldBeEmpty();
+        Read("AGENTS.md").ShouldBe(
+            "# Demo\n\nGolden rules:\n\n"
+            + "<<<<<<< solution\n1. One slice per use case, always.\n"
+            + $"||||||| generation {ToolVersion.Current}\n1. One slice per use case.\n"
+            + "=======\n1. One slice per use case, tested.\n"
+            + $">>>>>>> template {ToolVersion.Current}\n"
+            + "\n## Modules\n\n- `Rooms`: the rooms of the building.\n\n## Running\n\nRun it.\n");
+        var lines = Lines(output);
+        lines.ShouldContain(
+            $"==> Conflicts to resolve (1). Each file holds both changes between git conflict markers: '<<<<<<< solution', then '||||||| generation {ToolVersion.Current}' "
+            + $"before the lines as the template generated them, then '=======' before '>>>>>>> template {ToolVersion.Current}'. Keep what each side needs, then remove the markers:");
+        lines.ShouldContain("    AGENTS.md");
+        lines[^1].ShouldBe(
+            "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 1 updated, 1 merged, 0 removed, 1 conflict to resolve, 0 files left to merge or to review. "
+            + "Resolve the conflicts listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.");
+        Read(".hardslice/generation/AGENTS.md").ShouldBe(_generator.Files["AGENTS.md"]);
+    }
+
+    // dotnet new draws a new UserSecretsId at each generation: the project keeps the one of the solution, without a conflict on
+    // its line, and so does its recorded generation.
+    [Fact]
+    public void The_UserSecretsId_of_a_project_creates_no_conflict()
+    {
+        const string project = "<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n  <PropertyGroup>\n    <UserSecretsId>{0}</UserSecretsId>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n\n  <ItemGroup>\n{1}  </ItemGroup>\n</Project>\n";
+        const string kept = "8254d42f-b88e-48d2-83ca-ca1a59059a75";
+        Generated("src/Demo/Demo.csproj", string.Format(project, kept, "    <PackageReference Include=\"FluentValidation\" />\n"));
+        _solution.Write("src/Demo/Demo.csproj", "<!-- Rooms -->\n" + string.Format(project, kept, "    <PackageReference Include=\"FluentValidation\" />\n    <PackageReference Include=\"CsvHelper\" />\n"));
+        Commit();
+        _generator.Files["AGENTS.md"] = Read("AGENTS.md");
+        _generator.Files["src/Demo/Demo.csproj"] = string.Format(project, "4568ce66-0fef-4b9c-84ba-da27744c3630", "    <PackageReference Include=\"FluentValidation\" />\n").Replace("enable", "disable", StringComparison.Ordinal);
+
+        var (exitCode, output, _) = Upgrade();
+
+        exitCode.ShouldBe(0);
+        Lines(output).ShouldContain("    src/Demo/Demo.csproj");
+        output.ShouldNotContain("==> Conflicts to resolve");
+        Read("src/Demo/Demo.csproj").ShouldBe(
+            "<!-- Rooms -->\n" + string.Format(project, kept, "    <PackageReference Include=\"FluentValidation\" />\n    <PackageReference Include=\"CsvHelper\" />\n").Replace("enable", "disable", StringComparison.Ordinal));
+        Read(".hardslice/generation/src/Demo/Demo.csproj").ShouldContain(kept);
+    }
+
+    // A file that the application deleted is left deleted: listed when the template changed it, silent otherwise.
+    [Fact]
+    public void A_file_deleted_by_the_application_is_left_deleted_and_listed_when_the_template_changed_it()
+    {
+        RecordThreeWayCase();
+        Generated("src/Demo/Shared/Behaviors/LoggingBehavior.cs", "namespace Demo.Shared.Behaviors;\n");
+        File.Delete(Path.Combine(_solution.Root, "src/Demo/Shared/Messaging/Mediator.cs"));
+        File.Delete(Path.Combine(_solution.Root, "src/Demo/Shared/Behaviors/LoggingBehavior.cs"));
+        Commit();
+        _generator.Files["src/Demo/Shared/Behaviors/LoggingBehavior.cs"] = "namespace Demo.Shared.Behaviors;\n";
+
+        var (exitCode, output, _) = Upgrade();
+
+        exitCode.ShouldBe(UpgradeCommand.MergeLeft);
+        File.Exists(Path.Combine(_solution.Root, "src/Demo/Shared/Messaging/Mediator.cs")).ShouldBeFalse();
+        File.Exists(Path.Combine(_solution.Root, "src/Demo/Shared/Behaviors/LoggingBehavior.cs")).ShouldBeFalse();
+        var lines = Lines(output);
+        lines.ShouldContain(
+            "==> Files that the application deleted and the template changed, left deleted (1). Restore one that the application needs from .hardslice/generation/, which holds the new generation:");
+        lines.ShouldContain("    src/Demo/Shared/Messaging/Mediator.cs");
+        output.ShouldNotContain("LoggingBehavior.cs");
+        lines[^1].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
+        Read(".hardslice/generation/src/Demo/Shared/Messaging/Mediator.cs").ShouldBe(_generator.Files["src/Demo/Shared/Messaging/Mediator.cs"]);
+    }
+
+    // A file of the recorded generation that the template no longer generates: deleted when the application never changed it,
+    // even when the template moved it, and left and listed when it did. The recorded generation loses it too.
+    [Fact]
+    public void A_file_that_the_template_no_longer_generates_is_deleted_unless_the_application_changed_it()
+    {
+        RecordThreeWayCase();
+        Generated("src/Demo/Shared/Behaviors/DomainExceptionHandler.cs", "namespace Demo.Shared.Behaviors;\n");
+        Generated("src/Demo/Shared/Behaviors/ValidationBehavior.cs", "namespace Demo.Shared.Behaviors;\n");
+        _solution.Write("src/Demo/Shared/Behaviors/ValidationBehavior.cs", "namespace Demo.Shared.Behaviors;\n// changed by the application\n");
+        Commit();
+
+        var (exitCode, output, _) = Upgrade();
+
+        exitCode.ShouldBe(UpgradeCommand.MergeLeft);
+        File.Exists(Path.Combine(_solution.Root, "src/Demo/Shared/Behaviors/DomainExceptionHandler.cs")).ShouldBeFalse();
+        Read("src/Demo/Shared/Behaviors/ValidationBehavior.cs").ShouldBe("namespace Demo.Shared.Behaviors;\n// changed by the application\n");
+        var lines = Lines(output);
+        lines.ShouldContain("==> Files of the application removed, which the template no longer generates and the application did not change (1):");
+        lines.ShouldContain("    src/Demo/Shared/Behaviors/DomainExceptionHandler.cs");
+        lines.ShouldContain(
+            "==> Files of the application that the template no longer generates, changed by the application, left as is (1). Delete each one that the application no longer needs:");
+        lines.ShouldContain("    src/Demo/Shared/Behaviors/ValidationBehavior.cs");
+        output.ShouldNotContain("may have moved");
+        lines[^1].ShouldContain(", 1 removed, 0 conflicts to resolve, 1 file left to merge or to review.");
+        Directory.Exists(Path.Combine(_solution.Root, ".hardslice/generation/src/Demo/Shared/Behaviors")).ShouldBeFalse();
+    }
+
+    // git may check the files out with the line breaks of Windows: the merged file keeps them.
+    [Fact]
+    public void A_merged_file_keeps_the_line_breaks_of_the_solution()
+    {
+        RecordThreeWayCase();
+        _solution.Write("src/Demo/Program.cs", Read("src/Demo/Program.cs").Replace("\n", "\r\n", StringComparison.Ordinal));
+        _solution.Write("src/Demo/Shared/Messaging/Mediator.cs", Read("src/Demo/Shared/Messaging/Mediator.cs").Replace("\n", "\r\n", StringComparison.Ordinal));
+        Commit();
+
+        var (exitCode, output, _) = Upgrade();
+
+        exitCode.ShouldBe(0);
+        Read("src/Demo/Program.cs").ShouldBe(
+            "var builder = WebApplication.CreateBuilder(args);\r\nbuilder.Services.AddMediator();\r\nbuilder.Services.AddRooms();\r\n\r\nvar app = builder.Build();\r\napp.MapHealth();\r\n\r\nawait app.RunAsync();\r\n");
+        Lines(output).ShouldContain("    src/Demo/Shared/Messaging/Mediator.cs");
+    }
+
+    // The solution as the template generated it, with its recorded generation, then changed by the application, and the template
+    // of the version of the tool, which changed other lines.
+    private void RecordThreeWayCase()
+    {
+        Generated("AGENTS.md", "# Demo\n\nGolden rules:\n\n1. One slice per use case.\n\n## Modules\n\n- None yet.\n\n## Running\n\nRun it.\n");
+        _solution.Write("AGENTS.md", "# Demo\n\nGolden rules:\n\n1. One slice per use case.\n\n## Modules\n\n- `Rooms`: the rooms of the building.\n\n## Running\n\nRun it.\n");
+        Generated("src/Demo/Program.cs", "var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddMediator();\n\nvar app = builder.Build();\napp.MapHealth();\n\napp.Run();\n");
+        _solution.Write("src/Demo/Program.cs", "var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddMediator();\nbuilder.Services.AddRooms();\n\nvar app = builder.Build();\napp.MapHealth();\n\napp.Run();\n");
+        Generated("src/Demo/Shared/Messaging/Mediator.cs", "namespace Demo.Shared.Messaging;\n");
+        Generated("src/Demo/Shared/Persistence/AppDbContext.cs", "namespace Demo.Shared.Persistence;\n");
+        _solution.Write("src/Demo/Shared/Persistence/AppDbContext.cs", "namespace Demo.Shared.Persistence;\n// changed by the application\n");
+        foreach (var path in new[] { "Directory.Packages.props", "Demo.slnx", ".gitignore" }.Concat(_solution.TestProjects.Where(project => !project.Contains("Architecture", StringComparison.Ordinal))))
+            Generated(path, Read(path));
+        Commit();
+
+        _generator.Files["AGENTS.md"] = "# Demo\n\nGolden rules:\n\n1. One slice per use case.\n2. Test every slice.\n\n## Modules\n\n- None yet.\n\n## Running\n\nRun it.\n";
+        _generator.Files["src/Demo/Program.cs"] = "var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddMediator();\n\nvar app = builder.Build();\napp.MapHealth();\n\nawait app.RunAsync();\n";
+        _generator.Files["src/Demo/Shared/Messaging/Mediator.cs"] = "namespace Demo.Shared.Messaging;\n// version 2\n";
+        _generator.Files["src/Demo/Shared/Persistence/AppDbContext.cs"] = "namespace Demo.Shared.Persistence;\n";
+    }
+
+    // A file of the application as the template generated it: in the solution and in its recorded generation.
+    private void Generated(string path, string text)
+    {
+        _solution.Write(path, text);
+        _solution.Write(UpgradeCommand.GenerationFolder + path, text);
     }
 
     // dotnet new, in a hive of its own: the package installed from the root of the solution, whose nuget.config chooses its source.
@@ -431,12 +647,20 @@ public sealed class UpgradeCommandTests : IDisposable
 
             foreach (var (path, text) in Files)
             {
-                var file = Path.Combine(target, path);
-                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-                File.WriteAllText(file, text);
+                Write(target, path, text);
+                // The second source of template.json: the files of the application again, in the generation that the solution records.
+                if (!UpgradeCommand.OwnedByTemplate(path, solution.Name) && !UpgradeCommand.AgentInstructionFiles.Contains(path))
+                    Write(target, UpgradeCommand.GenerationFolder + path, text);
             }
 
             return true;
+        }
+
+        private static void Write(string target, string path, string text)
+        {
+            var file = Path.Combine(target, path);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, text);
         }
     }
 }

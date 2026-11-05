@@ -23,9 +23,12 @@ internal static class Cli
           upgrade         Brings the solution to the template of the version of the tool, from a git tree without changes
                           but the tool manifest: generates hardslice-api anew under its name in a temporary folder, rewrites
                           the files the template owns (protected files and rule sheets), adds the files the solution lacks,
-                          and lists with their diff the files of the application that differ, to merge. Leaves out the sample
-                          when the solution has no src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless
-                          --sample or --no-sample says. Writes protected files: a maintainer runs it, never an agent.
+                          and merges the files of the application in three ways from the generation recorded in
+                          .hardslice/generation/: updates those the application did not change, merges with git merge-file
+                          those both changed, writing a conflict between git markers, and lists with their diff those
+                          without a recorded generation, to merge. Then records the new generation there. Leaves out the
+                          sample when the solution has no src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/,
+                          unless --sample or --no-sample says. Writes protected files: a maintainer runs it, never an agent.
           hook <cli> <event>
                           The hooks of an agent: reads the payload of the CLI on the standard input, refuses the edit
                           of a protected file, runs check --build after the edit of a .cs file and check before the
@@ -42,8 +45,8 @@ internal static class Cli
           --version       Prints the version of the tool.
 
         Exit codes of check and check --build: 0 the check passed, 1 a step failed, 2 a wrong command line only.
-        Exit codes of upgrade: 0 nothing left to merge, 1 the upgrade failed (with a change in the git tree, nothing is written),
-        2 a wrong command line, 3 files left to merge or to review, listed.
+        Exit codes of upgrade: 0 nothing left to merge (merged files listed, to review), 1 the upgrade failed (with a change in the
+        git tree, nothing is written), 2 a wrong command line, 3 conflicts to resolve or files left to merge or to review, listed.
         Exit codes of explain: 0 the sheet printed, 2 a rule without a sheet or a wrong command line.
         Exit codes of hook: those of its CLI above, 1 an unknown CLI or event, or a payload that is not JSON.
         """;
