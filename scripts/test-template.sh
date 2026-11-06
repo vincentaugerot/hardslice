@@ -39,6 +39,8 @@
 # collection of the root, which creates the converter of the identifier of the root, and one that holds that identifier, which
 # reuses it, proves they build without HardSlice diagnostic, that the check fails until the root holds the printed collection,
 # then on their TODO(hardslice): tests, and passes once the printed migration creates both tables.
+# It generates a value object with dotnet new hardslice-value-object through each of its refusals, proves it builds without HardSlice
+# diagnostic, that its tests pass and the check fails on the TODO(hardslice): marker of its rule alone, and passes once completed.
 # It generates domain events with dotnet new hardslice-event through each of its refusals and its HS019 warning, with a reaction in
 # the module of the event and one in a second module, registers them with the lines it prints, checks that the test of the host
 # names a forgotten registration, that only the TODO(hardslice): tests fail without HardSlice diagnostic, and that a reference completion passes the check.
@@ -5196,6 +5198,208 @@ probe_entity_template() {
   [[ ! -d "$work/entity-migrations.backup" ]] || mv "$work/entity-migrations.backup" "$migrations"
 }
 
+# PB-107: the value object <name> of module <module>, which must exist, through every path of dotnet new hardslice-value-object:
+# its refusals, among them a name of the type <existing> that the domain of the module already has, then the record and its unit
+# tests, which build without HardSlice diagnostic and pass, the check failing on the TODO(hardslice): marker of its rule alone,
+# and a reference completion, two counts and the rate computed from them, which passes the check. Both files are removed at the end.
+probe_value_object_template() {
+  local module="$1"
+  local name="$2"
+  local existing="$3"
+  local project="src/$app_name/$app_name.csproj"
+  local source="src/$app_name.Domain/$module/$name.cs"
+  local tests="tests/$app_name.Tests/Domain/$module/${name}Tests.cs"
+  local value_object_output
+  local refusal
+  local fields
+  local arguments
+  local option
+  local expected
+  local generated
+  local build_output
+  local check_output
+  local status
+  local marker
+
+  if [[ ! -f "$app/src/$app_name.Domain/$module/$existing.cs" ]]; then
+    echo "error: the domain of module $module of $app_name has no $existing.cs for the probe of hardslice-value-object to refuse that name." >&2
+    exit 1
+  fi
+  for generated in "$source" "$tests"; do
+    if [[ -e "$app/$generated" ]]; then
+      echo "error: $app_name already holds $generated: the probe of hardslice-value-object needs a free name." >&2
+      exit 1
+    fi
+  done
+
+  echo "==> Checking that dotnet new hardslice-value-object refuses an unreadable application, an invalid or missing name or module, and a name the module cannot take in $app_name"
+  expect_item_refused hardslice-value-object "a run without the web project" "with --project src/<App>/<App>.csproj" --module "$module" --name "$name"
+  expect_item_refused hardslice-value-object "a run without module" "Missing mandatory option(s) for the template 'HardSlice value object': '--module'." --project "$project" --name "$name"
+  for refusal in "a run without name|--name is required" \
+    "a name that is not PascalCase|--name 'delivery-rate' is not PascalCase|--name|delivery-rate" \
+    "a module that is not PascalCase|--module 'payments' is not PascalCase|--module|payments" \
+    "a module that does not exist|module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found|--module|Payments" \
+    "a value object named as its module|--name '$module' is already the name of a module or of a namespace of the application|--name|$module" \
+    "a value object named as a namespace of the application|--name 'Domain' is already the name of a module or of a namespace of the application|--name|Domain" \
+    "a value object named as a type of the implicit usings|--name 'Range' is already the name of a type that the files of the application or of its tests import|--name|Range" \
+    "a value object named as a type of the module|--name '$existing' already exists in module '$module': src/$app_name.Domain/$module/$existing.cs or tests/$app_name.Tests/Domain/$module/${existing}Tests.cs exists|--name|$existing"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    # The valid value of each option that the refusal does not give, and none for --name in the run without name.
+    arguments=(--project "$project")
+    for option in --module --name; do
+      [[ " ${fields[*]:2} " == *" $option "* || ( "$option" == --name && "${fields[0]}" == "a run without name" ) ]] && continue
+      case "$option" in
+        --module) arguments+=(--module "$module") ;;
+        --name) arguments+=(--name "$name") ;;
+      esac
+    done
+    expect_item_refused hardslice-value-object "${fields[0]}" "${fields[1]}" "${arguments[@]}" "${fields[@]:2}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-value-object refused ${fields[0]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+
+  echo "==> Generating the value object $name of module $module in $app_name with dotnet new hardslice-value-object"
+  if ! value_object_output="$(new_item hardslice-value-object --project "$project" --module "$module" --name "$name")"; then
+    printf '%s\n' "$value_object_output" >&2
+    echo "error: dotnet new hardslice-value-object failed on the value object $name of module $module in $app_name." >&2
+    exit 1
+  fi
+  for generated in "$source" "$tests"; do
+    if [[ ! -f "$app/$generated" ]]; then
+      printf '%s\n' "$value_object_output" >&2
+      echo "error: dotnet new hardslice-value-object did not create $generated in $app_name." >&2
+      exit 1
+    fi
+    if grep -q 'MyApp\|ModuleName\|ValueObjectName\|#if\|#else\|#endif' "$app/$generated"; then
+      echo "error: $generated, generated in $app_name, keeps a placeholder or a condition of the template." >&2
+      exit 1
+    fi
+    # PB-056: the template cites no type of the Bookings sample, which --no-sample leaves out.
+    if [[ "$module$name" != *Booking* ]] && grep -qi 'booking' "$app/$generated"; then
+      echo "error: $generated, generated in $app_name, mentions the Bookings sample." >&2
+      exit 1
+    fi
+  done
+  for expected in "Complete the value object $name of module $module:" \
+    "1. Give it its values in $source, in place of Value: a parameter of its constructor and a property without setter for each." \
+    "2. Test it in $tests: valid values and what it holds, then one test per rule that its constructor refuses, with Should.Throw<DomainException>, and one per rule that it computes."; do
+    if [[ "${value_object_output//Manual instructions: /}" != *"$expected"* ]]; then
+      printf '%s\n' "$value_object_output" >&2
+      echo "error: dotnet new hardslice-value-object did not print '$expected'." >&2
+      exit 1
+    fi
+  done
+  for expected in "$source|namespace $app_name.Domain.$module;" \
+    "$source|public sealed record $name" \
+    "$source|    public $name(decimal value)" \
+    "$source|            throw new DomainException(\"$name cannot be negative.\");" \
+    "$source|    public decimal Value { get; }" \
+    "$tests|namespace $app_name.Tests.Domain.$module;" \
+    "$tests|        Should.Throw<DomainException>(() => new $name(-1m));"; do
+    if ! grep -Fxq -- "${expected#*|}" "$app/${expected%%|*}"; then
+      cat "$app/${expected%%|*}" >&2
+      echo "error: dotnet new hardslice-value-object did not write the line '${expected#*|}' in ${expected%%|*}." >&2
+      exit 1
+    fi
+  done
+  expect_item_refused hardslice-value-object "a value object that exists" "--name '$name' already exists in module '$module'" --project "$project" --module "$module" --name "$name"
+  if [[ "$item_refused_status" != 105 ]]; then
+    echo "error: dotnet new hardslice-value-object refused a value object that exists with exit $item_refused_status instead of 105." >&2
+    exit 1
+  fi
+
+  echo "==> Checking that $app_name builds the value object $name without HardSlice diagnostic"
+  if ! build_output="$(cd "$app" && dotnet build "$app_name.slnx" 2>&1)" || grep -Eq '(error|warning) HS[0-9]{3}' <<< "$build_output"; then
+    printf '%s\n' "$build_output" >&2
+    echo "error: $app_name does not build the value object $module/$name without HardSlice diagnostic." >&2
+    exit 1
+  fi
+  echo "    $name and ${name}Tests build"
+
+  # Its tests pass on the rule of the template: the check fails on the marker of that rule alone, once every other step passed.
+  echo "==> Checking that the check of $app_name fails on the TODO(hardslice): marker of the rule of $name alone"
+  marker="$source:$(grep -n 'TODO(hardslice): ' "$app/$source" | cut -d: -f1): $(grep -o '// TODO(hardslice): .*' "$app/$source")"
+  status=0
+  check_output="$(run_check check.sh 2>&1)" || status=$?
+  check_output="$(strip_ansi <<< "$check_output")"
+  if [[ "$status" != 1 || "$check_output" != *"error: 1 TODO(hardslice): marker is left in src/ and tests/: "* ]] ||
+    [[ "$(grep -E '^(src|tests)/[^:]+:[0-9]+: ' <<< "$check_output")" != "$marker" ]] ||
+    grep -Eq '^failed |(error|warning) HS[0-9]{3}' <<< "$check_output"; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh did not fail on the TODO(hardslice): marker of $source alone, with the code 1." >&2
+    exit 1
+  fi
+  echo "    $marker"
+
+  # The reference completion, as the instructions say: the values of the constructor, its rules, the rule it computes, and their tests.
+  echo "==> Completing the value object $name with two counts and the rate computed from them, and their tests"
+  {
+    sed -n '1,/^public sealed record /p' "$app/$source"
+    cat <<CODE
+{
+    public $name(int delivered, int total)
+    {
+        if (total <= 0)
+            throw new DomainException("$name counts at least one trip.");
+        if (delivered < 0 || delivered > total)
+            throw new DomainException("$name delivers between none and all of its trips.");
+
+        Delivered = delivered;
+        Total = total;
+    }
+
+    public int Delivered { get; }
+
+    public int Total { get; }
+
+    // The share of the trips delivered, from 0 to 1.
+    public decimal Rate => (decimal)Delivered / Total;
+}
+CODE
+  } > "$work/value-object.cs"
+  mv "$work/value-object.cs" "$app/$source"
+  cat > "$app/$tests" <<CODE
+using $app_name.Domain;
+using $app_name.Domain.$module;
+
+namespace $app_name.Tests.Domain.$module;
+
+public sealed class ${name}Tests
+{
+    [Fact]
+    public void Holds_its_counts_and_computes_their_rate()
+    {
+        var value = new $name(3, 4);
+
+        value.Delivered.ShouldBe(3);
+        value.Total.ShouldBe(4);
+        value.Rate.ShouldBe(0.75m);
+        value.ShouldBe(new $name(3, 4));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-1, 4)]
+    [InlineData(5, 4)]
+    public void Refuses_counts_that_break_its_rules(int delivered, int total)
+    {
+        Should.Throw<DomainException>(() => new $name(delivered, total));
+    }
+}
+CODE
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of the value object $module/$name leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+
+  echo "==> Checking that $app_name passes the check with the completed value object $name"
+  bash "$app/scripts/check.sh"
+
+  rm "${app:?}/${source:?}" "${app:?}/${tests:?}"
+}
+
 # PB-085: the example of "Mapping private fields" in the add-aggregate skill of the generated solution, applied as it is written
 # to an aggregate Trip of module <module> generated by dotnet new hardslice-aggregate: its value object, the members of the
 # aggregate and the lines of its mapping. Its migration stores each private field in its own column, the check passes, and an
@@ -6048,6 +6252,7 @@ probe_protected_endpoints Bookings ProtectBooking ImportProtectedBookings GetPro
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories
 probe_entity_template Bookings Booking BookingNote BookingAuditEntry BookingAudit
+probe_value_object_template Bookings BookingRate Booking
 probe_private_fields Bookings
 probe_aggregate_concurrency Bookings
 probe_event_template Bookings BookingExtended BookingArchived Housekeeping Booking \
@@ -6352,6 +6557,8 @@ probe_condition_template Rooms CollectHeldRoomFeeds ImportHeldRooms CollectRoomF
 probe_aggregate_template Rooms Room Rooms keep
 # Its child entities, generated by dotnet new hardslice-entity in both forms, then removed with their migration.
 probe_entity_template Rooms Room RoomSeat RoomVisit RoomVisitLog
+# PB-107: a value object of Rooms, generated by dotnet new hardslice-value-object beside its aggregate Room, then removed.
+probe_value_object_template Rooms RoomOccupancy Room
 # PB-087: the concurrency token of a generated aggregate, through its root and its children.
 probe_aggregate_concurrency Rooms
 probe_query_template Rooms GetRoomSummary ListRoomSummaries GetRoomsOnDate Room 'Room.Create()'

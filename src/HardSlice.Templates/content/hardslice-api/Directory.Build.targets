@@ -1,12 +1,17 @@
 <Project>
-  <!-- The module files of the web project, read by the item templates (dotnet new hardslice-aggregate, hardslice-entity, hardslice-command, hardslice-query, hardslice-event and
-       hardslice-condition) through their project binding to refuse an element of a module that does not exist. The mappings and the converters of identifiers, read by dotnet new
+  <!-- The module files of the web project, read by the item templates (dotnet new hardslice-aggregate, hardslice-entity, hardslice-value-object, hardslice-command, hardslice-query,
+       hardslice-event and hardslice-condition) through their project binding to refuse an element of a module that does not exist. The mappings and the converters of identifiers, read by dotnet new
        hardslice-entity to refuse an unknown aggregate or a name already mapped, and to create the converter of the root only once. The source files of the slices, read by dotnet
-       new hardslice-condition to refuse a slice or a command that does not exist, or a condition that does. Evaluated only: no target reads them. -->
+       new hardslice-condition to refuse a slice or a command that does not exist, or a condition that does. The source files of the domain project and the domain
+       tests of the unit test project, read by dotnet new hardslice-value-object to refuse a name that the module already has. Evaluated only: no target reads them. -->
   <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)/Features')">
     <HardSliceModuleFiles>$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*Module.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceModuleFiles>
     <HardSliceMappingFiles>$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*Configuration.cs', 'System.IO.SearchOption.AllDirectories'))));$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*IdConverter.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceMappingFiles>
     <HardSliceSliceFiles>$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)/Features', '*.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceSliceFiles>
+    <_HardSliceDomainFolder>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '$(MSBuildProjectName).Domain'))</_HardSliceDomainFolder>
+    <_HardSliceDomainTestsFolder>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'tests', '$(MSBuildProjectName).Tests', 'Domain'))</_HardSliceDomainTestsFolder>
+    <HardSliceDomainFiles Condition="Exists('$(_HardSliceDomainFolder)')">$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(_HardSliceDomainFolder)', '*.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceDomainFiles>
+    <HardSliceDomainFiles Condition="Exists('$(_HardSliceDomainTestsFolder)')">$(HardSliceDomainFiles);$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(_HardSliceDomainTestsFolder)', '*Tests.cs', 'System.IO.SearchOption.AllDirectories'))))</HardSliceDomainFiles>
   </PropertyGroup>
 
   <!-- Read evaluated Compile items and symbols without compiling a potentially stale test assembly. -->

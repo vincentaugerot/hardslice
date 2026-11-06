@@ -1,12 +1,13 @@
 # Item templates
 
-`HardSlice.Templates` ships seven item templates besides the `hardslice-api` solution template. Each one generates one element of a solution in its place, with its tests, and prints the registrations to add: it never edits an existing file. The skills of the [agent loop](agent-loop.md) call them, so an agent never recreates the structure of an element by hand.
+`HardSlice.Templates` ships eight item templates besides the `hardslice-api` solution template. Each one generates one element of a solution in its place, with its tests, and prints the registrations to add: it never edits an existing file. The skills of the [agent loop](agent-loop.md) call them, so an agent never recreates the structure of an element by hand.
 
 | Template | Generates | Skill that calls it |
 |---|---|---|
 | [`hardslice-module`](#a-module) | the public contract of a module, which registers and maps its slices | `add-module` |
 | [`hardslice-aggregate`](#an-aggregate) | an aggregate root, its identifier, its EF Core mapping, its unit tests and the test of its concurrency token | `add-aggregate` |
 | [`hardslice-entity`](#a-child-entity) | a child entity of an aggregate, its identifier, its EF Core mapping and its unit tests | `add-aggregate` |
+| [`hardslice-value-object`](#a-value-object) | a value object of the domain of a module, whose constructor checks its rules, and its unit tests | `add-aggregate` |
 | [`hardslice-command`](#a-command-slice) | a command slice: command, validator, handler, endpoint and tests, or a system command without endpoint | `add-slice` |
 | [`hardslice-query`](#a-query-slice) | a query slice that reads an aggregate: query, DTO, handler, endpoint and tests, and the validator of a filter | `add-slice` |
 | [`hardslice-event`](#a-domain-event-and-its-reaction) | a domain event and, on request, the reaction slice that handles it, with its tests | `add-domain-event` |
@@ -14,7 +15,7 @@
 
 The examples below run from the root of a solution generated as `Rooms` by [Getting started](getting-started.md), once it is restored (after a first build or check). `--project` names the web project: the template reads the name of the application, its `RootNamespace`, and its modules from it.
 
-The generated code always builds without any HardSlice diagnostic, but an element is never generated "done": its tests end with `Assert.Fail("TODO(hardslice): ...")` and `dotnet hardslice check` fails while a `TODO(hardslice):` marker is left, until the business logic and its assertions are written.
+The generated code always builds without any HardSlice diagnostic, but an element is never generated "done": its tests end with `Assert.Fail("TODO(hardslice): ...")`, or its code holds the marker, such as the rule of a value object, and `dotnet hardslice check` fails while a `TODO(hardslice):` marker is left, until the business logic and its assertions are written.
 
 ## A module
 
@@ -54,6 +55,18 @@ It creates the child entity `InvoiceLine` of the aggregate `Invoice` and its ide
 In both forms, a foreign key deletes the children with their root. The unit test of the state ends with `TODO(hardslice):`, and the integration tests fail until the migration is added, as for an aggregate.
 
 It exits with an error and creates nothing without `--project`, before the first restore, with a name, a module or an aggregate that is not PascalCase, for a module without `Features/<Module>/<Module>Module.cs`, for an aggregate without `Features/<Module>/<Aggregate>Configuration.cs`, with a table that is not made of letters, digits and underscores, with a name that the generated code could not use, as for an aggregate, or with a name that the module already maps, that of its aggregate included.
+
+## A value object
+
+```text
+dotnet new hardslice-value-object --project src/Rooms/Rooms.csproj --module Payments --name TaxRate
+```
+
+It creates the value object `TaxRate` in `src/Rooms.Domain/Payments/` and its unit tests in `tests/Rooms.Tests/Domain/Payments/`. It is a `sealed record`, without identity nor setter: it equals any other `TaxRate` with the same values, and an aggregate or a child entity that holds it replaces it whole. Its constructor takes a `decimal value`, held by `Value`, to replace with the values of the domain, and checks a rule marked `TODO(hardslice):`, a negative value refused with `DomainException`, to replace with its own rules. A rule computed from these values, such as a rate, a share or an order, is a property or a method of the value object, never a computation of a handler, as `AGENTS.md` says. The template maps nothing: a value object held by an entity is stored in the columns of its row with `ComplexProperty`, as the section "A value object stored in the row of its entity" of `add-aggregate` details.
+
+Its tests build a valid value and refuse a negative one, and pass as generated: the check fails on the marker of the rule alone, until the rules of the domain replace it. It prints what to complete.
+
+It exits with an error and creates nothing without `--project`, before the first restore, with a name or a module that is not PascalCase, for a module without `Features/<Module>/<Module>Module.cs`, with a name that the generated code could not use, as for an aggregate, or with a name that the module already has: `src/Rooms.Domain/Payments/<Name>.cs`, that of an aggregate, an entity, an identifier or another value object, or `tests/Rooms.Tests/Domain/Payments/<Name>Tests.cs`.
 
 ## A command slice
 
@@ -151,6 +164,7 @@ Without `--project`, before the first restore, with a name or a module that is n
 - `hardslice-module` creates the contract of the module alone, as `dotnet new` creates no empty folder and never deletes a file: the templates of its aggregates, slices and events create its other folders. With `--force`, it overwrites the contract of an existing module, its registrations included.
 - The tests that `hardslice-command` and `hardslice-query` generate call `<Module>Module.Route`, the constant that `hardslice-module` writes in the contract of the module. A module written by hand without it fails the build of these tests (CS0117): add `public const string Route` to it and map its group with it.
 - They cannot check that the route of a slice is free in its module: two endpoints with the same method and route fail at run time, in the integration tests.
+- `hardslice-value-object` knows the types of a module by their files only, `<Name>.cs` in the domain of the module and `<Name>Tests.cs` in its domain tests: a type declared in a file of another name, such as an enum next to its aggregate, fails the build with a compiler error (CS0101) instead.
 - `hardslice-entity` knows an aggregate by its mapping only, `Features/<Module>/<Aggregate>Configuration.cs`: it cannot tell a root from a child entity, nor read the root to add the collection to it.
 - `hardslice-query` cannot check the aggregate: the compiler does. Its list result is `--result many`, not `list`, which `dotnet new` would read as its own `list` command. It generates one filter, of a listed type: add the others to the query. It cannot see the other slices of the module either: two queries whose names differ only by their verb, such as `GetBooking` and `FindBooking`, name the same DTO, which the module that registers both reads as ambiguous (CS0104) until one is renamed.
 - `hardslice-event --reaction-only` cannot check that the event exists: the compiler does, and the test it generates leaves the building of the event to complete.

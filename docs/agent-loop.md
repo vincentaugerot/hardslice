@@ -62,7 +62,7 @@ Six skills, in the Agent Skills format (`SKILL.md`), are shipped. Four turn a bu
 | Skill | Adds | Template |
 |---|---|---|
 | `add-module` | a module, registered in `Program.cs` and the map of `AGENTS.md` | `hardslice-module` |
-| `add-aggregate` | an aggregate with its invariants, their unit tests, its mapping and its migration, and its child entities | `hardslice-aggregate`, `hardslice-entity` |
+| `add-aggregate` | an aggregate with its invariants, their unit tests, its mapping and its migration, its child entities and its value objects | `hardslice-aggregate`, `hardslice-entity`, `hardslice-value-object` |
 | `add-slice` | a command or a query, its business rule in the aggregate, its registration and its tests, and the condition of a scheduled command | `hardslice-command`, `hardslice-query`, `hardslice-condition` |
 | `add-domain-event` | a domain event raised by its aggregate, and the reaction that handles it with its tests | `hardslice-event` |
 

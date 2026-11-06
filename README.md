@@ -41,7 +41,7 @@ dotnet new hardslice-command --project src/Rooms/Rooms.csproj --module Bookings 
 | Part | What it does |
 |---|---|
 | `hardslice-api` solution template | An ASP.NET Core API in vertical slices around a separate domain project, with PostgreSQL, EF Core, a small in-house mediator and FluentValidation, its unit, integration and architecture tests, and the `Bookings` sample or none. |
-| Seven item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-entity`, `hardslice-command`, `hardslice-query`, `hardslice-event` and `hardslice-condition` generate an element in its place with its tests, which fail until the element is completed. |
+| Eight item templates | `hardslice-module`, `hardslice-aggregate`, `hardslice-entity`, `hardslice-value-object`, `hardslice-command`, `hardslice-query`, `hardslice-event` and `hardslice-condition` generate an element in its place with its tests, which fail until the element is completed. |
 | `HardSlice.Analyzers` | Roslyn analyzers that report the rules at build time and in the IDE. |
 | Architecture tests | The rules that span projects, modules and test folders, in every generated solution. |
 | `dotnet hardslice` | A local tool pinned to the version of the analyzers: `check` runs the whole verification and gives a `Fix:` to each error on a HardSlice file, `explain` prints the sheet of a rule, `hook` runs the hooks of the agents, `protected` lists the protected files, `upgrade` brings a solution to the template of its version, and merges in three ways the files of the application from the generation that the solution records in `.hardslice/generation/`. |

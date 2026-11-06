@@ -1,6 +1,6 @@
 ---
 name: add-aggregate
-description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, or a child entity of an aggregate with dotnet new hardslice-entity, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape than the one it shows, in private fields, or a value object in the columns of its row, when two commands may change the same aggregate at the same time, for an aggregate written once and never changed, such as a trace, and when a command deletes rows in bulk, such as a purge.
+description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, a child entity of an aggregate with dotnet new hardslice-entity, or a value object of a module with dotnet new hardslice-value-object, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape than the one it shows, in private fields, or a value object in the columns of its row, when two commands may change the same aggregate at the same time, for an aggregate written once and never changed, such as a trace, and when a command deletes rows in bulk, such as a purge.
 ---
 
 # Add an aggregate
@@ -14,7 +14,7 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
 ## Steps
 
 1. The module must exist: `src/MyApp/Features/<Module>/<Module>Module.cs`. If it does not, use the `add-module` skill first.
-2. List the state of the aggregate and its invariants: the rules that every instance must respect, such as a required name or a positive price. A value with its own rules, such as a period or an amount, becomes a value object of the module, a `record` that checks them when it is built. A part with an identity of its own becomes a child entity, generated once the root exists. Another aggregate is held by its identifier only, `CategoryId CategoryId` and never `Category Category`.
+2. List the state of the aggregate and its invariants: the rules that every instance must respect, such as a required name or a positive price. A value with its own rules, such as a period or an amount, becomes a value object of the module, a `record` that checks them when it is built, generated as [Value objects](#value-objects) says. A part with an identity of its own becomes a child entity, generated once the root exists. Another aggregate is held by its identifier only, `CategoryId CategoryId` and never `Category Category`.
 3. Generate it, with `--table <Table>` only when the table is not the name of the aggregate followed by `s`:
 
    ```text
@@ -64,6 +64,21 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
 4. For a child held by its root, add to the root the private list and its read-only view that the template prints, under these names: until the root declares them, EF Core cannot build the model and the check fails. Then add a method of the root for each change of the collection, such as `AddLine`, which builds the child with its factory method and checks the rules of the whole aggregate, and test these methods in the tests of the root. Never add, change nor remove a child from outside its root.
 5. Complete the child as steps 4 to 6 complete a root: its factory method named after the business fact, its rules, the `TODO(hardslice):` marker of `tests/MyApp.Tests/Domain/<Module>/<Entity>Tests.cs`, and the mapping of its state.
 6. Add the migration that the template printed, as step 7 says: it must create the table of the child, with its foreign key to the table of the root, and nothing else. Add the mapping of the child to the entry of its module in `AGENTS.md`, then run the check.
+
+## Value objects
+
+A value object holds values that belong together and the rules on them, without an identity of its own, such as a period, an amount, a week or the counts of a set of trips. A rule computed from values, such as a rate, a share or the order of a ranking, is a property or a method of a value object, never a computation of a handler or a query.
+
+1. The module must exist. Generate the value object in its domain:
+
+   ```text
+   dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name>
+   ```
+
+   It refuses an unknown module, and a name that the domain of the module or its tests already have, that of an aggregate, an entity, an identifier or another value object.
+2. Complete `src/MyApp.Domain/<Module>/<Name>.cs`, a `sealed record`: replace `Value` with its values, a parameter of the constructor and a property without setter for each, and the rule marked `TODO(hardslice):` with its own rules, each throwing a `DomainException`. Add each rule computed from the values as a property or a method.
+3. Rewrite `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs` with these values: valid values and what the value object holds, one test per rule that the constructor refuses (`Should.Throw<DomainException>`), and one per computed rule. The generated tests pass on the rule of the template: the check fails on its marker alone.
+4. An aggregate or a child entity holds it as a property, which a method replaces whole, and its mapping stores it in the columns of its row, as [A value object stored in the row of its entity](#a-value-object-stored-in-the-row-of-its-entity) says, then a migration. A value object that a method or a query computes and returns, such as the rate of a set of rows, needs no mapping. Then run the check.
 
 ## Concurrent changes
 
@@ -287,7 +302,7 @@ builder.Ignore(trip => trip.IsPlanned);
 
 These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the check cannot pass without one, stop and explain the conflict instead.
 
-- Write the aggregate, a child entity, their identifiers or their mappings yourself, or remove `IAggregateRoot` or `IEntity`.
+- Write the aggregate, a child entity, a value object, their identifiers or their mappings yourself, or remove `IAggregateRoot` or `IEntity`.
 - Give the aggregate a public setter, an `init` accessor or a public field to make a slice or a test simpler.
 - Put an invariant in a handler, a validator or an endpoint instead of the aggregate.
 - Remove the concurrency token `Version` from a mapping, or add, change or remove a child from outside its root, which its token would then not cover.

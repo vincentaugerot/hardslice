@@ -1,0 +1,420 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Vincent Augerot",
+  "classifications": [
+    "Web",
+    "API",
+    "Vertical Slices",
+    "DDD"
+  ],
+  "identity": "HardSlice.Templates.ValueObject",
+  "name": "HardSlice value object",
+  "description": "A value object of the domain of a module of a hardslice-api solution: a sealed record whose constructor checks its rules and throws DomainException, and its unit tests. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "shortName": "hardslice-value-object",
+  "sourceName": "ValueObjectName",
+  "preferNameDirectory": false,
+  "preferDefaultName": true,
+  "defaultName": "HardSliceNameMissing",
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "Module": {
+      "type": "parameter",
+      "datatype": "text",
+      "isRequired": true,
+      "description": "The module of the value object, in PascalCase, such as Reliability: src/<App>/Features/<Module>/<Module>Module.cs must exist.",
+      "replaces": "ModuleName",
+      "fileRename": "ModuleName"
+    },
+    "AppName": {
+      "type": "bind",
+      "binding": "msbuild:RootNamespace",
+      "replaces": "MyApp",
+      "fileRename": "MyApp"
+    },
+    "ModuleFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceModuleFiles"
+    },
+    "DomainFiles": {
+      "type": "bind",
+      "binding": "msbuild:HardSliceDomainFiles"
+    },
+    "Unbound": {
+      "type": "generated",
+      "generator": "constant",
+      "parameters": {
+        "value": ""
+      }
+    },
+    "AppNameOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "AppName",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "DomainFilesOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "DomainFiles",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "AppIsKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppNameOrEmpty",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      }
+    },
+    "NameIsGiven": {
+      "type": "computed",
+      "value": "(name != \"HardSliceNameMissing\")"
+    },
+    "NameIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ModuleIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "Module",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "ModuleProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "ModuleExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ModuleProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "NameProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "ModuleFiles"
+          }
+        ]
+      }
+    },
+    "NameIsModule": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "NameProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|(?:.*;)?[^;]*[/\\\\]Features[/\\\\]\\1[/\\\\]\\1Module\\.cs(?:;|$)"
+      }
+    },
+    "AppProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "AppNameOrEmpty"
+          }
+        ]
+      }
+    },
+    "NameIsNamespace": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AppProbe",
+        "pattern": "^(?:(?:Domain|Features|Shared|Tests|IntegrationTests|ArchitectureTests)\\||([A-Za-z0-9]+)\\|(?:[^|]*\\.)?\\1(?:\\.[^|]*)?$)"
+      }
+    },
+    "NameIsImportedType": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "name",
+        "pattern": "^(?:Action|Array|Assert|Attribute|Barrier|Buffer|Console|Convert|Delegate|Directory|Endpoint|Enum|Environment|Exception|File|FormFile|Guid|Host|Index|Lock|Math|Monitor|Mutex|Object|Parallel|Path|Random|Range|Record|Results|Route|Semaphore|Should|Stream|String|Task|TestContext|Thread|Timeout|Timer|Tuple|Type|TypedResults|Uri|Version)$"
+      }
+    },
+    "ExistingNameProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "name"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "DomainFilesOrEmpty"
+          }
+        ]
+      }
+    },
+    "NameExists": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ExistingNameProbe",
+        "pattern": "^([A-Za-z0-9]+)\\|([A-Za-z0-9]+)\\|(?:.*;)?[^;]*(?:\\.Domain[/\\\\]\\1[/\\\\]\\2\\.cs|\\.Tests[/\\\\]Domain[/\\\\]\\1[/\\\\]\\2Tests\\.cs)(?:;|$)"
+      }
+    },
+    "NameIsFree": {
+      "type": "computed",
+      "value": "(!NameIsModule && !NameIsNamespace && !NameIsImportedType)"
+    },
+    "Accepted": {
+      "type": "computed",
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && NameIsFree && !NameExists)"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!Accepted)",
+          "exclude": [
+            "**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "postActions": [
+    {
+      "id": "refuseUnknownApplication",
+      "condition": "(!AppIsKnown)",
+      "description": "Refuses a solution whose web project it cannot read.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: hardslice-value-object reads the application from its web project, which it could not evaluate. Run it from the root of the solution with --project src/<App>/<App>.csproj, once the solution is restored (after a first build or check), such as: dotnet new hardslice-value-object --project src/<App>/<App>.csproj --module <Module> --name <Name>. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingName",
+      "condition": "(!NameIsGiven)",
+      "description": "Refuses a value object without name.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name is required: the value object in PascalCase and in the singular, such as --name DeliveryRate. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidName",
+      "condition": "(!NameIsPascalCase)",
+      "description": "Refuses a name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'ValueObjectName' is not PascalCase: it names the value object and its tests, such as --name DeliveryRate. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseInvalidModule",
+      "condition": "(!ModuleIsPascalCase)",
+      "description": "Refuses a module name that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --module 'ModuleName' is not PascalCase: pass the name of an existing module, such as the folder of src/MyApp/Features/<Module>/. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseMissingModule",
+      "condition": "(ModuleIsPascalCase && !ModuleExists)",
+      "description": "Refuses a module that does not exist.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: module 'ModuleName' does not exist: src/MyApp/Features/ModuleName/ModuleNameModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/MyApp/MyApp.csproj --name ModuleName. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNameOfNamespace",
+      "condition": "(NameIsPascalCase && (NameIsModule || NameIsNamespace))",
+      "description": "Refuses a value object named as a module or a namespace of the application.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'ValueObjectName' is already the name of a module or of a namespace of the application: in the tests and the code that uses it, it would name that namespace instead of the value object (CS0118). Name the value object after the value it holds, such as --name DeliveryRate in module Reliability. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNameOfImportedType",
+      "condition": "(NameIsImportedType)",
+      "description": "Refuses a value object named as a type that every file imports.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'ValueObjectName' is already the name of a type that the files of the application or of its tests import, from System, System.IO, System.Threading.Tasks, ASP.NET Core, xUnit or Shouldly: the tests and the code that uses it would not know which one they use (CS0104). Choose another name of the domain, such as --name SlotRange rather than Range. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseExistingName",
+      "condition": "(NameIsPascalCase && ModuleIsPascalCase && NameExists)",
+      "description": "Refuses a name that the domain of the module or its tests already have.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-value-object.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --name 'ValueObjectName' already exists in module 'ModuleName': src/MyApp.Domain/ModuleName/ValueObjectName.cs or tests/MyApp.Tests/Domain/ModuleName/ValueObjectNameTests.cs exists, the file of an aggregate, an entity, an identifier or another value object, or of its tests. Choose another name, or change the existing type by hand. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "completeValueObject",
+      "condition": "(Accepted)",
+      "description": "The value object to complete.",
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "applyFileRenamesToManualInstructions": true,
+      "manualInstructions": [
+        {
+          "text": "Complete the value object ValueObjectName of module ModuleName:\n1. Give it its values in src/MyApp.Domain/ModuleName/ValueObjectName.cs, in place of Value: a parameter of its constructor and a property without setter for each. Replace the TODO(hardslice): marker and its rule with the rules of these values, each one throwing a DomainException, answered with 400. A rule computed from them, such as a rate, a share or an order, is a property or a method of ValueObjectName, never a computation of a handler.\n2. Test it in tests/MyApp.Tests/Domain/ModuleName/ValueObjectNameTests.cs: valid values and what it holds, then one test per rule that its constructor refuses, with Should.Throw<DomainException>, and one per rule that it computes.\n3. Hold it where the domain needs it: a property of an aggregate or a child entity, which a method replaces whole, mapped with ComplexProperty in the columns of their row as the skill add-aggregate says, or a value that a method computes and returns. A slice builds it from the fields of its request. The check fails while the marker is left."
+        }
+      ],
+      "continueOnError": true
+    }
+  ]
+}

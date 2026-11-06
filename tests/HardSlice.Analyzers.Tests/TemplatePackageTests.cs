@@ -70,6 +70,7 @@ public sealed class TemplatePackageTests
             PackedFiles(archive, "/hardslice-module/").ShouldBe(ModuleTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-aggregate/").ShouldBe(AggregateTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-entity/").ShouldBe(EntityTemplateFiles.Order(StringComparer.Ordinal));
+            PackedFiles(archive, "/hardslice-value-object/").ShouldBe(ValueObjectTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-event/").ShouldBe(EventTemplateFiles.Order(StringComparer.Ordinal));
             PackedFiles(archive, "/hardslice-condition/").ShouldBe(ConditionTemplateFiles.Order(StringComparer.Ordinal));
             // docs/agents/support.md: .claude/skills/ is the only source, the pack copies it into .agents/skills/ for Codex and Gemini CLI.
@@ -2138,6 +2139,126 @@ public sealed class TemplatePackageTests
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("AggregateExists && TableIsValid && NameIsFree && !NameIsMapped");
     }
 
+    // PB-107: hardslice-value-object generates a value object of the domain of a module and its unit tests, nothing else. It reads
+    // the module files of the web project, and the source files of its domain and of its domain tests to refuse a name taken.
+    [Fact]
+    public void Value_object_item_template_generates_the_record_and_its_unit_tests_only()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = ValueObjectTemplateRoot(repositoryRoot);
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ShouldBe(ValueObjectTemplateFiles.Order(StringComparer.Ordinal));
+        config.GetProperty("shortName").GetString().ShouldBe("hardslice-value-object");
+        config.GetProperty("tags").GetProperty("type").GetString().ShouldBe("item");
+        config.GetProperty("sourceName").GetString().ShouldBe("ValueObjectName");
+        var symbols = config.GetProperty("symbols");
+        symbols.GetProperty("AppName").GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
+        symbols.GetProperty("ModuleFiles").GetProperty("binding").GetString().ShouldBe("msbuild:HardSliceModuleFiles");
+        symbols.GetProperty("DomainFiles").GetProperty("binding").GetString().ShouldBe("msbuild:HardSliceDomainFiles");
+        symbols.GetProperty("Module").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+        symbols.GetProperty("Module").GetProperty("replaces").GetString().ShouldBe("ModuleName");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()
+            .ShouldBe("(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && NameIsFree && !NameExists)");
+        var modifiers = config.GetProperty("sources").EnumerateArray().ShouldHaveSingleItem().GetProperty("modifiers");
+        modifiers.EnumerateArray().ShouldHaveSingleItem().GetProperty("condition").GetString().ShouldBe("(!Accepted)");
+        var targets = File.ReadAllText(Path.Combine(TemplateRoot(repositoryRoot), "Directory.Build.targets"));
+        targets.ShouldContain("'$(MSBuildProjectName).Domain'");
+        targets.ShouldContain("'tests', '$(MSBuildProjectName).Tests', 'Domain'");
+        targets.ShouldContain("<HardSliceDomainFiles Condition=\"Exists('$(_HardSliceDomainTestsFolder)')\">$(HardSliceDomainFiles);");
+    }
+
+    // The value object is a sealed record of the domain without setter, whose constructor checks a rule marked TODO(hardslice):
+    // and throws DomainException. Its tests build a valid value and refuse one, and pass as generated: the marker fails the check.
+    [Fact]
+    public void Value_object_item_template_checks_its_rule_in_its_constructor_and_tests_a_valid_and_a_refused_value()
+    {
+        var root = ValueObjectTemplateRoot(FindRepositoryRoot());
+        var valueObject = File.ReadAllText(Path.Combine(root, "src", "MyApp.Domain", "ModuleName", "ValueObjectName.cs"));
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.Tests", "Domain", "ModuleName", "ValueObjectNameTests.cs"));
+
+        valueObject.ShouldStartWith("namespace MyApp.Domain.ModuleName;\n");
+        valueObject.ShouldContain("\npublic sealed record ValueObjectName\n{\n    public ValueObjectName(decimal value)\n");
+        valueObject.ShouldContain("        // TODO(hardslice): replace Value with the values of ValueObjectName");
+        valueObject.ShouldContain("            throw new DomainException(\"ValueObjectName cannot be negative.\");");
+        valueObject.ShouldContain("    public decimal Value { get; }");
+        valueObject.ShouldNotContain(" set;");
+        valueObject.ShouldNotContain(" init;");
+        valueObject.ShouldNotContain("IEntity");
+        tests.ShouldContain("public sealed class ValueObjectNameTests");
+        tests.ShouldContain("        value.ShouldBe(new ValueObjectName(12.5m));");
+        tests.ShouldContain("        Should.Throw<DomainException>(() => new ValueObjectName(-1m));");
+        tests.ShouldNotContain("TODO(hardslice)");
+    }
+
+    // Every refusal fails the generation, after excluding every file, and says that nothing was created. The last action prints
+    // what to complete.
+    [Fact]
+    public void Value_object_item_template_refuses_with_an_error_that_creates_nothing()
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ValueObjectTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
+
+        refusals.Length.ShouldBe(8);
+        refusals.Length.ShouldBe(postActions.Length - 1);
+        refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
+        refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
+            .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
+        var completion = postActions[^1];
+        completion.GetProperty("condition").GetString().ShouldBe("(Accepted)");
+        completion.GetProperty("continueOnError").GetBoolean().ShouldBeTrue();
+        var text = completion.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!;
+        text.ShouldStartWith("Complete the value object ValueObjectName of module ModuleName:\n");
+        text.ShouldContain("src/MyApp.Domain/ModuleName/ValueObjectName.cs");
+        text.ShouldContain("tests/MyApp.Tests/Domain/ModuleName/ValueObjectNameTests.cs");
+        text.ShouldContain("A rule computed from them, such as a rate, a share or an order, is a property or a method of ValueObjectName");
+    }
+
+    // A name is taken when the domain of the module has its file, an aggregate, an entity, an identifier or a value object, or when
+    // the domain tests of the module have its tests. A file of another module, of a subfolder or of the slices takes nothing.
+    [Theory]
+    [InlineData("Reliability|DeliveryRate|", false)]
+    [InlineData("Reliability|DeliveryRate|/app/src/A.Domain/Reliability/DeliveryRate.cs", true)]
+    [InlineData("Reliability|DeliveryRate|/app/src/A.Domain/Reliability/Trip.cs;/app/src/A/../A.Domain/Reliability/DeliveryRate.cs;/app/src/A.Domain/IEntity.cs", true)]
+    [InlineData("Reliability|DeliveryRate|C:\\app\\src\\A.Domain\\Reliability\\DeliveryRate.cs", true)]
+    [InlineData("Reliability|DeliveryRate|/app/tests/A.Tests/Domain/Reliability/DeliveryRateTests.cs", true)]
+    [InlineData("Reliability|DeliveryRate|/app/src/A.Domain/Schedule/DeliveryRate.cs;/app/tests/A.Tests/Domain/Schedule/DeliveryRateTests.cs", false)]
+    [InlineData("Reliability|DeliveryRate|/app/src/A.Domain/Reliability/Events/DeliveryRate.cs", false)]
+    [InlineData("Reliability|Rate|/app/src/A.Domain/Reliability/DeliveryRate.cs;/app/tests/A.Tests/Domain/Reliability/DeliveryRateTests.cs", false)]
+    [InlineData("Reliability|DeliveryRate|/app/src/A.Domain/Reliability/DeliveryRateTests.cs;/app/tests/A.Tests/Domain/Reliability/DeliveryRate.cs", false)]
+    [InlineData("Reliability|DeliveryRate|/app/tests/A.Tests/Features/Reliability/DeliveryRateTests.cs", false)]
+    public void Value_object_item_template_refuses_a_name_that_the_domain_of_its_module_or_its_tests_already_have(string probe, bool exists)
+    {
+        using var template = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ValueObjectTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+
+        Matches(template.RootElement.GetProperty("symbols"), "NameExists", probe).ShouldBe(exists);
+    }
+
+    // PB-107: AGENTS.md says, in both variants, that a rule computed from values lives in a value object, and names its template.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_puts_a_rule_computed_from_values_in_a_value_object_that_its_template_generates(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var addAggregate = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-aggregate", "SKILL.md"));
+
+        agents.Single(line => line.StartsWith("4. Business rules live in the domain", StringComparison.Ordinal))
+            .ShouldContain("A rule computed from values, such as a rate, lives in a value object of the module, a `sealed record` that "
+                + "`dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name>` generates with its tests.");
+        agents.Length.ShouldBeLessThan(150);
+        addAggregate.ShouldContain("\n## Value objects\n");
+        addAggregate.ShouldContain("dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name>\n");
+    }
+
     // The lines of <source> that the template keeps for --link id (<linkIsId>) or --link collection, the only condition of its files.
     private static string Branch(string source, bool linkIsId)
     {
@@ -2889,6 +3010,7 @@ public sealed class TemplatePackageTests
     [InlineData("add-module", "hardslice-module")]
     [InlineData("add-aggregate", "hardslice-aggregate")]
     [InlineData("add-aggregate", "hardslice-entity")]
+    [InlineData("add-aggregate", "hardslice-value-object")]
     [InlineData("add-slice", "hardslice-command")]
     [InlineData("add-slice", "hardslice-query")]
     [InlineData("add-slice", "hardslice-condition")]
@@ -3228,6 +3350,14 @@ public sealed class TemplatePackageTests
         "tests/MyApp.Tests/Domain/ModuleName/EntityNameTests.cs"
     ];
 
+    private static readonly string[] ValueObjectTemplateFiles =
+    [
+        ".template.config/dotnetcli.host.json",
+        ".template.config/template.json",
+        "src/MyApp.Domain/ModuleName/ValueObjectName.cs",
+        "tests/MyApp.Tests/Domain/ModuleName/ValueObjectNameTests.cs"
+    ];
+
     private static readonly string[] EventTemplateFiles =
     [
         ".template.config/dotnetcli.host.json",
@@ -3266,6 +3396,9 @@ public sealed class TemplatePackageTests
 
     private static string EntityTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-entity");
+
+    private static string ValueObjectTemplateRoot(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-value-object");
 
     private static string EventTemplateRoot(string repositoryRoot) =>
         Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "content", "hardslice-event");
