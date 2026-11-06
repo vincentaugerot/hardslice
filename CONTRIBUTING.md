@@ -63,8 +63,12 @@ VERSION=$(dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -get
 dotnet pack src/HardSlice.Analyzers/HardSlice.Analyzers.csproj --configuration Release --output artifacts/packages
 dotnet pack src/HardSlice.Tool/HardSlice.Tool.csproj --configuration Release --output artifacts/packages
 dotnet pack src/HardSlice.Templates/HardSlice.Templates.csproj --configuration Release --output artifacts/packages
-dotnet new install "artifacts/packages/HardSlice.Templates.$VERSION.nupkg" --force
+dotnet new uninstall HardSlice.Templates
+dotnet new install "artifacts/packages/HardSlice.Templates.$VERSION.nupkg"
+dotnet new uninstall
 ```
+
+The first `dotnet new uninstall` removes the template installed by an earlier build, or answers `The template package 'HardSlice.Templates' is not found.` when there is none, which is expected. The last one lists the installed template packages: `HardSlice.Templates` must appear once. Never reinstall with `dotnet new install --force` instead: on the same version, it can register the package a second time, mounted on the same file. Each template then warns of a conflict (`To resolve this conflict, uninstall the conflicting template packages`), `dotnet new uninstall` lists `HardSlice.Templates` twice, and `dotnet new hardslice-api` may fail with `Sequence contains more than one matching element`. To fix it, run `dotnet new uninstall HardSlice.Templates` until it answers that the package is not found, then `dotnet new install` without `--force`.
 
 `artifacts/packages` then holds `HardSlice.Analyzers`, `HardSlice.Tool` and `HardSlice.Templates` at the version of `Directory.Build.props`, which a rebuild does not change. The generated solutions must restore the first two from that folder, not from NuGet.org. Create a folder for them, outside this repository, with this `nuget.config`, replacing the `value` of `hardslice-local` with the absolute path of `artifacts/packages`:
 
@@ -87,7 +91,7 @@ dotnet new install "artifacts/packages/HardSlice.Templates.$VERSION.nupkg" --for
 </configuration>
 ```
 
-The mapping makes NuGet take `HardSlice.*` packages from your local folder only, never from NuGet.org. Then follow [Getting started](docs/getting-started.md) from step 2 in that folder. After a rebuild, repack the three packages and reinstall the template as above. A rebuild keeps the version, so two caches of your machine still serve the previous build without a word, and both must be purged: the global packages folder of NuGet, with `dotnet nuget locals global-packages --clear` (or only the folders `hardslice.analyzers`, `hardslice.tool` and `hardslice.templates` of `~/.nuget/packages/`), and the file `hardslice.tool` of `~/.dotnet/toolResolverCache/1/`. Otherwise `dotnet restore` and `dotnet tool restore` keep giving the solutions the previous builds of `HardSlice.Analyzers` and `HardSlice.Tool`.
+The mapping makes NuGet take `HardSlice.*` packages from your local folder only, never from NuGet.org. Then follow [Getting started](docs/getting-started.md) from step 2 in that folder. After a rebuild, repack the three packages and reinstall the template with the same three commands, uninstall first. A rebuild keeps the version, so two caches of your machine still serve the previous build without a word, and both must be purged: the global packages folder of NuGet, with `dotnet nuget locals global-packages --clear` (or only the folders `hardslice.analyzers`, `hardslice.tool` and `hardslice.templates` of `~/.nuget/packages/`), and the file `hardslice.tool` of `~/.dotnet/toolResolverCache/1/`. Otherwise `dotnet restore` and `dotnet tool restore` keep giving the solutions the previous builds of `HardSlice.Analyzers` and `HardSlice.Tool`.
 
 ## Conventions
 
