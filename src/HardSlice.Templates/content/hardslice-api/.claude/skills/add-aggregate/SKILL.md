@@ -1,6 +1,6 @@
 ---
 name: add-aggregate
-description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, or a child entity of an aggregate with dotnet new hardslice-entity, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape than the one it shows, in private fields, or when two commands may change the same aggregate at the same time.
+description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, or a child entity of an aggregate with dotnet new hardslice-entity, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape than the one it shows, in private fields, or a value object in the columns of its row, when two commands may change the same aggregate at the same time, for an aggregate written once and never changed, such as a trace, and when a command deletes rows in bulk, such as a purge.
 ---
 
 # Add an aggregate
@@ -95,6 +95,16 @@ Two commands that change the same aggregate at the same time, from two requests,
 
 The test of the model proves that the token is mapped: a migration that records its removal leaves the other tests green, those of the 409 aside, and this one fails. The integration test of the 409 comes with the first command that changes the aggregate, as `add-slice` says: it lets two commands load the aggregate before either saves, then asserts that one commits and the other throws `ConflictException`.
 
+## An aggregate that never changes
+
+An aggregate that a command creates and nothing changes after, such as a trace, an entry of a log or a reading, is generated and completed as any other: the template has no other form for it.
+
+- Keep the line `builder.Property<uint>("Version").IsRowVersion();` of its mapping and `<Aggregate>ConfigurationTests` as generated. While nothing updates its rows, nothing meets the token, and it costs nothing: `xmin` is a system column, for which the migration creates no column. The token and its test of the model cover the first method that changes the aggregate later, from its first update. Say so in the comment of the token, such as `Never changed once written, so nothing meets it yet: kept so that a method added later is covered from its first update.`
+- Its factory method builds it whole, with every invariant checked there: add no method that changes its state, and no setter for a test. Its unit tests cover the factory method and each value it refuses.
+- The integration test of the 409 waits for that first method: it comes with the first command that changes the aggregate, as [Concurrent changes](#concurrent-changes) says. Write none before.
+- Two commands that create such aggregates at the same time each write their own row, which the token never covers. When the business allows one row per key only, such as one trace per cycle, a unique index answers the second with 409.
+- Its rows removed by a retention or a purge follow [Rows deleted in bulk](#rows-deleted-in-bulk).
+
 ## Children written in bulk
 
 A command that writes many children of one root at once, such as the millions of rows of an import, may write them outside the change tracker, which would take minutes and gigabytes to save them. These children hold the identifier of their root (`--link id`). The solution generates no helper for it: write it in the handler, or in `src/MyApp/Shared/Persistence/` once several slices need it, with no module type in it.
@@ -105,6 +115,46 @@ A command that writes many children of one root at once, such as the millions of
 4. Keep the foreign key to the root immediate, as the migration of the child creates it: PostgreSQL checks each row as it is written, against the root saved before. Never make it `DEFERRABLE INITIALLY DEFERRED` nor remove it to write the children first: a deferred key is checked row by row at the commit, which then takes minutes and outlasts its timeout.
 5. A write that takes longer than the 30 seconds that Npgsql gives a command by default gets a longer timeout in that command only: the `Timeout` of the importer for a `COPY`, `db.Database.SetCommandTimeout(...)` for the SQL that EF Core sends. Never raise it in the connection string, which would change it for every request.
 6. The integration test of the command reads the children back from the database, and checks that a command that fails partway, such as on an invalid row of its source, leaves neither the root nor any child.
+
+## Rows deleted in bulk
+
+A command that deletes many rows at once, such as a retention that removes what is older than a period or a purge of what was archived, deletes them with `ExecuteDeleteAsync`, without loading them: removing hundreds of thousands of aggregates through the change tracker would take minutes and gigabytes. The solution generates no helper for it: write it in the handler.
+
+`ExecuteDeleteAsync` deletes rows, not aggregates: no method of the aggregate runs, nor its rules, nor a domain event, and no concurrency token is checked. A command that changes one of these aggregates while the purge runs either commits first, and the purge deletes the row all the same, or finds the row gone, and its save fails with 409. Delete in bulk only rows that the rule of the purge declares due, never an aggregate whose deletion is a business fact that a rule checks or that other code reacts to: that one is loaded, removed through a method of its own and records its domain event.
+
+1. Put the rule that decides what is purged in the domain, as any rule: a method of an aggregate or a value object of the module that says which rows are due, such as the instant before which a day is kept, and that checks the counts deleted. The handler only runs the statements.
+2. Delete in the transaction of the command, through `AppDbContext`: each `ExecuteDeleteAsync` runs at once in the transaction that the pipeline opened, and a rollback of the command restores every row. Never open a connection or a transaction of your own, and never delete in bulk an aggregate that the command also tracks.
+3. Delete in batches whose size is a constant of the handler, such as 1,000 roots per statement, so that each statement stays well under the 30 seconds that Npgsql gives a command by default. A batch that still needs longer gets a longer timeout in that command only, `db.Database.SetCommandTimeout(...)`, as [Children written in bulk](#children-written-in-bulk) says.
+4. Delete the children of a batch first, then its roots. The foreign key of a child, generated with `OnDelete(DeleteBehavior.Cascade)`, would delete them with their root, but inside the statement of the roots, which counts only the roots: the count of the children would be lost.
+5. Delete only aggregates of the module of the command. The rows of another module are deleted by that module, through one of its own commands or a reaction to a domain event, as [HS012](../../../docs/rules/HS012.md#reading-the-aggregates-of-another-module) says.
+6. Give the counts that each statement returns to the domain, which compares them with what its rule expects, such as the rows written in an archive, and throws a `DomainException` when they differ: the whole command rolls back, every deletion with it.
+
+```csharp
+// src/MyApp/Features/<Module>/PurgeReadings/PurgeReadings.cs, in the handler
+// About 40 values a reading: about 40,000 rows deleted by statement.
+private const int ReadingsPerBatch = 1_000;
+
+// In Handle: ReadingPurge, an aggregate of the module, says which readings are due, then records the purge.
+var purge = ReadingPurge.Start(clock.GetUtcNow(), options.Value.Retention);
+var readingIds = await db.Set<Reading>()
+    .Where(reading => reading.TakenAt < purge.Before)
+    .Select(reading => reading.Id)
+    .ToListAsync(cancellationToken);
+
+var values = 0;
+var readings = 0;
+foreach (var batch in readingIds.Chunk(ReadingsPerBatch))
+{
+    values += await db.Set<ReadingValue>().Where(value => batch.Contains(value.ReadingId)).ExecuteDeleteAsync(cancellationToken);
+    readings += await db.Set<Reading>().Where(reading => batch.Contains(reading.Id)).ExecuteDeleteAsync(cancellationToken);
+}
+
+// Throws a DomainException when the counts differ from those of its rule, which rolls every deletion back.
+purge.Record(readingIds.Count, readings, values);
+db.Set<ReadingPurge>().Add(purge);
+```
+
+The integration test of the command checks that the rows that the rule keeps are still there, that the rows it purges are gone, children included, and that a purge whose counts differ, or that fails partway, leaves every row.
 
 ## Changing the shape of stored rows
 
@@ -119,6 +169,67 @@ A mapping change on a table that already holds rows, such as one row per stop of
 3. Write the `Down` that converts back, the same way in reverse: the old shape filled from the new one, such as `CROSS JOIN LATERAL unnest(...)` to spread arrays back into rows. When the new shape keeps less than the old one, such as a dropped column, the loss is a decision: ask the user before writing it, and say in a comment of the migration what `Up` drops and `Down` cannot bring back.
 4. A conversion of millions of rows takes longer than the 30 seconds that Npgsql gives a command by default, in either direction. Apply it with a longer timeout for that run only, in the connection string that `dotnet ef database update` receives: `dotnet ef database update --project src/MyApp --connection "<connection string>;Command Timeout=600"`. Never raise it in the configuration nor in the code of the application, which would change it for every request.
 5. Try it on a copy of the data, in both directions, before a database that matters. Restore a dump of the data in a local container, apply the migration, compare the rows (a count, a few values read through the new mapping), go back with `dotnet ef database update <PreviousMigration> --project src/MyApp`, which runs `Down`, compare with the dump, then apply it again. The integration tests migrate an empty database only: they never see a row converted. An integration test may cover the conversion on a few rows: in a database of its own, `db.GetService<IMigrator>().MigrateAsync("<PreviousMigration>")`, rows of the old shape inserted with SQL, then `db.Database.MigrateAsync()` and the rows read through the new mapping, the database dropped at the end.
+
+## A value object stored in the row of its entity
+
+A value object that an entity holds as one property, such as the period of a reservation or the address of a customer, is stored in columns of the row of its entity with `ComplexProperty`: it has no table, no key and no identity of its own. HS007 accepts the record, and HS901 and HS902 never count it as an entity. For an aggregate `Reading` generated by `dotnet new hardslice-aggregate`, which holds the value object `Measure` twice:
+
+```csharp
+// src/MyApp.Domain/<Module>/Measure.cs
+namespace MyApp.Domain.<Module>;
+
+// One measure of a reading: a value and its unit, checked when the domain builds it.
+public sealed record Measure
+{
+    // Also the constructor of EF Core, which reads a stored row through it: one parameter per property, named after it.
+    private Measure(decimal value, string unit)
+    {
+        Value = value;
+        Unit = unit;
+    }
+
+    public decimal Value { get; }
+
+    public string Unit { get; }
+
+    public static Measure Of(decimal value, string unit)
+    {
+        if (string.IsNullOrWhiteSpace(unit))
+            throw new DomainException("A measure has a unit.");
+
+        return new Measure(value, unit.Trim());
+    }
+}
+```
+
+```csharp
+// src/MyApp.Domain/<Module>/Reading.cs, members added to the generated aggregate
+public Measure Temperature { get; }
+
+public Measure Humidity { get; }
+
+// In the rehydration constructor of the generated aggregate, values that EF Core replaces with the stored ones.
+Temperature = null!;
+Humidity = null!;
+```
+
+```csharp
+// src/MyApp/Features/<Module>/ReadingConfiguration.cs, lines added to Configure, then the method they share
+// The columns of each measure, in the row of the reading: Temperature_Value, Temperature_Unit, Humidity_Value, Humidity_Unit.
+builder.ComplexProperty(reading => reading.Temperature, MapMeasure);
+builder.ComplexProperty(reading => reading.Humidity, MapMeasure);
+
+private static void MapMeasure(ComplexPropertyBuilder<Measure> measure)
+{
+    measure.Property(m => m.Value).HasPrecision(9, 3);
+    measure.Property(m => m.Unit).HasMaxLength(8);
+}
+```
+
+- Each property of the value object becomes a column named `<Property>_<Field>`, such as `Temperature_Value`. `HasColumnName` gives another name, such as `Start` for the field `Start` of a period held once. The migration adds these columns to the table of the entity, and nothing else.
+- EF Core builds the value object through a constructor whose parameters have the names of its properties, private or not. A private one that takes the stored values as they are keeps the rules in the factory method: a rule made stricter later never refuses a row already stored. A public constructor that checks the rules works too, and then runs on each row read.
+- The value object stays a `sealed record` of the domain, with no EF Core attribute nor reference, and no setter: a change of the entity replaces it whole, through a method of the entity.
+- Prefer [Mapping private fields](#mapping-private-fields) when the row stores the state in another shape than the value object, such as a list of `TripStop` stored in two arrays, or a collection of value objects of any length: `ComplexProperty` maps one value object, held once or a fixed number of times, column by column.
 
 ## Mapping private fields
 
@@ -181,6 +292,7 @@ These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the c
 - Put an invariant in a handler, a validator or an endpoint instead of the aggregate.
 - Remove the concurrency token `Version` from a mapping, or add, change or remove a child from outside its root, which its token would then not cover.
 - Write children in bulk before their root, through a connection or a transaction of your own, or under a deferred or a missing foreign key.
+- Delete in bulk the rows of another module, through a connection or a transaction of your own, or without the domain checking the counts deleted.
 - Apply a migration that drops or changes a table holding rows without converting them, in both directions, or raise the command timeout in the connection string of the application.
 - Make a mapped private field public, or show the array it holds, so that a slice or a test reaches it.
 - Leave an empty test or an assertion that checks nothing in place of the `TODO(hardslice):` marker.

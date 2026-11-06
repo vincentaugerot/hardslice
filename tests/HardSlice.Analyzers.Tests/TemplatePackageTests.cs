@@ -2151,6 +2151,69 @@ public sealed class TemplatePackageTests
         }
     }
 
+    // PB-101: add-aggregate documents an aggregate written once, a value object stored in the row of its entity and rows deleted in
+    // bulk, without any template option nor diagnostic. AGENTS.md sends there from "Changing the database", and HS012 from its
+    // sentence on ExecuteDelete. The pack copies add-aggregate into .agents/skills/ as is, which the test of the pack checks.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_how_to_keep_an_aggregate_written_once_map_a_value_object_in_its_row_and_delete_rows_in_bulk(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var addAggregate = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-aggregate", "SKILL.md"));
+        var hs012 = File.ReadAllText(Path.Combine(templateRoot, "docs", "rules", "HS012.md"));
+
+        string[] headings = ["## An aggregate that never changes", "## A value object stored in the row of its entity", "## Rows deleted in bulk"];
+        foreach (var heading in headings)
+            addAggregate.IndexOf($"\n{heading}\n", StringComparison.Ordinal)
+                .ShouldBeInRange(0, addAggregate.IndexOf("\n## Never\n", StringComparison.Ordinal), $"add-aggregate has no section '{heading}' before Never.");
+
+        var database = agents.SkipWhile(line => line != "## Changing the database").TakeWhile(line => line != "## Running the API").ToArray();
+        database.Single(line => line.StartsWith("1. Map a new aggregate", StringComparison.Ordinal))
+            .ShouldEndWith("An aggregate that never changes, a value object stored in the row of its entity and rows deleted in bulk, such as a purge, "
+                + "follow `add-aggregate`.");
+        agents.Length.ShouldBeLessThan(150);
+
+        var neverChanges = Section(addAggregate, headings[0]);
+        neverChanges.ShouldContain("- Keep the line `builder.Property<uint>(\"Version\").IsRowVersion();` of its mapping and `<Aggregate>ConfigurationTests` as generated.");
+        neverChanges.ShouldContain("The token and its test of the model cover the first method that changes the aggregate later");
+        neverChanges.ShouldContain("- The integration test of the 409 waits for that first method");
+
+        var valueObject = Section(addAggregate, headings[1]);
+        valueObject.ShouldContain("builder.ComplexProperty(reading => reading.Temperature, MapMeasure);");
+        valueObject.ShouldContain("- Each property of the value object becomes a column named `<Property>_<Field>`, such as `Temperature_Value`.");
+        valueObject.ShouldContain("private Measure(decimal value, string unit)");
+        valueObject.ShouldContain("- Prefer [Mapping private fields](#mapping-private-fields) when the row stores the state in another shape than the value object");
+
+        var bulkDelete = Section(addAggregate, headings[2]);
+        bulkDelete.ShouldContain("`ExecuteDeleteAsync` deletes rows, not aggregates: no method of the aggregate runs, nor its rules, nor a domain event, "
+            + "and no concurrency token is checked.");
+        bulkDelete.ShouldContain("1. Put the rule that decides what is purged in the domain");
+        bulkDelete.ShouldContain("2. Delete in the transaction of the command, through `AppDbContext`");
+        bulkDelete.ShouldContain("3. Delete in batches whose size is a constant of the handler");
+        bulkDelete.ShouldContain("4. Delete the children of a batch first, then its roots.");
+        bulkDelete.ShouldContain("5. Delete only aggregates of the module of the command.");
+        bulkDelete.ShouldContain("throws a `DomainException` when they differ: the whole command rolls back, every deletion with it.");
+        addAggregate.ShouldContain("- Delete in bulk the rows of another module, through a connection or a transaction of your own, or without the domain "
+            + "checking the counts deleted.");
+
+        hs012.ShouldContain("A command deletes rows of its own module in bulk, such as a purge, with `ExecuteDeleteAsync` in its transaction, as the "
+            + "section \"Rows deleted in bulk\" of the `add-aggregate` skill says.");
+
+        Directory.EnumerateFiles(Path.Combine(templateRoot, "..", "hardslice-aggregate"), "*", SearchOption.AllDirectories)
+            .Where(file => File.ReadAllText(file).Contains("immutable", StringComparison.OrdinalIgnoreCase))
+            .ShouldBeEmpty("An aggregate written once is documented in add-aggregate, never generated (arbitrage 17).");
+
+        static string Section(string markdown, string heading)
+        {
+            var start = markdown.IndexOf($"\n{heading}\n", StringComparison.Ordinal);
+            start.ShouldBeGreaterThan(0, $"add-aggregate has no section '{heading}'.");
+            var end = markdown.IndexOf("\n## ", start + heading.Length + 1, StringComparison.Ordinal);
+            return markdown[start..(end < 0 ? markdown.Length : end)];
+        }
+    }
+
     // PB-063: outside the code blocks that quote a diagnostic, every instruction of the agent kit that asks for an invalid request or
     // for validator tests says which commands it concerns. HS013 is about commands with parameters only, and says so once.
     [Theory]
