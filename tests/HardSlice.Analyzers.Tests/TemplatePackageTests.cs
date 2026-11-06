@@ -1140,6 +1140,31 @@ public sealed class TemplatePackageTests
         appFactory.ShouldNotContain("#if");
     }
 
+    // PB-108: AppFactory holds the first command of a type after its handler and before its commit, from a behavior registered
+    // inside TransactionBehavior, and add-slice names it for the test of the 409 of a token conflict, with the second command that
+    // must change the aggregate. The foundation tests the helper in both variants.
+    [Fact]
+    public void AppFactory_holds_a_command_before_its_commit_for_the_test_of_its_409()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var appFactory = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "AppFactory.cs"));
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+        var tests = File.ReadAllText(Path.Combine(template, "tests", "MyApp.IntegrationTests", "HoldBeforeCommitTests.cs"));
+
+        appFactory.ShouldContain("public CommitHold HoldBeforeCommit<TCommand>() where TCommand : notnull");
+        appFactory.ShouldContain("public async Task WaitUntilHeldAsync(CancellationToken cancellationToken = default)");
+        appFactory.ShouldContain("public void Release() => _released.TrySetResult();");
+        // Added after the behaviors of the application, so the innermost one: the mediator runs the first registered outermost.
+        appFactory.ShouldContain("services.AddScoped(typeof(IPipelineBehavior<,>), typeof(HoldBeforeCommitBehavior<,>));");
+        appFactory.ShouldContain("_commitHolds.ReleaseAll();");
+        appFactory.ShouldNotContain("#if");
+        addSlice.ShouldContain("`using var hold = app.HoldBeforeCommit<<Slice>Command>();` on its `AppFactory`");
+        addSlice.ShouldContain("An aggregate that a command leaves unchanged writes nothing and meets no token: the second command must change it");
+        tests.ShouldNotContain("#if");
+        tests.ShouldContain("public async Task Commits_a_second_change_of_the_same_row_and_answers_a_conflict_to_the_held_one_released_after_it()");
+        tests.ShouldContain("public async Task Never_holds_a_command_of_another_type()");
+    }
+
     // PB-081: add-slice says how to protect an endpoint, where the scheme and the policy go, and how its tests authenticate.
     [Fact]
     public void Add_slice_says_how_to_protect_an_endpoint()

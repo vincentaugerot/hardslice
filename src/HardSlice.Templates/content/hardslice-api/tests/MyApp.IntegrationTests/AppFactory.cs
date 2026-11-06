@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using MyApp.Shared.Messaging;
 using MyApp.Shared.Persistence;
 
 namespace MyApp.IntegrationTests;
@@ -16,6 +17,9 @@ namespace MyApp.IntegrationTests;
 // packages included, unless the test keeps it with KeepHostedService, and each one it removes is logged before the host starts.
 // ASP.NET Core registers its own after them: they always run.
 // An endpoint that requires an authorization policy is called with app.CreateAuthorizedClient(policy), from AuthorizedClients.
+// The test of the 409 of two commands that change the same aggregate holds the first one before its commit with
+// app.HoldBeforeCommit<TCommand>(), lets the second one commit, then releases the first, which saves nothing and throws
+// ConflictException, answered with 409.
 // A store outside the database that the application registers in Shared/Persistence, such as a file or object store, gets a copy of
 // its own for each instance, given in ConfigureWebHost, such as a temporary folder by builder.UseSetting and deleted with the
 // factory: no test writes to the store of the developer, nor reads what another instance wrote.
@@ -49,6 +53,24 @@ public sealed class AppFactory : WebApplicationFactory<Program>
         return this;
     }
 
+    private readonly CommitHolds _commitHolds = new();
+
+    // Holds the next command TCommand that this instance runs, or an instance derived from it with WithWebHostBuilder: once its
+    // handler has returned, before TransactionBehavior publishes its domain events, saves and commits, until the test calls
+    // Release() on the hold it returns. await hold.WaitUntilHeldAsync() waits until the command is there, still uncommitted: a
+    // second command that changes the same aggregate then loads what the first one loaded, commits, and the first one, released,
+    // saves nothing and throws ConflictException. An aggregate that a command leaves unchanged writes nothing and meets no token:
+    // the second command must change it too. Commands of another type, and those of TCommand after the first, are never held.
+    // It can be called at any time. Disposing of the hold or of this instance releases it.
+    public CommitHold HoldBeforeCommit<TCommand>() where TCommand : notnull
+    {
+        if (!typeof(TCommand).GetInterfaces().Any(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ICommand<>)))
+            throw new InvalidOperationException(
+                $"HoldBeforeCommit: {Describe(typeof(TCommand))} is no ICommand<TResponse>. Only a command runs in a transaction that commits.");
+
+        return _commitHolds.Add(typeof(TCommand));
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(TestEnvironment);
@@ -58,7 +80,16 @@ public sealed class AppFactory : WebApplicationFactory<Program>
         {
             services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
             RemoveHostedServicesOfTheApplication(services);
+            // Registered after the behaviors of the application, so inside TransactionBehavior: between the handler and the commit.
+            services.AddSingleton(_commitHolds);
+            services.AddScoped(typeof(IPipelineBehavior<,>), typeof(HoldBeforeCommitBehavior<,>));
         });
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        _commitHolds.ReleaseAll();
+        await base.DisposeAsync();
     }
 
     // As WebApplicationFactory builds and starts the host, with a line for each hosted service of the application that it does not
@@ -113,6 +144,96 @@ public sealed class AppFactory : WebApplicationFactory<Program>
     // A hosted service registered with a factory is known by the type its factory returns.
     private static Type ImplementationOf(ServiceDescriptor service) =>
         service.ImplementationType ?? service.ImplementationInstance?.GetType() ?? service.ImplementationFactory!.Method.ReturnType;
+
+    // A command held before its commit by HoldBeforeCommit<TCommand>().
+    public sealed class CommitHold : IDisposable
+    {
+        private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+
+        private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal CommitHold(Type command) => Command = command;
+
+        internal Type Command { get; }
+
+        // Waits until the command is held, for 30 seconds at most.
+        public async Task WaitUntilHeldAsync(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                await _held.Task.WaitAsync(Timeout, cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                throw new TimeoutException(
+                    $"HoldBeforeCommit: no command {Describe(Command)} reached its commit within {Timeout.TotalSeconds} s. Send it after "
+                    + "HoldBeforeCommit, to this AppFactory or an instance derived from it, and check that its validation and its handler passed.");
+            }
+        }
+
+        // Lets the command save and commit.
+        public void Release() => _released.TrySetResult();
+
+        public void Dispose() => Release();
+
+        internal async Task HoldAsync(CancellationToken cancellationToken)
+        {
+            _held.TrySetResult();
+            await _released.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private sealed class CommitHolds
+    {
+        private readonly List<CommitHold> _waiting = [];
+        private readonly List<CommitHold> _all = [];
+
+        public CommitHold Add(Type command)
+        {
+            var hold = new CommitHold(command);
+            lock (_waiting)
+            {
+                _waiting.Add(hold);
+                _all.Add(hold);
+            }
+
+            return hold;
+        }
+
+        // The first hold of that command that holds none yet.
+        public CommitHold? Take(Type command)
+        {
+            lock (_waiting)
+            {
+                var hold = _waiting.FirstOrDefault(hold => hold.Command == command);
+                if (hold is not null)
+                    _waiting.Remove(hold);
+                return hold;
+            }
+        }
+
+        public void ReleaseAll()
+        {
+            lock (_waiting)
+            {
+                foreach (var hold in _all)
+                    hold.Release();
+            }
+        }
+    }
+
+    private sealed class HoldBeforeCommitBehavior<TCommand, TResponse>(CommitHolds holds) : IPipelineBehavior<TCommand, TResponse>
+        where TCommand : ICommand<TResponse>
+    {
+        public async Task<TResponse> Handle(TCommand command, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        {
+            var response = await next();
+            if (holds.Take(typeof(TCommand)) is { } hold)
+                await hold.HoldAsync(cancellationToken);
+            return response;
+        }
+    }
 }
 
 public static class AppFactoryClients

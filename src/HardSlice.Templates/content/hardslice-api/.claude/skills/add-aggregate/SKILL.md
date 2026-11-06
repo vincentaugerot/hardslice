@@ -108,7 +108,7 @@ Two commands that change the same aggregate at the same time, from two requests,
   }
   ```
 
-The test of the model proves that the token is mapped: a migration that records its removal leaves the other tests green, those of the 409 aside, and this one fails. The integration test of the 409 comes with the first command that changes the aggregate, as `add-slice` says: it lets two commands load the aggregate before either saves, then asserts that one commits and the other throws `ConflictException`.
+The test of the model proves that the token is mapped: a migration that records its removal leaves the other tests green, those of the 409 aside, and this one fails. The integration test of the 409 comes with the first command that changes the aggregate, as `add-slice` says: it lets two commands load the aggregate before either saves, then asserts that one commits and the other throws `ConflictException`, the first one held before its commit by `app.HoldBeforeCommit<TCommand>()`.
 
 ## An aggregate that never changes
 

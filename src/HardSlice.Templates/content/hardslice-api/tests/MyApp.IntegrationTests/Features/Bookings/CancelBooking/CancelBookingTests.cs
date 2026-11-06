@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MyApp.Domain.Bookings;
+using MyApp.Features.Bookings.CancelBooking;
 using MyApp.Features.Bookings.ConfirmBooking;
 
 namespace MyApp.IntegrationTests.Features.Bookings.CancelBooking;
@@ -58,6 +59,28 @@ public sealed class CancelBookingTests(PostgresDatabase database)
         responses.Select(response => response.StatusCode).Order().ShouldBe([HttpStatusCode.NoContent, HttpStatusCode.Conflict]);
         var conflict = responses.Single(response => response.StatusCode == HttpStatusCode.Conflict);
         conflict.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        (await StoredStatusAsync(id)).ShouldBe(BookingStatus.Cancelled);
+    }
+
+    // The same race with AppFactory.HoldBeforeCommit: the first cancellation loads the confirmed booking and is held before its commit,
+    // the second one cancels it, then the first one, released, saves nothing, since the row changed since it loaded it, and answers 409.
+    [Fact]
+    public async Task Answers_409_to_a_cancellation_held_before_its_commit_while_another_one_cancels_the_booking()
+    {
+        await using var app = new AppFactory(database);
+        var client = app.CreateClient();
+        var id = await ConfirmAsync(client);
+        using var hold = app.HoldBeforeCommit<CancelBookingCommand>();
+
+        var held = CancelAsync(client, id);
+        await hold.WaitUntilHeldAsync(TestContext.Current.CancellationToken);
+        var second = await CancelAsync(client, id);
+        hold.Release();
+        var first = await held;
+
+        second.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        first.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        first.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
         (await StoredStatusAsync(id)).ShouldBe(BookingStatus.Cancelled);
     }
 
