@@ -45,7 +45,7 @@
       "type": "parameter",
       "datatype": "choice",
       "defaultValue": "single",
-      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs) or filtered (the list of the DTOs that the filter of --parameter selects, read from the query string and checked by a validator). Not list: dotnet new would read it as its list command.",
+      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs) or filtered (the list of the DTOs that the filter of --parameter selects, read from the query string, or from the route when --route names it, and checked by a validator). Not list: dotnet new would read it as its list command.",
       "choices": [
         {
           "choice": "single",
@@ -57,19 +57,19 @@
         },
         {
           "choice": "filtered",
-          "description": "The list of the DTOs that the filter of --parameter selects; a request without it is answered with 400."
+          "description": "The list of the DTOs that the filter of --parameter selects, from the query string, where a request without it is answered with 400, or from the route."
         }
       ]
     },
     "Parameter": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The filter of --result filtered, as <Name>:<Type>: a PascalCase name and one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly. The query reads it from the query string, such as ?date=2026-11-04, and its validator answers 400 to a request without it. Required with --result filtered, refused otherwise."
+      "description": "The filter of --result filtered, as <Name>:<Type>: a PascalCase name and one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly. The query reads it from the query string, such as ?date=2026-11-04, and its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Required with --result filtered, refused otherwise."
     },
     "Route": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The route of the endpoint under the group of the module, chosen after the resource it reads rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as trips or {roomId:guid}/bookings, or / for the group itself. The name of the slice in kebab-case by default. With --result single, /{id:guid} follows it."
+      "description": "The route of the endpoint under the group of the module, chosen after the resource it reads rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as trips or {roomId:guid}/bookings, or / for the group itself. The name of the slice in kebab-case by default. With --result single, /{id:guid} follows it. With --result filtered, a route parameter names the filter of --parameter, such as days/{date}, and nothing else."
     },
     "Method": {
       "type": "parameter",
@@ -338,6 +338,60 @@
         ]
       }
     },
+    "FilterRefusedValue": {
+      "type": "generated",
+      "generator": "switch",
+      "replaces": "filter-refused-value",
+      "parameters": {
+        "evaluator": "C++",
+        "datatype": "string",
+        "cases": [
+          {
+            "condition": "(FilterType == \"string\")",
+            "value": "refused-value"
+          },
+          {
+            "condition": "(FilterType == \"bool\")",
+            "value": "not-a-boolean"
+          },
+          {
+            "condition": "(FilterType == \"int\")",
+            "value": "not-a-number"
+          },
+          {
+            "condition": "(FilterType == \"long\")",
+            "value": "not-a-number"
+          },
+          {
+            "condition": "(FilterType == \"decimal\")",
+            "value": "not-a-number"
+          },
+          {
+            "condition": "(FilterType == \"double\")",
+            "value": "not-a-number"
+          },
+          {
+            "condition": "(FilterType == \"Guid\")",
+            "value": "not-a-guid"
+          },
+          {
+            "condition": "(FilterType == \"DateOnly\")",
+            "value": "not-a-date"
+          },
+          {
+            "condition": "(FilterType == \"TimeOnly\")",
+            "value": "not-a-time"
+          },
+          {
+            "condition": "(FilterType == \"DateTimeOffset\")",
+            "value": "not-an-instant"
+          },
+          {
+            "value": ""
+          }
+        ]
+      }
+    },
     "QueryRouteWords": {
       "type": "generated",
       "generator": "regex",
@@ -452,6 +506,81 @@
         "pattern": "(?i)\\{id[:?}]"
       }
     },
+    "FilterRouteProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "FilterName"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "SliceRoute"
+          }
+        ]
+      }
+    },
+    "RouteNamesFilter": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterRouteProbe",
+        "pattern": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{\\1(?:[:?][^{}/]*)?\\}"
+      }
+    },
+    "RouteConstrainsFilter": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterRouteProbe",
+        "pattern": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{\\1:"
+      }
+    },
+    "RouteNamesOtherParameter": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterRouteProbe",
+        "pattern": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{(?!\\1[:?}])"
+      }
+    },
+    "UnknownRouteParameter": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterRouteProbe",
+        "steps": [
+          {
+            "regex": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{(?!\\1[:?}])([A-Za-z][A-Za-z0-9]*).*$",
+            "replacement": "$2"
+          }
+        ]
+      },
+      "fileRename": "unknown-route-parameter"
+    },
+    "FilterRouteToken": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterRouteProbe",
+        "steps": [
+          {
+            "regex": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?(\\{\\1(?:[:?][^{}/]*)?\\})(?:/.*)?$",
+            "replacement": "$2"
+          }
+        ]
+      },
+      "replaces": "filter-route-token"
+    },
     "RouteIsValid": {
       "type": "generated",
       "generator": "regexMatch",
@@ -485,6 +614,26 @@
     "ResultIsFiltered": {
       "type": "computed",
       "value": "(Result == \"filtered\")"
+    },
+    "FilterIsInRoute": {
+      "type": "computed",
+      "value": "(ResultIsFiltered && ParameterIsWellFormed && RouteNamesFilter)"
+    },
+    "FilterRouteIsConstrained": {
+      "type": "computed",
+      "value": "(FilterIsInRoute && RouteConstrainsFilter)"
+    },
+    "FilterIsReadFromBinding": {
+      "type": "computed",
+      "value": "(FilterIsInRoute && !FilterIsString && !RouteConstrainsFilter)"
+    },
+    "FilterIsCheckedByValidator": {
+      "type": "computed",
+      "value": "(ResultIsFiltered && (!FilterIsInRoute || FilterIsString))"
+    },
+    "RouteNamesNoFilter": {
+      "type": "computed",
+      "value": "(ResultIsFiltered && ParameterIsWellFormed && RouteNamesOtherParameter)"
     },
     "ResultIsList": {
       "type": "computed",
@@ -609,7 +758,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown && RequireIsValid)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown && !RouteNamesNoFilter && RequireIsValid)"
     }
   },
   "sources": [
@@ -891,6 +1040,25 @@
       "manualInstructions": [
         {
           "text": "error: --parameter 'ParameterText' has the type 'FilterType', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, written as in C#. For another type, such as an enum of the domain, generate the query with the closest of them, then change the type of the query, of its validator and of its tests. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseRouteParameterWithoutFilter",
+      "condition": "(RouteNamesNoFilter)",
+      "description": "Refuses a route parameter that names no filter of a filtered result.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --route '/slice-route' holds the route parameter 'unknown-route-parameter', which names no filter of the query: --result filtered binds from the route the filter of --parameter that a route parameter names, here 'FilterName', such as --route days/{date} --parameter Date:DateOnly. Name the filter in the route, or remove the parameter from --route to read the filter from the query string. Nothing was created."
         }
       ],
       "continueOnError": false
