@@ -3843,7 +3843,7 @@ query_dto() {
 }
 
 # Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and the unit tests of
-# its validator with --result filtered only, and leaves the printed instructions in $query_output.
+# its validator with --result filtered or --result summary only, and leaves the printed instructions in $query_output.
 generate_query() {
   local module="$1"
   local name="$2"
@@ -3864,9 +3864,9 @@ generate_query() {
       exit 1
     fi
   done
-  if [[ " $* " == *" --result filtered "* ]]; then
+  if [[ " $* " == *" --result filtered "* || " $* " == *" --result summary "* ]]; then
     if [[ ! -f "$app/$unit_test" ]]; then
-      echo "error: dotnet new hardslice-query --result filtered did not create $unit_test in $app_name." >&2
+      echo "error: dotnet new hardslice-query $* did not create $unit_test in $app_name." >&2
       exit 1
     fi
   elif [[ -e "$app/tests/$app_name.Tests/Features/$module/$name" ]]; then
@@ -4347,6 +4347,190 @@ probe_route_filters() {
     rm -r "${app_src:?}/Features/$module/${slice:?}" "${tests:?}/${slice:?}" "${unit_tests:?}/${slice:?}"
   done
   mv "$work/module-route-filters.backup" "$module_file"
+}
+
+# The name <name> of a slice in kebab-case, the route that its template gives it by default.
+kebab_case() {
+  sed 's/\([a-z0-9]\)\([A-Z]\)/\1-\2/g' <<< "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+# PB-106: a DTO, or 404. In module <module>, the command <command-name> is generated with --parameters ServiceDate:DateOnly
+# --response <command-name>Dto --not-found: its command returns a nullable DTO, its endpoint answers null with 404, and its test of the
+# 404 runs on a database of its own. The command <command-name>ById, with --method DELETE, reads its Id from its route and answers
+# the same way. The query <query-name> of <aggregate> is generated with --result summary --parameters From:DateOnly,To:DateOnly: one
+# nullable DTO that its handler computes with GroupBy on the aggregates that its filters select, its validator and its tests, the 400
+# of a request without filters and the 404 of filters that select nothing, on a database of its own. Before, --not-found is refused
+# with exit 105 without a DTO, without endpoint and without parameters, and --result summary without --parameters. The check fails on
+# their TODO(hardslice): tests and the 404 of the commands, whose handlers throw, then passes after the reference completion, in
+# which <create> creates the aggregate to store: the handler of the command answers a DTO when an aggregate exists and null
+# otherwise, and the summary counts the stored aggregate. The module is left as it was and the slices removed.
+probe_not_found_results() {
+  local module="$1"
+  local command_name="$2"
+  local query_name="$3"
+  local aggregate="$4"
+  local create="$5"
+  local project="src/$app_name/$app_name.csproj"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local command_dto="${command_name}Dto"
+  local by_id_name="${command_name}ById"
+  local query_dto_name
+  local command_slice="$app_src/Features/$module/$command_name/$command_name.cs"
+  local command_test="$app/tests/$app_name.IntegrationTests/Features/$module/$command_name/${command_name}Tests.cs"
+  local query_slice="$app_src/Features/$module/$query_name/$query_name.cs"
+  local query_test="$app/tests/$app_name.IntegrationTests/Features/$module/$query_name/${query_name}Tests.cs"
+  local query_unit_test="$app/tests/$app_name.Tests/Features/$module/$query_name/${query_name}ValidatorTests.cs"
+  local refusal
+  local generated
+  local slice
+  local -a fields
+
+  query_dto_name="$(query_dto "$query_name")"
+  cp "$module_file" "$work/module-not-found.backup"
+
+  echo "==> Checking that dotnet new hardslice-command refuses --not-found without a DTO, without endpoint or without parameters, and hardslice-query --result summary without --parameters, in $app_name"
+  for refusal in "--not-found with the identifier|--not-found answers 404 to a null DTO, which needs the PascalCase name of that DTO in --response|--not-found" \
+    "--not-found with --response none|--not-found answers 404 to a null DTO, which needs the PascalCase name of that DTO in --response|--response|none|--not-found" \
+    "--not-found of a system command|--not-found answers 404 from the endpoint of the command, which a system command of --endpoint none, --every or --daily-at does not have|--response|$command_dto|--not-found|--endpoint|none" \
+    "--not-found of a recurring command|--not-found answers 404 from the endpoint of the command, which a system command of --endpoint none, --every or --daily-at does not have|--response|$command_dto|--not-found|--every|00:00:30" \
+    "--not-found without parameters|--not-found answers 404 to an aggregate that does not exist, which a command with --parameters none has no field to name|--response|$command_dto|--not-found|--parameters|none"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    expect_item_refused hardslice-command "${fields[0]}" "${fields[1]}" --project "$project" --module "$module" --name "$command_name" "${fields[@]:2}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-command refused ${fields[0]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+  expect_item_refused hardslice-query "a summary without --parameters" "--result summary needs --parameters <Name>:<Type>[,<Name>:<Type>...]" \
+    --project "$project" --module "$module" --name "$query_name" --aggregate "$aggregate" --result summary
+  if [[ "$item_refused_status" != 105 ]]; then
+    echo "error: dotnet new hardslice-query refused --result summary without --parameters with exit $item_refused_status instead of 105." >&2
+    exit 1
+  fi
+
+  echo "==> Generating the commands $module/$command_name and $module/$by_id_name with --response <Dto> --not-found, and the query $module/$query_name with --result summary, in $app_name"
+  generate_command "$module" "$command_name" --parameters ServiceDate:DateOnly --response "$command_dto" --not-found
+  if ! grep -Fxq "            .AddScoped<IRequestHandler<${command_name}Command, ${command_dto}?>, ${command_name}Handler>()" <<< "$command_output"; then
+    printf '%s\n' "$command_output" >&2
+    echo "error: dotnet new hardslice-command --not-found did not print the registration of a handler that returns ${command_dto}?." >&2
+    exit 1
+  fi
+  register_slice hardslice-command "$command_output"
+  generate_query "$module" "$query_name" --aggregate "$aggregate" --route figures --result summary --parameters From:DateOnly,To:DateOnly
+  for generated in "            .AddScoped<IRequestHandler<${query_name}Query, ${query_dto_name}?>, ${query_name}Handler>()" \
+    "            .AddScoped<IValidator<${query_name}Query>, ${query_name}Validator>()"; do
+    if ! grep -Fxq -- "$generated" <<< "${query_output//Manual instructions: /}"; then
+      printf '%s\n' "$query_output" >&2
+      echo "error: dotnet new hardslice-query --result summary did not print the line '$generated'." >&2
+      exit 1
+    fi
+  done
+  register_slice hardslice-query "$query_output"
+  cp "$module_file" "$work/module-not-found-query.backup"
+  generate_command "$module" "$by_id_name" --method DELETE --response "${by_id_name}Dto" --not-found
+  register_slice hardslice-command "$command_output"
+  for generated in "$command_slice|public sealed record ${command_name}Command(DateOnly? ServiceDate) : ICommand<${command_dto}?>;" \
+    "$command_slice|public sealed record ${command_dto}(Guid Id);" \
+    "$command_slice|internal sealed class ${command_name}Handler : IRequestHandler<${command_name}Command, ${command_dto}?>" \
+    "$command_slice|        group.MapPost(\"/$(kebab_case "$command_name")\", async Task<Results<Ok<${command_dto}>, NotFound>> (${command_name}Command command, IMediator mediator, CancellationToken cancellationToken) =>" \
+    "$command_slice|            await mediator.Send(command, cancellationToken) is { } response ? TypedResults.Ok(response) : TypedResults.NotFound());" \
+    "$command_test|    public async Task Returns_404_when_its_aggregate_does_not_exist()" \
+    "$command_test|        await using var isolated = await database.CreateIsolatedAsync();" \
+    "$command_test|        var command = new ${command_name}Command(new DateOnly(2026, 11, 4));" \
+    "$command_test|            HttpStatusCode.NotFound," \
+    "$app_src/Features/$module/$by_id_name/$by_id_name.cs|public sealed record ${by_id_name}Command(Guid Id) : ICommand<${by_id_name}Dto?>;" \
+    "$app_src/Features/$module/$by_id_name/$by_id_name.cs|        group.MapDelete(\"/$(kebab_case "$by_id_name")/{id:guid}\", async Task<Results<Ok<${by_id_name}Dto>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/$by_id_name/${by_id_name}Tests.cs|        var response = await app.CreateClient().DeleteAsync(\$\"{Route}/{command.Id}\", TestContext.Current.CancellationToken);" \
+    "$query_slice|public sealed record ${query_name}Query(DateOnly? From, DateOnly? To) : IQuery<${query_dto_name}?>;" \
+    "$query_slice|public sealed record ${query_dto_name}(int Count);" \
+    "$query_slice|internal sealed class ${query_name}Handler(AppDbContext db) : IRequestHandler<${query_name}Query, ${query_dto_name}?>" \
+    "$query_slice|            .AsNoTracking()" \
+    "$query_slice|            .GroupBy(aggregate => 1)" \
+    "$query_slice|            .Select(group => new ${query_dto_name}(group.Count()))" \
+    "$query_slice|        group.MapGet(\"/figures\", async Task<Results<Ok<${query_dto_name}>, NotFound>> ([AsParameters] ${query_name}Query query, IMediator mediator, CancellationToken cancellationToken) =>" \
+    "$query_test|    private const string QueryString = \"?from=2026-11-04&to=2026-11-04\";" \
+    "$query_test|    public async Task Computes_its_dto_on_the_stored_aggregates_that_its_filters_select()" \
+    "$query_test|    public async Task Returns_404_when_its_filters_select_no_aggregate()" \
+    "$query_test|        await using var app = new AppFactory(isolated);" \
+    "$query_test|        problem.Errors.Keys.ShouldBe([\"from\", \"to\"]);" \
+    "$query_unit_test|        result.ShouldHaveValidationErrorFor(query => query.To);"; do
+    if ! grep -Fxq -- "${generated#*|}" "${generated%%|*}"; then
+      cat "${generated%%|*}" >&2
+      echo "error: ${generated%%|*} does not hold the line of a DTO, or 404: ${generated#*|}" >&2
+      exit 1
+    fi
+  done
+  for slice in "$command_name" "$by_id_name" "$query_name"; do
+    if grep -rn 'MyApp\|ModuleName\|CommandName\|QueryName\|AggregateName\|ResponseTypeName\|ResultDtoName\|command-route\|query-route\|FirstFilterName\|FilterComments\|Parameter[A-Z][A-Za-z]*\|parameter-keys' \
+      "$app_src/Features/$module/$slice" "$app/tests/$app_name.IntegrationTests/Features/$module/$slice"; then
+      echo "error: the slice $module/$slice keeps a placeholder of the template." >&2
+      exit 1
+    fi
+  done
+  echo "    ICommand<${command_dto}?> and IQuery<${query_dto_name}?>, Results<Ok<T>, NotFound>, the 404 on a database of its own"
+
+  echo "==> Checking that $app_name builds the slices of a DTO, or 404, without HardSlice diagnostic and fails the check on their TODO(hardslice): tests and their unwritten handlers only"
+  expect_check_fails_on_todo_tests_only "the slices $module/$command_name, $module/$by_id_name and $module/$query_name" \
+    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$command_name.${command_name}Tests.Handles_a_valid_command" \
+      "$app_name.IntegrationTests.Features.$module.$command_name.${command_name}Tests.Returns_404_when_its_aggregate_does_not_exist" \
+      "$app_name.IntegrationTests.Features.$module.$by_id_name.${by_id_name}Tests.Handles_a_valid_command" \
+      "$app_name.IntegrationTests.Features.$module.$by_id_name.${by_id_name}Tests.Returns_404_when_its_aggregate_does_not_exist" \
+      "$app_name.IntegrationTests.Features.$module.$query_name.${query_name}Tests.Computes_its_dto_on_the_stored_aggregates_that_its_filters_select" | LC_ALL=C sort)"
+  rm -r "${app_src:?}/Features/$module/${by_id_name:?}" "$app/tests/$app_name.Tests/Features/$module/${by_id_name:?}" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/${by_id_name:?}"
+  cp "$work/module-not-found-query.backup" "$module_file"
+
+  # The reference completion: the handler of the command answers a DTO when an aggregate exists, and null on the database of its 404,
+  # which holds none; the test of the valid command stores one first. The summary keeps every aggregate and counts the one stored.
+  echo "==> Checking that the reference completion of $module/$command_name and $module/$query_name passes the check of $app_name"
+  if ! { printf 'using Microsoft.EntityFrameworkCore;\nusing %s.Domain.%s;\nusing %s.Shared.Persistence;\n' "$app_name" "$module" "$app_name"
+    sed -e "s/^internal sealed class ${command_name}Handler : /internal sealed class ${command_name}Handler(AppDbContext db) : /" \
+      -e "s/^    public Task<${command_dto}?> Handle(/    public async Task<${command_dto}?> Handle(/" \
+      -e '/throw new NotImplementedException(/,/Never call SaveChangesAsync\.");/c\
+        await db.Set<'"$aggregate"'>().AnyAsync(cancellationToken) ? new '"$command_dto"'(Guid.NewGuid()) : null;' \
+      "$command_slice"; } > "$work/slice.cs"; then
+    echo "error: the reference completion of $module/$command_name could not rewrite its handler." >&2
+    exit 1
+  fi
+  mv "$work/slice.cs" "$command_slice"
+  if ! { printf 'using %s.Domain.%s;\n' "$app_name" "$module"
+    CREATE="$create" AGGREGATE="$aggregate" DTO="$command_dto" awk '
+      /^    public async Task Handles_a_valid_command\(\)$/ { print; getline; print
+        print "        await using (var db = database.CreateDbContext())"
+        print "        {"
+        print "            db.Set<" ENVIRON["AGGREGATE"] ">().Add(" ENVIRON["CREATE"] ");"
+        print "            await db.SaveChangesAsync(TestContext.Current.CancellationToken);"
+        print "        }"
+        stored = 1
+        next
+      }
+      /^        Assert\.Fail\("TODO\(hardslice\): / {
+        print "        (await response.Content.ReadFromJsonAsync<" ENVIRON["DTO"] ">(TestContext.Current.CancellationToken)).ShouldNotBeNull().Id.ShouldNotBe(Guid.Empty);"
+        next
+      }
+      { print }
+      END { if (!stored) exit 1 }' "$command_test"; } > "$work/test.cs"; then
+    echo "error: the integration test of $module/$command_name has no Handles_a_valid_command to store an aggregate in." >&2
+    exit 1
+  fi
+  mv "$work/test.cs" "$command_test"
+  sed 's/^        Assert\.Fail("TODO(hardslice): store the .*/        dto.Count.ShouldBe(1);/' "$query_test" > "$work/test.cs"
+  mv "$work/test.cs" "$query_test"
+  complete_query_tests "$aggregate" "$create" "$query_test"
+  sed '/^            \/\/ TODO(hardslice): keep the /d' "$query_slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$query_slice"
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of $module/$command_name and $module/$query_name leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+
+  for slice in "$command_name" "$query_name"; do
+    rm -r "${app_src:?}/Features/$module/${slice:?}" "$app/tests/$app_name.Tests/Features/$module/${slice:?}" \
+      "$app/tests/$app_name.IntegrationTests/Features/$module/${slice:?}"
+  done
+  mv "$work/module-not-found.backup" "$module_file"
+  rm "$work/module-not-found-query.backup"
 }
 
 # PB-081: --require <policy> protects the endpoint of a slice. In module <module>, the command <name>, the command without parameters
@@ -5858,6 +6042,8 @@ probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetB
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_route_filters Bookings GetBookingDayReadings GetBookingDatedReadings GetBookingWeekReadings GetBookingDayRoomReadings Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
+probe_not_found_results Bookings ReconcileBookingTally CountBookingFigures Booking \
+  "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_protected_endpoints Bookings ProtectBooking ImportProtectedBookings GetProtectedBooking Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories
@@ -6171,6 +6357,7 @@ probe_aggregate_concurrency Rooms
 probe_query_template Rooms GetRoomSummary ListRoomSummaries GetRoomsOnDate Room 'Room.Create()'
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoomTrip Room 'Room.Create()'
 probe_route_filters Rooms GetRoomDayReadings GetRoomDatedReadings GetRoomWeekReadings GetRoomDayNeighbourReadings Room 'Room.Create()'
+probe_not_found_results Rooms ReconcileRoomTally CountRoomFigures Room 'Room.Create()'
 probe_protected_endpoints Rooms ProtectRoom ImportProtectedRooms GetProtectedRoom Room 'Room.Create()'
 # The events of Rooms are generated by dotnet new hardslice-event, with a reaction in Rooms and one in a second module, both
 # completed with the aggregate Room.

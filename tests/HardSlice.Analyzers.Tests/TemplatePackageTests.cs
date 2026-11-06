@@ -207,7 +207,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(30);
+        refusals.Length.ShouldBe(33);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -251,7 +251,8 @@ public sealed class TemplatePackageTests
             .GetProperty("manualInstructions").EnumerateArray()
             .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
         registrations.Keys.ShouldBe([
-            "(!EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
+            "(!EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && !ParametersIsNone && ResponseIsNone)",
+            "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto && !NotFound)", "(!EndpointIsNone && !ParametersIsNone && DtoOrNotFound)",
             "(!EndpointIsNone && ParametersIsNone && ResponseIsId)", "(!EndpointIsNone && ParametersIsNone && ResponseIsDto)",
             "(EndpointIsNone && !ParametersIsNone && ResponseIsId)", "(EndpointIsNone && !ParametersIsNone && ResponseIsNone)", "(EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
             "(EndpointIsNone && ParametersIsNone && ResponseIsId && !ScheduleIsGiven)", "(EndpointIsNone && ParametersIsNone && ResponseIsDto && !ScheduleIsGiven)",
@@ -274,6 +275,66 @@ public sealed class TemplatePackageTests
         slice.ShouldContain("#if (!ParametersIsNone)\n\n// Checks the shape of the input only");
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
         tests.ShouldContain("PostAsync(Route, content: null, TestContext.Current.CancellationToken)");
+    }
+
+    // PB-106: --not-found makes the DTO of --response nullable, answered with 404 by the endpoint, and tests the 404 on a database of
+    // its own when the fields of a list name the aggregate. It is refused with exit 105 without a DTO, for a system command, which has
+    // no endpoint, and for a command without parameters, which names no aggregate. Without the option, the slice is unchanged.
+    [Fact]
+    public void Command_item_template_answers_a_null_dto_with_404_with_not_found()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+        var notFound = symbols.GetProperty("NotFound");
+
+        notFound.GetProperty("datatype").GetString().ShouldBe("bool");
+        notFound.GetProperty("defaultValue").GetString().ShouldBe("false");
+        notFound.TryGetProperty("replaces", out _).ShouldBeFalse();
+        host.RootElement.GetProperty("symbolInfo").GetProperty("NotFound").GetProperty("longName").GetString().ShouldBe("not-found");
+        foreach (var (symbol, value) in new[]
+        {
+            ("NotFoundWithoutDto", "(NotFound && !ResponseIsDto)"),
+            ("NotFoundWithoutEndpoint", "(NotFound && ResponseIsDto && EndpointIsNone)"),
+            ("NotFoundWithoutIdentifier", "(NotFound && ResponseIsDto && !EndpointIsNone && ParametersIsNone)"),
+            ("DtoOrNotFound", "(NotFound && ResponseIsDto)"),
+        })
+            symbols.GetProperty(symbol).GetProperty("value").GetString().ShouldBe(value);
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!
+            .ShouldContain("!NotFoundWithoutDto && !NotFoundWithoutEndpoint && !NotFoundWithoutIdentifier");
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        foreach (var (id, condition, text) in new[]
+        {
+            ("refuseNotFoundWithoutDto", "(NotFoundWithoutDto)", "error: --not-found answers 404 to a null DTO, which needs the PascalCase name of that DTO in --response"),
+            ("refuseNotFoundWithoutEndpoint", "(NotFoundWithoutEndpoint)", "error: --not-found answers 404 from the endpoint of the command, which a system command"),
+            ("refuseNotFoundWithoutIdentifier", "(NotFoundWithoutIdentifier)", "error: --not-found answers 404 to an aggregate that does not exist, which a command with --parameters none"),
+        })
+        {
+            var refusal = postActions.Single(action => action.GetProperty("id").GetString() == id);
+            refusal.GetProperty("condition").GetString().ShouldBe(condition);
+            refusal.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldStartWith(text);
+        }
+        var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        registrations["(!EndpointIsNone && !ParametersIsNone && DtoOrNotFound)"]
+            .ShouldContain("            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName?>, CommandNameHandler>()\n");
+        registrations["(!EndpointIsNone && !ParametersIsNone && ResponseIsDto && !NotFound)"]
+            .ShouldContain("            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n");
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
+        Regex.Matches(slice, @"#elif \(DtoOrNotFound\)\n// Returns null when the aggregate (it changes )?does not exist, answered with 404\.").Count.ShouldBe(3);
+        Regex.Matches(slice, @": ICommand<ResponseTypeName\?>;").Count.ShouldBe(3);
+        slice.ShouldContain("internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, ResponseTypeName?>\n{\n    public Task<ResponseTypeName?> Handle(");
+        Regex.Matches(slice, @"async Task<Results<Ok<ResponseTypeName>, NotFound>> \(").Count.ShouldBe(4);
+        Regex.Matches(slice, @"is \{ \} response \? TypedResults\.Ok\(response\) : TypedResults\.NotFound\(\)\)").Count.ShouldBe(4);
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        tests.ShouldContain("#if (DtoOrNotFound)\n");
+        tests.ShouldContain("    public async Task Returns_404_when_its_aggregate_does_not_exist()\n    {\n#if (ParametersIsList)\n"
+            + "        await using var isolated = await database.CreateIsolatedAsync();\n        await using var app = new AppFactory(isolated);\n");
+        tests.ShouldContain("            HttpStatusCode.NotFound,\n            \"CommandNameHandler answers 500 until its NotImplementedException is replaced by the use case.\");");
     }
 
     // PB-067: --endpoint none generates a system command, which implements ISystemCommand<TResponse>, without endpoint: its integration
@@ -313,7 +374,7 @@ public sealed class TemplatePackageTests
 
         var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
         slice.ShouldContain("}\n#if (!EndpointIsNone)\n\ninternal static class CommandNameEndpoint\n");
-        slice.ShouldContain("#if (ResponseIsNone && !EndpointIsNone)\nusing Microsoft.AspNetCore.Http.HttpResults;");
+        slice.ShouldContain("#if ((ResponseIsNone || DtoOrNotFound) && !EndpointIsNone)\nusing Microsoft.AspNetCore.Http.HttpResults;");
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
         tests.ShouldContain("await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new CommandNameCommand(), TestContext.Current.CancellationToken);");
         tests.ShouldContain("await Should.ThrowAsync<ValidationException>(");
@@ -982,8 +1043,8 @@ public sealed class TemplatePackageTests
     // send the client of the policy that AppFactory holds, except a test of the 401 that sends none. Without the option, the tests keep
     // app.CreateClient(), and a command refuses it with --endpoint none or --every, which have no endpoint.
     [Theory]
-    [InlineData("hardslice-command", 5, 2)]
-    [InlineData("hardslice-query", 3, 3)]
+    [InlineData("hardslice-command", 7, 2)]
+    [InlineData("hardslice-query", 4, 3)]
     public void Slice_item_templates_protect_their_endpoint_with_the_policy_of_require(string templateName, int endpoints, int unauthorizedTests)
     {
         var repository = FindRepositoryRoot();
@@ -1275,10 +1336,10 @@ public sealed class TemplatePackageTests
         // Never list: dotnet new would read '--result list' as its own list command.
         symbols.GetProperty("Result").GetProperty("choices").EnumerateArray()
             .Select(choice => choice.GetProperty("choice").GetString())
-            .ShouldBe(["single", "many", "filtered"]);
+            .ShouldBe(["single", "many", "filtered", "summary"]);
         symbols.GetProperty("Result").GetProperty("defaultValue").GetString().ShouldBe("single");
         var modifiers = config.GetProperty("sources")[0].GetProperty("modifiers");
-        modifiers[1].GetProperty("condition").GetString().ShouldBe("(!ResultIsFiltered)");
+        modifiers[1].GetProperty("condition").GetString().ShouldBe("(!ResultTakesFilters)");
         modifiers[1].GetProperty("exclude").EnumerateArray().Select(glob => glob.GetString()).ShouldBe(["tests/MyApp.Tests/**/*"]);
     }
 
@@ -1506,7 +1567,7 @@ public sealed class TemplatePackageTests
             actions.Single(action => action.GetProperty("id").GetString() == refusal).GetProperty("manualInstructions")[0].GetProperty("text").GetString()!
                 .ShouldContain("while --parameters id, a list of parameters or --endpoint http asks for the opposite");
         slice.ShouldContain("#elif (ParametersIsList)\n// The fields of the use case, each nullable: the validator refuses a command without one of them, naming it.\n");
-        Regex.Matches(slice, @"public sealed record CommandNameCommand\(ParameterDeclarations\)").Count.ShouldBe(4);
+        Regex.Matches(slice, @"public sealed record CommandNameCommand\(ParameterDeclarations\)").Count.ShouldBe(5);
         tests.ShouldContain("#if (ParametersIsList)\n        var command = new CommandNameCommand(ParameterValues);\n#else\n        var command = new CommandNameCommand(Guid.NewGuid());\n#endif");
         tests.ShouldContain("PostAsJsonAsync(Route, new CommandNameCommand(ParameterNulls), TestContext.Current.CancellationToken)");
         tests.ShouldContain("mediator.Send(new CommandNameCommand(ParameterNulls), TestContext.Current.CancellationToken)");
@@ -1546,7 +1607,7 @@ public sealed class TemplatePackageTests
             Evaluated(symbols, "UnknownRouteParameter", inputs).ShouldBe(unknown);
         symbols.GetProperty("FilterProbe").GetProperty("parameters").GetProperty("symbols").EnumerateArray()
             .Select(part => part.GetProperty("value").GetString()).ShouldBe(["ParametersList", "\u001f", "SliceRoute"]);
-        symbols.GetProperty("FiltersAreGenerated").GetProperty("value").GetString().ShouldBe("(ResultIsFiltered && ParametersIsWellFormed)");
+        symbols.GetProperty("FiltersAreGenerated").GetProperty("value").GetString().ShouldBe("(ResultTakesFilters && ParametersIsWellFormed)");
         symbols.GetProperty("HasRouteFilters").GetProperty("value").GetString().ShouldBe("(HasBindingRouteFilters || HasConstrainedRouteFilters || HasStringRouteFilters)");
         symbols.GetProperty("RouteNamesNoFilter").GetProperty("value").GetString().ShouldBe("(FiltersAreGenerated && RouteNamesUnknownParameter)");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!RouteNamesNoFilter");
@@ -1641,15 +1702,16 @@ public sealed class TemplatePackageTests
         };
     }
 
-    // Both results read the aggregate without tracking and project it to the DTO of the slice (HS006).
+    // Every handler reads the aggregate without tracking, and projects it to the DTO of the slice or, for a summary, its group (HS006).
     [Fact]
-    public void Query_item_template_reads_its_aggregate_without_tracking_in_both_results()
+    public void Query_item_template_reads_its_aggregate_without_tracking_in_every_result()
     {
         var slice = File.ReadAllText(
             Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
 
-        Regex.Matches(slice, @"db\.Set<AggregateName>\(\)\s+\.AsNoTracking\(\)").Count.ShouldBe(2);
+        Regex.Matches(slice, @"db\.Set<AggregateName>\(\)\s+\.AsNoTracking\(\)").Count.ShouldBe(3);
         Regex.Matches(slice, @"\.Select\(aggregate => new ResultDtoName\(").Count.ShouldBe(2);
+        Regex.Matches(slice, @"\.Select\(group => new ResultDtoName\(group\.Count\(\)\)\)").Count.ShouldBe(1);
         slice.ShouldNotContain("AsTracking()");
         slice.ShouldNotContain("SaveChanges");
     }
@@ -1663,7 +1725,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(17);
+        refusals.Length.ShouldBe(18);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -1671,6 +1733,61 @@ public sealed class TemplatePackageTests
         // The lines to add, then, with --require, what its policy asks (PB-081): nothing else is printed.
         postActions.Where(action => !action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal))
             .Select(action => action.GetProperty("condition").GetString()).ShouldBe(["(Accepted)", "(Accepted && RequireIsGiven)"]);
+    }
+
+    // PB-106: --result summary computes one nullable DTO on the aggregates that the filters of --parameters select, read as those of
+    // --result filtered with the same validator and tests, and answers null with 404. Its handler groups them on a constant, so that
+    // PostgreSQL computes the values in one query and returns no row when the filters select none. Its tests of the DTO and of the 404
+    // run on a database of their own. --parameters is required with it (exit 105).
+    [Fact]
+    public void Query_item_template_computes_a_summary_on_the_aggregates_that_its_filters_select_and_answers_404_when_they_select_none()
+    {
+        var root = QueryTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+
+        foreach (var (symbol, value) in new[]
+        {
+            ("ResultIsSummary", "(Result == \"summary\")"),
+            ("ResultTakesFilters", "(ResultIsFiltered || ResultIsSummary)"),
+            ("SummaryWithoutParameters", "(ResultIsSummary && !ParametersIsGiven)"),
+            ("ParametersIsUnused", "(!ResultTakesFilters && ParametersIsGiven)"),
+            ("ParametersIsMalformed", "(ResultTakesFilters && ParametersIsGiven && !ParametersIsWellFormed)"),
+        })
+            symbols.GetProperty(symbol).GetProperty("value").GetString().ShouldBe(value);
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!SummaryWithoutParameters");
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusal = postActions.Single(action => action.GetProperty("id").GetString() == "refuseSummaryWithoutParameters");
+        refusal.GetProperty("condition").GetString().ShouldBe("(SummaryWithoutParameters)");
+        refusal.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!
+            .ShouldStartWith("error: --result summary needs --parameters <Name>:<Type>[,<Name>:<Type>...]");
+        var registration = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .Single(instruction => instruction.GetProperty("condition").GetString() == "(ResultIsSummary)")
+            .GetProperty("text").GetString()!;
+        registration.ShouldContain("using FluentValidation;\n");
+        registration.ShouldContain("            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName?>, QueryNameHandler>()\n"
+            + "            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n");
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
+        slice.ShouldContain("#if (ResultTakesFilters)\nusing FluentValidation;");
+        slice.ShouldContain("#if (ResultIsSingle || ResultIsSummary)\nusing Microsoft.AspNetCore.Http.HttpResults;");
+        slice.ShouldContain("#elif (ResultIsSummary)\n// Computes one ResultDtoName on the AggregateName that its filters select: none selected is a null response, answered with 404.\n");
+        slice.ShouldContain("public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<ResultDtoName?>;");
+        slice.ShouldContain("public sealed record ResultDtoName(int Count);");
+        slice.ShouldContain("internal sealed class QueryNameHandler(AppDbContext db) : IRequestHandler<QueryNameQuery, ResultDtoName?>\n{\n"
+            + "    public Task<ResultDtoName?> Handle(QueryNameQuery query, CancellationToken cancellationToken) =>\n"
+            + "        db.Set<AggregateName>()\n            .AsNoTracking()\n            // TODO(hardslice): keep the AggregateName that the filters of the query select, ");
+        slice.ShouldContain("            .GroupBy(aggregate => 1)\n            .Select(group => new ResultDtoName(group.Count()))\n            .SingleOrDefaultAsync(cancellationToken);\n");
+        Regex.Matches(slice, @"async Task<Results<Ok<ResultDtoName>, NotFound>> \(\[AsParameters\] QueryNameQuery query, ").Count.ShouldBe(2);
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "QueryName", "QueryNameTests.cs"));
+        tests.ShouldContain("#elif (ResultTakesFilters)\n#if (ResultIsSummary)\n");
+        tests.ShouldContain("    public async Task Computes_its_dto_on_the_stored_aggregates_that_its_filters_select()\n    {\n"
+            + "        await using var isolated = await database.CreateIsolatedAsync();\n        await StoreAggregateName(isolated);\n        await using var app = new AppFactory(isolated);\n");
+        tests.ShouldContain("    public async Task Returns_404_when_its_filters_select_no_aggregate()\n    {\n"
+            + "        await using var isolated = await database.CreateIsolatedAsync();\n        await using var app = new AppFactory(isolated);\n");
+        tests.ShouldContain("    private static async Task<Guid> StoreAggregateName(IsolatedDatabase isolated)\n    {\n        await using var db = isolated.CreateDbContext();\n");
     }
 
     // hardslice-module generates the contract of the module alone. dotnet new creates no empty folder and never deletes a file: a

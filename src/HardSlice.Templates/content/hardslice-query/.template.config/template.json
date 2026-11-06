@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Query",
   "name": "HardSlice query slice",
-  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests, and with --result filtered and --parameters <Name>:<Type>[,...] the validator of its filters and its tests. --route chooses the route of its endpoint, which answers GET, and --require <policy> protects it with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests, and with --result filtered and --parameters <Name>:<Type>[,...] the validator of its filters and its tests, or with --result summary the same filters and one DTO that the handler computes on the aggregates they select, null answered with 404. --route chooses the route of its endpoint, which answers GET, and --require <policy> protects it with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-query",
   "sourceName": "QueryName",
   "preferNameDirectory": false,
@@ -40,7 +40,7 @@
       "type": "parameter",
       "datatype": "choice",
       "defaultValue": "single",
-      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs) or filtered (the list of the DTOs that the filters of --parameters select, each read from the query string, or from the route when --route names it, and checked by a validator). Not list: dotnet new would read it as its list command.",
+      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs), filtered (the list of the DTOs that the filters of --parameters select, each read from the query string, or from the route when --route names it, and checked by a validator) or summary (one DTO that the handler computes, such as counts, on the aggregates that the same filters select, null answered with 404 when they select none). Not list: dotnet new would read it as its list command.",
       "choices": [
         {
           "choice": "single",
@@ -53,18 +53,22 @@
         {
           "choice": "filtered",
           "description": "The list of the DTOs that the filters of --parameters select, each from the query string, where a request without it is answered with 400, or from the route."
+        },
+        {
+          "choice": "summary",
+          "description": "One DTO computed on the aggregates that the filters of --parameters select, read as for filtered; none selected is answered with 404."
         }
       ]
     },
     "Parameters": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The filters of --result filtered, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly or From:DateOnly,To:DateOnly. The query reads each filter from the query string, such as ?from=2026-11-04&to=2026-11-05, where its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Each filter has a rule of the validator, its unit test, and its test of the 400. Required with --result filtered, refused otherwise."
+      "description": "The filters of --result filtered or --result summary, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly or From:DateOnly,To:DateOnly. The query reads each filter from the query string, such as ?from=2026-11-04&to=2026-11-05, where its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Each filter has a rule of the validator, its unit test, and its test of the 400. Required with --result filtered and --result summary, refused otherwise."
     },
     "Route": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The route of the endpoint under the group of the module, chosen after the resource it reads rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as trips or {roomId:guid}/bookings, or / for the group itself. The name of the slice in kebab-case by default. With --result single, /{id:guid} follows it. With --result filtered, each route parameter names a filter of --parameters, such as days/{date}, and nothing else."
+      "description": "The route of the endpoint under the group of the module, chosen after the resource it reads rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as trips or {roomId:guid}/bookings, or / for the group itself. The name of the slice in kebab-case by default. With --result single, /{id:guid} follows it. With --result filtered or --result summary, each route parameter names a filter of --parameters, such as days/{date}, and nothing else."
     },
     "Method": {
       "type": "parameter",
@@ -1189,9 +1193,17 @@
       "type": "computed",
       "value": "(Result == \"filtered\")"
     },
+    "ResultIsSummary": {
+      "type": "computed",
+      "value": "(Result == \"summary\")"
+    },
+    "ResultTakesFilters": {
+      "type": "computed",
+      "value": "(ResultIsFiltered || ResultIsSummary)"
+    },
     "FiltersAreGenerated": {
       "type": "computed",
-      "value": "(ResultIsFiltered && ParametersIsWellFormed)"
+      "value": "(ResultTakesFilters && ParametersIsWellFormed)"
     },
     "HasQueryStringFilters": {
       "type": "computed",
@@ -1219,7 +1231,7 @@
     },
     "ResultIsList": {
       "type": "computed",
-      "value": "(Result != \"single\")"
+      "value": "(ResultIsMany || ResultIsFiltered)"
     },
     "AppIsKnown": {
       "type": "generated",
@@ -1326,13 +1338,17 @@
       "type": "computed",
       "value": "(ResultIsFiltered && !ParametersIsGiven)"
     },
+    "SummaryWithoutParameters": {
+      "type": "computed",
+      "value": "(ResultIsSummary && !ParametersIsGiven)"
+    },
     "ParametersIsUnused": {
       "type": "computed",
-      "value": "(!ResultIsFiltered && ParametersIsGiven)"
+      "value": "(!ResultTakesFilters && ParametersIsGiven)"
     },
     "ParametersIsMalformed": {
       "type": "computed",
-      "value": "(ResultIsFiltered && ParametersIsGiven && !ParametersIsWellFormed)"
+      "value": "(ResultTakesFilters && ParametersIsGiven && !ParametersIsWellFormed)"
     },
     "ParameterTypeIsUnknown": {
       "type": "computed",
@@ -1344,7 +1360,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParametersIsMissing && !ParametersIsUnused && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !RouteNamesNoFilter && RequireIsValid)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParametersIsMissing && !SummaryWithoutParameters && !ParametersIsUnused && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !RouteNamesNoFilter && RequireIsValid)"
     }
   },
   "sources": [
@@ -1357,7 +1373,7 @@
           ]
         },
         {
-          "condition": "(!ResultIsFiltered)",
+          "condition": "(!ResultTakesFilters)",
           "exclude": [
             "tests/MyApp.Tests/**/*"
           ]
@@ -1574,6 +1590,25 @@
       "continueOnError": false
     },
     {
+      "id": "refuseSummaryWithoutParameters",
+      "condition": "(SummaryWithoutParameters)",
+      "description": "Refuses a summary without the filters that select its aggregates.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --result summary needs --parameters <Name>:<Type>[,<Name>:<Type>...], the filters that select the aggregates on which the query computes its DTO, read from the query string or from its route, such as --parameters From:DateOnly,To:DateOnly. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "refuseParameterWithoutFilter",
       "condition": "(ParametersIsUnused)",
       "description": "Refuses a filter that the result does not read.",
@@ -1587,7 +1622,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --parameters 'ParametersText' lists the filters of --result filtered: pass --result filtered with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
+          "text": "error: --parameters 'ParametersText' lists the filters of --result filtered or --result summary: pass one of them with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1663,7 +1698,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --route '/slice-route' holds the route parameter 'unknown-route-parameter', which names no filter of the query: --result filtered binds from the route each filter of --parameters 'ParametersText' that a route parameter names, such as --route days/{date} --parameters Date:DateOnly. Name the filter in the route, or remove the parameter from --route to read the filter from the query string. Nothing was created."
+          "text": "error: --route '/slice-route' holds the route parameter 'unknown-route-parameter', which names no filter of the query: --result filtered binds from the route each filter of --parameters 'ParametersText' that a route parameter names, as --result summary does, such as --route days/{date} --parameters Date:DateOnly. Name the filter in the route, or remove the parameter from --route to read the filter from the query string. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1705,6 +1740,10 @@
         {
           "condition": "(ResultIsFiltered)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ResultIsSummary)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName?>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

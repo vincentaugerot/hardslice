@@ -1,7 +1,7 @@
 #if (!ParametersIsNone)
 using FluentValidation;
 #endif
-#if (ResponseIsNone && !EndpointIsNone)
+#if ((ResponseIsNone || DtoOrNotFound) && !EndpointIsNone)
 using Microsoft.AspNetCore.Http.HttpResults;
 #endif
 using MyApp.Shared.Messaging;
@@ -53,6 +53,12 @@ public sealed record CommandNameCommand(Guid Id) : ICommand<Guid>;
 #elif (ResponseIsNone)
 // Returns false when the aggregate does not exist, answered with 404.
 public sealed record CommandNameCommand(Guid Id) : ICommand<bool>;
+#elif (DtoOrNotFound)
+// Returns null when the aggregate does not exist, answered with 404.
+public sealed record CommandNameCommand(Guid Id) : ICommand<ResponseTypeName?>;
+
+// Values only: never an entity, not even in a property (HS005).
+public sealed record ResponseTypeName(Guid Id);
 #else
 public sealed record CommandNameCommand(Guid Id) : ICommand<ResponseTypeName>;
 
@@ -70,6 +76,12 @@ public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<bool>;
 #elif (ResponseIsNone)
 // Returns false when the aggregate it changes does not exist, answered with 404.
 public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<bool>;
+#elif (DtoOrNotFound)
+// Returns null when the aggregate it changes does not exist, answered with 404.
+public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<ResponseTypeName?>;
+
+// Values only: never an entity, not even in a property (HS005).
+public sealed record ResponseTypeName(Guid Id);
 #else
 public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<ResponseTypeName>;
 
@@ -85,6 +97,12 @@ public sealed record CommandNameCommand(Guid Id) : ICommand<bool>;
 #elif (ResponseIsNone)
 // Returns false when the aggregate it changes does not exist, answered with 404. Replace Id with the fields of the use case.
 public sealed record CommandNameCommand(Guid Id) : ICommand<bool>;
+#elif (DtoOrNotFound)
+// Returns null when the aggregate it changes does not exist, answered with 404. Replace Id with the fields of the use case.
+public sealed record CommandNameCommand(Guid Id) : ICommand<ResponseTypeName?>;
+
+// Values only: never an entity, not even in a property (HS005).
+public sealed record ResponseTypeName(Guid Id);
 #else
 // Replace Id with the fields of the use case.
 public sealed record CommandNameCommand(Guid Id) : ICommand<ResponseTypeName>;
@@ -118,6 +136,10 @@ internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, G
 internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, bool>
 {
     public Task<bool> Handle(CommandNameCommand command, CancellationToken cancellationToken) =>
+#elif (DtoOrNotFound)
+internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, ResponseTypeName?>
+{
+    public Task<ResponseTypeName?> Handle(CommandNameCommand command, CancellationToken cancellationToken) =>
 #else
 internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, ResponseTypeName>
 {
@@ -126,7 +148,11 @@ internal sealed class CommandNameHandler : IRequestHandler<CommandNameCommand, R
         throw new NotImplementedException(
             "TODO(hardslice): implement CommandNameHandler through the aggregate of module ModuleName: inject AppDbContext, "
             + "load the aggregate with Set<TAggregate>(), call the method of the aggregate that holds the business rule, "
+#if (DtoOrNotFound)
+            + "and return the response, or null when the aggregate does not exist. Never call SaveChangesAsync.");
+#else
             + "and return the response. Never call SaveChangesAsync.");
+#endif
 }
 #if (!EndpointIsNone)
 
@@ -145,6 +171,10 @@ internal static class CommandNameEndpoint
         group.MapPost("/command-id-route", async Task<Results<NoContent, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
                 await mediator.Send(new CommandNameCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound())
             .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven && ReadsIdFromRoute && DtoOrNotFound)
+        group.MapPost("/command-id-route", async Task<Results<Ok<ResponseTypeName>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+                await mediator.Send(new CommandNameCommand(id), cancellationToken) is { } response ? TypedResults.Ok(response) : TypedResults.NotFound())
+            .RequireAuthorization("AuthorizationPolicyName");
 #elif (RequireIsGiven && ReadsIdFromRoute)
         group.MapPost("/command-id-route", async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
                 TypedResults.Ok(await mediator.Send(new CommandNameCommand(id), cancellationToken)))
@@ -152,6 +182,10 @@ internal static class CommandNameEndpoint
 #elif (RequireIsGiven && ResponseIsNone)
         group.MapPost("/command-route", async Task<Results<NoContent, NotFound>> (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
                 await mediator.Send(command, cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound())
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven && DtoOrNotFound)
+        group.MapPost("/command-route", async Task<Results<Ok<ResponseTypeName>, NotFound>> (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
+                await mediator.Send(command, cancellationToken) is { } response ? TypedResults.Ok(response) : TypedResults.NotFound())
             .RequireAuthorization("AuthorizationPolicyName");
 #elif (RequireIsGiven)
         group.MapPost("/command-route", async (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
@@ -163,12 +197,18 @@ internal static class CommandNameEndpoint
 #elif (ReadsIdFromRoute && ResponseIsNone)
         group.MapPost("/command-id-route", async Task<Results<NoContent, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(new CommandNameCommand(id), cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
+#elif (ReadsIdFromRoute && DtoOrNotFound)
+        group.MapPost("/command-id-route", async Task<Results<Ok<ResponseTypeName>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
+            await mediator.Send(new CommandNameCommand(id), cancellationToken) is { } response ? TypedResults.Ok(response) : TypedResults.NotFound());
 #elif (ReadsIdFromRoute)
         group.MapPost("/command-id-route", async (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
             TypedResults.Ok(await mediator.Send(new CommandNameCommand(id), cancellationToken)));
 #elif (ResponseIsNone)
         group.MapPost("/command-route", async Task<Results<NoContent, NotFound>> (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(command, cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound());
+#elif (DtoOrNotFound)
+        group.MapPost("/command-route", async Task<Results<Ok<ResponseTypeName>, NotFound>> (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
+            await mediator.Send(command, cancellationToken) is { } response ? TypedResults.Ok(response) : TypedResults.NotFound());
 #else
         group.MapPost("/command-route", async (CommandNameCommand command, IMediator mediator, CancellationToken cancellationToken) =>
             TypedResults.Ok(await mediator.Send(command, cancellationToken)));

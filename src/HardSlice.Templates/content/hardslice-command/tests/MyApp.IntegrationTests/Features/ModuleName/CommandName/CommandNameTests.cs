@@ -299,6 +299,37 @@ public sealed class CommandNameTests(PostgresDatabase database)
         problem.Errors.Keys.ShouldBe(["id"]);
 #endif
     }
+#if (DtoOrNotFound)
+
+#if (ParametersIsList)
+    // The handler returns null when the aggregate that the command names does not exist, answered with 404. The test runs on a
+    // database of its own, which holds no aggregate whatever the fields name, while the other tests store theirs beside it.
+#else
+    // The handler returns null when the aggregate that the command names does not exist, answered with 404.
+#endif
+    [Fact]
+    public async Task Returns_404_when_its_aggregate_does_not_exist()
+    {
+#if (ParametersIsList)
+        await using var isolated = await database.CreateIsolatedAsync();
+        await using var app = new AppFactory(isolated);
+        var command = new CommandNameCommand(ParameterValues);
+#else
+        await using var app = new AppFactory(database);
+        var command = new CommandNameCommand(Guid.NewGuid());
+#endif
+
+#if (ReadsIdFromRoute)
+        var response = await app.CreateClient().DeleteAsync($"{Route}/{command.Id}", TestContext.Current.CancellationToken);
+#else
+        var response = await app.CreateClient().PostAsJsonAsync(Route, command, TestContext.Current.CancellationToken);
+#endif
+
+        response.StatusCode.ShouldBe(
+            HttpStatusCode.NotFound,
+            "CommandNameHandler answers 500 until its NotImplementedException is replaced by the use case.");
+    }
+#endif
 #if (RequireIsGiven)
 
     // The policy AuthorizationPolicyName refuses a request without authentication before the endpoint: its 401 is not in the signature

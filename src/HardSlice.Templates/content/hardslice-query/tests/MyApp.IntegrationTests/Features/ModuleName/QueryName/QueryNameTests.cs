@@ -75,7 +75,49 @@ public sealed class QueryNameTests(PostgresDatabase database)
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 #endif
-#elif (ResultIsFiltered)
+#elif (ResultTakesFilters)
+#if (ResultIsSummary)
+    // The values of the DTO count every AggregateName that the filters select: the test runs on a database of its own, which holds
+    // the aggregates that it stores alone, while the other tests store theirs beside it in the shared one.
+    [Fact]
+    public async Task Computes_its_dto_on_the_stored_aggregates_that_its_filters_select()
+    {
+        await using var isolated = await database.CreateIsolatedAsync();
+        await StoreAggregateName(isolated);
+        await using var app = new AppFactory(isolated);
+
+#if (HasRouteFilters && HasQueryStringFilters)
+        var response = await app.CreateClient().GetAsync(RouteWith() + QueryString, TestContext.Current.CancellationToken);
+#elif (HasRouteFilters)
+        var response = await app.CreateClient().GetAsync(RouteWith(), TestContext.Current.CancellationToken);
+#else
+        var response = await app.CreateClient().GetAsync(Route + QueryString, TestContext.Current.CancellationToken);
+#endif
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ResultDtoName>(TestContext.Current.CancellationToken);
+        dto.ShouldNotBeNull();
+        Assert.Fail("TODO(hardslice): store the AggregateName that the filters of the request select and another one that they exclude, then assert each value of ResultDtoName that the handler computes on the selected ones.");
+    }
+
+    // A database of its own holds no AggregateName: the filters select none, and the null response is answered with 404.
+    [Fact]
+    public async Task Returns_404_when_its_filters_select_no_aggregate()
+    {
+        await using var isolated = await database.CreateIsolatedAsync();
+        await using var app = new AppFactory(isolated);
+
+#if (HasRouteFilters && HasQueryStringFilters)
+        var response = await app.CreateClient().GetAsync(RouteWith() + QueryString, TestContext.Current.CancellationToken);
+#elif (HasRouteFilters)
+        var response = await app.CreateClient().GetAsync(RouteWith(), TestContext.Current.CancellationToken);
+#else
+        var response = await app.CreateClient().GetAsync(Route + QueryString, TestContext.Current.CancellationToken);
+#endif
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+#else
     [Fact]
     public async Task Lists_the_stored_aggregates_that_its_filters_select()
     {
@@ -96,6 +138,7 @@ public sealed class QueryNameTests(PostgresDatabase database)
         dtos.Select(dto => dto.Id).ShouldContain(id);
         Assert.Fail("TODO(hardslice): store the AggregateName that the filters of the request select and another one that they exclude, then assert the values of ResultDtoName that the use case reads, and their order.");
     }
+#endif
 #if (HasQueryStringFilters)
 
     [Fact]
@@ -233,10 +276,17 @@ public sealed class QueryNameTests(PostgresDatabase database)
 #endif
 #endif
 
+#if (ResultIsSummary)
+    // Stores, outside the application, the AggregateName that the query reads in the database <isolated>, and returns its identifier.
+    private static async Task<Guid> StoreAggregateName(IsolatedDatabase isolated)
+    {
+        await using var db = isolated.CreateDbContext();
+#else
     // Stores, outside the application, the AggregateName that the query reads, and returns its identifier.
     private async Task<Guid> StoreAggregateName()
     {
         await using var db = database.CreateDbContext();
+#endif
         throw new NotImplementedException(
             "TODO(hardslice): create the AggregateName through the factory method of its aggregate, add it to db.Set<AggregateName>(), "
             + "save it with db.SaveChangesAsync(TestContext.Current.CancellationToken) and return its identifier.");

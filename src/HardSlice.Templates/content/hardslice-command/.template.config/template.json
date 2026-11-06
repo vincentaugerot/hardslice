@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --parameters <Name>:<Type>[,...] names its fields, such as --parameters From:DateOnly,To:DateOnly. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval> or --daily-at <hh:mm> --time-zone <id>, one that AddRecurringCommand sends at regular intervals or every day, with --retry <delay>x<count> to send it again after a failed cycle and --at-start to send it once when the application starts too. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --parameters <Name>:<Type>[,...] names its fields, such as --parameters From:DateOnly,To:DateOnly. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval> or --daily-at <hh:mm> --time-zone <id>, one that AddRecurringCommand sends at regular intervals or every day, with --retry <delay>x<count> to send it again after a failed cycle and --at-start to send it once when the application starts too. --response <Dto> --not-found makes its DTO nullable, answered with 404 and tested. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -32,7 +32,7 @@
       "type": "parameter",
       "datatype": "text",
       "defaultValue": "id",
-      "description": "What the command returns: id (a Guid, by default), none (a bool, false answered with 404) or the PascalCase name of a DTO of values that the slice declares.",
+      "description": "What the command returns: id (a Guid, by default), none (a bool, false answered with 404) or the PascalCase name of a DTO of values that the slice declares, which --not-found makes nullable, null answered with 404.",
       "replaces": "ResponseTypeName",
       "fileRename": "ResponseTypeName"
     },
@@ -96,6 +96,12 @@
       "datatype": "bool",
       "defaultValue": "false",
       "description": "Also sends the command of --every or --daily-at once when the application starts, before the first instant of its schedule, such as an import that must not wait for the night: the registration chains AlsoAtStart() to its schedule, which the key <Module>:<Name>:AtStart of the configuration replaces, and an integration test runs the cycle at start at TestInstants.Start. The conditions of the command decide on it as on any cycle (dotnet new hardslice-condition), and --retry sends it again after a failure. Refused without --every or --daily-at."
+    },
+    "NotFound": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Makes the DTO of --response nullable: the handler returns null when the aggregate that the command names does not exist, such as the day of a reconciliation that holds no data, and the endpoint answers it with 404, which an integration test asserts on a database of its own. Only with --response <Dto>: --response none already answers 404, with false. Refused with --parameters none, which names no aggregate, and with --endpoint none, --every and --daily-at, which have no endpoint."
     },
     "AppName": {
       "type": "bind",
@@ -1209,6 +1215,22 @@
       "type": "computed",
       "value": "(AtStart && !ScheduleIsGiven)"
     },
+    "NotFoundWithoutDto": {
+      "type": "computed",
+      "value": "(NotFound && !ResponseIsDto)"
+    },
+    "NotFoundWithoutEndpoint": {
+      "type": "computed",
+      "value": "(NotFound && ResponseIsDto && EndpointIsNone)"
+    },
+    "NotFoundWithoutIdentifier": {
+      "type": "computed",
+      "value": "(NotFound && ResponseIsDto && !EndpointIsNone && ParametersIsNone)"
+    },
+    "DtoOrNotFound": {
+      "type": "computed",
+      "value": "(NotFound && ResponseIsDto)"
+    },
     "CommandContract": {
       "type": "generated",
       "generator": "switch",
@@ -1257,7 +1279,7 @@
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule && !AtStartWithoutSchedule && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !ParametersWithDelete)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule && !AtStartWithoutSchedule && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !ParametersWithDelete && !NotFoundWithoutDto && !NotFoundWithoutEndpoint && !NotFoundWithoutIdentifier)"
     }
   },
   "sources": [
@@ -1443,6 +1465,60 @@
       "manualInstructions": [
         {
           "text": "error: --response none answers 404 to an unknown aggregate, which a command with --parameters none has no identifier to look for, nor one with --every or --daily-at, which imply it. Pass --response id for the identifier of the aggregate it creates or changes, or the PascalCase name of a DTO of what it did, such as --response ImportResultDto, or keep the parameters with --parameters id. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNotFoundWithoutDto",
+      "condition": "(NotFoundWithoutDto)",
+      "description": "Refuses a 404 of a null response without a DTO that can be null.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --not-found answers 404 to a null DTO, which needs the PascalCase name of that DTO in --response, such as --response ReconciledDayDto --not-found. --response none already answers 404 to an aggregate that does not exist, with false, and --response id returns an identifier that is never null. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNotFoundWithoutEndpoint",
+      "condition": "(NotFoundWithoutEndpoint)",
+      "description": "Refuses a 404 for a system command, which has no endpoint.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --not-found answers 404 from the endpoint of the command, which a system command of --endpoint none, --every or --daily-at does not have: the type of its module that sends it reads its response. Leave --not-found out. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseNotFoundWithoutIdentifier",
+      "condition": "(NotFoundWithoutIdentifier)",
+      "description": "Refuses a 404 for a command without parameters, which names no aggregate.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --not-found answers 404 to an aggregate that does not exist, which a command with --parameters none has no field to name. Keep its parameters with --parameters id or the list of its fields, such as --parameters ServiceDate:DateOnly, or leave --not-found out. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1853,8 +1929,12 @@
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, bool>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto)",
+          "condition": "(!EndpointIsNone && !ParametersIsNone && ResponseIsDto && !NotFound)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(!EndpointIsNone && !ParametersIsNone && DtoOrNotFound)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.CommandName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<CommandNameCommand, ResponseTypeName?>, CommandNameHandler>()\n            .AddScoped<IValidator<CommandNameCommand>, CommandNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        CommandNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
           "condition": "(!EndpointIsNone && ParametersIsNone && ResponseIsId)",

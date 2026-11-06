@@ -7,7 +7,7 @@
 # the usings the file does not have yet, the registrations after 'services' (unless <registrations> is 'without-registrations'),
 # and the call of Map before 'return endpoints;'. Fails if the instructions do not name the module file or one of these lines:
 # two registrations for hardslice-command, the handler and the validator, or the handler alone of a command without parameters,
-# one for hardslice-query, the handler, or two with --result filtered, the handler and the validator of its filter, and one for
+# one for hardslice-query, the handler, or two with --result filtered or summary, the handler and the validator of its filters, and one for
 # hardslice-event, the handler of its reaction, which has no endpoint to map, as a system command of hardslice-command
 # --endpoint none has none. A recurring command of hardslice-command --every has two, its handler and its AddRecurringCommand,
 # and no endpoint.

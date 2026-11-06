@@ -1,7 +1,7 @@
-#if (ResultIsFiltered)
+#if (ResultTakesFilters)
 using FluentValidation;
 #endif
-#if (ResultIsSingle)
+#if (ResultIsSingle || ResultIsSummary)
 using Microsoft.AspNetCore.Http.HttpResults;
 #endif
 using Microsoft.EntityFrameworkCore;
@@ -19,14 +19,25 @@ public sealed record QueryNameQuery(Guid Id) : IQuery<ResultDtoName?>;
 // Reads the AggregateName that its filters select. Add the other filters of the use case, each with its rule.
 FilterComments
 public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<IReadOnlyList<ResultDtoName>>;
+#elif (ResultIsSummary)
+// Computes one ResultDtoName on the AggregateName that its filters select: none selected is a null response, answered with 404.
+// Add the other filters of the use case, each with its rule.
+FilterComments
+public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<ResultDtoName?>;
 #else
 // Reads every AggregateName. Add the parameters of the use case, such as a filter, and their validator if any.
 public sealed record QueryNameQuery : IQuery<IReadOnlyList<ResultDtoName>>;
 #endif
 
+#if (ResultIsSummary)
+// Values only: never an entity, not even in a property. Replace Count with the values the use case computes, such as the count of
+// each state.
+public sealed record ResultDtoName(int Count);
+#else
 // Values only: never an entity, not even in a property. Add the values the use case reads.
 public sealed record ResultDtoName(Guid Id);
-#if (ResultIsFiltered)
+#endif
+#if (ResultTakesFilters)
 
 // Checks the shape of the filters only, before the handler runs: business rules stay in the domain.
 internal sealed class QueryNameValidator : AbstractValidator<QueryNameQuery>
@@ -52,6 +63,20 @@ internal sealed class QueryNameHandler(AppDbContext db) : IRequestHandler<QueryN
             .SingleOrDefaultAsync(cancellationToken);
     }
 }
+#elif (ResultIsSummary)
+// PostgreSQL computes the values in one query: GroupBy on a constant puts every selected AggregateName in one group, and Select
+// projects it, such as group.Count(aggregate => aggregate.State == State.Done) for count(*) FILTER (WHERE ...). No group, so no
+// row, when the filters select none: SingleOrDefaultAsync returns null. Never load the rows to count them in memory.
+internal sealed class QueryNameHandler(AppDbContext db) : IRequestHandler<QueryNameQuery, ResultDtoName?>
+{
+    public Task<ResultDtoName?> Handle(QueryNameQuery query, CancellationToken cancellationToken) =>
+        db.Set<AggregateName>()
+            .AsNoTracking()
+            // TODO(hardslice): keep the AggregateName that the filters of the query select, such as .Where(aggregate => aggregate.FirstFilterName == query.FirstFilterName), then compute each value of ResultDtoName on the group in Select.
+            .GroupBy(aggregate => 1)
+            .Select(group => new ResultDtoName(group.Count()))
+            .SingleOrDefaultAsync(cancellationToken);
+}
 #else
 internal sealed class QueryNameHandler(AppDbContext db) : IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>
 {
@@ -75,7 +100,7 @@ internal static class QueryNameEndpoint
 #elif (HasRouteFilters)
     // [AsParameters] binds route-filter-bindings of the route,
     // and each other parameter of the query from the query string.
-#elif (ResultIsFiltered)
+#elif (ResultTakesFilters)
     // [AsParameters] binds each parameter of the query from the query string, such as ?query-string-example.
 #endif
 #if (RequireIsGiven)
@@ -86,6 +111,10 @@ internal static class QueryNameEndpoint
 #if (RequireIsGiven && ResultIsSingle)
         group.MapGet("/query-id-route", async Task<Results<Ok<ResultDtoName>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
                 await mediator.Send(new QueryNameQuery(id), cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound())
+            .RequireAuthorization("AuthorizationPolicyName");
+#elif (RequireIsGiven && ResultIsSummary)
+        group.MapGet("/query-route", async Task<Results<Ok<ResultDtoName>, NotFound>> ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
+                await mediator.Send(query, cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound())
             .RequireAuthorization("AuthorizationPolicyName");
 #elif (RequireIsGiven && ResultIsFiltered)
         group.MapGet("/query-route", async ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
@@ -98,6 +127,9 @@ internal static class QueryNameEndpoint
 #elif (ResultIsSingle)
         group.MapGet("/query-id-route", async Task<Results<Ok<ResultDtoName>, NotFound>> (Guid id, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(new QueryNameQuery(id), cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound());
+#elif (ResultIsSummary)
+        group.MapGet("/query-route", async Task<Results<Ok<ResultDtoName>, NotFound>> ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
+            await mediator.Send(query, cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound());
 #elif (ResultIsFiltered)
         group.MapGet("/query-route", async ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
             TypedResults.Ok(await mediator.Send(query, cancellationToken)));
