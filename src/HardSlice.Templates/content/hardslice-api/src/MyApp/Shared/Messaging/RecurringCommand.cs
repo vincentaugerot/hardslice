@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace MyApp.Shared.Messaging;
@@ -61,6 +62,7 @@ public static class RecurringCommandServiceCollectionExtensions
                 $"{section}:Retries, the number of times {command} is sent again after a failed cycle, must be zero or more, and {section}:RetryDelay, "
                 + $"the delay between two of them, longer than zero and at most {LongestDelay} when there are any.")
             .ValidateOnStart();
+        services.TryAddScoped<RecurringCycleContext>();
         return services.AddHostedService<RecurringCommandService<TCommand, TResponse>>();
     }
 }
@@ -189,10 +191,21 @@ public interface IRecurringCommandCondition<TCommand>
     Task<string?> CheckAsync(RecurringCycle cycle, CancellationToken cancellationToken);
 }
 
-// The cycle that a condition decides on: its instant, whether it is the cycle at start of RecurringSchedule.AlsoAtStart or one of
-// its retries, and the number of the retry it sends, 0 for the first send of the cycle. A condition that only applies at start,
-// such as an import that must not wait for the night when no version covers the day, returns null when AtStart is false.
+// The cycle that a condition decides on, and that the handler of the command reads from RecurringCycleContext: its instant,
+// whether it is the cycle at start of RecurringSchedule.AlsoAtStart or one of its retries, and the number of the retry it sends,
+// 0 for the first send of the cycle. A condition that only applies at start, such as an import that must not wait for the night
+// when no version covers the day, returns null when AtStart is false.
 public sealed record RecurringCycle(DateTimeOffset Due, bool AtStart, int Retry);
+
+// The cycle of AddRecurringCommand that sent the command of this scope. A handler that dates what it records by the schedule,
+// such as a trace or a report, rather than by the clock, injects it and reads Current.Due: the instant of the cycle, which a read
+// of TimeProvider after a slow call would move. Current is null for a command sent any other way, by its endpoint or through
+// IMediator outside the service. AddRecurringCommand registers it, scoped, and the service fills it in the scope of each send,
+// before the command enters the pipeline, so the reactions to its domain events see the same cycle.
+public sealed class RecurringCycleContext
+{
+    public RecurringCycle? Current { get; internal set; }
+}
 
 // What RecurringCommandService tells the integration tests that watch it, through RecurringCommandCycles: the application
 // registers none.
@@ -263,7 +276,7 @@ internal sealed class RecurringCommandService<TCommand, TResponse>(
                     if (held is not null)
                         logger.LogInformation("{Command} is sent again: its conditions hold", command);
                     held = null;
-                    failure = await SendAsync(stoppingToken);
+                    failure = await SendAsync(cycle, stoppingToken);
                 }
 
                 if (failure is null)
@@ -331,11 +344,12 @@ internal sealed class RecurringCommandService<TCommand, TResponse>(
     }
 
     // The exception that failed the cycle, or null.
-    private async Task<Exception?> SendAsync(CancellationToken stoppingToken)
+    private async Task<Exception?> SendAsync(RecurringCycle cycle, CancellationToken stoppingToken)
     {
         try
         {
             await using var scope = scopes.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<RecurringCycleContext>().Current = cycle;
             var response = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new TCommand(), stoppingToken);
             foreach (var monitor in monitors)
                 monitor.Completed(response);

@@ -425,6 +425,44 @@ public sealed class RecurringCommandTests
         await host.StopAsync(TestContext.Current.CancellationToken);
     }
 
+    // The handler dates its work by the cycle that sent it, the instant of the schedule, rather than by the clock that the cycle
+    // moved on: at start, at a retry of the cycle at start, and at the next night.
+    [Fact]
+    public async Task Tells_the_handler_the_cycle_that_sent_its_command()
+    {
+        var cycles = new Cycles(1);
+        var waits = new Waits();
+        using var host = await StartAsync(cycles, Nightly.AlsoAtStart().WithRetries(TimeSpan.FromMinutes(10), 1), waits: waits);
+        var clock = host.Services.GetRequiredService<FakeTimeProvider>();
+        var night = new DateTimeOffset(2100, 1, 4, 9, 30, 0, TimeSpan.Zero);
+
+        (await waits.NextAsync()).ShouldBe(Start);
+        (await cycles.NextAsync()).ShouldBe(1);
+        for (var cycle = 2; cycle <= 3; cycle++)
+        {
+            clock.SetUtcNow(await waits.NextAsync());
+            (await cycles.NextAsync()).ShouldBe(cycle);
+        }
+
+        cycles.Contexts.ShouldBe([new RecurringCycle(Start, true, 0), new RecurringCycle(Start.AddMinutes(10), true, 1), new RecurringCycle(night, false, 0)]);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Tells_no_cycle_to_the_handler_of_a_command_sent_through_IMediator()
+    {
+        var cycles = new Cycles();
+        var waits = new Waits();
+        using var host = await StartAsync(cycles, waits: waits);
+        (await waits.NextAsync()).ShouldBe(Start + Interval);
+
+        await using (var scope = host.Services.CreateAsyncScope())
+            (await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new Tick(), TestContext.Current.CancellationToken)).ShouldBe(1);
+
+        cycles.Contexts.ShouldHaveSingleItem().ShouldBeNull();
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
     private static async Task<IHost> StartAsync(
         Cycles cycles,
         RecurringSchedule? schedule = null,
@@ -481,10 +519,14 @@ public sealed class RecurringCommandTests
         // The scope of each command that reached the handler.
         public ConcurrentQueue<ScopeMarker> Scopes { get; } = new();
 
+        // The cycle that RecurringCycleContext gave the handler of each command, null for a command sent another way.
+        public ConcurrentQueue<RecurringCycle?> Contexts { get; } = new();
+
         public int Sent => Commands.Count;
 
-        public int Record(object command)
+        public int Record(object command, RecurringCycle? sentBy = null)
         {
+            Contexts.Enqueue(sentBy);
             Commands.Enqueue(command);
             var cycle = Commands.Count;
             _completed.Writer.TryWrite(cycle);
@@ -568,12 +610,12 @@ public sealed class RecurringCommandTests
         }
     }
 
-    private sealed class TickHandler(Cycles cycles, ScopeMarker scope) : IRequestHandler<Tick, int>
+    private sealed class TickHandler(Cycles cycles, ScopeMarker scope, RecurringCycleContext context) : IRequestHandler<Tick, int>
     {
         public Task<int> Handle(Tick command, CancellationToken cancellationToken)
         {
             cycles.Scopes.Enqueue(scope);
-            return Task.FromResult(cycles.Record(command));
+            return Task.FromResult(cycles.Record(command, context.Current));
         }
     }
 

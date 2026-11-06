@@ -611,6 +611,26 @@ public sealed class TemplatePackageTests
         programTests.ShouldContain("typeof(IDomainEventHandler<>), typeof(IRecurringCommandCondition<>)];");
     }
 
+    // PB-109: the handler of a recurring command reads the cycle that sent it from RecurringCycleContext, which the service fills in
+    // the scope of each send, and add-slice and AGENTS.md name it.
+    [Fact]
+    public void The_handler_of_a_recurring_command_reads_the_cycle_that_sent_it()
+    {
+        var template = TemplateRoot(FindRepositoryRoot());
+        var service = File.ReadAllText(Path.Combine(template, "src", "MyApp", "Shared", "Messaging", "RecurringCommand.cs"));
+        var tests = File.ReadAllText(Path.Combine(template, "tests", "MyApp.Tests", "Shared", "Messaging", "RecurringCommandTests.cs"));
+        var agents = File.ReadAllText(Path.Combine(template, "AGENTS.md"));
+        var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
+
+        service.ShouldContain("public sealed class RecurringCycleContext\n{\n    public RecurringCycle? Current { get; internal set; }\n}");
+        service.ShouldContain("services.TryAddScoped<RecurringCycleContext>();");
+        service.ShouldContain("scope.ServiceProvider.GetRequiredService<RecurringCycleContext>().Current = cycle;");
+        tests.ShouldContain("public async Task Tells_the_handler_the_cycle_that_sent_its_command()");
+        tests.ShouldContain("public async Task Tells_no_cycle_to_the_handler_of_a_command_sent_through_IMediator()");
+        agents.ShouldContain("Its handler reads the instant of its cycle from `RecurringCycleContext.Current`, `null` when the command comes another way.");
+        addSlice.ShouldContain("injects `RecurringCycleContext` and reads `Current.Due`, the instant of the cycle, rather than `TimeProvider`");
+    }
+
     // PB-083: the agent kit says how a job decides whether to run, and how a setting is checked at start.
     [Fact]
     public void Agent_guidance_says_how_a_job_decides_whether_to_run()
