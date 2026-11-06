@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Query",
   "name": "HardSlice query slice",
-  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests, and with --result filtered the validator of its filter and its tests. --route chooses the route of its endpoint, which answers GET, and --require <policy> protects it with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A query slice of a hardslice-api solution: query, DTO, handler reading its aggregate without tracking, endpoint and integration tests, and with --result filtered and --parameters <Name>:<Type>[,...] the validator of its filters and its tests. --route chooses the route of its endpoint, which answers GET, and --require <policy> protects it with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-query",
   "sourceName": "QueryName",
   "preferNameDirectory": false,
@@ -18,11 +18,6 @@
   "tags": {
     "language": "C#",
     "type": "item"
-  },
-  "forms": {
-    "firstLowerCase": {
-      "identifier": "firstLowerCaseInvariant"
-    }
   },
   "symbols": {
     "Module": {
@@ -45,7 +40,7 @@
       "type": "parameter",
       "datatype": "choice",
       "defaultValue": "single",
-      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs) or filtered (the list of the DTOs that the filter of --parameter selects, read from the query string, or from the route when --route names it, and checked by a validator). Not list: dotnet new would read it as its list command.",
+      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs) or filtered (the list of the DTOs that the filters of --parameters select, each read from the query string, or from the route when --route names it, and checked by a validator). Not list: dotnet new would read it as its list command.",
       "choices": [
         {
           "choice": "single",
@@ -57,19 +52,19 @@
         },
         {
           "choice": "filtered",
-          "description": "The list of the DTOs that the filter of --parameter selects, from the query string, where a request without it is answered with 400, or from the route."
+          "description": "The list of the DTOs that the filters of --parameters select, each from the query string, where a request without it is answered with 400, or from the route."
         }
       ]
     },
-    "Parameter": {
+    "Parameters": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The filter of --result filtered, as <Name>:<Type>: a PascalCase name and one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly. The query reads it from the query string, such as ?date=2026-11-04, and its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Required with --result filtered, refused otherwise."
+      "description": "The filters of --result filtered, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly or From:DateOnly,To:DateOnly. The query reads each filter from the query string, such as ?from=2026-11-04&to=2026-11-05, where its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Each filter has a rule of the validator, its unit test, and its test of the 400. Required with --result filtered, refused otherwise."
     },
     "Route": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The route of the endpoint under the group of the module, chosen after the resource it reads rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as trips or {roomId:guid}/bookings, or / for the group itself. The name of the slice in kebab-case by default. With --result single, /{id:guid} follows it. With --result filtered, a route parameter names the filter of --parameter, such as days/{date}, and nothing else."
+      "description": "The route of the endpoint under the group of the module, chosen after the resource it reads rather than the use case: lowercase words separated by hyphens, and route parameters between braces such as {id:guid}, separated by slashes, such as trips or {roomId:guid}/bookings, or / for the group itself. The name of the slice in kebab-case by default. With --result single, /{id:guid} follows it. With --result filtered, each route parameter names a filter of --parameters, such as days/{date}, and nothing else."
     },
     "Method": {
       "type": "parameter",
@@ -149,245 +144,6 @@
           {
             "regex": "^$",
             "replacement": "app.CreateClient()."
-          }
-        ]
-      }
-    },
-    "ParameterText": {
-      "type": "generated",
-      "generator": "coalesce",
-      "parameters": {
-        "sourceVariableName": "Parameter",
-        "fallbackVariableName": "Unbound"
-      },
-      "fileRename": "ParameterText"
-    },
-    "ParameterIsGiven": {
-      "type": "generated",
-      "generator": "regexMatch",
-      "datatype": "bool",
-      "parameters": {
-        "source": "ParameterText",
-        "pattern": "."
-      }
-    },
-    "ParameterIsWellFormed": {
-      "type": "generated",
-      "generator": "regexMatch",
-      "datatype": "bool",
-      "parameters": {
-        "source": "ParameterText",
-        "pattern": "^[A-Z][A-Za-z0-9]*:[^:]+$"
-      }
-    },
-    "FilterName": {
-      "type": "generated",
-      "generator": "regex",
-      "parameters": {
-        "source": "ParameterText",
-        "steps": [
-          {
-            "regex": "^([^:]*):.*$",
-            "replacement": "$1"
-          }
-        ]
-      },
-      "replaces": "FilterName",
-      "fileRename": "FilterName"
-    },
-    "FilterKey": {
-      "type": "derived",
-      "valueSource": "FilterName",
-      "valueTransform": "firstLowerCase",
-      "replaces": "filterName",
-      "fileRename": "filterName"
-    },
-    "FilterType": {
-      "type": "generated",
-      "generator": "regex",
-      "parameters": {
-        "source": "ParameterText",
-        "steps": [
-          {
-            "regex": "^[^:]*:",
-            "replacement": ""
-          }
-        ]
-      },
-      "replaces": "FilterType",
-      "fileRename": "FilterType"
-    },
-    "FilterTypeIsKnown": {
-      "type": "generated",
-      "generator": "regexMatch",
-      "datatype": "bool",
-      "parameters": {
-        "source": "FilterType",
-        "pattern": "^(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)$"
-      }
-    },
-    "FilterIsString": {
-      "type": "computed",
-      "value": "(FilterType == \"string\")"
-    },
-    "FilterValue": {
-      "type": "generated",
-      "generator": "switch",
-      "replaces": "FilterValue",
-      "parameters": {
-        "evaluator": "C++",
-        "datatype": "string",
-        "cases": [
-          {
-            "condition": "(FilterType == \"string\")",
-            "value": "\"value\""
-          },
-          {
-            "condition": "(FilterType == \"bool\")",
-            "value": "true"
-          },
-          {
-            "condition": "(FilterType == \"int\")",
-            "value": "1"
-          },
-          {
-            "condition": "(FilterType == \"long\")",
-            "value": "1L"
-          },
-          {
-            "condition": "(FilterType == \"decimal\")",
-            "value": "1.5m"
-          },
-          {
-            "condition": "(FilterType == \"double\")",
-            "value": "1.5"
-          },
-          {
-            "condition": "(FilterType == \"Guid\")",
-            "value": "Guid.NewGuid()"
-          },
-          {
-            "condition": "(FilterType == \"DateOnly\")",
-            "value": "new DateOnly(2026, 11, 4)"
-          },
-          {
-            "condition": "(FilterType == \"TimeOnly\")",
-            "value": "new TimeOnly(8, 30)"
-          },
-          {
-            "condition": "(FilterType == \"DateTimeOffset\")",
-            "value": "new DateTimeOffset(2026, 11, 4, 8, 30, 0, TimeSpan.Zero)"
-          },
-          {
-            "value": "default"
-          }
-        ]
-      }
-    },
-    "FilterQueryValue": {
-      "type": "generated",
-      "generator": "switch",
-      "replaces": "filter-query-value",
-      "parameters": {
-        "evaluator": "C++",
-        "datatype": "string",
-        "cases": [
-          {
-            "condition": "(FilterType == \"string\")",
-            "value": "value"
-          },
-          {
-            "condition": "(FilterType == \"bool\")",
-            "value": "true"
-          },
-          {
-            "condition": "(FilterType == \"int\")",
-            "value": "1"
-          },
-          {
-            "condition": "(FilterType == \"long\")",
-            "value": "1"
-          },
-          {
-            "condition": "(FilterType == \"decimal\")",
-            "value": "1.5"
-          },
-          {
-            "condition": "(FilterType == \"double\")",
-            "value": "1.5"
-          },
-          {
-            "condition": "(FilterType == \"Guid\")",
-            "value": "0f8fad5b-d9cb-469f-a165-70867728950e"
-          },
-          {
-            "condition": "(FilterType == \"DateOnly\")",
-            "value": "2026-11-04"
-          },
-          {
-            "condition": "(FilterType == \"TimeOnly\")",
-            "value": "08:30"
-          },
-          {
-            "condition": "(FilterType == \"DateTimeOffset\")",
-            "value": "2026-11-04T08:30:00%2B00:00"
-          },
-          {
-            "value": ""
-          }
-        ]
-      }
-    },
-    "FilterRefusedValue": {
-      "type": "generated",
-      "generator": "switch",
-      "replaces": "filter-refused-value",
-      "parameters": {
-        "evaluator": "C++",
-        "datatype": "string",
-        "cases": [
-          {
-            "condition": "(FilterType == \"string\")",
-            "value": "refused-value"
-          },
-          {
-            "condition": "(FilterType == \"bool\")",
-            "value": "not-a-boolean"
-          },
-          {
-            "condition": "(FilterType == \"int\")",
-            "value": "not-a-number"
-          },
-          {
-            "condition": "(FilterType == \"long\")",
-            "value": "not-a-number"
-          },
-          {
-            "condition": "(FilterType == \"decimal\")",
-            "value": "not-a-number"
-          },
-          {
-            "condition": "(FilterType == \"double\")",
-            "value": "not-a-number"
-          },
-          {
-            "condition": "(FilterType == \"Guid\")",
-            "value": "not-a-guid"
-          },
-          {
-            "condition": "(FilterType == \"DateOnly\")",
-            "value": "not-a-date"
-          },
-          {
-            "condition": "(FilterType == \"TimeOnly\")",
-            "value": "not-a-time"
-          },
-          {
-            "condition": "(FilterType == \"DateTimeOffset\")",
-            "value": "not-an-instant"
-          },
-          {
-            "value": ""
           }
         ]
       }
@@ -506,18 +262,270 @@
         "pattern": "(?i)\\{id[:?}]"
       }
     },
-    "FilterRouteProbe": {
+    "ParametersText": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Parameters",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "ParametersText"
+    },
+    "ParametersList": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersText",
+        "steps": [
+          {
+            "regex": "\\s+",
+            "replacement": ""
+          }
+        ]
+      }
+    },
+    "ParametersIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "."
+      }
+    },
+    "ParametersIsWellFormed": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "^[A-Z][A-Za-z0-9]*:[^:,]+(?:,[A-Z][A-Za-z0-9]*:[^:,]+)*$"
+      }
+    },
+    "ParameterTypesAreKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "^[^:,]*:(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)(?:,[^:,]*:(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset))*$"
+      }
+    },
+    "UnknownParameterName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "^(?:[^,]*,)*?([^:,]*):(?!(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)(?:,|$))[^,]*(?:,.*)?$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "UnknownParameterName"
+    },
+    "UnknownParameterType": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "^(?:[^,]*,)*?[^:,]*:(?!(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)(?:,|$))([^,]*)(?:,.*)?$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "UnknownParameterType"
+    },
+    "ParametersHaveDuplicate": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "(?i)(?:^|,)([A-Za-z0-9]+):[^,]*,(?:[^,]*,)*?\\1:"
+      }
+    },
+    "DuplicateParameterName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "(?i)^(?:[^,]*,)*?([A-Za-z0-9]+):[^,]*,(?:[^,]*,)*?\\1:.*$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "DuplicateParameterName"
+    },
+    "ParameterDeclarations": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "([A-Za-z0-9]+):([A-Za-z]+)",
+            "replacement": "$2? $1"
+          },
+          {
+            "regex": ",",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "ParameterDeclarations"
+    },
+    "ParameterValues": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": ",",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:string(?=\u001e|$)",
+            "replacement": "\"value\""
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:bool(?=\u001e|$)",
+            "replacement": "true"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:int(?=\u001e|$)",
+            "replacement": "1"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:long(?=\u001e|$)",
+            "replacement": "1L"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:decimal(?=\u001e|$)",
+            "replacement": "1.5m"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:double(?=\u001e|$)",
+            "replacement": "1.5"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:Guid(?=\u001e|$)",
+            "replacement": "Guid.NewGuid()"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:DateOnly(?=\u001e|$)",
+            "replacement": "new DateOnly(2026, 11, 4)"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:TimeOnly(?=\u001e|$)",
+            "replacement": "new TimeOnly(8, 30)"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:DateTimeOffset(?=\u001e|$)",
+            "replacement": "new DateTimeOffset(2026, 11, 4, 8, 30, 0, TimeSpan.Zero)"
+          },
+          {
+            "regex": "\u001e",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "ParameterValues"
+    },
+    "ParameterNulls": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "[^,]+",
+            "replacement": "null"
+          },
+          {
+            "regex": ",",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "ParameterNulls"
+    },
+    "ParameterRules": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": ",",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):string(?=\u001e|$)",
+            "replacement": "RuleFor(query => query.$1).NotEmpty();"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):[A-Za-z]+(?=\u001e|$)",
+            "replacement": "RuleFor(query => query.$1).NotNull();"
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "\n        "
+          }
+        ]
+      },
+      "replaces": "ParameterRules"
+    },
+    "ParameterMissingAssertions": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "([A-Za-z0-9]+):[A-Za-z]+",
+            "replacement": "result.ShouldHaveValidationErrorFor(query => query.$1);"
+          },
+          {
+            "regex": ",",
+            "replacement": "\n        "
+          }
+        ]
+      },
+      "replaces": "ParameterMissingAssertions"
+    },
+    "FirstFilterName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "^([^:,]*):.*$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "replaces": "FirstFilterName"
+    },
+    "FilterProbe": {
       "type": "generated",
       "generator": "join",
       "parameters": {
         "symbols": [
           {
             "type": "ref",
-            "value": "FilterName"
+            "value": "ParametersList"
           },
           {
             "type": "const",
-            "value": "|"
+            "value": "\u001f"
           },
           {
             "type": "ref",
@@ -526,60 +534,626 @@
         ]
       }
     },
-    "RouteNamesFilter": {
+    "FilterTags": {
       "type": "generated",
-      "generator": "regexMatch",
-      "datatype": "bool",
+      "generator": "regex",
       "parameters": {
-        "source": "FilterRouteProbe",
-        "pattern": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{\\1(?:[:?][^{}/]*)?\\}"
+        "source": "FilterProbe",
+        "steps": [
+          {
+            "regex": ",(?=[^\u001f]*\u001f)",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "(?i)(?<=^|\u001e)([A-Za-z0-9]+):(string)(?=(?:\u001e[^\u001f]*)?\u001f(?:.*/)?(\\{\\1(?:[:?][^{}/]*)?\\}))",
+            "replacement": "S|$1|$1|$2|$3"
+          },
+          {
+            "regex": "(?i)(?<=^|\u001e)([A-Za-z0-9]+):([A-Za-z]+)(?=(?:\u001e[^\u001f]*)?\u001f(?:.*/)?(\\{\\1:[^{}/]*\\}))",
+            "replacement": "C|$1|$1|$2|$3"
+          },
+          {
+            "regex": "(?i)(?<=^|\u001e)([A-Za-z0-9]+):([A-Za-z]+)(?=(?:\u001e[^\u001f]*)?\u001f(?:.*/)?(\\{\\1\\??\\}))",
+            "replacement": "B|$1|$1|$2|$3"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):([A-Za-z]+)(?=\u001e|\u001f)",
+            "replacement": "Q|$1|$1|$2|"
+          },
+          {
+            "regex": "\u001f.*$",
+            "replacement": ""
+          },
+          {
+            "regex": "(?<=(?:(?:^|\u001e)[QBCS]\\|[^|]*\\|))[A-Z]|(?<=(?:(?:^|\u001e)[QBCS]\\|[^|]*\\|)[A-Z]+)[A-Z](?=[A-Z]|\\|)",
+            "replacement": "\u001d$0"
+          },
+          {
+            "regex": "\u001dA",
+            "replacement": "a"
+          },
+          {
+            "regex": "\u001dB",
+            "replacement": "b"
+          },
+          {
+            "regex": "\u001dC",
+            "replacement": "c"
+          },
+          {
+            "regex": "\u001dD",
+            "replacement": "d"
+          },
+          {
+            "regex": "\u001dE",
+            "replacement": "e"
+          },
+          {
+            "regex": "\u001dF",
+            "replacement": "f"
+          },
+          {
+            "regex": "\u001dG",
+            "replacement": "g"
+          },
+          {
+            "regex": "\u001dH",
+            "replacement": "h"
+          },
+          {
+            "regex": "\u001dI",
+            "replacement": "i"
+          },
+          {
+            "regex": "\u001dJ",
+            "replacement": "j"
+          },
+          {
+            "regex": "\u001dK",
+            "replacement": "k"
+          },
+          {
+            "regex": "\u001dL",
+            "replacement": "l"
+          },
+          {
+            "regex": "\u001dM",
+            "replacement": "m"
+          },
+          {
+            "regex": "\u001dN",
+            "replacement": "n"
+          },
+          {
+            "regex": "\u001dO",
+            "replacement": "o"
+          },
+          {
+            "regex": "\u001dP",
+            "replacement": "p"
+          },
+          {
+            "regex": "\u001dQ",
+            "replacement": "q"
+          },
+          {
+            "regex": "\u001dR",
+            "replacement": "r"
+          },
+          {
+            "regex": "\u001dS",
+            "replacement": "s"
+          },
+          {
+            "regex": "\u001dT",
+            "replacement": "t"
+          },
+          {
+            "regex": "\u001dU",
+            "replacement": "u"
+          },
+          {
+            "regex": "\u001dV",
+            "replacement": "v"
+          },
+          {
+            "regex": "\u001dW",
+            "replacement": "w"
+          },
+          {
+            "regex": "\u001dX",
+            "replacement": "x"
+          },
+          {
+            "regex": "\u001dY",
+            "replacement": "y"
+          },
+          {
+            "regex": "\u001dZ",
+            "replacement": "z"
+          }
+        ]
       }
     },
-    "RouteConstrainsFilter": {
+    "FilterKinds": {
       "type": "generated",
-      "generator": "regexMatch",
-      "datatype": "bool",
+      "generator": "regex",
       "parameters": {
-        "source": "FilterRouteProbe",
-        "pattern": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{\\1:"
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=^|\u001e)([QBCS])\\|[^\u001e]*",
+            "replacement": "$1"
+          },
+          {
+            "regex": "\u001e",
+            "replacement": ""
+          }
+        ]
       }
     },
-    "RouteNamesOtherParameter": {
+    "KindsHoldQueryString": {
       "type": "generated",
       "generator": "regexMatch",
       "datatype": "bool",
       "parameters": {
-        "source": "FilterRouteProbe",
-        "pattern": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{(?!\\1[:?}])"
+        "source": "FilterKinds",
+        "pattern": "Q"
+      }
+    },
+    "KindsHoldBinding": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterKinds",
+        "pattern": "B"
+      }
+    },
+    "KindsHoldConstraint": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterKinds",
+        "pattern": "C"
+      }
+    },
+    "KindsHoldString": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterKinds",
+        "pattern": "S"
+      }
+    },
+    "RouteNamesUnknownParameter": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FilterProbe",
+        "pattern": "(?i)\u001f(?:[^\u001f]*/)?\\{([A-Za-z][A-Za-z0-9]*)(?=[:?}])(?<!(?:^|,)\\1:[^\u001f]*\u001f.*)"
       }
     },
     "UnknownRouteParameter": {
       "type": "generated",
       "generator": "regex",
       "parameters": {
-        "source": "FilterRouteProbe",
+        "source": "FilterProbe",
         "steps": [
           {
-            "regex": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?\\{(?!\\1[:?}])([A-Za-z][A-Za-z0-9]*).*$",
-            "replacement": "$2"
+            "regex": "(?i)^[^\u001f]*\u001f(?:[^\u001f]*?/)?\\{([A-Za-z][A-Za-z0-9]*)(?=[:?}])(?<!(?:^|,)\\1:[^\u001f]*\u001f.*).*$",
+            "replacement": "$1"
           }
         ]
       },
       "fileRename": "unknown-route-parameter"
     },
-    "FilterRouteToken": {
+    "ParameterKeys": {
       "type": "generated",
       "generator": "regex",
       "parameters": {
-        "source": "FilterRouteProbe",
+        "source": "FilterTags",
         "steps": [
           {
-            "regex": "(?i)^([A-Za-z0-9]+)\\|(?:.*/)?(\\{\\1(?:[:?][^{}/]*)?\\})(?:/.*)?$",
-            "replacement": "$2"
+            "regex": "(?<=^|\u001e)[Q]\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "\"$2\""
+          },
+          {
+            "regex": "(?<=^|\u001e)[QBCS]\\|[^\u001e]*",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e{2,}",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "^\u001e|\u001e$",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e",
+            "replacement": ", "
           }
         ]
       },
-      "replaces": "filter-route-token"
+      "replaces": "parameter-keys"
+    },
+    "QueryStringExample": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)string(?=\\|)",
+            "replacement": "value"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)bool(?=\\|)",
+            "replacement": "true"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)int(?=\\|)",
+            "replacement": "1"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)long(?=\\|)",
+            "replacement": "1"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)decimal(?=\\|)",
+            "replacement": "1.5"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)double(?=\\|)",
+            "replacement": "1.5"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)Guid(?=\\|)",
+            "replacement": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)DateOnly(?=\\|)",
+            "replacement": "2026-11-04"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)TimeOnly(?=\\|)",
+            "replacement": "08:30"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[Q]\\|[^|]*\\|[^|]*\\|)DateTimeOffset(?=\\|)",
+            "replacement": "2026-11-04T08:30:00%2B00:00"
+          },
+          {
+            "regex": "(?<=^|\u001e)[Q]\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "$2=$3"
+          },
+          {
+            "regex": "(?<=^|\u001e)[QBCS]\\|[^\u001e]*",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e{2,}",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "^\u001e|\u001e$",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "&"
+          }
+        ]
+      },
+      "replaces": "query-string-example"
+    },
+    "RouteFilterReplacements": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)string(?=\\|)",
+            "replacement": "value"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)bool(?=\\|)",
+            "replacement": "true"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)int(?=\\|)",
+            "replacement": "1"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)long(?=\\|)",
+            "replacement": "1"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)decimal(?=\\|)",
+            "replacement": "1.5"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)double(?=\\|)",
+            "replacement": "1.5"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)Guid(?=\\|)",
+            "replacement": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)DateOnly(?=\\|)",
+            "replacement": "2026-11-04"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)TimeOnly(?=\\|)",
+            "replacement": "08:30"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[BCS]\\|[^|]*\\|[^|]*\\|)DateTimeOffset(?=\\|)",
+            "replacement": "2026-11-04T08:30:00%2B00:00"
+          },
+          {
+            "regex": "(?<=^|\u001e)[BCS]\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": ".Replace(\"$4\", filter == \"$2\" ? value : \"$3\", StringComparison.Ordinal)"
+          },
+          {
+            "regex": "(?<=^|\u001e)[QBCS]\\|[^\u001e]*",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e{2,}",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "^\u001e|\u001e$",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "\n            "
+          }
+        ]
+      },
+      "replaces": "RouteFilterReplacements"
+    },
+    "RouteFilterBindings": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=^|\u001e)[BCS]\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "$1 from the parameter $4"
+          },
+          {
+            "regex": "(?<=^|\u001e)[QBCS]\\|[^\u001e]*",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e{2,}",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "^\u001e|\u001e$",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e(?=[^\u001e]*$)",
+            "replacement": " and "
+          },
+          {
+            "regex": "\u001e",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "route-filter-bindings"
+    },
+    "BindingRouteFilterCases": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)string(?=\\|)",
+            "replacement": "refused-value"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)bool(?=\\|)",
+            "replacement": "not-a-boolean"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)int(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)long(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)decimal(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)double(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)Guid(?=\\|)",
+            "replacement": "not-a-guid"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)DateOnly(?=\\|)",
+            "replacement": "not-a-date"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)TimeOnly(?=\\|)",
+            "replacement": "not-a-time"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[B]\\|[^|]*\\|[^|]*\\|)DateTimeOffset(?=\\|)",
+            "replacement": "not-an-instant"
+          },
+          {
+            "regex": "(?<=^|\u001e)[B]\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "[InlineData(\"$2\", \"$3\")]"
+          },
+          {
+            "regex": "(?<=^|\u001e)[QBCS]\\|[^\u001e]*",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e{2,}",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "^\u001e|\u001e$",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "\n    "
+          }
+        ]
+      },
+      "replaces": "BindingRouteFilterCases"
+    },
+    "ConstrainedRouteFilterCases": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)string(?=\\|)",
+            "replacement": "refused-value"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)bool(?=\\|)",
+            "replacement": "not-a-boolean"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)int(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)long(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)decimal(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)double(?=\\|)",
+            "replacement": "not-a-number"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)Guid(?=\\|)",
+            "replacement": "not-a-guid"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)DateOnly(?=\\|)",
+            "replacement": "not-a-date"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)TimeOnly(?=\\|)",
+            "replacement": "not-a-time"
+          },
+          {
+            "regex": "(?<=(?:^|\u001e)[C]\\|[^|]*\\|[^|]*\\|)DateTimeOffset(?=\\|)",
+            "replacement": "not-an-instant"
+          },
+          {
+            "regex": "(?<=^|\u001e)[C]\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "[InlineData(\"$2\", \"$3\")]"
+          },
+          {
+            "regex": "(?<=^|\u001e)[QBCS]\\|[^\u001e]*",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e{2,}",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "^\u001e|\u001e$",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "\n    "
+          }
+        ]
+      },
+      "replaces": "ConstrainedRouteFilterCases"
+    },
+    "StringRouteFilterCases": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=^|\u001e)[S]\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "[InlineData(\"$2\", \"refused-value\")]"
+          },
+          {
+            "regex": "(?<=^|\u001e)[QBCS]\\|[^\u001e]*",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e{2,}",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "^\u001e|\u001e$",
+            "replacement": ""
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "\n    "
+          }
+        ]
+      },
+      "replaces": "StringRouteFilterCases"
+    },
+    "FilterComments": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FilterTags",
+        "steps": [
+          {
+            "regex": "(?<=^|\u001e)Q\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "// $1, from the query string: nullable, so that the validator answers 400 to a request without it."
+          },
+          {
+            "regex": "(?<=^|\u001e)B\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "// $1, from the route parameter $4: its binding answers 400 to a value that it cannot read as $3, before the validator."
+          },
+          {
+            "regex": "(?<=^|\u001e)C\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "// $1, from the route parameter $4: its constraint lets no value that it refuses reach the endpoint (404)."
+          },
+          {
+            "regex": "(?<=^|\u001e)S\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^\u001e]*)",
+            "replacement": "// $1, from the route parameter $4: its binding takes any text, so the validator holds the rules of its format."
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "\n"
+          }
+        ]
+      },
+      "replaces": "FilterComments"
     },
     "RouteIsValid": {
       "type": "generated",
@@ -615,25 +1189,33 @@
       "type": "computed",
       "value": "(Result == \"filtered\")"
     },
-    "FilterIsInRoute": {
+    "FiltersAreGenerated": {
       "type": "computed",
-      "value": "(ResultIsFiltered && ParameterIsWellFormed && RouteNamesFilter)"
+      "value": "(ResultIsFiltered && ParametersIsWellFormed)"
     },
-    "FilterRouteIsConstrained": {
+    "HasQueryStringFilters": {
       "type": "computed",
-      "value": "(FilterIsInRoute && RouteConstrainsFilter)"
+      "value": "(FiltersAreGenerated && KindsHoldQueryString)"
     },
-    "FilterIsReadFromBinding": {
+    "HasBindingRouteFilters": {
       "type": "computed",
-      "value": "(FilterIsInRoute && !FilterIsString && !RouteConstrainsFilter)"
+      "value": "(FiltersAreGenerated && KindsHoldBinding)"
     },
-    "FilterIsCheckedByValidator": {
+    "HasConstrainedRouteFilters": {
       "type": "computed",
-      "value": "(ResultIsFiltered && (!FilterIsInRoute || FilterIsString))"
+      "value": "(FiltersAreGenerated && KindsHoldConstraint)"
+    },
+    "HasStringRouteFilters": {
+      "type": "computed",
+      "value": "(FiltersAreGenerated && KindsHoldString)"
+    },
+    "HasRouteFilters": {
+      "type": "computed",
+      "value": "(HasBindingRouteFilters || HasConstrainedRouteFilters || HasStringRouteFilters)"
     },
     "RouteNamesNoFilter": {
       "type": "computed",
-      "value": "(ResultIsFiltered && ParameterIsWellFormed && RouteNamesOtherParameter)"
+      "value": "(FiltersAreGenerated && RouteNamesUnknownParameter)"
     },
     "ResultIsList": {
       "type": "computed",
@@ -740,25 +1322,29 @@
       "type": "computed",
       "value": "(ResultIsSingle && RouteNamesId)"
     },
-    "ParameterIsMissing": {
+    "ParametersIsMissing": {
       "type": "computed",
-      "value": "(ResultIsFiltered && !ParameterIsGiven)"
+      "value": "(ResultIsFiltered && !ParametersIsGiven)"
     },
-    "ParameterIsUnused": {
+    "ParametersIsUnused": {
       "type": "computed",
-      "value": "(!ResultIsFiltered && ParameterIsGiven)"
+      "value": "(!ResultIsFiltered && ParametersIsGiven)"
     },
-    "ParameterIsMalformed": {
+    "ParametersIsMalformed": {
       "type": "computed",
-      "value": "(ResultIsFiltered && ParameterIsGiven && !ParameterIsWellFormed)"
+      "value": "(ResultIsFiltered && ParametersIsGiven && !ParametersIsWellFormed)"
     },
     "ParameterTypeIsUnknown": {
       "type": "computed",
-      "value": "(ResultIsFiltered && ParameterIsWellFormed && !FilterTypeIsKnown)"
+      "value": "(FiltersAreGenerated && !ParameterTypesAreKnown)"
+    },
+    "ParameterIsDuplicated": {
+      "type": "computed",
+      "value": "(FiltersAreGenerated && ParametersHaveDuplicate)"
     },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown && !RouteNamesNoFilter && RequireIsValid)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParametersIsMissing && !ParametersIsUnused && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !RouteNamesNoFilter && RequireIsValid)"
     }
   },
   "sources": [
@@ -970,7 +1556,7 @@
     },
     {
       "id": "refuseFilterWithoutParameter",
-      "condition": "(ParameterIsMissing)",
+      "condition": "(ParametersIsMissing)",
       "description": "Refuses a filtered result without its filter.",
       "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
       "applyFileRenamesToManualInstructions": true,
@@ -982,14 +1568,14 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --result filtered needs --parameter <Name>:<Type>, the filter that the query reads from the query string, such as --parameter Date:DateOnly. Nothing was created."
+          "text": "error: --result filtered needs --parameters <Name>:<Type>[,<Name>:<Type>...], the filters that the query reads from the query string or from its route, such as --parameters Date:DateOnly or --parameters From:DateOnly,To:DateOnly. Nothing was created."
         }
       ],
       "continueOnError": false
     },
     {
       "id": "refuseParameterWithoutFilter",
-      "condition": "(ParameterIsUnused)",
+      "condition": "(ParametersIsUnused)",
       "description": "Refuses a filter that the result does not read.",
       "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
       "applyFileRenamesToManualInstructions": true,
@@ -1001,14 +1587,14 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --parameter 'ParameterText' is the filter of --result filtered, which reads it from the query string: pass --result filtered with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
+          "text": "error: --parameters 'ParametersText' lists the filters of --result filtered: pass --result filtered with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
         }
       ],
       "continueOnError": false
     },
     {
       "id": "refuseMalformedParameter",
-      "condition": "(ParameterIsMalformed)",
+      "condition": "(ParametersIsMalformed)",
       "description": "Refuses a filter that is not <Name>:<Type>.",
       "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
       "applyFileRenamesToManualInstructions": true,
@@ -1020,7 +1606,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --parameter 'ParameterText' is not <Name>:<Type>, a PascalCase name and its type separated by a colon, such as --parameter Date:DateOnly. Nothing was created."
+          "text": "error: --parameters 'ParametersText' is not a list of <Name>:<Type> separated by commas, each a PascalCase name and its type separated by a colon, such as --parameters Date:DateOnly or --parameters From:DateOnly,To:DateOnly. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1039,7 +1625,26 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --parameter 'ParameterText' has the type 'FilterType', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, written as in C#. For another type, such as an enum of the domain, generate the query with the closest of them, then change the type of the query, of its validator and of its tests. Nothing was created."
+          "text": "error: --parameters 'ParametersText' gives UnknownParameterName the type 'UnknownParameterType', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, written as in C#. For another type, such as an enum of the domain, generate the query with the closest of them, then change the type of the query, of its validator and of its tests. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseDuplicateParameter",
+      "condition": "(ParameterIsDuplicated)",
+      "description": "Refuses a filter named twice.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --parameters 'ParametersText' names DuplicateParameterName twice, whatever its case: each filter is a parameter of the query, read from the query string or from the route by its name. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1058,7 +1663,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --route '/slice-route' holds the route parameter 'unknown-route-parameter', which names no filter of the query: --result filtered binds from the route the filter of --parameter that a route parameter names, here 'FilterName', such as --route days/{date} --parameter Date:DateOnly. Name the filter in the route, or remove the parameter from --route to read the filter from the query string. Nothing was created."
+          "text": "error: --route '/slice-route' holds the route parameter 'unknown-route-parameter', which names no filter of the query: --result filtered binds from the route each filter of --parameters 'ParametersText' that a route parameter names, such as --route days/{date} --parameters Date:DateOnly. Name the filter in the route, or remove the parameter from --route to read the filter from the query string. Nothing was created."
         }
       ],
       "continueOnError": false

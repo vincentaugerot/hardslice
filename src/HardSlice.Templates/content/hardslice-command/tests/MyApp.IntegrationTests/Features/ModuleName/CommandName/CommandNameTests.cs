@@ -168,7 +168,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
     {
         await using var app = new AppFactory(database);
         await using var scope = app.Services.CreateAsyncScope();
+#if (ParametersIsList)
+        var command = new CommandNameCommand(ParameterValues);
+#else
         var command = new CommandNameCommand(Guid.NewGuid());
+#endif
 
         // CommandNameHandler throws its NotImplementedException until it is replaced by the use case.
         var response = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(command, TestContext.Current.CancellationToken);
@@ -183,10 +187,17 @@ public sealed class CommandNameTests(PostgresDatabase database)
         await using var scope = app.Services.CreateAsyncScope();
         var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
 
+#if (ParametersIsList)
+        var exception = await Should.ThrowAsync<ValidationException>(
+            () => mediator.Send(new CommandNameCommand(ParameterNulls), TestContext.Current.CancellationToken));
+
+        exception.Errors.Select(error => error.PropertyName).ShouldBe([ParameterPropertyNames]);
+#else
         var exception = await Should.ThrowAsync<ValidationException>(
             () => mediator.Send(new CommandNameCommand(Guid.Empty), TestContext.Current.CancellationToken));
 
         exception.Errors.Select(error => error.PropertyName).ShouldBe(["Id"]);
+#endif
     }
 #endif
 #else
@@ -243,7 +254,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
     public async Task Handles_a_valid_command()
     {
         await using var app = new AppFactory(database);
+#if (ParametersIsList)
+        var command = new CommandNameCommand(ParameterValues);
+#else
         var command = new CommandNameCommand(Guid.NewGuid());
+#endif
 
 #if (ReadsIdFromRoute)
         var response = await app.CreateClient().DeleteAsync($"{Route}/{command.Id}", TestContext.Current.CancellationToken);
@@ -269,6 +284,8 @@ public sealed class CommandNameTests(PostgresDatabase database)
 
 #if (ReadsIdFromRoute)
         var response = await app.CreateClient().DeleteAsync($"{Route}/{Guid.Empty}", TestContext.Current.CancellationToken);
+#elif (ParametersIsList)
+        var response = await app.CreateClient().PostAsJsonAsync(Route, new CommandNameCommand(ParameterNulls), TestContext.Current.CancellationToken);
 #else
         var response = await app.CreateClient().PostAsJsonAsync(Route, new CommandNameCommand(Guid.Empty), TestContext.Current.CancellationToken);
 #endif
@@ -276,7 +293,11 @@ public sealed class CommandNameTests(PostgresDatabase database)
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var problem = await response.Content.ReadFromJsonAsync<HttpValidationProblemDetails>(TestContext.Current.CancellationToken);
         problem.ShouldNotBeNull();
+#if (ParametersIsList)
+        problem.Errors.Keys.ShouldBe([parameter-keys]);
+#else
         problem.Errors.Keys.ShouldBe(["id"]);
+#endif
     }
 #if (RequireIsGiven)
 
@@ -290,6 +311,8 @@ public sealed class CommandNameTests(PostgresDatabase database)
 
 #if (ReadsIdFromRoute)
         var response = await anonymous.DeleteAsync($"{Route}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+#elif (ParametersIsList)
+        var response = await anonymous.PostAsJsonAsync(Route, new CommandNameCommand(ParameterValues), TestContext.Current.CancellationToken);
 #else
         var response = await anonymous.PostAsJsonAsync(Route, new CommandNameCommand(Guid.NewGuid()), TestContext.Current.CancellationToken);
 #endif

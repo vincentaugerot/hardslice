@@ -207,7 +207,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(26);
+        refusals.Length.ShouldBe(30);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -229,11 +229,13 @@ public sealed class TemplatePackageTests
         var parameters = symbols.GetProperty("Parameters");
         using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
 
-        parameters.GetProperty("datatype").GetString().ShouldBe("choice");
-        parameters.GetProperty("choices").EnumerateArray().Select(choice => choice.GetProperty("choice").GetString()).ShouldBe(["id", "none"]);
+        // A text since PB-105: id, none or a list of fields.
+        parameters.GetProperty("datatype").GetString().ShouldBe("text");
+        parameters.TryGetProperty("choices", out _).ShouldBeFalse();
         // No default value: --every refuses an explicit --parameters id, which generates the same slice as no option at all.
         parameters.TryGetProperty("defaultValue", out _).ShouldBeFalse();
-        symbols.GetProperty("ParametersIsNone").GetProperty("value").GetString().ShouldBe("(Parameters == \"none\" || ScheduleIsGiven)");
+        symbols.GetProperty("ParametersNamesNone").GetProperty("value").GetString().ShouldBe("(ParametersList == \"none\")");
+        symbols.GetProperty("ParametersIsNone").GetProperty("value").GetString().ShouldBe("(ParametersNamesNone || ScheduleIsGiven)");
         host.RootElement.GetProperty("symbolInfo").GetProperty("Parameters").GetProperty("longName").GetString().ShouldBe("parameters");
         symbols.GetProperty("ResponseNeedsParameters").GetProperty("value").GetString().ShouldBe("(ParametersIsNone && ResponseIsNone)");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!ResponseNeedsParameters");
@@ -360,7 +362,7 @@ public sealed class TemplatePackageTests
         symbols.GetProperty("EveryOrUnbound").GetProperty("fileRename").GetString().ShouldBe("RecurringInterval");
         File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs")).ShouldContain("sends a new one every RecurringInterval");
         symbols.GetProperty("EveryContradictsOptions").GetProperty("value").GetString()
-            .ShouldBe("(EveryIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))");
+            .ShouldBe("(EveryIsGiven && (ParametersNamesId || ParametersIsList || Endpoint == \"http\"))");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!EveryContradictsOptions && EveryIsValid");
         symbols.GetProperty("CommandContract").GetProperty("parameters").GetProperty("cases")[0].GetProperty("condition").GetString()
             .ShouldBe("(Endpoint == \"none\" || ScheduleIsGiven)");
@@ -451,7 +453,7 @@ public sealed class TemplatePackageTests
         symbols.GetProperty("DefaultTimeZone").GetProperty("parameters").GetProperty("value").GetString().ShouldBe("UTC");
         symbols.GetProperty("ScheduleIsGiven").GetProperty("value").GetString().ShouldBe("(EveryIsGiven || DailyAtIsGiven)");
         symbols.GetProperty("DailyAtContradictsOptions").GetProperty("value").GetString()
-            .ShouldBe("(DailyAtIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))");
+            .ShouldBe("(DailyAtIsGiven && (ParametersNamesId || ParametersIsList || Endpoint == \"http\"))");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain(
             "DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule");
         var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
@@ -781,7 +783,7 @@ public sealed class TemplatePackageTests
         symbols.GetProperty("AtStart").GetProperty("datatype").GetString().ShouldBe("bool");
         host.RootElement.GetProperty("symbolInfo").GetProperty("AtStart").GetProperty("longName").GetString().ShouldBe("at-start");
         symbols.GetProperty("AtStartWithoutSchedule").GetProperty("value").GetString().ShouldBe("(AtStart && !ScheduleIsGiven)");
-        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldEndWith(" && !AtStartWithoutSchedule)");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain(" && !AtStartWithoutSchedule");
         var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
         postActions.Single(action => action.GetProperty("id").GetString() == "refuseAtStartWithoutSchedule")
             .GetProperty("condition").GetString().ShouldBe("(AtStartWithoutSchedule)");
@@ -1177,7 +1179,7 @@ public sealed class TemplatePackageTests
         Matches(command.RootElement.GetProperty("symbols"), "RouteNamesId", route).ShouldBe(named);
         Matches(query.RootElement.GetProperty("symbols"), "RouteNamesId", route).ShouldBe(named);
         command.RootElement.GetProperty("symbols").GetProperty("RouteHidesId").GetProperty("value").GetString().ShouldBe("(ReadsIdFromRoute && RouteNamesId)");
-        command.RootElement.GetProperty("symbols").GetProperty("ReadsIdFromRoute").GetProperty("value").GetString().ShouldBe("(MethodIsDelete && !ParametersIsNone)");
+        command.RootElement.GetProperty("symbols").GetProperty("ReadsIdFromRoute").GetProperty("value").GetString().ShouldBe("(MethodIsDelete && !ParametersIsNone && !ParametersIsList)");
         query.RootElement.GetProperty("symbols").GetProperty("RouteHidesId").GetProperty("value").GetString().ShouldBe("(ResultIsSingle && RouteNamesId)");
     }
 
@@ -1231,7 +1233,7 @@ public sealed class TemplatePackageTests
     // and a route parameter left between braces is a marker to replace, except the filter of a query that its route names (PB-104).
     [Theory]
     [InlineData("hardslice-command", "CommandName", "/command-route", "RouteHasParameters")]
-    [InlineData("hardslice-query", "QueryName", "/query-route", "RouteHasParameters && !FilterIsInRoute")]
+    [InlineData("hardslice-query", "QueryName", "/query-route", "RouteHasParameters && !HasRouteFilters")]
     public void Slice_item_templates_test_the_route_of_the_slice_under_the_group_of_its_module(string template, string name, string token, string markerCondition)
     {
         var root = Path.Combine(FindRepositoryRoot(), "src", "HardSlice.Templates", "content", template);
@@ -1305,90 +1307,248 @@ public sealed class TemplatePackageTests
             File.ReadAllText(Path.Combine(root, file)).ShouldNotContain("QueryNameDto");
     }
 
-    // PB-070: --parameter of --result filtered is <Name>:<Type>, a PascalCase name and one of the listed types, written as in C#.
+    // PB-070, PB-105: --parameters of hardslice-command and of --result filtered is a list of <Name>:<Type> separated by commas, each
+    // a PascalCase name and one of the listed types, written as in C#. The spaces of a list are ignored, and an unknown type is named.
     [Theory]
-    [InlineData("Date:DateOnly", true, true)]
-    [InlineData("ServiceDate:DateOnly", true, true)]
-    [InlineData("Name:string", true, true)]
-    [InlineData("At:DateTimeOffset", true, true)]
-    [InlineData("Count:int", true, true)]
-    [InlineData("Id:Guid", true, true)]
-    [InlineData("Date:DateTime", true, false)]
-    [InlineData("Name:String", true, false)]
-    [InlineData("Status:BookingStatus", true, false)]
-    [InlineData("date:DateOnly", false, false)]
-    [InlineData("Date", false, false)]
-    [InlineData("Date:", false, false)]
-    [InlineData("Date:DateOnly:Extra", false, false)]
-    public void Query_item_template_accepts_a_filter_of_a_listed_type_only(string parameter, bool wellFormed, bool generated)
+    [InlineData("Date:DateOnly", true, true, null)]
+    [InlineData("ServiceDate:DateOnly", true, true, null)]
+    [InlineData("From:DateOnly,To:DateOnly", true, true, null)]
+    [InlineData(" From:DateOnly, To:DateOnly ", true, true, null)]
+    [InlineData("Name:string,At:DateTimeOffset,Count:int,Id:Guid", true, true, null)]
+    [InlineData("Date:DateTime", true, false, "Date:DateTime")]
+    [InlineData("From:DateOnly,To:DateTime", true, false, "To:DateTime")]
+    [InlineData("Name:String", true, false, "Name:String")]
+    [InlineData("From:DateOnly,Status:BookingStatus,To:Foo", true, false, "Status:BookingStatus")]
+    [InlineData("date:DateOnly", false, false, null)]
+    [InlineData("From:DateOnly,to:DateOnly", false, false, null)]
+    [InlineData("Date", false, false, null)]
+    [InlineData("Date:", false, false, null)]
+    [InlineData("Date:DateOnly:Extra", false, false, null)]
+    [InlineData("From:DateOnly,,To:DateOnly", false, false, null)]
+    [InlineData("From:DateOnly,", false, false, null)]
+    public void Slice_item_templates_accept_a_list_of_parameters_of_the_listed_types_only(string parameters, bool wellFormed, bool generated, string? unknown)
     {
-        using var template = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
-        var symbols = template.RootElement.GetProperty("symbols");
-        var type = Regex.Replace(parameter, @"^[^:]*:", "");
-
-        Matches(symbols, "ParameterIsWellFormed", parameter).ShouldBe(wellFormed);
-        (wellFormed && Matches(symbols, "FilterTypeIsKnown", type)).ShouldBe(generated);
-        symbols.GetProperty("Accepted").GetProperty("value").GetString()!
-            .ShouldContain("!ParameterIsMissing && !ParameterIsUnused && !ParameterIsMalformed && !ParameterTypeIsUnknown");
-    }
-
-    // PB-070: each listed type has a value of its own in the tests, a C# expression and the text of the query string. The template
-    // engine reads a value shaped as a date and time as a date: the one of DateTimeOffset is encoded so that it stays text.
-    [Fact]
-    public void Query_item_template_gives_every_listed_filter_type_a_test_value()
-    {
-        using var template = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(QueryTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
-        var symbols = template.RootElement.GetProperty("symbols");
-        string[] types = ["string", "bool", "int", "long", "decimal", "double", "Guid", "DateOnly", "TimeOnly", "DateTimeOffset"];
-
-        symbols.GetProperty("FilterTypeIsKnown").GetProperty("parameters").GetProperty("pattern").GetString()
-            .ShouldBe($"^(?:{string.Join('|', types)})$");
-        foreach (var symbol in new[] { "FilterValue", "FilterQueryValue" })
+        foreach (var root in new[] { CommandTemplateRoot(FindRepositoryRoot()), QueryTemplateRoot(FindRepositoryRoot()) })
         {
-            var cases = symbols.GetProperty(symbol).GetProperty("parameters").GetProperty("cases").EnumerateArray().ToArray();
-            cases.Take(types.Length).Select(entry => entry.GetProperty("condition").GetString())
-                .ShouldBe(types.Select(type => $"(FilterType == \"{type}\")"));
-            cases.Take(types.Length).ShouldAllBe(entry => entry.GetProperty("value").GetString()!.Length > 0);
+            using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+            var symbols = template.RootElement.GetProperty("symbols");
+            var inputs = new Dictionary<string, string> { ["Parameters"] = parameters };
+
+            Evaluated(symbols, "ParametersIsWellFormed", inputs).ShouldBe(wellFormed ? "true" : "false");
+            (wellFormed && Evaluated(symbols, "ParameterTypesAreKnown", inputs) == "true").ShouldBe(generated);
+            if (unknown is not null)
+                $"{Evaluated(symbols, "UnknownParameterName", inputs)}:{Evaluated(symbols, "UnknownParameterType", inputs)}".ShouldBe(unknown);
+            symbols.GetProperty("Parameters").GetProperty("datatype").GetString().ShouldBe("text");
+            symbols.GetProperty("ParameterTypeIsUnknown").GetProperty("value").GetString()!.ShouldContain("!ParameterTypesAreKnown");
+            var refusal = template.RootElement.GetProperty("postActions").EnumerateArray()
+                .Single(action => action.GetProperty("id").GetString() == "refuseUnknownParameterType");
+            refusal.GetProperty("condition").GetString().ShouldBe("(ParameterTypeIsUnknown)");
+            refusal.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!
+                .ShouldStartWith("error: --parameters 'ParametersText' gives UnknownParameterName the type 'UnknownParameterType', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset");
+            using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json")));
+            host.RootElement.GetProperty("symbolInfo").GetProperty("Parameters").GetProperty("longName").GetString().ShouldBe("parameters");
+            host.RootElement.GetProperty("symbolInfo").TryGetProperty("Parameter", out _).ShouldBeFalse();
         }
-        symbols.GetProperty("FilterQueryValue").GetProperty("parameters").GetProperty("cases")[types.Length - 1]
-            .GetProperty("value").GetString().ShouldBe("2026-11-04T08:30:00%2B00:00");
     }
 
-    // PB-104: a route parameter that names the filter of --result filtered, whatever its case, its constraint or its optional mark, binds
-    // the filter from the route, and the tests put its value in place of that parameter. Any other route parameter is refused.
+    // PB-105: a parameter named twice, whatever its case, is refused: a field of the command and the key of its JSON value, or a filter
+    // of the query bound by its name.
     [Theory]
-    [InlineData("Date", "days/{date}", true, false, "{date}", null)]
-    [InlineData("Date", "days/{Date:datetime}", true, true, "{Date:datetime}", null)]
-    [InlineData("Date", "days/{date?}", true, false, "{date?}", null)]
-    [InlineData("Date", "{date:datetime}/readings", true, true, "{date:datetime}", null)]
-    [InlineData("Week", "weeks/{week:minlength(8):maxlength(8)}", true, true, "{week:minlength(8):maxlength(8)}", null)]
-    [InlineData("Date", "days", false, false, null, null)]
-    [InlineData("Date", "days/{day}", false, false, null, "day")]
-    [InlineData("Date", "days/{dateFrom}", false, false, null, "dateFrom")]
-    [InlineData("Date", "{roomId:guid}/days/{date}", true, false, "{date}", "roomId")]
-    [InlineData("Date", "days/{date}/{slot:int}", true, false, "{date}", "slot")]
-    public void Query_item_template_binds_from_the_route_the_filter_that_it_names(
-        string filter, string route, bool named, bool constrained, string? token, string? unknown)
+    [InlineData("From:DateOnly,FROM:int", "From")]
+    [InlineData("Day:DateOnly,To:int,DAY:bool", "Day")]
+    [InlineData("From:DateOnly,To:DateOnly,To:int", "To")]
+    [InlineData("Date:DateOnly,DateTo:int", null)]
+    [InlineData("RoomId:Guid,Room:Guid", null)]
+    public void Slice_item_templates_refuse_a_parameter_named_twice(string parameters, string? duplicate)
+    {
+        foreach (var root in new[] { CommandTemplateRoot(FindRepositoryRoot()), QueryTemplateRoot(FindRepositoryRoot()) })
+        {
+            using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+            var symbols = template.RootElement.GetProperty("symbols");
+            var inputs = new Dictionary<string, string> { ["Parameters"] = parameters };
+
+            Evaluated(symbols, "ParametersHaveDuplicate", inputs).ShouldBe(duplicate is null ? "false" : "true");
+            if (duplicate is not null)
+                Evaluated(symbols, "DuplicateParameterName", inputs).ShouldBe(duplicate);
+            symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!ParameterIsDuplicated");
+            template.RootElement.GetProperty("postActions").EnumerateArray()
+                .Single(action => action.GetProperty("id").GetString() == "refuseDuplicateParameter")
+                .GetProperty("manualInstructions")[0].GetProperty("text").GetString()!
+                .ShouldStartWith("error: --parameters 'ParametersText' names DuplicateParameterName twice, whatever its case");
+        }
+    }
+
+    // PB-070, PB-105: each parameter becomes a nullable field of the command or the query, a rule of its validator (NotEmpty for a
+    // string, NotNull otherwise), a value of the complete command or query of the tests, a null of the one that misses them all, and
+    // an assertion of the unit test that names it.
+    [Theory]
+    [InlineData("hardslice-command", "CommandName", "command")]
+    [InlineData("hardslice-query", "QueryName", "query")]
+    public void Slice_item_templates_write_each_parameter_in_the_record_its_validator_and_its_tests(string template, string name, string variable)
+    {
+        var root = Path.Combine(FindRepositoryRoot(), "src", "HardSlice.Templates", "content", template);
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
+        var inputs = new Dictionary<string, string> { ["Parameters"] = "ServiceDate:DateOnly,Note:string,Count:int" };
+        var kind = template == "hardslice-command" ? "Command" : "Query";
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", name, $"{name}.cs"));
+        var unitTests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.Tests", "Features", "ModuleName", name, $"{name}ValidatorTests.cs"));
+
+        Evaluated(symbols, "ParameterDeclarations", inputs).ShouldBe("DateOnly? ServiceDate, string? Note, int? Count");
+        Evaluated(symbols, "ParameterValues", inputs).ShouldBe("new DateOnly(2026, 11, 4), \"value\", 1");
+        Evaluated(symbols, "ParameterNulls", inputs).ShouldBe("null, null, null");
+        Evaluated(symbols, "ParameterRules", inputs).ShouldBe(
+            $"RuleFor({variable} => {variable}.ServiceDate).NotNull();\n        RuleFor({variable} => {variable}.Note).NotEmpty();\n        RuleFor({variable} => {variable}.Count).NotNull();");
+        Evaluated(symbols, "ParameterMissingAssertions", inputs).ShouldBe(
+            $"result.ShouldHaveValidationErrorFor({variable} => {variable}.ServiceDate);\n        result.ShouldHaveValidationErrorFor({variable} => {variable}.Note);\n        result.ShouldHaveValidationErrorFor({variable} => {variable}.Count);");
+        foreach (var token in new[] { "ParameterDeclarations", "ParameterValues", "ParameterNulls", "ParameterRules", "ParameterMissingAssertions" })
+            symbols.GetProperty(token).GetProperty("replaces").GetString().ShouldBe(token);
+        slice.ShouldContain($"public sealed record {name}{kind}(ParameterDeclarations) : I{kind}<");
+        slice.ShouldContain($"    public {name}Validator()\n    {{\n        ParameterRules\n    }}\n");
+        unitTests.ShouldContain($"_validator.TestValidate(new {name}{kind}(ParameterValues))");
+        unitTests.ShouldContain($"var result = _validator.TestValidate(new {name}{kind}(ParameterNulls));\n\n        ParameterMissingAssertions\n");
+    }
+
+    // PB-070, PB-105: each listed type has a value of its own in the tests, a C# expression, the text of the query string and of the route, and
+    // a value that its binding cannot read. The template engine reads a value shaped as a date and time as a date: the one of
+    // DateTimeOffset is encoded so that it stays text.
+    [Theory]
+    [InlineData("string", "\"value\"", "value", null)]
+    [InlineData("bool", "true", "true", "not-a-boolean")]
+    [InlineData("int", "1", "1", "not-a-number")]
+    [InlineData("long", "1L", "1", "not-a-number")]
+    [InlineData("decimal", "1.5m", "1.5", "not-a-number")]
+    [InlineData("double", "1.5", "1.5", "not-a-number")]
+    [InlineData("Guid", "Guid.NewGuid()", "0f8fad5b-d9cb-469f-a165-70867728950e", "not-a-guid")]
+    [InlineData("DateOnly", "new DateOnly(2026, 11, 4)", "2026-11-04", "not-a-date")]
+    [InlineData("TimeOnly", "new TimeOnly(8, 30)", "08:30", "not-a-time")]
+    [InlineData("DateTimeOffset", "new DateTimeOffset(2026, 11, 4, 8, 30, 0, TimeSpan.Zero)", "2026-11-04T08:30:00%2B00:00", "not-an-instant")]
+    public void Slice_item_templates_give_every_listed_type_a_test_value(string type, string value, string text, string? refused)
+    {
+        var repository = FindRepositoryRoot();
+        using var command = JsonDocument.Parse(File.ReadAllText(Path.Combine(CommandTemplateRoot(repository), ".template.config", "template.json")));
+        using var query = JsonDocument.Parse(File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), ".template.config", "template.json")));
+        var symbols = query.RootElement.GetProperty("symbols");
+        var parameters = $"First:int,Value:{type}";
+
+        Evaluated(command.RootElement.GetProperty("symbols"), "ParameterValues", new Dictionary<string, string> { ["Parameters"] = parameters }).ShouldBe($"1, {value}");
+        Evaluated(symbols, "ParameterValues", new Dictionary<string, string> { ["Parameters"] = parameters }).ShouldBe($"1, {value}");
+        Evaluated(symbols, "QueryStringExample", new Dictionary<string, string> { ["Parameters"] = parameters, ["SliceRoute"] = "readings" })
+            .ShouldBe($"first=1&value={text}");
+        var inRoute = new Dictionary<string, string> { ["Parameters"] = parameters, ["SliceRoute"] = "readings/{value}" };
+        Evaluated(symbols, "RouteFilterReplacements", inRoute).ShouldBe($".Replace(\"{{value}}\", filter == \"value\" ? value : \"{text}\", StringComparison.Ordinal)");
+        Evaluated(symbols, "BindingRouteFilterCases", inRoute).ShouldBe(refused is null ? "" : $"[InlineData(\"value\", \"{refused}\")]");
+        Evaluated(symbols, "StringRouteFilterCases", inRoute).ShouldBe(refused is null ? "[InlineData(\"value\", \"refused-value\")]" : "");
+    }
+
+    // PB-105: the key of a parameter in the 400 of a request is its name in camel case, as the application writes it in JSON: the
+    // command names each field, the query each filter of the query string.
+    [Fact]
+    public void Slice_item_templates_name_each_parameter_by_its_json_key_in_the_test_of_the_400()
+    {
+        var repository = FindRepositoryRoot();
+        using var command = JsonDocument.Parse(File.ReadAllText(Path.Combine(CommandTemplateRoot(repository), ".template.config", "template.json")));
+        using var query = JsonDocument.Parse(File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), ".template.config", "template.json")));
+        string[] names = ["ServiceDate", "URLStatus", "ID", "Id", "IPAddress", "A1", "ABc", "X"];
+        var parameters = string.Join(',', names.Select(name => $"{name}:int"));
+        var keys = string.Join(", ", names.Select(name => $"\"{JsonNamingPolicy.CamelCase.ConvertName(name)}\""));
+
+        keys.ShouldBe("\"serviceDate\", \"urlStatus\", \"id\", \"id\", \"ipAddress\", \"a1\", \"aBc\", \"x\"");
+        Evaluated(command.RootElement.GetProperty("symbols"), "ParameterKeys", new Dictionary<string, string> { ["Parameters"] = parameters }).ShouldBe(keys);
+        Evaluated(command.RootElement.GetProperty("symbols"), "ParameterPropertyNames", new Dictionary<string, string> { ["Parameters"] = parameters })
+            .ShouldBe(string.Join(", ", names.Select(name => $"\"{name}\"")));
+        Evaluated(query.RootElement.GetProperty("symbols"), "ParameterKeys", new Dictionary<string, string> { ["Parameters"] = parameters, ["SliceRoute"] = "readings" })
+            .ShouldBe(keys);
+        Evaluated(query.RootElement.GetProperty("symbols"), "ParameterKeys", new Dictionary<string, string> { ["Parameters"] = "Date:DateOnly,ServiceDate:int", ["SliceRoute"] = "{date}" })
+            .ShouldBe("\"serviceDate\"");
+        command.RootElement.GetProperty("symbols").GetProperty("ParameterKeys").GetProperty("replaces").GetString().ShouldBe("parameter-keys");
+        query.RootElement.GetProperty("symbols").GetProperty("ParameterKeys").GetProperty("replaces").GetString().ShouldBe("parameter-keys");
+        var commandTests = File.ReadAllText(Path.Combine(CommandTemplateRoot(repository), "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+        commandTests.ShouldContain("#if (ParametersIsList)\n        problem.Errors.Keys.ShouldBe([parameter-keys]);\n#else\n        problem.Errors.Keys.ShouldBe([\"id\"]);\n#endif");
+        commandTests.ShouldContain("exception.Errors.Select(error => error.PropertyName).ShouldBe([ParameterPropertyNames]);");
+        var queryTests = File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "QueryName", "QueryNameTests.cs"));
+        queryTests.ShouldContain("    public async Task Rejects_a_request_without_its_filters_with_a_validation_problem_before_its_handler()");
+        queryTests.ShouldContain("        problem.Errors.Keys.ShouldBe([parameter-keys]);");
+    }
+
+    // PB-105: --parameters of hardslice-command is id (by default, with or without the option), none, or a list of fields, which a
+    // DELETE refuses, since it has no body, as --every and --daily-at do, which build their command without parameter.
+    [Fact]
+    public void Command_item_template_takes_the_list_of_its_fields_and_refuses_it_with_a_delete()
+    {
+        var root = CommandTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var symbols = template.RootElement.GetProperty("symbols");
+        var actions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "CommandName", "CommandName.cs"));
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "CommandName", "CommandNameTests.cs"));
+
+        symbols.GetProperty("ParametersNamesId").GetProperty("value").GetString().ShouldBe("(ParametersList == \"id\")");
+        symbols.GetProperty("ParametersIsList").GetProperty("value").GetString().ShouldBe("(ParametersIsGiven && !ParametersNamesId && !ParametersNamesNone)");
+        symbols.GetProperty("ParametersIsMalformed").GetProperty("value").GetString().ShouldBe("(ParametersIsList && !ParametersIsWellFormed)");
+        symbols.GetProperty("ParametersWithDelete").GetProperty("value").GetString().ShouldBe("(ParametersIsList && MethodIsDelete)");
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!
+            .ShouldContain("!ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !ParametersWithDelete");
+        foreach (var (refusal, condition, start) in new[]
+        {
+            ("refuseMalformedParameters", "(ParametersIsMalformed)", "error: --parameters 'ParametersText' is neither id, none nor a list of <Name>:<Type>"),
+            ("refuseUnknownParameterType", "(ParameterTypeIsUnknown)", "error: --parameters 'ParametersText' gives UnknownParameterName the type"),
+            ("refuseDuplicateParameter", "(ParameterIsDuplicated)", "error: --parameters 'ParametersText' names DuplicateParameterName twice"),
+            ("refuseParametersWithDelete", "(ParametersWithDelete)", "error: --method DELETE has no body, so its command reads its Id from its route, while --parameters 'ParametersText' lists the fields of a body."),
+        })
+        {
+            var action = actions.Single(action => action.GetProperty("id").GetString() == refusal);
+            action.GetProperty("condition").GetString().ShouldBe(condition);
+            action.GetProperty("applyFileRenamesToManualInstructions").GetBoolean().ShouldBeTrue();
+            action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldStartWith(start);
+        }
+        foreach (var refusal in new[] { "refuseEveryWithOptions", "refuseDailyTimeWithOptions" })
+            actions.Single(action => action.GetProperty("id").GetString() == refusal).GetProperty("manualInstructions")[0].GetProperty("text").GetString()!
+                .ShouldContain("while --parameters id, a list of parameters or --endpoint http asks for the opposite");
+        slice.ShouldContain("#elif (ParametersIsList)\n// The fields of the use case, each nullable: the validator refuses a command without one of them, naming it.\n");
+        Regex.Matches(slice, @"public sealed record CommandNameCommand\(ParameterDeclarations\)").Count.ShouldBe(4);
+        tests.ShouldContain("#if (ParametersIsList)\n        var command = new CommandNameCommand(ParameterValues);\n#else\n        var command = new CommandNameCommand(Guid.NewGuid());\n#endif");
+        tests.ShouldContain("PostAsJsonAsync(Route, new CommandNameCommand(ParameterNulls), TestContext.Current.CancellationToken)");
+        tests.ShouldContain("mediator.Send(new CommandNameCommand(ParameterNulls), TestContext.Current.CancellationToken)");
+    }
+
+    // PB-104, PB-105: a route parameter that names a filter of --result filtered, whatever its case, its constraint or its optional mark,
+    // binds that filter from the route: a string (S), a filter under a constraint (C) or another one, which its binding reads (B). The
+    // other filters come from the query string (Q). A route parameter that names no filter is refused, and named.
+    [Theory]
+    [InlineData("Date:DateOnly", "days/{date}", "B", null)]
+    [InlineData("Date:DateOnly", "days/{Date:datetime}", "C", null)]
+    [InlineData("Date:DateOnly", "days/{date?}", "B", null)]
+    [InlineData("Date:DateOnly", "{date:datetime}/readings", "C", null)]
+    [InlineData("Week:string", "weeks/{week}", "S", null)]
+    [InlineData("Week:string", "weeks/{week:minlength(8):maxlength(8)}", "S", null)]
+    [InlineData("Date:DateOnly", "days", "Q", null)]
+    [InlineData("Date:DateOnly", "days/{day}", "Q", "day")]
+    [InlineData("Date:DateOnly", "days/{dateFrom}", "Q", "dateFrom")]
+    [InlineData("Date:DateOnly", "{roomId:guid}/days/{date}", "B", "roomId")]
+    [InlineData("Date:DateOnly", "days/{date}/{slot:int}", "B", "slot")]
+    [InlineData("From:DateOnly,To:DateOnly", "days/{from}", "BQ", null)]
+    [InlineData("RoomId:Guid,From:DateOnly,To:DateOnly", "{roomId:guid}/days/{from}", "CBQ", null)]
+    [InlineData("From:DateOnly,Week:string,To:DateOnly", "weeks/{week}/{TO}", "QSB", null)]
+    [InlineData("From:DateOnly,To:DateOnly", "days/{from}/{until}", "BQ", "until")]
+    [InlineData("Date:DateOnly,DateTo:DateOnly", "days/{dateTo}", "QB", null)]
+    public void Query_item_template_binds_from_the_route_each_filter_that_it_names(string parameters, string route, string kinds, string? unknown)
     {
         var root = QueryTemplateRoot(FindRepositoryRoot());
         using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
         var symbols = template.RootElement.GetProperty("symbols");
-        var probe = $"{filter}|{route}";
+        var inputs = new Dictionary<string, string> { ["Parameters"] = parameters, ["SliceRoute"] = route };
 
         Matches(symbols, "RouteIsValid", route).ShouldBeTrue();
-        Matches(symbols, "RouteNamesFilter", probe).ShouldBe(named);
-        Matches(symbols, "RouteConstrainsFilter", probe).ShouldBe(constrained);
-        Matches(symbols, "RouteNamesOtherParameter", probe).ShouldBe(unknown is not null);
-        if (token is not null)
-            Replaced(symbols, "FilterRouteToken", probe).ShouldBe(token);
+        Evaluated(symbols, "FilterKinds", inputs).ShouldBe(kinds);
+        Evaluated(symbols, "RouteNamesUnknownParameter", inputs).ShouldBe(unknown is null ? "false" : "true");
         if (unknown is not null)
-            Replaced(symbols, "UnknownRouteParameter", probe).ShouldBe(unknown);
-        symbols.GetProperty("FilterRouteProbe").GetProperty("parameters").GetProperty("symbols").EnumerateArray()
-            .Select(part => part.GetProperty("value").GetString()).ShouldBe(["FilterName", "|", "SliceRoute"]);
-        symbols.GetProperty("FilterIsInRoute").GetProperty("value").GetString().ShouldBe("(ResultIsFiltered && ParameterIsWellFormed && RouteNamesFilter)");
-        symbols.GetProperty("RouteNamesNoFilter").GetProperty("value").GetString().ShouldBe("(ResultIsFiltered && ParameterIsWellFormed && RouteNamesOtherParameter)");
+            Evaluated(symbols, "UnknownRouteParameter", inputs).ShouldBe(unknown);
+        symbols.GetProperty("FilterProbe").GetProperty("parameters").GetProperty("symbols").EnumerateArray()
+            .Select(part => part.GetProperty("value").GetString()).ShouldBe(["ParametersList", "\u001f", "SliceRoute"]);
+        symbols.GetProperty("FiltersAreGenerated").GetProperty("value").GetString().ShouldBe("(ResultIsFiltered && ParametersIsWellFormed)");
+        symbols.GetProperty("HasRouteFilters").GetProperty("value").GetString().ShouldBe("(HasBindingRouteFilters || HasConstrainedRouteFilters || HasStringRouteFilters)");
+        symbols.GetProperty("RouteNamesNoFilter").GetProperty("value").GetString().ShouldBe("(FiltersAreGenerated && RouteNamesUnknownParameter)");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("!RouteNamesNoFilter");
         var refusal = template.RootElement.GetProperty("postActions").EnumerateArray()
             .Single(action => action.GetProperty("id").GetString() == "refuseRouteParameterWithoutFilter");
@@ -1397,38 +1557,89 @@ public sealed class TemplatePackageTests
             .ShouldStartWith("error: --route '/slice-route' holds the route parameter 'unknown-route-parameter', which names no filter of the query");
     }
 
-    // PB-104: a filter of the route is never missing, so its tests replace the test of a request without it with the test of a value
-    // that its binding refuses (400), that its route constraint refuses (404), or, for a string, that its validator refuses, marked
-    // TODO(hardslice):. Each value is one that the binding of its type cannot read.
+    // PB-104, PB-105: a filter of the route is never missing, so its tests replace the test of a request without it with the test of
+    // a value that its binding refuses (400), that its route constraint refuses (404), or, for a string, that its validator refuses,
+    // marked TODO(hardslice):, one case of a theory per filter. RouteWith puts a valid value in place of each filter of the route, or
+    // the value of the case, and the filters of the query string keep a valid value.
     [Fact]
-    public void Query_item_template_tests_a_refused_value_of_a_filter_of_the_route()
+    public void Query_item_template_tests_a_refused_value_of_each_filter_of_the_route()
     {
         var root = QueryTemplateRoot(FindRepositoryRoot());
         using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
         var symbols = template.RootElement.GetProperty("symbols");
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "QueryName", "QueryNameTests.cs"));
         var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
-        string[] types = ["string", "bool", "int", "long", "decimal", "double", "Guid", "DateOnly", "TimeOnly", "DateTimeOffset"];
+        var inputs = new Dictionary<string, string>
+        {
+            ["Parameters"] = "RoomId:Guid,From:DateOnly,Week:string,Count:int,Until:TimeOnly",
+            ["SliceRoute"] = "rooms/{roomId:guid}/days/{from}/weeks/{week}",
+        };
 
-        var cases = symbols.GetProperty("FilterRefusedValue").GetProperty("parameters").GetProperty("cases").EnumerateArray().ToArray();
-        cases.Take(types.Length).Select(entry => entry.GetProperty("condition").GetString()).ShouldBe(types.Select(type => $"(FilterType == \"{type}\")"));
-        cases.Skip(1).Take(types.Length - 1).ShouldAllBe(entry => entry.GetProperty("value").GetString()!.StartsWith("not-a"));
-        symbols.GetProperty("FilterRefusedValue").GetProperty("replaces").GetString().ShouldBe("filter-refused-value");
-        symbols.GetProperty("FilterRouteToken").GetProperty("replaces").GetString().ShouldBe("filter-route-token");
-        tests.ShouldContain("    private static string RouteWith(string value) => Route.Replace(\"filter-route-token\", value, StringComparison.Ordinal);");
-        tests.ShouldContain("#if (FilterIsInRoute && FilterIsString)\n");
-        tests.ShouldContain("    public async Task Rejects_a_filter_that_its_validator_refuses_with_a_validation_problem_before_its_handler()\n    {\n        Assert.Fail(\"TODO(hardslice): ");
-        tests.ShouldContain("#elif (FilterRouteIsConstrained)\n");
+        Evaluated(symbols, "RouteFilterReplacements", inputs).ShouldBe(string.Join("\n            ",
+            ".Replace(\"{roomId:guid}\", filter == \"roomId\" ? value : \"0f8fad5b-d9cb-469f-a165-70867728950e\", StringComparison.Ordinal)",
+            ".Replace(\"{from}\", filter == \"from\" ? value : \"2026-11-04\", StringComparison.Ordinal)",
+            ".Replace(\"{week}\", filter == \"week\" ? value : \"value\", StringComparison.Ordinal)"));
+        Evaluated(symbols, "QueryStringExample", inputs).ShouldBe("count=1&until=08:30");
+        Evaluated(symbols, "ParameterKeys", inputs).ShouldBe("\"count\", \"until\"");
+        Evaluated(symbols, "BindingRouteFilterCases", inputs).ShouldBe("[InlineData(\"from\", \"not-a-date\")]");
+        Evaluated(symbols, "ConstrainedRouteFilterCases", inputs).ShouldBe("[InlineData(\"roomId\", \"not-a-guid\")]");
+        Evaluated(symbols, "StringRouteFilterCases", inputs).ShouldBe("[InlineData(\"week\", \"refused-value\")]");
+        Evaluated(symbols, "RouteFilterBindings", inputs)
+            .ShouldBe("RoomId from the parameter {roomId:guid}, From from the parameter {from} and Week from the parameter {week}");
+        Evaluated(symbols, "FilterComments", inputs).Split('\n').ShouldBe([
+            "// RoomId, from the route parameter {roomId:guid}: its constraint lets no value that it refuses reach the endpoint (404).",
+            "// From, from the route parameter {from}: its binding answers 400 to a value that it cannot read as DateOnly, before the validator.",
+            "// Week, from the route parameter {week}: its binding takes any text, so the validator holds the rules of its format.",
+            "// Count, from the query string: nullable, so that the validator answers 400 to a request without it.",
+            "// Until, from the query string: nullable, so that the validator answers 400 to a request without it."]);
+        Evaluated(symbols, "FirstFilterName", inputs).ShouldBe("RoomId");
+        foreach (var (symbol, token) in new[]
+        {
+            ("RouteFilterReplacements", "RouteFilterReplacements"), ("QueryStringExample", "query-string-example"), ("BindingRouteFilterCases", "BindingRouteFilterCases"),
+            ("ConstrainedRouteFilterCases", "ConstrainedRouteFilterCases"), ("StringRouteFilterCases", "StringRouteFilterCases"),
+            ("RouteFilterBindings", "route-filter-bindings"), ("FilterComments", "FilterComments"), ("FirstFilterName", "FirstFilterName"),
+        })
+            symbols.GetProperty(symbol).GetProperty("replaces").GetString().ShouldBe(token);
+        tests.ShouldContain("    private const string QueryString = \"?query-string-example\";");
+        tests.ShouldContain("    private static string RouteWith(string? filter = null, string? value = null) =>\n        Route\n            RouteFilterReplacements;\n");
+        tests.ShouldContain("#if (HasStringRouteFilters)\n");
+        tests.ShouldContain("    [Theory]\n    StringRouteFilterCases\n    public async Task Rejects_a_filter_that_its_validator_refuses_with_a_validation_problem_before_its_handler(string filter, string value)\n    {\n        Assert.Fail(\"TODO(hardslice): ");
+        tests.ShouldContain("#if (HasConstrainedRouteFilters)\n");
+        tests.ShouldContain("    [Theory]\n    ConstrainedRouteFilterCases\n    public async Task Does_not_match_a_filter_that_its_route_constraint_refuses(string filter, string value)");
         tests.ShouldContain("        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);");
-        tests.ShouldContain("#elif (FilterIsInRoute)\n");
-        tests.ShouldContain("    public async Task Rejects_a_filter_that_its_binding_cannot_read_before_its_handler()");
-        tests.ShouldContain("#else\n    [Fact]\n    public async Task Rejects_a_request_without_its_filter_with_a_validation_problem_before_its_handler()");
-        slice.ShouldContain("#if (FilterIsInRoute)\n    // [AsParameters] binds FilterName from the parameter filter-route-token of the route");
+        tests.ShouldContain("#if (HasBindingRouteFilters)\n");
+        tests.ShouldContain("    [Theory]\n    BindingRouteFilterCases\n    public async Task Rejects_a_filter_that_its_binding_cannot_read_before_its_handler(string filter, string value)");
+        tests.ShouldContain("        var response = await app.CreateClient().GetAsync(RouteWith(filter, value) + QueryString, TestContext.Current.CancellationToken);");
+        tests.ShouldContain("#if (HasQueryStringFilters)\n\n    [Fact]\n    public async Task Rejects_a_request_without_its_filters_with_a_validation_problem_before_its_handler()");
+        tests.ShouldNotContain("Filter" + "Name");
+        slice.ShouldContain("#elif (ResultIsFiltered)\n// Reads the AggregateName that its filters select. Add the other filters of the use case, each with its rule.\nFilterComments\n");
+        slice.ShouldContain("#if (HasRouteFilters && HasQueryStringFilters)\n    // [AsParameters] binds route-filter-bindings of the route,\n");
     }
 
-    private static string Replaced(JsonElement symbols, string symbol, string source) =>
-        symbols.GetProperty(symbol).GetProperty("parameters").GetProperty("steps").EnumerateArray()
-            .Aggregate(source, (value, step) => Regex.Replace(value, step.GetProperty("regex").GetString()!, step.GetProperty("replacement").GetString()!));
+    // The value of the generated symbol <symbol> of a template.json for the values <inputs> of its parameters, as the template engine
+    // evaluates its regex, regexMatch, join, coalesce and constant generators, step after step.
+    private static string Evaluated(JsonElement symbols, string symbol, IReadOnlyDictionary<string, string> inputs)
+    {
+        if (inputs.TryGetValue(symbol, out var input))
+            return input;
+        var definition = symbols.GetProperty(symbol);
+        if (definition.GetProperty("type").GetString() != "generated")
+            return "";
+        var parameters = definition.GetProperty("parameters");
+        string Source(string name) => Evaluated(symbols, parameters.GetProperty(name).GetString()!, inputs);
+        return definition.GetProperty("generator").GetString() switch
+        {
+            "regex" => parameters.GetProperty("steps").EnumerateArray().Aggregate(Source("source"),
+                (value, step) => Regex.Replace(value, step.GetProperty("regex").GetString()!, step.GetProperty("replacement").GetString()!)),
+            "regexMatch" => Regex.IsMatch(Source("source"), parameters.GetProperty("pattern").GetString()!) ? "true" : "false",
+            "join" => string.Concat(parameters.GetProperty("symbols").EnumerateArray().Select(part => part.GetProperty("type").GetString() == "ref"
+                ? Evaluated(symbols, part.GetProperty("value").GetString()!, inputs)
+                : part.GetProperty("value").GetString())),
+            "coalesce" => Source("sourceVariableName") is { Length: > 0 } value ? value : Source("fallbackVariableName"),
+            "constant" => parameters.GetProperty("value").GetString()!,
+            var generator => throw new InvalidOperationException($"{symbol} uses the generator {generator}, which the tests do not evaluate."),
+        };
+    }
 
     // Both results read the aggregate without tracking and project it to the DTO of the slice (HS006).
     [Fact]
@@ -1452,7 +1663,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(16);
+        refusals.Length.ShouldBe(17);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));

@@ -11,15 +11,15 @@ public sealed class QueryNameValidatorTests
     [Fact]
     public void Accepts_a_complete_query()
     {
-        _validator.TestValidate(new QueryNameQuery(FilterValue))
+        _validator.TestValidate(new QueryNameQuery(ParameterValues))
             .ShouldNotHaveAnyValidationErrors();
     }
 
     [Fact]
     public void Names_every_missing_filter()
     {
-        var result = _validator.TestValidate(new QueryNameQuery(null));
+        var result = _validator.TestValidate(new QueryNameQuery(ParameterNulls));
 
-        result.ShouldHaveValidationErrorFor(query => query.FilterName);
+        ParameterMissingAssertions
     }
 }

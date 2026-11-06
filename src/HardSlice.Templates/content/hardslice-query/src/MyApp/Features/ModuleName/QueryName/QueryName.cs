@@ -16,20 +16,9 @@ namespace MyApp.Features.ModuleName.QueryName;
 // Reads one AggregateName by its identifier: an unknown one is a null response, answered with 404.
 public sealed record QueryNameQuery(Guid Id) : IQuery<ResultDtoName?>;
 #elif (ResultIsFiltered)
-#if (FilterIsInRoute && FilterIsString)
-// Reads the AggregateName that FilterName selects, a parameter of the route: a request always holds it, and its binding takes any
-// text, so the validator holds the rules of its format. Add the other filters of the use case, each with its rule.
-#elif (FilterRouteIsConstrained)
-// Reads the AggregateName that FilterName selects, a parameter of the route: a request always holds it, and the constraint of the
-// route lets no value that it refuses reach the endpoint (404). Add the other filters of the use case, each with its rule.
-#elif (FilterIsInRoute)
-// Reads the AggregateName that FilterName selects, a parameter of the route: a request always holds it, and its binding answers 400
-// to a value that it cannot read as FilterType, before the validator. Add the other filters of the use case, each with its rule.
-#else
-// Reads the AggregateName that FilterName selects, from the query string. FilterName is nullable so that a request without it
-// reaches the validator, which answers 400 naming it. Add the other filters of the use case, each with its rule.
-#endif
-public sealed record QueryNameQuery(FilterType? FilterName) : IQuery<IReadOnlyList<ResultDtoName>>;
+// Reads the AggregateName that its filters select. Add the other filters of the use case, each with its rule.
+FilterComments
+public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<IReadOnlyList<ResultDtoName>>;
 #else
 // Reads every AggregateName. Add the parameters of the use case, such as a filter, and their validator if any.
 public sealed record QueryNameQuery : IQuery<IReadOnlyList<ResultDtoName>>;
@@ -42,12 +31,10 @@ public sealed record ResultDtoName(Guid Id);
 // Checks the shape of the filters only, before the handler runs: business rules stay in the domain.
 internal sealed class QueryNameValidator : AbstractValidator<QueryNameQuery>
 {
-    public QueryNameValidator() =>
-#if (FilterIsString)
-        RuleFor(query => query.FilterName).NotEmpty();
-#else
-        RuleFor(query => query.FilterName).NotNull();
-#endif
+    public QueryNameValidator()
+    {
+        ParameterRules
+    }
 }
 #endif
 
@@ -72,7 +59,7 @@ internal sealed class QueryNameHandler(AppDbContext db) : IRequestHandler<QueryN
         await db.Set<AggregateName>()
             .AsNoTracking()
 #if (ResultIsFiltered)
-            // TODO(hardslice): keep the AggregateName that query.FilterName selects, such as .Where(aggregate => aggregate.FilterName == query.FilterName), and join the other aggregates the use case reads, each with AsNoTracking().
+            // TODO(hardslice): keep the AggregateName that the filters of the query select, such as .Where(aggregate => aggregate.FirstFilterName == query.FirstFilterName), and join the other aggregates the use case reads, each with AsNoTracking().
 #endif
             .OrderBy(aggregate => aggregate.Id)
             .Select(aggregate => new ResultDtoName(aggregate.Id.Value))
@@ -82,11 +69,14 @@ internal sealed class QueryNameHandler(AppDbContext db) : IRequestHandler<QueryN
 
 internal static class QueryNameEndpoint
 {
-#if (FilterIsInRoute)
-    // [AsParameters] binds FilterName from the parameter filter-route-token of the route, and each other parameter of the query from
-    // the query string.
+#if (HasRouteFilters && HasQueryStringFilters)
+    // [AsParameters] binds route-filter-bindings of the route,
+    // and each other parameter of the query from the query string, such as ?query-string-example.
+#elif (HasRouteFilters)
+    // [AsParameters] binds route-filter-bindings of the route,
+    // and each other parameter of the query from the query string.
 #elif (ResultIsFiltered)
-    // [AsParameters] binds each parameter of the query from the query string, such as ?filterName=filter-query-value.
+    // [AsParameters] binds each parameter of the query from the query string, such as ?query-string-example.
 #endif
 #if (RequireIsGiven)
     // The policy AuthorizationPolicyName answers 401 or 403 before the delegate runs: those responses are not in its signature (HS015),

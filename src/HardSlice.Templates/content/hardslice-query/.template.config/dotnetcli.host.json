@@ -21,8 +21,8 @@
       "longName": "method",
       "shortName": ""
     },
-    "Parameter": {
-      "longName": "parameter",
+    "Parameters": {
+      "longName": "parameters",
       "shortName": ""
     },
     "Require": {

@@ -59,6 +59,23 @@ public sealed record CommandNameCommand(Guid Id) : ICommand<ResponseTypeName>;
 // Values only: never an entity, not even in a property (HS005).
 public sealed record ResponseTypeName(Guid Id);
 #endif
+#elif (ParametersIsList)
+// The fields of the use case, each nullable: the validator refuses a command without one of them, naming it.
+#if (ResponseIsId)
+// Returns the identifier of the aggregate it changes or creates.
+public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<Guid>;
+#elif (ResponseIsNone && EndpointIsNone)
+// Returns false when the aggregate it changes does not exist.
+public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<bool>;
+#elif (ResponseIsNone)
+// Returns false when the aggregate it changes does not exist, answered with 404.
+public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<bool>;
+#else
+public sealed record CommandNameCommand(ParameterDeclarations) : ICommand<ResponseTypeName>;
+
+// Values only: never an entity, not even in a property (HS005).
+public sealed record ResponseTypeName(Guid Id);
+#endif
 #elif (ResponseIsId)
 // Returns the identifier of the aggregate it changes or creates. Replace Id with the fields of the use case.
 public sealed record CommandNameCommand(Guid Id) : ICommand<Guid>;
@@ -80,8 +97,15 @@ public sealed record ResponseTypeName(Guid Id);
 // Checks the shape of the input only: business rules stay in the aggregate.
 internal sealed class CommandNameValidator : AbstractValidator<CommandNameCommand>
 {
+#if (ParametersIsList)
+    public CommandNameValidator()
+    {
+        ParameterRules
+    }
+#else
     public CommandNameValidator() =>
         RuleFor(command => command.Id).NotEmpty();
+#endif
 }
 #endif
 

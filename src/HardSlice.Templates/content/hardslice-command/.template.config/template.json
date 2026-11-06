@@ -9,7 +9,7 @@
   ],
   "identity": "HardSlice.Templates.Command",
   "name": "HardSlice command slice",
-  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval> or --daily-at <hh:mm> --time-zone <id>, one that AddRecurringCommand sends at regular intervals or every day, with --retry <delay>x<count> to send it again after a failed cycle and --at-start to send it once when the application starts too. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
+  "description": "A command slice of a hardslice-api solution: command, validator, handler, endpoint, validator tests and integration tests, or, with --parameters none, an empty command without validator nor validator tests. --parameters <Name>:<Type>[,...] names its fields, such as --parameters From:DateOnly,To:DateOnly. --route and --method choose its endpoint. With --endpoint none, a system command that only the application sends, without endpoint nor HTTP test, and with --every <interval> or --daily-at <hh:mm> --time-zone <id>, one that AddRecurringCommand sends at regular intervals or every day, with --retry <delay>x<count> to send it again after a failed cycle and --at-start to send it once when the application starts too. --require <policy> protects its endpoint with an authorization policy of the application, and tests its 401. Run it from the root of the solution with --project src/<App>/<App>.csproj.",
   "shortName": "hardslice-command",
   "sourceName": "CommandName",
   "preferNameDirectory": false,
@@ -38,18 +38,8 @@
     },
     "Parameters": {
       "type": "parameter",
-      "datatype": "choice",
-      "description": "What the command takes from the request: id (a Guid Id to replace with the fields of the use case, checked by a validator, by default) or none (an empty record, without validator: what it needs comes from the database, the configuration or a service of its module). --every implies none.",
-      "choices": [
-        {
-          "choice": "id",
-          "description": "A Guid Id, to replace with the fields of the use case, its validator and its validator tests."
-        },
-        {
-          "choice": "none",
-          "description": "No parameter: an empty record, an endpoint without body, no validator nor validator tests."
-        }
-      ]
+      "datatype": "text",
+      "description": "What the command takes from the request: id (a Guid Id to replace with the fields of the use case, checked by a validator, by default), none (an empty record, without validator: what it needs comes from the database, the configuration or a service of its module), or the list of its fields as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as ServiceDate:DateOnly or From:DateOnly,To:DateOnly. Each field is nullable and has a rule of the validator, its unit test and its key in the test of the 400. A list is refused with --method DELETE, which has no body. --every and --daily-at imply none."
     },
     "Endpoint": {
       "type": "parameter",
@@ -395,6 +385,397 @@
         "source": "RetryOrUnbound",
         "pattern": "^(?:|(?!(?:0{1,2}\\.)?00:00:00x)(?:(?:[0-3]?[0-9]|4[0-8])\\.)?(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]x[1-9][0-9]?)$"
       }
+    },
+    "ParametersText": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Parameters",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "ParametersText"
+    },
+    "ParametersList": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersText",
+        "steps": [
+          {
+            "regex": "\\s+",
+            "replacement": ""
+          }
+        ]
+      }
+    },
+    "ParametersIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "."
+      }
+    },
+    "ParametersIsWellFormed": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "^[A-Z][A-Za-z0-9]*:[^:,]+(?:,[A-Z][A-Za-z0-9]*:[^:,]+)*$"
+      }
+    },
+    "ParameterTypesAreKnown": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "^[^:,]*:(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)(?:,[^:,]*:(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset))*$"
+      }
+    },
+    "UnknownParameterName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "^(?:[^,]*,)*?([^:,]*):(?!(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)(?:,|$))[^,]*(?:,.*)?$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "UnknownParameterName"
+    },
+    "UnknownParameterType": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "^(?:[^,]*,)*?[^:,]*:(?!(?:string|bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)(?:,|$))([^,]*)(?:,.*)?$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "UnknownParameterType"
+    },
+    "ParametersHaveDuplicate": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "ParametersList",
+        "pattern": "(?i)(?:^|,)([A-Za-z0-9]+):[^,]*,(?:[^,]*,)*?\\1:"
+      }
+    },
+    "DuplicateParameterName": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "(?i)^(?:[^,]*,)*?([A-Za-z0-9]+):[^,]*,(?:[^,]*,)*?\\1:.*$",
+            "replacement": "$1"
+          }
+        ]
+      },
+      "fileRename": "DuplicateParameterName"
+    },
+    "ParameterDeclarations": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "([A-Za-z0-9]+):([A-Za-z]+)",
+            "replacement": "$2? $1"
+          },
+          {
+            "regex": ",",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "ParameterDeclarations"
+    },
+    "ParameterValues": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": ",",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:string(?=\u001e|$)",
+            "replacement": "\"value\""
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:bool(?=\u001e|$)",
+            "replacement": "true"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:int(?=\u001e|$)",
+            "replacement": "1"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:long(?=\u001e|$)",
+            "replacement": "1L"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:decimal(?=\u001e|$)",
+            "replacement": "1.5m"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:double(?=\u001e|$)",
+            "replacement": "1.5"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:Guid(?=\u001e|$)",
+            "replacement": "Guid.NewGuid()"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:DateOnly(?=\u001e|$)",
+            "replacement": "new DateOnly(2026, 11, 4)"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:TimeOnly(?=\u001e|$)",
+            "replacement": "new TimeOnly(8, 30)"
+          },
+          {
+            "regex": "(?<=^|\u001e)[A-Za-z0-9]+:DateTimeOffset(?=\u001e|$)",
+            "replacement": "new DateTimeOffset(2026, 11, 4, 8, 30, 0, TimeSpan.Zero)"
+          },
+          {
+            "regex": "\u001e",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "ParameterValues"
+    },
+    "ParameterNulls": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "[^,]+",
+            "replacement": "null"
+          },
+          {
+            "regex": ",",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "ParameterNulls"
+    },
+    "ParameterRules": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": ",",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):string(?=\u001e|$)",
+            "replacement": "RuleFor(command => command.$1).NotEmpty();"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):[A-Za-z]+(?=\u001e|$)",
+            "replacement": "RuleFor(command => command.$1).NotNull();"
+          },
+          {
+            "regex": "\u001e",
+            "replacement": "\n        "
+          }
+        ]
+      },
+      "replaces": "ParameterRules"
+    },
+    "ParameterMissingAssertions": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "([A-Za-z0-9]+):[A-Za-z]+",
+            "replacement": "result.ShouldHaveValidationErrorFor(command => command.$1);"
+          },
+          {
+            "regex": ",",
+            "replacement": "\n        "
+          }
+        ]
+      },
+      "replaces": "ParameterMissingAssertions"
+    },
+    "ParametersCamel": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "(?<=(?:^|,))[A-Z]|(?<=(?:^|,)[A-Z]+)[A-Z](?=[A-Z]|:)",
+            "replacement": "\u001d$0"
+          },
+          {
+            "regex": "\u001dA",
+            "replacement": "a"
+          },
+          {
+            "regex": "\u001dB",
+            "replacement": "b"
+          },
+          {
+            "regex": "\u001dC",
+            "replacement": "c"
+          },
+          {
+            "regex": "\u001dD",
+            "replacement": "d"
+          },
+          {
+            "regex": "\u001dE",
+            "replacement": "e"
+          },
+          {
+            "regex": "\u001dF",
+            "replacement": "f"
+          },
+          {
+            "regex": "\u001dG",
+            "replacement": "g"
+          },
+          {
+            "regex": "\u001dH",
+            "replacement": "h"
+          },
+          {
+            "regex": "\u001dI",
+            "replacement": "i"
+          },
+          {
+            "regex": "\u001dJ",
+            "replacement": "j"
+          },
+          {
+            "regex": "\u001dK",
+            "replacement": "k"
+          },
+          {
+            "regex": "\u001dL",
+            "replacement": "l"
+          },
+          {
+            "regex": "\u001dM",
+            "replacement": "m"
+          },
+          {
+            "regex": "\u001dN",
+            "replacement": "n"
+          },
+          {
+            "regex": "\u001dO",
+            "replacement": "o"
+          },
+          {
+            "regex": "\u001dP",
+            "replacement": "p"
+          },
+          {
+            "regex": "\u001dQ",
+            "replacement": "q"
+          },
+          {
+            "regex": "\u001dR",
+            "replacement": "r"
+          },
+          {
+            "regex": "\u001dS",
+            "replacement": "s"
+          },
+          {
+            "regex": "\u001dT",
+            "replacement": "t"
+          },
+          {
+            "regex": "\u001dU",
+            "replacement": "u"
+          },
+          {
+            "regex": "\u001dV",
+            "replacement": "v"
+          },
+          {
+            "regex": "\u001dW",
+            "replacement": "w"
+          },
+          {
+            "regex": "\u001dX",
+            "replacement": "x"
+          },
+          {
+            "regex": "\u001dY",
+            "replacement": "y"
+          },
+          {
+            "regex": "\u001dZ",
+            "replacement": "z"
+          }
+        ]
+      }
+    },
+    "ParameterKeys": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersCamel",
+        "steps": [
+          {
+            "regex": "([A-Za-z0-9]+):[A-Za-z]+",
+            "replacement": "\"$1\""
+          },
+          {
+            "regex": ",",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "parameter-keys"
+    },
+    "ParameterPropertyNames": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "ParametersList",
+        "steps": [
+          {
+            "regex": "([A-Za-z0-9]+):[A-Za-z]+",
+            "replacement": "\"$1\""
+          },
+          {
+            "regex": ",",
+            "replacement": ", "
+          }
+        ]
+      },
+      "replaces": "ParameterPropertyNames"
     },
     "TestClient": {
       "type": "generated",
@@ -776,9 +1157,21 @@
       "type": "computed",
       "value": "(EveryIsGiven || DailyAtIsGiven)"
     },
+    "ParametersNamesId": {
+      "type": "computed",
+      "value": "(ParametersList == \"id\")"
+    },
+    "ParametersNamesNone": {
+      "type": "computed",
+      "value": "(ParametersList == \"none\")"
+    },
+    "ParametersIsList": {
+      "type": "computed",
+      "value": "(ParametersIsGiven && !ParametersNamesId && !ParametersNamesNone)"
+    },
     "ParametersIsNone": {
       "type": "computed",
-      "value": "(Parameters == \"none\" || ScheduleIsGiven)"
+      "value": "(ParametersNamesNone || ScheduleIsGiven)"
     },
     "EndpointIsNone": {
       "type": "computed",
@@ -794,11 +1187,11 @@
     },
     "EveryContradictsOptions": {
       "type": "computed",
-      "value": "(EveryIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))"
+      "value": "(EveryIsGiven && (ParametersNamesId || ParametersIsList || Endpoint == \"http\"))"
     },
     "DailyAtContradictsOptions": {
       "type": "computed",
-      "value": "(DailyAtIsGiven && (Parameters == \"id\" || Endpoint == \"http\"))"
+      "value": "(DailyAtIsGiven && (ParametersNamesId || ParametersIsList || Endpoint == \"http\"))"
     },
     "EveryWithDailyAt": {
       "type": "computed",
@@ -840,15 +1233,31 @@
     },
     "ReadsIdFromRoute": {
       "type": "computed",
-      "value": "(MethodIsDelete && !ParametersIsNone)"
+      "value": "(MethodIsDelete && !ParametersIsNone && !ParametersIsList)"
     },
     "RouteHidesId": {
       "type": "computed",
       "value": "(ReadsIdFromRoute && RouteNamesId)"
     },
+    "ParametersIsMalformed": {
+      "type": "computed",
+      "value": "(ParametersIsList && !ParametersIsWellFormed)"
+    },
+    "ParameterTypeIsUnknown": {
+      "type": "computed",
+      "value": "(ParametersIsList && ParametersIsWellFormed && !ParameterTypesAreKnown)"
+    },
+    "ParameterIsDuplicated": {
+      "type": "computed",
+      "value": "(ParametersIsList && ParametersIsWellFormed && ParametersHaveDuplicate)"
+    },
+    "ParametersWithDelete": {
+      "type": "computed",
+      "value": "(ParametersIsList && MethodIsDelete)"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule && !AtStartWithoutSchedule)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule && !AtStartWithoutSchedule && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !ParametersWithDelete)"
     }
   },
   "sources": [
@@ -1115,6 +1524,82 @@
       "continueOnError": false
     },
     {
+      "id": "refuseMalformedParameters",
+      "condition": "(ParametersIsMalformed)",
+      "description": "Refuses parameters that are neither id, none nor a list of <Name>:<Type>.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --parameters 'ParametersText' is neither id, none nor a list of <Name>:<Type> separated by commas, each a PascalCase name and its type separated by a colon, such as --parameters ServiceDate:DateOnly or --parameters From:DateOnly,To:DateOnly. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseUnknownParameterType",
+      "condition": "(ParameterTypeIsUnknown)",
+      "description": "Refuses a parameter of a type that the template does not generate.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --parameters 'ParametersText' gives UnknownParameterName the type 'UnknownParameterType', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, written as in C#. For another type, such as an enum of the domain, generate the command with the closest of them, then change the type of the command, of its validator and of its tests. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseDuplicateParameter",
+      "condition": "(ParameterIsDuplicated)",
+      "description": "Refuses a parameter named twice.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --parameters 'ParametersText' names DuplicateParameterName twice, whatever its case: each parameter is a field of the command and the key of its value in the body of the request. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseParametersWithDelete",
+      "condition": "(ParametersWithDelete)",
+      "description": "Refuses a list of parameters with DELETE, which has no body.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --method DELETE has no body, so its command reads its Id from its route, while --parameters 'ParametersText' lists the fields of a body. Pass --parameters id with --method DELETE, or another method, such as --method POST, for a command with these fields. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "refuseEndpointOptionsWithoutEndpoint",
       "condition": "(EndpointOptionsWithoutEndpoint)",
       "description": "Refuses --route or --method for a system command, which has no endpoint.",
@@ -1154,7 +1639,7 @@
     {
       "id": "refuseEveryWithOptions",
       "condition": "(EveryContradictsOptions)",
-      "description": "Refuses --every with --parameters id or --endpoint http.",
+      "description": "Refuses --every with --parameters id or a list or --endpoint http.",
       "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
       "args": {
         "jsonFileName": "hardslice-command.refused.json",
@@ -1164,7 +1649,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --every sends a new command at regular intervals, built without parameter and sent by the application only, so it implies --parameters none and --endpoint none, while --parameters id or --endpoint http asks for the opposite. Remove them, or generate the slice without --every. Nothing was created."
+          "text": "error: --every sends a new command at regular intervals, built without parameter and sent by the application only, so it implies --parameters none and --endpoint none, while --parameters id, a list of parameters or --endpoint http asks for the opposite. Remove them, or generate the slice without --every. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1246,7 +1731,7 @@
     {
       "id": "refuseDailyTimeWithOptions",
       "condition": "(DailyAtContradictsOptions)",
-      "description": "Refuses --daily-at with --parameters id or --endpoint http.",
+      "description": "Refuses --daily-at with --parameters id or a list or --endpoint http.",
       "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
       "args": {
         "jsonFileName": "hardslice-command.refused.json",
@@ -1256,7 +1741,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --daily-at sends a new command every day, built without parameter and sent by the application only, so it implies --parameters none and --endpoint none, while --parameters id or --endpoint http asks for the opposite. Remove them, or generate the slice without --daily-at. To send a command that keeps its endpoint every day too, generate it without --daily-at and register it with AddRecurringCommand, as the skill add-slice shows. Nothing was created."
+          "text": "error: --daily-at sends a new command every day, built without parameter and sent by the application only, so it implies --parameters none and --endpoint none, while --parameters id, a list of parameters or --endpoint http asks for the opposite. Remove them, or generate the slice without --daily-at. To send a command that keeps its endpoint every day too, generate it without --daily-at and register it with AddRecurringCommand, as the skill add-slice shows. Nothing was created."
         }
       ],
       "continueOnError": false

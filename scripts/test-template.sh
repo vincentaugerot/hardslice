@@ -17,16 +17,19 @@
 # It generates command slices with dotnet new hardslice-command through each of its refusals, registers them with the lines it prints, checks that the test of the host names a forgotten registration,
 # that only the TODO(hardslice): test fails, that the none and DTO responses build without HardSlice diagnostic, and that a reference completion passes the check.
 # Its system commands, generated with --endpoint none, have no endpoint, fail HS004 while no type of their module sends them, and pass once a hosted service does.
+# A command generated with the list of its fields in --parameters, through the refusals of a list, holds a nullable field, a rule and its tests each, and passes once completed.
 # Its recurring commands, generated with --every through each of its refusals, are sent by AddRecurringCommand, and their tests run three cycles on a FakeTimeProvider.
 # Its scheduled commands, generated with --daily-at, --time-zone and --retry through each of their refusals, are sent every day or again after a failed cycle, a command with its endpoint too, and their tests run two days of cycles and the retries.
 # It generates query slices with dotnet new hardslice-query the same way, the three results, single, many and filtered (with the validator of
-# its filter, through each refusal of --parameter), named without their verb, without HardSlice diagnostic, HS006 included, with the 400 of a
-# filtered query without its filter, and proves that an unknown aggregate fails the build with a compiler error that names it.
+# its filters, through each refusal of --parameters and the refusal of the former --parameter), named without their verb, without HardSlice
+# diagnostic, HS006 included, with the 400 of a filtered query without its filters, and proves that an unknown aggregate fails the build with
+# a compiler error that names it.
 # It generates slices with the route and the method of --route and --method, a PUT and a DELETE in a module created with its own
 # --route and a query on a route of its own, through the refusals of a route or a method they cannot map, and their tests pass on these routes.
 # It generates filtered queries whose filter is a parameter of their route, through the refusal of a route parameter that names no filter:
 # their tests put the filter in the route, and test the value that its binding (400) or its constraint (404) refuses, or, for a string,
-# the value that its validator refuses, marked TODO(hardslice):, which passes after the reference completion.
+# the value that its validator refuses, marked TODO(hardslice):, which passes after the reference completion. A query with two filters,
+# one of the route and one of the query string, tests both.
 # It generates a command, a command without parameters and a query protected by --require, on a key scheme in Shared/Http, through the
 # refusals of --require: their tests of the 401 pass, and those that send the client of the policy fail with the message of AppFactory
 # until it holds that client, then pass after their reference completion.
@@ -2762,7 +2765,8 @@ expect_check_fails_on_todo_tests_only() {
     exit 1
   fi
   check_output="$(strip_ansi <<< "$check_output")"
-  failures="$(sed -n 's/^failed \([^ ]*\) (.*/\1/p' <<< "$check_output" | LC_ALL=C sort -u)"
+  # A case of a theory is reported as its test followed by its arguments, such as Test(filter: "week", value: "refused-value").
+  failures="$(sed -n 's/^failed \([A-Za-z0-9_.]*\)[ (].*/\1/p' <<< "$check_output" | LC_ALL=C sort -u)"
   if [[ "$failures" != "$expected_failures" || "$check_output" != *"TODO(hardslice): "* ]] ||
     grep -Eq '(error|warning) HS[0-9]{3}' <<< "$check_output"; then
     printf '%s\n' "$check_output" >&2
@@ -2775,8 +2779,8 @@ expect_check_fails_on_todo_tests_only() {
 # Generates a command slice of module <module>, which must exist, through every path of dotnet new hardslice-command: refusals,
 # instructions, a forgotten registration, the TODO(hardslice): tests, the other responses, then the reference completion.
 # Then the commands without parameters <parameterless-name> and <parameterless-dto-name>, through their TODO(hardslice): tests
-# and their reference completion, and the system commands <system-name> and <system-parameterless-name>, through HS004 and
-# their reference completion. The module file is restored and the slices removed at the end.
+# and their reference completion, the system commands <system-name> and <system-parameterless-name>, through HS004 and
+# their reference completion, and the command of two fields <fields-name>. The module file is restored and the slices removed at the end.
 probe_command_template() {
   local module="$1"
   local name="$2"
@@ -2786,6 +2790,7 @@ probe_command_template() {
   local parameterless_dto_name="$6"
   local system_name="$7"
   local system_parameterless_name="$8"
+  local fields_name="$9"
   local module_file="$app_src/Features/$module/${module}Module.cs"
   local slice="$app_src/Features/$module/$name/$name.cs"
   local integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
@@ -2816,7 +2821,7 @@ probe_command_template() {
     echo "error: dotnet new hardslice-command refused --parameters none --response none with exit $item_refused_status instead of 105." >&2
     exit 1
   fi
-  expect_item_refused hardslice-command "unknown parameters" "'many' is not a valid value for --parameters" --project "$project" --module "$module" --name "$parameterless_name" --parameters many
+  expect_item_refused hardslice-command "unknown parameters" "--parameters 'many' is neither id, none nor a list of <Name>:<Type> separated by commas" --project "$project" --module "$module" --name "$parameterless_name" --parameters many
 
   echo "==> Generating the command slice $module/$name of $app_name with dotnet new hardslice-command"
   generate_command "$module" "$name"
@@ -2905,6 +2910,7 @@ probe_command_template() {
 
   probe_parameterless_commands "$module" "$parameterless_name" "$parameterless_dto_name"
   probe_system_commands "$module" "$system_name" "$system_parameterless_name"
+  probe_command_fields "$module" "$fields_name"
 
   rm -r "$app_src/Features/$module/$name" "$app/tests/$app_name.Tests/Features/$module/$name" "$app/tests/$app_name.IntegrationTests/Features/$module/$name"
   mv "$work/module.backup" "$module_file"
@@ -2941,6 +2947,82 @@ expect_explicit_parameters_id() {
   fi
   command_output="$default_output"
   echo "    --parameters id: the files and the lines of the default"
+}
+
+# PB-105: the command slice <module>/<name> generated with --parameters ServiceDate:DateOnly,Note:string, the fields of its use case:
+# a nullable field each, a rule of its validator each (NotNull, NotEmpty for the string), their unit tests, a value each in the
+# request of the valid command, and the 400 of a request without them, whose keys name both. Before, a list is refused with exit 105
+# with --method DELETE, which has no body, with a name given twice whatever its case, with a type that it does not generate, with a
+# name that is not PascalCase and with --every. The check fails on its TODO(hardslice): test only, then passes after its reference
+# completion. The module is left as it was and the slice removed.
+probe_command_fields() {
+  local module="$1"
+  local name="$2"
+  local project="src/$app_name/$app_name.csproj"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local slice="$app_src/Features/$module/$name/$name.cs"
+  local unit_test="$app/tests/$app_name.Tests/Features/$module/$name/${name}ValidatorTests.cs"
+  local integration_test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
+  local refusal
+  local generated
+  local -a fields
+
+  echo "==> Checking that dotnet new hardslice-command refuses a list of fields with DELETE, named twice, of a type that it does not generate, not PascalCase or with --every in $app_name"
+  for refusal in "a list of fields with DELETE|--method DELETE has no body, so its command reads its Id from its route, while --parameters 'ServiceDate:DateOnly' lists the fields of a body|--parameters|ServiceDate:DateOnly|--method|DELETE" \
+    "a field named twice|--parameters 'ServiceDate:DateOnly,SERVICEDATE:int' names ServiceDate twice, whatever its case|--parameters|ServiceDate:DateOnly,SERVICEDATE:int" \
+    "a field of a type that it does not generate|--parameters 'ServiceDate:DateOnly,Note:String' gives Note the type 'String', which is not one of string, bool, int|--parameters|ServiceDate:DateOnly,Note:String" \
+    "a field whose name is not PascalCase|--parameters 'ServiceDate:DateOnly,note:string' is neither id, none nor a list of <Name>:<Type>|--parameters|ServiceDate:DateOnly,note:string" \
+    "a list of fields with --every|implies --parameters none and --endpoint none, while --parameters id, a list of parameters or --endpoint http asks for the opposite|--parameters|ServiceDate:DateOnly|--every|00:00:30"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    expect_item_refused hardslice-command "${fields[0]}" "${fields[1]}" --project "$project" --module "$module" --name "$name" "${fields[@]:2}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-command refused ${fields[0]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+
+  echo "==> Generating the command slice $module/$name of $app_name with dotnet new hardslice-command --parameters ServiceDate:DateOnly,Note:string"
+  cp "$module_file" "$work/module-fields.backup"
+  generate_command "$module" "$name" --parameters ServiceDate:DateOnly,Note:string
+  if ! grep -Fxq "            .AddScoped<IValidator<${name}Command>, ${name}Validator>()" <<< "$command_output"; then
+    printf '%s\n' "$command_output" >&2
+    echo "error: dotnet new hardslice-command --parameters ServiceDate:DateOnly,Note:string did not print the registration of the validator." >&2
+    exit 1
+  fi
+  for generated in "$slice|public sealed record ${name}Command(DateOnly? ServiceDate, string? Note) : ICommand<Guid>;" \
+    "$slice|        RuleFor(command => command.ServiceDate).NotNull();" \
+    "$slice|        RuleFor(command => command.Note).NotEmpty();" \
+    "$unit_test|        _validator.TestValidate(new ${name}Command(new DateOnly(2026, 11, 4), \"value\"))" \
+    "$unit_test|        var result = _validator.TestValidate(new ${name}Command(null, null));" \
+    "$unit_test|        result.ShouldHaveValidationErrorFor(command => command.ServiceDate);" \
+    "$unit_test|        result.ShouldHaveValidationErrorFor(command => command.Note);" \
+    "$integration_test|        var command = new ${name}Command(new DateOnly(2026, 11, 4), \"value\");" \
+    "$integration_test|        var response = await app.CreateClient().PostAsJsonAsync(Route, new ${name}Command(null, null), TestContext.Current.CancellationToken);" \
+    "$integration_test|        problem.Errors.Keys.ShouldBe([\"serviceDate\", \"note\"]);"; do
+    if ! grep -Fxq -- "${generated#*|}" "${generated%%|*}"; then
+      cat "${generated%%|*}" >&2
+      echo "error: ${generated%%|*} does not hold the line of the fields of --parameters: ${generated#*|}" >&2
+      exit 1
+    fi
+  done
+  if grep -n 'command\.Id\|Guid\.Empty\|MyApp\|ModuleName\|CommandName\|ResponseTypeName\|command-route\|Parameter[A-Z][A-Za-z]*\|parameter-keys' \
+    "$slice" "$unit_test" "$integration_test"; then
+    echo "error: the command $module/$name generated with its fields keeps the field Id or a placeholder of the template." >&2
+    exit 1
+  fi
+  echo "    ${name}Command(DateOnly? ServiceDate, string? Note), a rule and a unit test each, the keys serviceDate and note of the 400"
+
+  echo "==> Checking that $app_name builds the command $module/$name without HardSlice diagnostic and fails the check on its TODO(hardslice): test only"
+  register_slice hardslice-command "$command_output"
+  expect_check_fails_on_todo_tests_only "the command $module/$name generated with its fields" \
+    "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Handles_a_valid_command"
+
+  echo "==> Checking that the reference completion of the command $module/$name passes the check of $app_name"
+  complete_parameterless_command "$module" "$name" id
+  bash "$app/scripts/check.sh"
+
+  rm -r "${app_src:?}/Features/$module/${name:?}" "$app/tests/$app_name.Tests/Features/$module/${name:?}" "$app/tests/$app_name.IntegrationTests/Features/$module/${name:?}"
+  mv "$work/module-fields.backup" "$module_file"
 }
 
 # The command slices <module>/<name> and <module>/<dto-name> generated with --parameters none, responding with their identifier
@@ -3859,13 +3941,14 @@ probe_query_template() {
   # 'list' is not a value: dotnet new would read '--result list' as its list command.
   expect_item_refused hardslice-query "an unknown result" "'list' is not a valid value for --result" --project "$project" --module "$module" --name "$name" --aggregate "$aggregate" --result=list
 
-  echo "==> Checking that dotnet new hardslice-query refuses a filtered result without its filter, a filter without filtered result, and a filter it cannot generate in $app_name"
-  for refusal in "a filtered result without --parameter|--result filtered needs --parameter <Name>:<Type>|--result|filtered" \
-    "a filter of a single result|--parameter 'Date:DateOnly' is the filter of --result filtered|--parameter|Date:DateOnly" \
-    "a filter of a list of every aggregate|--parameter 'Date:DateOnly' is the filter of --result filtered|--result|many|--parameter|Date:DateOnly" \
-    "a filter without type|--parameter 'Date' is not <Name>:<Type>|--result|filtered|--parameter|Date" \
-    "a filter whose name is not PascalCase|--parameter 'date:DateOnly' is not <Name>:<Type>|--result|filtered|--parameter|date:DateOnly" \
-    "a filter of a type it does not generate|--parameter 'Date:DateTime' has the type 'DateTime', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset|--result|filtered|--parameter|Date:DateTime"; do
+  echo "==> Checking that dotnet new hardslice-query refuses a filtered result without its filters, filters without filtered result, and filters it cannot generate in $app_name"
+  for refusal in "a filtered result without --parameters|--result filtered needs --parameters <Name>:<Type>[,<Name>:<Type>...]|--result|filtered" \
+    "a filter of a single result|--parameters 'Date:DateOnly' lists the filters of --result filtered|--parameters|Date:DateOnly" \
+    "a filter of a list of every aggregate|--parameters 'Date:DateOnly' lists the filters of --result filtered|--result|many|--parameters|Date:DateOnly" \
+    "a filter without type|--parameters 'Date' is not a list of <Name>:<Type>|--result|filtered|--parameters|Date" \
+    "a filter whose name is not PascalCase|--parameters 'Date:DateOnly,roomId:Guid' is not a list of <Name>:<Type>|--result|filtered|--parameters|Date:DateOnly,roomId:Guid" \
+    "a filter of a type it does not generate|--parameters 'Date:DateTime' gives Date the type 'DateTime', which is not one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset|--result|filtered|--parameters|Date:DateTime" \
+    "a filter named twice|--parameters 'Date:DateOnly,DATE:string' names Date twice, whatever its case|--result|filtered|--parameters|Date:DateOnly,DATE:string"; do
     IFS='|' read -r -a fields <<< "$refusal"
     expect_item_refused hardslice-query "${fields[0]}" "${fields[1]}" --project "$project" --module "$module" --name "$filtered_name" --aggregate "$aggregate" "${fields[@]:2}"
     if [[ "$item_refused_status" != 105 ]]; then
@@ -3873,6 +3956,9 @@ probe_query_template() {
       exit 1
     fi
   done
+  # PB-105 keeps no compatibility: the former option is unknown to dotnet new, which refuses it before the template.
+  expect_item_refused hardslice-query "the former --parameter" "'--parameter' is not a valid option" --project "$project" --module "$module" --name "$filtered_name" \
+    --aggregate "$aggregate" --result filtered --parameter Date:DateOnly
 
   echo "==> Generating the query slice $module/$name of $app_name with dotnet new hardslice-query"
   generate_query "$module" "$name" --aggregate "$aggregate"
@@ -3928,7 +4014,7 @@ probe_query_template() {
 
   # The three results at once: each fails the check on its TODO(hardslice): test only, the 404 of the single result passes, and
   # so do the validator tests of the filtered result and its 400 on a request without date.
-  echo "==> Checking that $app_name builds the registered query slices $module/$name, $module/$many_name (--result many) and $module/$filtered_name (--result filtered --parameter Date:DateOnly) without HardSlice diagnostic, HS006 included, and fails the check on their TODO(hardslice): tests only"
+  echo "==> Checking that $app_name builds the registered query slices $module/$name, $module/$many_name (--result many) and $module/$filtered_name (--result filtered --parameters Date:DateOnly) without HardSlice diagnostic, HS006 included, and fails the check on their TODO(hardslice): tests only"
   register_slice hardslice-query "$query_output"
   generate_query "$module" "$many_name" --aggregate "$aggregate" --result many
   if ! grep -Fxq "            .AddScoped<IRequestHandler<${many_name}Query, IReadOnlyList<${many_dto}>>, ${many_name}Handler>()" <<< "${query_output//Manual instructions: /}"; then
@@ -3937,7 +4023,7 @@ probe_query_template() {
     exit 1
   fi
   register_slice hardslice-query "$query_output"
-  generate_query "$module" "$filtered_name" --aggregate "$aggregate" --result filtered --parameter Date:DateOnly
+  generate_query "$module" "$filtered_name" --aggregate "$aggregate" --result filtered --parameters Date:DateOnly
   for expected in "using FluentValidation;" \
     "            .AddScoped<IRequestHandler<${filtered_name}Query, IReadOnlyList<${filtered_dto}>>, ${filtered_name}Handler>()" \
     "            .AddScoped<IValidator<${filtered_name}Query>, ${filtered_name}Validator>()"; do
@@ -3958,7 +4044,7 @@ probe_query_template() {
     fi
   done
   if ! grep -Fxq "public sealed record $many_dto(Guid Id);" "$app_src/Features/$module/$many_name/$many_name.cs" ||
-    ! grep -Fq '?date=2026-11-04"' "$app/tests/$app_name.IntegrationTests/Features/$module/$filtered_name/${filtered_name}Tests.cs" ||
+    ! grep -Fxq '    private const string QueryString = "?date=2026-11-04";' "$app/tests/$app_name.IntegrationTests/Features/$module/$filtered_name/${filtered_name}Tests.cs" ||
     ! grep -Fxq '        problem.Errors.Keys.ShouldBe(["date"]);' "$app/tests/$app_name.IntegrationTests/Features/$module/$filtered_name/${filtered_name}Tests.cs"; then
     echo "error: dotnet new hardslice-query did not name the DTO of $module/$many_name $many_dto, or the tests of $module/$filtered_name do not read ?date=." >&2
     exit 1
@@ -3967,7 +4053,7 @@ probe_query_template() {
   expect_check_fails_on_todo_tests_only "the generated query slices $module/$name, $module/$many_name and $module/$filtered_name" \
     "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$many_name.${many_name}Tests.Lists_a_stored_aggregate_as_its_dto" \
       "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Reads_a_stored_aggregate_as_its_dto" \
-      "$app_name.IntegrationTests.Features.$module.$filtered_name.${filtered_name}Tests.Lists_the_stored_aggregates_that_its_filter_selects" | LC_ALL=C sort)"
+      "$app_name.IntegrationTests.Features.$module.$filtered_name.${filtered_name}Tests.Lists_the_stored_aggregates_that_its_filters_select" | LC_ALL=C sort)"
   cp "$module_file" "$work/module-registered.backup"
 
   # A registered slice, so that HS015 has nothing to report: the compiler alone names the aggregate it does not find.
@@ -4118,20 +4204,23 @@ probe_slice_routes() {
 }
 
 # PB-104: a filter of --result filtered that --route names between braces is bound from the route. In module <module>, the queries
-# of <aggregate> <date-name> (--route 'day-readings/{date}' --parameter Date:DateOnly), <constrained-name> (--route
-# 'dated-readings/{Date:datetime}', the same filter under a route constraint, written with its capital) and <string-name> (--route
-# 'week-readings/{week}' --parameter Week:string). Before, a route parameter that names no filter is refused with exit 105. Their
-# tests put the value of the filter in place of its route parameter, and test a value that the binding refuses (400), that the
-# constraint refuses (404), or, for the string, that the validator refuses, marked TODO(hardslice):. The check fails on their
-# TODO(hardslice): tests only, then passes after their reference completion, in which <create> creates the aggregate to store and
-# the validator of the string gets the rule of a week. The module file is restored and the slices removed at the end.
+# of <aggregate> <date-name> (--route 'day-readings/{date}' --parameters Date:DateOnly), <constrained-name> (--route
+# 'dated-readings/{Date:datetime}', the same filter under a route constraint, written with its capital), <string-name> (--route
+# 'week-readings/{week}' --parameters Week:string) and, for PB-105, <two-name> (--route 'day-readings/{date}/rooms' --parameters
+# Date:DateOnly,RoomId:Guid, one filter of the route and one of the query string). Before, a route parameter that names no filter
+# is refused with exit 105. Their tests put a valid value of each filter in place of its route parameter, and test a value that the
+# binding refuses (400), that the constraint refuses (404), or, for the string, that the validator refuses, marked TODO(hardslice):,
+# and the 400 of a request without the filter of the query string. The check fails on their TODO(hardslice): tests only, then passes
+# after their reference completion, in which <create> creates the aggregate to store and the validator of the string gets the rule
+# of a week. The module file is restored and the slices removed at the end.
 probe_route_filters() {
   local module="$1"
   local date_name="$2"
   local constrained_name="$3"
   local string_name="$4"
-  local aggregate="$5"
-  local create="$6"
+  local two_name="$5"
+  local aggregate="$6"
+  local create="$7"
   local project="src/$app_name/$app_name.csproj"
   local module_file="$app_src/Features/$module/${module}Module.cs"
   local tests="$app/tests/$app_name.IntegrationTests/Features/$module"
@@ -4145,79 +4234,106 @@ probe_route_filters() {
   cp "$module_file" "$work/module-route-filters.backup"
 
   echo "==> Checking that dotnet new hardslice-query refuses a route parameter that names no filter of --result filtered in $app_name"
-  for refusal in "a route parameter that names no filter|--route '/day-readings/{day}' holds the route parameter 'day', which names no filter of the query: --result filtered binds from the route the filter of --parameter that a route parameter names, here 'Date'|--route|day-readings/{day}" \
+  for refusal in "a route parameter that names no filter|--route '/day-readings/{day}' holds the route parameter 'day', which names no filter of the query: --result filtered binds from the route each filter of --parameters 'Date:DateOnly' that a route parameter names|--route|day-readings/{day}" \
     "a route parameter beside the filter|--route '/{roomId:guid}/day-readings/{date}' holds the route parameter 'roomId', which names no filter of the query|--route|{roomId:guid}/day-readings/{date}" \
     "a route parameter that starts with the name of the filter|--route '/day-readings/{dateFrom:datetime}' holds the route parameter 'dateFrom', which names no filter of the query|--route|day-readings/{dateFrom:datetime}"; do
     IFS='|' read -r -a fields <<< "$refusal"
     expect_item_refused hardslice-query "${fields[0]}" "${fields[1]}" --project "$project" --module "$module" --name "$date_name" --aggregate "$aggregate" \
-      --result filtered --parameter Date:DateOnly "${fields[@]:2}"
+      --result filtered --parameters Date:DateOnly "${fields[@]:2}"
     if [[ "$item_refused_status" != 105 ]]; then
       echo "error: dotnet new hardslice-query refused ${fields[0]} with exit $item_refused_status instead of 105." >&2
       exit 1
     fi
   done
 
-  echo "==> Generating $module/$date_name, $module/$constrained_name and $module/$string_name, filtered by a parameter of their route, in $app_name"
-  generate_query "$module" "$date_name" --aggregate "$aggregate" --route 'day-readings/{date}' --result filtered --parameter Date:DateOnly
+  echo "==> Generating $module/$date_name, $module/$constrained_name, $module/$string_name and $module/$two_name, filtered by a parameter of their route, in $app_name"
+  generate_query "$module" "$date_name" --aggregate "$aggregate" --route 'day-readings/{date}' --result filtered --parameters Date:DateOnly
   register_slice hardslice-query "$query_output"
-  generate_query "$module" "$constrained_name" --aggregate "$aggregate" --route 'dated-readings/{Date:datetime}' --result filtered --parameter Date:DateOnly
+  generate_query "$module" "$constrained_name" --aggregate "$aggregate" --route 'dated-readings/{Date:datetime}' --result filtered --parameters Date:DateOnly
   register_slice hardslice-query "$query_output"
-  generate_query "$module" "$string_name" --aggregate "$aggregate" --route 'week-readings/{week}' --result filtered --parameter Week:string
+  generate_query "$module" "$string_name" --aggregate "$aggregate" --route 'week-readings/{week}' --result filtered --parameters Week:string
   register_slice hardslice-query "$query_output"
-  for generated in "src/$app_name/Features/$module/$date_name/$date_name.cs|    // [AsParameters] binds Date from the parameter {date} of the route, and each other parameter of the query from" \
+  generate_query "$module" "$two_name" --aggregate "$aggregate" --route 'day-readings/{date}/rooms' --result filtered --parameters Date:DateOnly,RoomId:Guid
+  register_slice hardslice-query "$query_output"
+  for generated in "src/$app_name/Features/$module/$date_name/$date_name.cs|    // [AsParameters] binds Date from the parameter {date} of the route," \
     "src/$app_name/Features/$module/$date_name/$date_name.cs|        group.MapGet(\"/day-readings/{date}\", async ([AsParameters] ${date_name}Query query, IMediator mediator, CancellationToken cancellationToken) =>" \
-    "src/$app_name/Features/$module/$date_name/$date_name.cs|// to a value that it cannot read as DateOnly, before the validator. Add the other filters of the use case, each with its rule." \
+    "src/$app_name/Features/$module/$date_name/$date_name.cs|// Date, from the route parameter {date}: its binding answers 400 to a value that it cannot read as DateOnly, before the validator." \
     "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|    private const string Route = ${module}Module.Route + \"/day-readings/{date}\";" \
-    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|    private static string RouteWith(string value) => Route.Replace(\"{date}\", value, StringComparison.Ordinal);" \
-    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|        var response = await app.CreateClient().GetAsync(RouteWith(\"2026-11-04\"), TestContext.Current.CancellationToken);" \
-    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|    public async Task Rejects_a_filter_that_its_binding_cannot_read_before_its_handler()" \
-    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|        var response = await app.CreateClient().GetAsync(RouteWith(\"not-a-date\"), TestContext.Current.CancellationToken);" \
-    "src/$app_name/Features/$module/$constrained_name/$constrained_name.cs|    // [AsParameters] binds Date from the parameter {Date:datetime} of the route, and each other parameter of the query from" \
-    "tests/$app_name.IntegrationTests/Features/$module/$constrained_name/${constrained_name}Tests.cs|    private static string RouteWith(string value) => Route.Replace(\"{Date:datetime}\", value, StringComparison.Ordinal);" \
-    "tests/$app_name.IntegrationTests/Features/$module/$constrained_name/${constrained_name}Tests.cs|    public async Task Does_not_match_a_filter_that_its_route_constraint_refuses()" \
+    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|    private static string RouteWith(string? filter = null, string? value = null) =>" \
+    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|            .Replace(\"{date}\", filter == \"date\" ? value : \"2026-11-04\", StringComparison.Ordinal);" \
+    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|        var response = await app.CreateClient().GetAsync(RouteWith(), TestContext.Current.CancellationToken);" \
+    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|    [InlineData(\"date\", \"not-a-date\")]" \
+    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|    public async Task Rejects_a_filter_that_its_binding_cannot_read_before_its_handler(string filter, string value)" \
+    "tests/$app_name.IntegrationTests/Features/$module/$date_name/${date_name}Tests.cs|        var response = await app.CreateClient().GetAsync(RouteWith(filter, value), TestContext.Current.CancellationToken);" \
+    "src/$app_name/Features/$module/$constrained_name/$constrained_name.cs|    // [AsParameters] binds Date from the parameter {Date:datetime} of the route," \
+    "src/$app_name/Features/$module/$constrained_name/$constrained_name.cs|// Date, from the route parameter {Date:datetime}: its constraint lets no value that it refuses reach the endpoint (404)." \
+    "tests/$app_name.IntegrationTests/Features/$module/$constrained_name/${constrained_name}Tests.cs|            .Replace(\"{Date:datetime}\", filter == \"date\" ? value : \"2026-11-04\", StringComparison.Ordinal);" \
+    "tests/$app_name.IntegrationTests/Features/$module/$constrained_name/${constrained_name}Tests.cs|    public async Task Does_not_match_a_filter_that_its_route_constraint_refuses(string filter, string value)" \
     "src/$app_name/Features/$module/$string_name/$string_name.cs|        RuleFor(query => query.Week).NotEmpty();" \
-    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|    private static string RouteWith(string value) => Route.Replace(\"{week}\", value, StringComparison.Ordinal);" \
-    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|    public async Task Rejects_a_filter_that_its_validator_refuses_with_a_validation_problem_before_its_handler()" \
-    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|        Assert.Fail(\"TODO(hardslice): give ${string_name}Validator the rule of the format of Week, such as Matches(...), then replace \\\"refused-value\\\" below with a value of Week that the route matches and that the rule refuses, and remove this line.\");" \
-    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|        problem.Errors.Keys.ShouldBe([\"week\"]);"; do
+    "src/$app_name/Features/$module/$string_name/$string_name.cs|// Week, from the route parameter {week}: its binding takes any text, so the validator holds the rules of its format." \
+    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|            .Replace(\"{week}\", filter == \"week\" ? value : \"value\", StringComparison.Ordinal);" \
+    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|    [InlineData(\"week\", \"refused-value\")]" \
+    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|    public async Task Rejects_a_filter_that_its_validator_refuses_with_a_validation_problem_before_its_handler(string filter, string value)" \
+    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|        Assert.Fail(\"TODO(hardslice): give ${string_name}Validator the rule of the format of each text filter of the route, such as Matches(...), then replace \\\"refused-value\\\" in each case above with a value of its filter that the route matches and that the rule refuses, give the filter a value that the rule accepts in RouteWith, and remove this line.\");" \
+    "tests/$app_name.IntegrationTests/Features/$module/$string_name/${string_name}Tests.cs|        problem.Errors.Keys.ShouldBe([filter]);" \
+    "src/$app_name/Features/$module/$two_name/$two_name.cs|// Date, from the route parameter {date}: its binding answers 400 to a value that it cannot read as DateOnly, before the validator." \
+    "src/$app_name/Features/$module/$two_name/$two_name.cs|// RoomId, from the query string: nullable, so that the validator answers 400 to a request without it." \
+    "src/$app_name/Features/$module/$two_name/$two_name.cs|public sealed record ${two_name}Query(DateOnly? Date, Guid? RoomId) : IQuery<IReadOnlyList<$(query_dto "$two_name")>>;" \
+    "src/$app_name/Features/$module/$two_name/$two_name.cs|        RuleFor(query => query.Date).NotNull();" \
+    "src/$app_name/Features/$module/$two_name/$two_name.cs|        RuleFor(query => query.RoomId).NotNull();" \
+    "src/$app_name/Features/$module/$two_name/$two_name.cs|    // and each other parameter of the query from the query string, such as ?roomId=0f8fad5b-d9cb-469f-a165-70867728950e." \
+    "tests/$app_name.IntegrationTests/Features/$module/$two_name/${two_name}Tests.cs|    private const string QueryString = \"?roomId=0f8fad5b-d9cb-469f-a165-70867728950e\";" \
+    "tests/$app_name.IntegrationTests/Features/$module/$two_name/${two_name}Tests.cs|        var response = await app.CreateClient().GetAsync(RouteWith() + QueryString, TestContext.Current.CancellationToken);" \
+    "tests/$app_name.IntegrationTests/Features/$module/$two_name/${two_name}Tests.cs|    public async Task Rejects_a_request_without_its_filters_with_a_validation_problem_before_its_handler()" \
+    "tests/$app_name.IntegrationTests/Features/$module/$two_name/${two_name}Tests.cs|        problem.Errors.Keys.ShouldBe([\"roomId\"]);" \
+    "tests/$app_name.IntegrationTests/Features/$module/$two_name/${two_name}Tests.cs|        var response = await app.CreateClient().GetAsync(RouteWith(filter, value) + QueryString, TestContext.Current.CancellationToken);"; do
     expected="${generated#*|}"
     if ! grep -Fxq -- "$expected" "$app/${generated%%|*}"; then
       cat "$app/${generated%%|*}" >&2
-      echo "error: ${generated%%|*} does not hold the line, for its filter bound from the route: $expected" >&2
+      echo "error: ${generated%%|*} does not hold the line, for its filters bound from the route: $expected" >&2
       exit 1
     fi
   done
   for slice in "$date_name" "$constrained_name" "$string_name"; do
-    if grep -n 'Rejects_a_request_without_its_filter\|?date=\|?week=\|replace each route parameter between braces\|from the query string, such as\|filter-route-token\|filter-refused-value\|filter-query-value\|FilterName\|filterName\|FilterType' \
+    if grep -n 'Rejects_a_request_without_its_filters\|?date=\|?week=\|QueryString\|replace each route parameter between braces\|from the query string, such as' \
       "$app_src/Features/$module/$slice/$slice.cs" "$tests/$slice/${slice}Tests.cs"; then
-      echo "error: the slice $module/$slice, filtered by a parameter of its route, keeps a test or a comment of a filter of the query string, or a placeholder of the template." >&2
+      echo "error: the slice $module/$slice, filtered by a parameter of its route, keeps a test or a comment of a filter of the query string." >&2
       exit 1
     fi
   done
-  echo "    Route.Replace(\"{date}\", ...), 400 of not-a-date, 404 of {Date:datetime}, TODO(hardslice): of the rule of Week"
+  for slice in "$date_name" "$constrained_name" "$string_name" "$two_name"; do
+    if grep -n 'replace each route parameter between braces\|route-filter-bindings\|query-string-example\|RouteFilterReplacements\|FilterComments\|FirstFilterName\|Parameter[A-Z][A-Za-z]*\|parameter-keys' \
+      "$app_src/Features/$module/$slice/$slice.cs" "$tests/$slice/${slice}Tests.cs"; then
+      echo "error: the slice $module/$slice, filtered by a parameter of its route, keeps a placeholder of the template." >&2
+      exit 1
+    fi
+  done
+  echo "    RouteWith(filter, value), 400 of not-a-date, 404 of {Date:datetime}, TODO(hardslice): of the rule of Week, ?roomId= beside {date}"
 
-  # The test of the value that the binding refuses and the one of the constraint pass at once: only the tests marked TODO(hardslice):
-  # fail, the list of each slice and the test of the value that the validator of the string refuses.
+  # The tests of the value that the binding refuses, of the one of the constraint and of a request without the filter of the query
+  # string pass at once: only the tests marked TODO(hardslice): fail, the list of each slice and the test of the value that the
+  # validator of the string refuses.
   echo "==> Checking that $app_name builds the slices filtered by their route without HardSlice diagnostic and fails the check on their TODO(hardslice): tests only"
-  expect_check_fails_on_todo_tests_only "the slices $module/$date_name, $module/$constrained_name and $module/$string_name" \
-    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$date_name.${date_name}Tests.Lists_the_stored_aggregates_that_its_filter_selects" \
-      "$app_name.IntegrationTests.Features.$module.$constrained_name.${constrained_name}Tests.Lists_the_stored_aggregates_that_its_filter_selects" \
-      "$app_name.IntegrationTests.Features.$module.$string_name.${string_name}Tests.Lists_the_stored_aggregates_that_its_filter_selects" \
+  expect_check_fails_on_todo_tests_only "the slices $module/$date_name, $module/$constrained_name, $module/$string_name and $module/$two_name" \
+    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$date_name.${date_name}Tests.Lists_the_stored_aggregates_that_its_filters_select" \
+      "$app_name.IntegrationTests.Features.$module.$two_name.${two_name}Tests.Lists_the_stored_aggregates_that_its_filters_select" \
+      "$app_name.IntegrationTests.Features.$module.$constrained_name.${constrained_name}Tests.Lists_the_stored_aggregates_that_its_filters_select" \
+      "$app_name.IntegrationTests.Features.$module.$string_name.${string_name}Tests.Lists_the_stored_aggregates_that_its_filters_select" \
       "$app_name.IntegrationTests.Features.$module.$string_name.${string_name}Tests.Rejects_a_filter_that_its_validator_refuses_with_a_validation_problem_before_its_handler" | LC_ALL=C sort)"
 
   # The reference completion: the handlers keep every aggregate, and the validator of the string refuses what is not a week, such as
   # refused-value, so the tests of the string send 2026-W45.
   echo "==> Checking that the reference completion of the slices filtered by their route passes the check of $app_name"
   complete_query_tests "$aggregate" "$create" "$tests/$date_name/${date_name}Tests.cs" "$tests/$constrained_name/${constrained_name}Tests.cs" \
-    "$tests/$string_name/${string_name}Tests.cs"
-  for slice in "$date_name" "$constrained_name" "$string_name"; do
+    "$tests/$string_name/${string_name}Tests.cs" "$tests/$two_name/${two_name}Tests.cs"
+  for slice in "$date_name" "$constrained_name" "$string_name" "$two_name"; do
     sed '/^            \/\/ TODO(hardslice): keep the /d' "$app_src/Features/$module/$slice/$slice.cs" > "$work/slice.cs"
     mv "$work/slice.cs" "$app_src/Features/$module/$slice/$slice.cs"
   done
   sed 's/^        RuleFor(query => query.Week).NotEmpty();$/        RuleFor(query => query.Week).NotEmpty().Matches("^[0-9]{4}-W[0-9]{2}$");/' \
     "$app_src/Features/$module/$string_name/$string_name.cs" > "$work/slice.cs"
   mv "$work/slice.cs" "$app_src/Features/$module/$string_name/$string_name.cs"
-  sed 's/RouteWith("value")/RouteWith("2026-W45")/' "$tests/$string_name/${string_name}Tests.cs" > "$work/test.cs"
+  sed 's/filter == "week" ? value : "value"/filter == "week" ? value : "2026-W45"/' "$tests/$string_name/${string_name}Tests.cs" > "$work/test.cs"
   mv "$work/test.cs" "$tests/$string_name/${string_name}Tests.cs"
   sed 's/Query("value")/Query("2026-W45")/' "$unit_tests/$string_name/${string_name}ValidatorTests.cs" > "$work/test.cs"
   mv "$work/test.cs" "$unit_tests/$string_name/${string_name}ValidatorTests.cs"
@@ -4227,7 +4343,7 @@ probe_route_filters() {
   fi
   bash "$app/scripts/check.sh"
 
-  for slice in "$date_name" "$constrained_name" "$string_name"; do
+  for slice in "$date_name" "$constrained_name" "$string_name" "$two_name"; do
     rm -r "${app_src:?}/Features/$module/${slice:?}" "${tests:?}/${slice:?}" "${unit_tests:?}/${slice:?}"
   done
   mv "$work/module-route-filters.backup" "$module_file"
@@ -5731,7 +5847,7 @@ rm "$work/RoomsModule.cs.backup"
 remove_module Rooms
 mv "$work/Program.cs.backup" "$app_src/Program.cs"
 
-probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings RemindBookings CollectBookingFeeds
+probe_command_template Bookings ExtendBooking ArchiveBooking RescheduleBooking ImportBookings PurgeExpiredBookings RemindBookings CollectBookingFeeds ReconcileBookingDay
 probe_recurring_commands Bookings CollectBookingStats PurgeBookingDrafts
 probe_scheduled_commands Bookings ImportNightlyBookings RetryBookingStats CloseBookingDay ImportBookingFeeds
 probe_recurring_condition Bookings CollectGuardedBookingFeeds
@@ -5740,7 +5856,7 @@ probe_query_template Bookings GetBookingSummary ListBookingSummaries GetBookings
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Bookings GetBookingTrip Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
-probe_route_filters Bookings GetBookingDayReadings GetBookingDatedReadings GetBookingWeekReadings Booking \
+probe_route_filters Bookings GetBookingDayReadings GetBookingDatedReadings GetBookingWeekReadings GetBookingDayRoomReadings Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_protected_endpoints Bookings ProtectBooking ImportProtectedBookings GetProtectedBooking Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
@@ -6039,7 +6155,7 @@ group_blank_items() {
 # hardslice-query its first query slices.
 probe_module_template Rooms MeetingRooms meeting-rooms
 
-probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRooms RemindRooms CollectRoomFeeds
+probe_command_template Rooms RenameRoom CloseRoom ResizeRoom ImportRooms CountRooms RemindRooms CollectRoomFeeds ReconcileRoomDay
 probe_recurring_commands Rooms CollectRoomStats PurgeRoomDrafts
 probe_scheduled_commands Rooms ImportNightlyRooms RetryRoomStats CloseRoomDay ImportRoomFeeds
 probe_recurring_condition Rooms CollectGuardedRoomFeeds
@@ -6054,7 +6170,7 @@ probe_entity_template Rooms Room RoomSeat RoomVisit RoomVisitLog
 probe_aggregate_concurrency Rooms
 probe_query_template Rooms GetRoomSummary ListRoomSummaries GetRoomsOnDate Room 'Room.Create()'
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoomTrip Room 'Room.Create()'
-probe_route_filters Rooms GetRoomDayReadings GetRoomDatedReadings GetRoomWeekReadings Room 'Room.Create()'
+probe_route_filters Rooms GetRoomDayReadings GetRoomDatedReadings GetRoomWeekReadings GetRoomDayNeighbourReadings Room 'Room.Create()'
 probe_protected_endpoints Rooms ProtectRoom ImportProtectedRooms GetProtectedRoom Room 'Room.Create()'
 # The events of Rooms are generated by dotnet new hardslice-event, with a reaction in Rooms and one in a second module, both
 # completed with the aggregate Room.
