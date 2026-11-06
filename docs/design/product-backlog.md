@@ -4320,7 +4320,7 @@ Les entrées « what worked at once » du 05/11/2026 et du 06/11/2026 et l'entr�
 - Les critères communs des sections 5 à 7 restent applicables, dont la sonde, l'entrée de `docs/item-templates.md` et la consigne de la skill de chaque template ou option ajouté, et `AGENTS.md` sous 150 lignes dans les deux variantes.
 - Chaque ticket cite l'entrée de `ghostline/docs/hardslice-friction.md` qu'il ferme, et dit dans son statut le contournement que Ghostline peut retirer. Aucun ticket ne modifie le dépôt Ghostline.
 - Chaque ticket ajoute sa ligne à `CHANGELOG.md`, sous `0.3.0-preview.1`.
-- Vérification : `dotnet build --no-restore`, `dotnet test --no-build`, et en local les groupes de `scripts/test-template.sh` que son Acceptation nomme (`--only`), jamais le scénario complet. Les commits passent par une branche `ci/<ticket>` dont la CI est verte, puis sur `main`.
+- Vérification : `dotnet build --no-restore`, `dotnet test --no-build`, et en local les groupes de `scripts/test-template.sh` que son Acceptation nomme (`--only`), jamais le scénario complet. Chaque ticket commite sur `main` en local, son ticket à la fin du message, et pousse tous ses commits en une fois sur `ci/<ticket>` (`git push origin HEAD:ci/<ticket>`), sans attendre la CI ni pousser `main`. PB-110, dernière tâche de la série, lit la CI de chaque branche `ci/` dans l'ordre, corrige le premier rouge, puis vérifie la CI de `ci/pb-110`, qui contient toute la série, et pousse `main` (PB-111).
 - Aucun ticket ne reconstruit les paquets, ne pose d'étiquette ni ne publie : PB-110 reconstruit une fois après eux.
 
 ### PB-099 : Écrire les noms générés sans article qui dépende de leur première lettre
@@ -4709,6 +4709,10 @@ dotnet build --no-restore && dotnet test --no-build
 CI de ci/pb-110, chaque groupe vert
 scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages
 ```
+
+### PB-111 : Vérifier une série de tickets en file par la CI de sa dernière tâche
+
+Statut : terminé le 06/11/2026. Méthode de contribution demandée par le mainteneur le 06/11/2026 : chaque ticket attendait deux CI d'environ 12 min sur sa branche `ci/<ticket>` (commit de travail, puis commit de statut) avant de pousser `main`, soit environ 25 min d'attente pour des changements de quelques fichiers. Un ticket seul garde sa règle (`ci/<ticket>` et sa CI verte, puis `main`), mais pousse en une fois ses commits de travail et de statut, pour une seule CI. Dans une série de tickets en file, chaque ticket garde ses tests locaux (`dotnet build --no-restore`, `dotnet test --no-build`, groupes `--only` de sa zone), commite sur `main` en local avec son ticket à la fin du message et pousse tous ses commits en une fois sur `ci/<ticket>` (`git push origin HEAD:ci/<ticket>`), sans attendre la CI ni pousser `main`. La dernière tâche de la série lit la CI de chaque branche `ci/` dans l'ordre, corrige le premier rouge, puis vérifie la CI de sa propre branche, qui contient toute la série, et pousse `main`. La règle est écrite dans le paragraphe de vérification d'`AGENTS.md` (toujours 30 lignes), dans le paragraphe CI de `CONTRIBUTING.md` et dans la ligne « Vérification » des critères communs à PB-099 à PB-110, PB-110 faisant la vérification finale. Texte seul : ni `dotnet test` ni `scripts/test-template.sh`, aucune ligne de `CHANGELOG.md` (rien de livré), commit poussé directement sur `main`.
 
 ### Définition de fini
 
