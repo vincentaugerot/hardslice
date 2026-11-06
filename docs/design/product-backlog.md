@@ -2912,6 +2912,8 @@ Complété le 05/11/2026 par PB-090 à PB-097, tirés des sept entrées du 04/11
 
 Complété le 06/11/2026 par PB-099 à PB-110, tirés des entrées du 05/11/2026 et du 06/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-097 (619b84e), roadmaps 2.4 à 2.8 : l'article devant un nom généré, la réinstallation du template sous la même version, trois formes d'agrégat sans consigne, une base de données à part pour un test, cinq consignes de `add-slice` et de la carte du projet, le filtre lié à la route, des paramètres nommés et multiples, un DTO ou 404, l'objet valeur du domaine, le 409 d'une commande et l'instant du cycle d'une commande planifiée. Leurs arbitrages (15 à 26) sont validés par le mainteneur le 06/11/2026. PB-110 revalide les paquets après eux, toujours sous `0.3.0-preview.1`.
 
+Complété le 06/11/2026 par PB-112, tiré de l'entrée « third run of dotnet hardslice upgrade, the first three-way merge in Ghostline », que `ghostline/docs/hardslice-friction.md` laisse ouverte après la mise à niveau de Ghostline sur les paquets de PB-110 (068cce8). Son arbitrage (27) est validé par le mainteneur le même jour. Texte seul : les paquets ne sont pas reconstruits.
+
 ### Résultat attendu
 
 > Les deux modules de Ghostline se construisent avec les templates et les skills, sans réécrire de code généré ni écrire à la main ce qu'un template devrait produire : commande sans paramètre, route choisie, entité enfant, commande lancée par une tâche de fond, requête filtrée. Les cas avancés rencontrés (unicité sous concurrence, règle du domaine dans une requête, grandes collections, écritures en masse) ont une consigne écrite.
@@ -3001,6 +3003,7 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 - Les critères communs des sections 5 et 6 restent applicables.
 - Chaque template ou option ajouté a sa sonde dans `scripts/test-template.sh` (génération, complétion de référence, vérification verte, refus des combinaisons invalides avec le code 105), son entrée dans `docs/item-templates.md` et sa consigne dans la skill qui le concerne.
 - Chaque ticket cite l'entrée de `ghostline/docs/hardslice-friction.md` qu'il ferme, et dit dans son résumé le contournement que Ghostline peut retirer.
+- Un ticket qui change ce qu'un template d'élément écrit (commentaire, test ou code) donne, dans son statut et dans sa ligne de `CHANGELOG.md`, le `git grep` qui retrouve les fichiers déjà générés dans une application, que `dotnet hardslice upgrade` ne reprend jamais. Le ticket qui revalide les paquets recopie ces commandes dans la procédure de mise à niveau de Ghostline, au lieu d'une liste de fichiers écrite à la main (PB-112, arbitrage 27).
 
 ### Graphe des dépendances
 
@@ -3053,8 +3056,9 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | PB-108 (409 d'une commande) | PB-107 | aucun |
 | PB-109 (cycle connu du handler) | PB-108 | aucun |
 | PB-110 (paquets revalidés) | PB-099 à PB-109 | aucun |
+| PB-112 (fichiers des templates d'élément, contrôle de la réinstallation) | PB-110 | aucun |
 
-Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. Puis PB-089, et PB-090 à PB-097 dans l'ordre de leur numéro, PB-098 passant entre PB-094 et PB-095 : PB-095 passe après les tickets qui changent le template, pour que la base qu'il enregistre et sa sonde les voient. Puis PB-099 à PB-110 dans l'ordre de leur numéro. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
+Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. Puis PB-089, et PB-090 à PB-097 dans l'ordre de leur numéro, PB-098 passant entre PB-094 et PB-095 : PB-095 passe après les tickets qui changent le template, pour que la base qu'il enregistre et sa sonde les voient. Puis PB-099 à PB-110 dans l'ordre de leur numéro, et PB-112 après la mise à niveau de Ghostline sur PB-110. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
 
 ### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
@@ -4749,9 +4753,50 @@ scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages
 
 Statut : terminé le 06/11/2026. Méthode de contribution demandée par le mainteneur le 06/11/2026 : chaque ticket attendait deux CI d'environ 12 min sur sa branche `ci/<ticket>` (commit de travail, puis commit de statut) avant de pousser `main`, soit environ 25 min d'attente pour des changements de quelques fichiers. Un ticket seul garde sa règle (`ci/<ticket>` et sa CI verte, puis `main`), mais pousse en une fois ses commits de travail et de statut, pour une seule CI. Dans une série de tickets en file, chaque ticket garde ses tests locaux (`dotnet build --no-restore`, `dotnet test --no-build`, groupes `--only` de sa zone), commite sur `main` en local avec son ticket à la fin du message et pousse tous ses commits en une fois sur `ci/<ticket>` (`git push origin HEAD:ci/<ticket>`), sans attendre la CI ni pousser `main`. La dernière tâche de la série lit la CI de chaque branche `ci/` dans l'ordre, corrige le premier rouge, puis vérifie la CI de sa propre branche, qui contient toute la série, et pousse `main`. La règle est écrite dans le paragraphe de vérification d'`AGENTS.md` (toujours 30 lignes), dans le paragraphe CI de `CONTRIBUTING.md` et dans la ligne « Vérification » des critères communs à PB-099 à PB-110, PB-110 faisant la vérification finale. Texte seul : ni `dotnet test` ni `scripts/test-template.sh`, aucune ligne de `CHANGELOG.md` (rien de livré), commit poussé directement sur `main`.
 
+### Arbitrage validé le 06/11/2026, après PB-110
+
+Pour PB-112, tiré de l'entrée « third run of dotnet hardslice upgrade, the first three-way merge in Ghostline » de `ghostline/docs/hardslice-friction.md`, la seule que la mise à niveau de Ghostline sur les paquets de PB-110 (068cce8) laisse ouverte. Validé par le mainteneur le 06/11/2026 : la recommandation, sans écart.
+
+27. **Fichiers des templates d'élément et contrôle de la réinstallation (PB-112).** L'entrée constate que la fusion à trois voies marche (code 3, exactement les listes de PB-110, deux conflits lisibles d'emblée sous la forme diff3, check vert sur la fusion, 10 min en tout), et relève deux défauts de la procédure de PB-110. Sa liste des commentaires générés à reprendre à la main, écrite sans recherche, omettait `TripOutcomeConfigurationTests.cs`, que le constat de PB-099 nommait pourtant, et comptait « an ObservationArchive », qui est juste. Son étape 2 dit que `dotnet new uninstall` doit lister `HardSlice.Templates` une fois, mais la sortie le nomme aussi dans la commande de désinstallation de l'entrée : un `grep -c` compte 2. Elle suggère qu'`upgrade` liste les fichiers générés par un template d'élément que la nouvelle version écrirait autrement.
+    - Option A : `upgrade` enregistre chaque appel d'un template d'élément (template, paramètres, fichiers écrits), les régénère à chaque mise à niveau et liste ceux qui diffèrent. Lourd : l'outil ne sait aujourd'hui ni quels fichiers viennent d'un template d'élément ni avec quels paramètres, `.hardslice/generation/` ne tenant que la base de `hardslice-api`, et l'application modifie ces fichiers presque tous.
+    - Option B : la recherche plutôt que l'outil. Un ticket qui change ce qu'un template d'élément écrit donne le `git grep` qui retrouve les fichiers déjà générés, dans son statut et dans sa ligne de `CHANGELOG.md`, et le ticket qui revalide les paquets le recopie dans la procédure. `CONTRIBUTING.md` donne la commande exacte du contrôle de la réinstallation.
+    - Décision : B. A va en section 9, à arbitrer sur un cas réel qui touche du code et non des commentaires. Le statut de PB-110, terminé, ne change pas, comme ceux de PB-088 et PB-097 pour PB-100.
+
+### PB-112 : Retrouver par une recherche les fichiers des templates d'élément qu'une version change, et compter exactement la réinstallation
+
+Statut : terminé le 06/11/2026. Ferme l'entrée « third run of dotnet hardslice upgrade, the first three-way merge in Ghostline » de `ghostline/docs/hardslice-friction.md` (arbitrage 27). « Try a local build of the packages » de `CONTRIBUTING.md` dit que `dotnet new uninstall` fait suivre chaque paquet de sa propre commande de désinstallation, qui le nomme une seconde fois, et donne le contrôle exact : `dotnet new uninstall | grep -cx '   HardSlice.Templates'` doit afficher `1`, pas `grep -c HardSlice.Templates`, qui compte aussi la ligne `dotnet new uninstall HardSlice.Templates`. Essai sur ce VPS (SDK 10.0.401, template installé une fois) : `1` pour le premier, `2` pour le second. Les conventions de `CONTRIBUTING.md` gagnent « Item templates » : `upgrade` ne reprend jamais un fichier qu'un template d'élément a généré, et un changement de ce qu'un tel template écrit donne dans sa ligne de `CHANGELOG.md` le `git grep` des fichiers à reprendre à la main, que la procédure de la reconstruction suivante répète. La section « Upgrading a generated solution » de `docs/getting-started.md` le dit aux utilisateurs, avec un lien vers `CHANGELOG.md`. La ligne de PB-099 dans `CHANGELOG.md` donne sa recherche, `git grep -nE '(changes|Stores) an? [A-Z]' -- '*.cs'`. Essai sur Ghostline à 068cce8, avant sa correction à la main (c061b80) : elle trouve les cinq fichiers que c061b80 a corrigés, `TripOutcomeConfigurationTests.cs` compris, et deux convertisseurs déjà justes (« Stores an ObservedTripId », « Stores a ScheduleVersionId »), à récrire au choix de l'application. Les critères communs de l'incrément gagnent la règle. Section 9 : la liste des fichiers des templates d'élément par `upgrade`, à arbitrer. Passages : `dotnet build --no-restore` et les tests de `ReadmeTests`. Texte seul, ni le code, ni le template, ni l'outil ne changent : paquets non reconstruits, aucun groupe de `scripts/test-template.sh`, commit poussé directement sur `main` (PB-111). Contournement que Ghostline peut retirer : aucun.
+
+**Résultat observable**
+
+Le contrôle de la réinstallation du template se lance tel quel et affiche `1`. Un utilisateur qui met à niveau sait que les fichiers de ses templates d'élément ne sont jamais repris, et trouve dans `CHANGELOG.md` la recherche de ceux qu'une version change.
+
+**Constat**
+
+Ghostline, entrée du 06/11/2026 : la liste de PB-110 manquait `TripOutcomeConfigurationTests.cs`, et le contrôle de son étape 2, lancé avec `grep -c`, comptait 2 pour un paquet installé une fois.
+
+**Périmètre**
+
+- `CONTRIBUTING.md` : le contrôle exact de la réinstallation, et la convention « Item templates ».
+- `docs/getting-started.md` : une puce de « Upgrading a generated solution ».
+- `CHANGELOG.md` : la recherche de la ligne de PB-099.
+- Ce document : l'arbitrage 27, le critère commun de l'incrément, la ligne de la section 9.
+- Hors périmètre : `dotnet hardslice upgrade`, et les statuts de PB-099 et PB-110, terminés.
+
+**Cas vérifiés**
+
+- `dotnet new uninstall | grep -cx '   HardSlice.Templates'` affiche `1` avec le template installé une fois.
+- La recherche de la ligne de PB-099 trouve, sur Ghostline à 068cce8, les cinq fichiers que c061b80 a corrigés.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore
+dotnet test tests/HardSlice.Analyzers.Tests --no-build --filter ReadmeTests
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-110 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-110, comme il l'a fait sur ceux de PB-088 et de PB-097. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
+L'incrément est terminé lorsque PB-064 à PB-110 et PB-112 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-110, comme il l'a fait sur ceux de PB-088 et de PB-097. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
 
 ## 8. Incréments suivants
 
@@ -4792,6 +4837,7 @@ L'incrément est terminé lorsque PB-064 à PB-110 sont satisfaits, que les jobs
 | Trace durable de chaque cycle d'une commande récurrente, écrite hors de sa transaction, vue par Ghostline | à arbitrer avec la boîte d'envoi (arbitrage 26) : un cycle en échec ne laisse que son journal |
 | Option `--immutable` de `hardslice-aggregate` | écarté par l'arbitrage 17 : documenté dans `add-aggregate` par PB-101 |
 | Liste à part des diffs sans ligne du template dans `dotnet hardslice upgrade` | écarté par l'arbitrage 26 : ne touche qu'une solution sans génération enregistrée |
+| Liste, par `dotnet hardslice upgrade`, des fichiers générés par un template d'élément que la nouvelle version écrirait autrement, vue par Ghostline | à arbitrer sur un cas réel qui touche du code et non des commentaires (arbitrage 27) : l'outil ne sait pas quels fichiers viennent d'un template d'élément ni avec quels paramètres, et le `git grep` de la ligne de `CHANGELOG.md` suffit |
 | Mise à niveau d'une solution générée par une construction locale non publiée | couverte par PB-086 (option B), qui ne restaure aucune génération de départ, puis par la fusion de PB-095 une fois la base enregistrée |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
