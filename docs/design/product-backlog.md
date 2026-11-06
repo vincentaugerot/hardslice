@@ -2910,6 +2910,8 @@ Décision du mainteneur du 04/11/2026, après PB-080 : aucune version n'est publ
 
 Complété le 05/11/2026 par PB-090 à PB-097, tirés des sept entrées du 04/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-088 (d78ba83) : la fusion à trois voies de `dotnet hardslice upgrade`, que la section 9 attendait d'arbitrer sur une vraie mise à niveau, la sortie de `upgrade`, la condition d'une commande planifiée, le test du jeton de concurrence, la constante d'une politique, `--help` sur chaque commande et le texte de HS006 sur une lecture sans entité. Leurs arbitrages (9 à 13) sont validés par le mainteneur le 05/11/2026. PB-098, ajouté le même jour à partir de l'entrée du 05/11/2026 « nothing says whether a slice may query the aggregates of another module » (arbitrage 14), passe entre PB-094 et PB-095. PB-097 revalide les paquets après eux, toujours sous `0.3.0-preview.1`.
 
+Complété le 06/11/2026 par PB-099 à PB-110, tirés des entrées du 05/11/2026 et du 06/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-097 (619b84e), roadmaps 2.4 à 2.8 : l'article devant un nom généré, la réinstallation du template sous la même version, trois formes d'agrégat sans consigne, une base de données à part pour un test, cinq consignes de `add-slice` et de la carte du projet, le filtre lié à la route, des paramètres nommés et multiples, un DTO ou 404, l'objet valeur du domaine, le 409 d'une commande et l'instant du cycle d'une commande planifiée. Leurs arbitrages (15 à 26) sont validés par le mainteneur le 06/11/2026. PB-110 revalide les paquets après eux, toujours sous `0.3.0-preview.1`.
+
 ### Résultat attendu
 
 > Les deux modules de Ghostline se construisent avec les templates et les skills, sans réécrire de code généré ni écrire à la main ce qu'un template devrait produire : commande sans paramètre, route choisie, entité enfant, commande lancée par une tâche de fond, requête filtrée. Les cas avancés rencontrés (unicité sous concurrence, règle du domaine dans une requête, grandes collections, écritures en masse) ont une consigne écrite.
@@ -3039,8 +3041,20 @@ Entrées sans tâche reprises : « RecurringCommandCycles takes a bare AppFactor
 | PB-095 (fusion à trois voies de `upgrade`) | PB-090 à PB-094, PB-098 | aucun |
 | PB-096 (sortie de `upgrade`) | PB-095 | aucun |
 | PB-097 (paquets revalidés) | PB-090 à PB-096, PB-098 | aucun |
+| PB-099 (article devant un nom généré) | PB-097 | aucun |
+| PB-100 (réinstallation sous la même version) | PB-099 | aucun |
+| PB-101 (trois formes d'agrégat) | PB-100 | aucun |
+| PB-102 (base de données à part) | PB-101 | aucun |
+| PB-103 (consignes de `add-slice` et carte du projet) | PB-102 | aucun |
+| PB-104 (filtre lié à la route) | PB-103 | aucun |
+| PB-105 (paramètres nommés et multiples) | PB-104 | aucun |
+| PB-106 (un DTO, ou 404) | PB-105 | aucun |
+| PB-107 (objet valeur du domaine) | PB-106 | aucun |
+| PB-108 (409 d'une commande) | PB-107 | aucun |
+| PB-109 (cycle connu du handler) | PB-108 | aucun |
+| PB-110 (paquets revalidés) | PB-099 à PB-109 | aucun |
 
-Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. Puis PB-089, et PB-090 à PB-097 dans l'ordre de leur numéro, PB-098 passant entre PB-094 et PB-095 : PB-095 passe après les tickets qui changent le template, pour que la base qu'il enregistre et sa sonde les voient. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
+Le dépôt n'a qu'un agent : les tickets passent l'un après l'autre, dans l'ordre PB-079, PB-085, PB-080, puis PB-081, PB-082, PB-083, PB-084, PB-087, PB-086 et PB-088. PB-086 passe après les autres pour que sa liste des fichiers du template et sa sonde voient tout ce qu'ils ajoutent. Puis PB-089, et PB-090 à PB-097 dans l'ordre de leur numéro, PB-098 passant entre PB-094 et PB-095 : PB-095 passe après les tickets qui changent le template, pour que la base qu'il enregistre et sa sonde les voient. Puis PB-099 à PB-110 dans l'ordre de leur numéro. PB-051 est suspendu par décision du mainteneur du 04/11/2026.
 
 ### PB-064 : Générer une commande sans paramètre avec `hardslice-command --parameters none`
 
@@ -4249,9 +4263,456 @@ CI de ci/pb-097, chaque groupe vert
 scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages
 ```
 
+### Arbitrages validés le 06/11/2026
+
+Pour PB-099 à PB-110, tirés des entrées du 05/11/2026 et du 06/11/2026 que `ghostline/docs/hardslice-friction.md` laisse ouvertes après la mise à niveau de Ghostline sur les paquets de PB-097 (619b84e), roadmaps 2.4 à 2.8. Validés par le mainteneur le 06/11/2026 : toutes les recommandations, sans écart. Les formes précises ci-dessous (noms d'options, de méthodes et de fichiers) suivent ces recommandations. Les tickets passent l'un après l'autre, dans l'ordre de leur numéro, et PB-110 reconstruit les paquets une seule fois, après eux.
+
+15. **Article devant un nom généré (PB-099).** Entrées « the comment of the generated token test reads an CollectionCycle » et « an ReconciledDay again ». Les templates écrivent « an » devant chaque nom d'agrégat.
+    - Décision : une tournure qui ne dépend jamais de la première lettre du nom (« the aggregate `X` », « an identifier `XId` »), et un test qui refuse « a » ou « an » devant un nom remplacé dans tout le contenu des templates.
+16. **Réinstallation du template sous la même version (PB-100).** Entrée « dotnet new install --force of the same version leaves the template package registered twice ».
+    - Décision : `dotnet new uninstall HardSlice.Templates`, puis `dotnet new install` sans `--force`, puis un contrôle que `dotnet new uninstall` ne liste le paquet qu'une fois. Dans `CONTRIBUTING.md` et dans la procédure de PB-110. Les procédures de PB-088 et PB-097, terminées, ne changent pas.
+17. **Trois formes d'agrégat sans consigne (PB-101).** Entrées « add-aggregate has no form for an aggregate written once and never changed », « EF Core complex types for a value object are not documented » et « a bulk delete in a command is documented nowhere ».
+    - Option A : trois sections de `add-aggregate`, rien de généré.
+    - Option B : A, plus une option `--immutable` de `hardslice-aggregate`.
+    - Décision : A. Un agrégat écrit une fois garde son jeton et son test de modèle (ils couvrent la première méthode ajoutée plus tard). Aucun diagnostic sur `ExecuteDeleteAsync`.
+18. **Base de données à part pour un test (PB-102).** Entrée « a job over every eligible row and the database that the integration tests share ». Le contournement de Ghostline (chaque classe réserve des années, ses tests passent l'un après l'autre) est fragile, et un agent ne le trouve pas seul.
+    - Décision : `PostgresDatabase.CreateIsolatedAsync()`, qui crée une base par `CREATE DATABASE ... TEMPLATE` depuis une base modèle migrée une fois par exécution, et qu'`AppFactory` accepte comme le conteneur partagé. Ticket à part, avant PB-103, pour que la consigne de PB-103 le nomme.
+19. **Consignes de `add-slice` et carte du projet (PB-103).** Entrées « nothing says whether a command may create a second aggregate in its transaction », « no documented place for the work a system command shares with its administration twin », « no guidance for the test data of a module that reads two other modules », « a job over every eligible row » (sa phrase) et « no allowed folder of Shared for a store outside the database ».
+    - Décision : les formes que Ghostline a choisies deviennent la consigne. Une commande écrit plusieurs agrégats de son module dans sa transaction quand ils doivent valider ensemble, sinon un événement de domaine et sa réaction. Un cas d'usage partagé par deux slices (un job et un endpoint) va dans un service `internal` du contrat public du module. Les données de test partagées par les slices d'un module vont dans le dossier de test du module, et construisent les agrégats d'un autre module par leurs fabriques. Un stockage hors base partagé par plusieurs modules va dans `Shared/Persistence` : `hardslice.json` ne gagne aucun dossier.
+20. **Filtre lié à la route (PB-104).** Entrée « a filtered query whose filter is a route parameter gets a 400 test that cannot happen ».
+    - Décision : quand `--route` contient `{<paramètre>}`, le filtre est lié depuis la route (commentaire de l'endpoint compris), et le test du filtre absent devient le test d'une valeur que la liaison refuse (400). Pour un `string`, que la liaison ne refuse jamais, un test marqué `TODO(hardslice):` d'une valeur que le validateur refuse. Un `{nom}` de la route qui ne nomme aucun filtre est refusé (code 105).
+21. **Paramètres nommés et multiples (PB-105).** Entrées « the generated tests of a command assume a field Id » et « hardslice-query --result filtered takes a single --parameter ». `dotnet new` refuse une option répétée.
+    - Option A : `--parameter` répétable. Impossible avec `dotnet new`.
+    - Option B : une liste dans une seule option, et un seul nom d'option pour les deux templates.
+    - Décision : B. `--parameters` sur les deux templates : `id` (par défaut) ou `none` sur `hardslice-command`, ou une liste `<Name>:<Type>[,<Name>:<Type>...]` sur les deux. Le `--parameter` de `hardslice-query` devient `--parameters` : rien n'est publié, aucune compatibilité à garder. Mêmes types que le filtre de PB-070. Une liste est refusée avec `--method DELETE`, qui n'a pas de corps (code 105).
+22. **Un DTO, ou 404 (PB-106).** Entrées « hardslice-command has no response a DTO, or 404 » et « hardslice-query has no result one DTO that a filter selects ».
+    - Décision : `--not-found` sur `hardslice-command`, seulement avec `--response <Dto>` (refusé sinon, code 105). `--result summary` sur `hardslice-query` : un DTO nullable, `null` répondu par 404, avec `--parameters` obligatoire. Un paragraphe « A query that aggregates » dans `add-slice`. Pas de `--response <Dto>?` : le `?` est un caractère de motif du shell.
+23. **Objet valeur du domaine (PB-107).** Entrée « no template for a value object of the domain ».
+    - Décision : `dotnet new hardslice-value-object --module <Module> --name <Name>`, un `sealed record` dont le constructeur valide et lève `DomainException`, avec ses tests unitaires.
+24. **Prouver le 409 d'une commande (PB-108).** Entrée « testing the 409 of a token conflict on a command needs a hand-written pipeline behavior ». L'exemple prouve le sien par un verrou de ligne (`CancelBookingTests`), propre à une ligne qui existe déjà.
+    - Décision : `app.HoldBeforeCommit<TCommand>()` sur `AppFactory`, qui retient la commande après son handler et avant sa validation jusqu'à ce que le test la relâche. L'exemple garde son verrou de ligne. Une phrase de `add-slice` : un agrégat inchangé n'écrit rien, donc la seconde commande doit le changer pour entrer en conflit.
+25. **Le cycle connu du handler (PB-109).** Entrée « the handler of a recurring command does not know the instant of its cycle ».
+    - Décision : un service scoped `RecurringCycleContext` dans `Shared/Messaging`, dont `Current` (`RecurringCycle?`) est rempli par `RecurringCommandService` avant chaque envoi, et vaut `null` pour une commande arrivée autrement.
+26. **Différés et écartés.**
+    - `AddRecurringCommand` avec une fabrique de commande paramétrée (entrée « administration twin ») : différé en section 9. Le seul cas réel ne s'y prête pas (`ReconcileTrips` traite la veille et le jour en cours), et le service du contrat du module, documenté par PB-103, suffit.
+    - Trace durable de chaque cycle d'une commande récurrente (entrée « no way to record the outcome of a cycle that fails ») : différé en section 9, avec la boîte d'envoi. Le manque réel de Ghostline est la durée de ses journaux sur Railway, une affaire d'exploitation.
+    - Liste à part des diffs sans ligne du template dans `dotnet hardslice upgrade` (entrée « second run of dotnet hardslice upgrade ») : écarté. Le cas ne touche qu'une solution sans génération enregistrée, et depuis PB-095 toute solution enregistre la sienne dès sa création, Ghostline compris depuis 619b84e.
+
+| Point | Ticket | Raison de l'ordre |
+|---|---|---|
+| Article devant un nom généré | PB-099 | correction seule |
+| Réinstallation sous la même version | PB-100 | procédure seule, avant PB-110 qui la suit |
+| Trois formes d'agrégat | PB-101 | texte seul |
+| Base de données à part | PB-102 | avant PB-103, qui la nomme |
+| Consignes de `add-slice` et carte du projet | PB-103 | après PB-102 |
+| Filtre lié à la route | PB-104 | avant PB-105, qui touche la même post-action |
+| Paramètres nommés et multiples | PB-105 | après PB-104 |
+| Un DTO, ou 404 | PB-106 | après PB-105, `--result summary` prend `--parameters` |
+| Objet valeur du domaine | PB-107 | template d'élément |
+| 409 d'une commande | PB-108 | helper de test |
+| Cycle connu du handler | PB-109 | `Shared/Messaging` |
+| Paquets revalidés | PB-110 | après PB-099 à PB-109, Ghostline se met à niveau sur ce commit |
+
+Les entrées « what worked at once » du 05/11/2026 et du 06/11/2026 et l'entrée « decision, the coverage before the traces of the collection is reconstructed » n'appellent aucun ticket.
+
+### Critères communs à PB-099 à PB-110
+
+- Les critères communs des sections 5 à 7 restent applicables, dont la sonde, l'entrée de `docs/item-templates.md` et la consigne de la skill de chaque template ou option ajouté, et `AGENTS.md` sous 150 lignes dans les deux variantes.
+- Chaque ticket cite l'entrée de `ghostline/docs/hardslice-friction.md` qu'il ferme, et dit dans son statut le contournement que Ghostline peut retirer. Aucun ticket ne modifie le dépôt Ghostline.
+- Chaque ticket ajoute sa ligne à `CHANGELOG.md`, sous `0.3.0-preview.1`.
+- Vérification : `dotnet build --no-restore`, `dotnet test --no-build`, et en local les groupes de `scripts/test-template.sh` que son Acceptation nomme (`--only`), jamais le scénario complet. Les commits passent par une branche `ci/<ticket>` dont la CI est verte, puis sur `main`.
+- Aucun ticket ne reconstruit les paquets, ne pose d'étiquette ni ne publie : PB-110 reconstruit une fois après eux.
+
+### PB-099 : Écrire les noms générés sans article qui dépende de leur première lettre
+
+Statut : à faire. Ferme les entrées « the comment of the generated token test reads an CollectionCycle » et « "an ReconciledDay" again, in the token test and in the converter of hardslice-entity » de `ghostline/docs/hardslice-friction.md` (arbitrage 15).
+
+**Résultat observable**
+
+Aucun fichier généré par un template ne met « a » ou « an » devant un nom remplacé (agrégat, entité, identifiant, module, slice, événement). Un test du paquet de templates échoue si un tel article revient.
+
+**Constat**
+
+Ghostline, entrées du 05/11/2026 : `CollectionCycleConfigurationTests.cs`, `TripOutcomeConfigurationTests.cs` et `ReconciledDayConfigurationTests.cs` disent « changes an CollectionCycle », et le converter de `hardslice-entity` dit « Stores an ReconciledDayId as its Guid ». Sources : `hardslice-aggregate/tests/MyApp.IntegrationTests/Features/ModuleName/AggregateNameConfigurationTests.cs` (ligne 11) et `hardslice-entity/src/MyApp/Features/ModuleName/AggregateNameIdConverter.cs` (ligne 6). Un nom qui commence par une voyelle donnerait l'erreur inverse avec « a ».
+
+**Périmètre**
+
+- Tout le contenu de `src/HardSlice.Templates/content/`, chaque template d'élément et `hardslice-api` (exemple compris) : chaque « a » ou « an » devant un nom remplacé (`AggregateName`, `EntityName`, `ModuleName`, `SliceName`, `EventName` et leurs dérivés `...Id`, `...Dto`) réécrit en une tournure qui ne dépend pas de la première lettre, comme « the aggregate `AggregateName` » ou « an identifier `AggregateNameId` ».
+- `TemplatePackageTests` : un test qui parcourt le contenu des templates et refuse `\b(a|an) <nom remplacé>`.
+- Hors périmètre : les textes des diagnostics et de l'outil, qui ne génèrent rien.
+
+**Cas vérifiés**
+
+- Le nouveau test, rouge avant la correction sur les deux fichiers du constat, vert après.
+- `probe_aggregate_template` et la sonde de `hardslice-entity` inchangées et vertes.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+Contournement que Ghostline peut retirer : aucun. Ses commentaires générés peuvent rester ou être corrigés à la main.
+
+### PB-100 : Réinstaller le template d'une reconstruction sous la même version sans l'enregistrer deux fois
+
+Statut : à faire. Ferme l'entrée « dotnet new install --force of the same version leaves the template package registered twice » de `ghostline/docs/hardslice-friction.md` (arbitrage 16).
+
+**Résultat observable**
+
+`CONTRIBUTING.md` réinstalle le template d'une reconstruction sous la même version par `dotnet new uninstall HardSlice.Templates`, puis `dotnet new install` sans `--force`, et dit de vérifier que `dotnet new uninstall` ne liste le paquet qu'une fois.
+
+**Constat**
+
+Ghostline, entrée du 05/11/2026 : après `dotnet new install artifacts/packages/HardSlice.Templates.0.3.0-preview.1.nupkg --force` (étape 2 de la procédure de PB-097, et `CONTRIBUTING.md` ligne 66), chaque template avertit d'un conflit, `dotnet new uninstall` liste `HardSlice.Templates` deux fois, et `~/.templateengine/packages.json` garde deux entrées montées sur le même fichier. Deux `dotnet new uninstall`, puis un `install` sans `--force`, ont donné une seule entrée sans avertissement.
+
+**Périmètre**
+
+- `CONTRIBUTING.md` : la commande de réinstallation, le contrôle, et le symptôme (l'avertissement de conflit, le paquet listé deux fois) avec son correctif, à côté de la purge des caches de PB-080.
+- Les scripts du dépôt qui réinstallent le template sous la même version (`scripts/`), s'il y en a, suivent la même forme.
+- Hors périmètre : les statuts de PB-088 et PB-097, terminés.
+
+**Cas vérifiés**
+
+- À la main, dans un home isolé (`isolate_dotnet_cli_home`) : deux réinstallations de suite selon `CONTRIBUTING.md`, puis `dotnet new uninstall` liste le paquet une fois et `dotnet new list hardslice` n'avertit d'aucun conflit. Le résultat est écrit dans le statut.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+```
+
+Contournement que Ghostline peut retirer : aucun. Sa prochaine mise à niveau suit la procédure de PB-110, qui reprend celle-ci.
+
+### PB-101 : Documenter un agrégat écrit une fois, un objet valeur dans la ligne de son entité, et une suppression en masse
+
+Statut : à faire. Ferme les entrées « add-aggregate has no form for an aggregate written once and never changed », « EF Core complex types for a value object are not documented » et « a bulk delete in a command is documented nowhere » de `ghostline/docs/hardslice-friction.md` (arbitrage 17, option A). Texte seul.
+
+**Résultat observable**
+
+`add-aggregate` a trois sections de plus :
+
+- « An aggregate that never changes » : une trace, une entrée de journal ou une mesure garde le jeton `Version` et son test de modèle, qui couvrent la première méthode ajoutée plus tard. Le test du 409 attend cette méthode.
+- « A value object stored in the row of its entity » : `builder.ComplexProperty(entity => entity.Property, ...)`, les noms de colonnes qu'il donne (`<Property>_<Field>`), la construction par un constructeur privé, et quand préférer les champs privés de « Mapping private fields ».
+- « Rows deleted in bulk » : une rétention ou une purge supprime par `ExecuteDeleteAsync` dans la transaction de sa commande, par lots dont la taille est une constante du handler, les enfants d'abord, seulement des agrégats de son module (HS012). La règle qui décide de ce qui est purgé vit dans le domaine, et le nombre de lignes supprimées est vérifié contre elle, une différence annulant la transaction. `ExecuteDeleteAsync` ne passe ni par les méthodes de l'agrégat ni par son jeton : la consigne le dit.
+
+**Constat**
+
+Ghostline, entrées du 05/11/2026 et du 06/11/2026 : `CollectionCycle`, écrit une fois et jamais changé, a reçu le jeton, son commentaire sur le 409 et son test, sans consigne sur ce qu'il faut garder. `FeedRead`, objet valeur tenu deux fois par `CollectionCycle`, est mappé par `ComplexProperty` sans aucun diagnostic, alors que `add-aggregate` ne montre que les champs privés, qui auraient demandé douze champs. `ArchiveObservations` supprime environ 8 000 `ObservedTrips`, 300 000 `TripObservations` et 2 880 traces par jour purgé par `ExecuteDeleteAsync` par lots de 1 000, `ObservationArchive.Verify` et `RecordPurge` portant la règle et le contrôle des comptes : aucune consigne ne le dit, et `HS012.md` ne nomme `ExecuteDelete` que pour l'interdire sur un autre module.
+
+**Périmètre**
+
+- La skill `add-aggregate` (copies `.claude/` et `.agents/`) : les trois sections, avec un exemple court pour chacune.
+- `AGENTS.md`, seulement si une demi-phrase de « Changing the database » doit renvoyer aux sections, sous 150 lignes dans les deux variantes.
+- `HS012.md` : la phrase sur `ExecuteDelete` renvoie à « Rows deleted in bulk » pour son propre module.
+- Hors périmètre : une option `--immutable`, un diagnostic sur `ExecuteDeleteAsync`, une aide de suppression en masse dans `Shared/Persistence`.
+
+**Cas vérifiés**
+
+- `TemplatePackageTests` : les trois titres de section dans `add-aggregate`, copie `.agents/` comprise.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+Contournement que Ghostline peut retirer : aucun. `CollectionCycle`, `FeedRead` et `ArchiveObservations` ont déjà la forme documentée.
+
+### PB-102 : Donner à un test d'intégration une base de données à lui
+
+Statut : à faire. Ferme la partie « helper » de l'entrée « a job over every eligible row and the database that the integration tests share » de `ghostline/docs/hardslice-friction.md` (arbitrage 18). PB-103 en écrit la consigne.
+
+**Résultat observable**
+
+Un test d'intégration qui travaille sur toutes les lignes qui répondent à une règle (purge, rétention, rattrapage) appelle `await database.CreateIsolatedAsync()` et reçoit une base migrée à lui, dans le même conteneur, qu'`AppFactory` accepte comme le conteneur partagé et qui est supprimée à la fin du test. Créer une base ne refait pas les migrations : elle est copiée d'une base modèle migrée une fois par exécution (`CREATE DATABASE ... TEMPLATE`).
+
+**Constat**
+
+Ghostline, entrée du 06/11/2026 : `PostgresDatabase` est un conteneur pour toute l'exécution, et les tests s'isolent « en créant leurs propres lignes ». La purge d'`ArchiveObservations` archive chaque jour figé depuis plus de 30 jours, quel que soit le test qui l'a créé. Les tests réservent les années 2091 à 2099, vivent dans une seule classe pour passer l'un après l'autre, et le bucket n'échoue que pour les clés de l'année du test.
+
+**Périmètre**
+
+- `tests/MyApp.IntegrationTests/PostgresDatabase.cs` du template : la base modèle, migrée une fois à la demande, et `CreateIsolatedAsync()`, qui rend une base à supprimer (`IAsyncDisposable`) avec sa chaîne de connexion et son `CreateDbContext()`.
+- `AppFactory` : un constructeur qui prend cette base, avec le même comportement que celui de `PostgresDatabase` (même environnement, mêmes services hébergés retirés).
+- Le commentaire de `PostgresDatabase` dit quand s'en servir. L'exemple ne s'en sert pas : aucun de ses tests ne balaie toutes les lignes.
+- Hors périmètre : un conteneur par test, la consigne de `add-slice` (PB-103).
+
+**Cas vérifiés**
+
+- Un test du template, dans les deux variantes : deux bases isolées créées en parallèle ne voient pas les lignes l'une de l'autre ni celles de la base partagée, et une base est supprimée à la fin.
+- Le temps de création d'une base isolée, mesuré et écrit dans le statut.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+Contournement que Ghostline peut retirer : les années réservées des tests d'`ArchiveObservations` et leur classe unique, remplacées par une base isolée par test.
+
+### PB-103 : Dire dans `add-slice` et la carte du projet où vont les cas que Ghostline a rencontrés dans les phases 2.5 à 2.8
+
+Statut : à faire. Ferme les entrées « nothing says whether a command may create a second aggregate in its transaction », « no documented place for the work a system command shares with its administration twin », « no guidance for the test data of a module that reads two other modules », « a job over every eligible row and the database that the integration tests share » (sa consigne, après PB-102) et « no allowed folder of Shared for a store outside the database, such as a bucket » de `ghostline/docs/hardslice-friction.md` (arbitrage 19). Texte seul.
+
+**Résultat observable**
+
+- `add-slice` dit qu'une commande crée ou change plusieurs agrégats de son module dans sa transaction quand ils doivent valider ensemble (une trace et la fusion qu'elle décrit), et qu'elle préfère un événement de domaine et sa réaction quand le second peut échouer ou suivre plus tard. Un agrégat d'un autre module s'écrit toujours par son module (HS012).
+- `add-slice` dit où va un cas d'usage que deux slices partagent derrière deux déclencheurs (une commande système planifiée et un endpoint d'administration) : un service `internal` du contrat public du module, enregistré par le module, nommé d'après le cas d'usage, avec un commentaire qui nomme les slices qui l'utilisent. HS006 ne vérifie pas ses lectures : la consigne demande les mêmes `AsNoTracking()` que dans un handler.
+- `add-slice` dit où vont les données de test partagées par les slices d'un module : `tests/MyApp.IntegrationTests/Features/<Module>/<Name>Scenario.cs`, qui construit les agrégats d'un autre module par leurs propres fabriques.
+- `add-slice` dit qu'un test d'un job qui balaie toutes les lignes d'une règle prend une base à lui, `database.CreateIsolatedAsync()` (PB-102).
+- La carte du projet d'`AGENTS.md` dit que `Shared/Persistence/` tient aussi les stockages hors base que plusieurs modules utilisent, comme un stockage de fichiers ou d'objets. Le commentaire d'`AppFactory` dit de donner à chaque instance sa propre copie d'un tel stockage.
+
+**Constat**
+
+Ghostline, entrées du 05/11/2026 et du 06/11/2026 : `CollectRealtimeFeeds` crée un `CollectionCycle` dans la transaction de sa fusion, sans règle ni consigne. `ReconcileTrips` et `ReconcileServiceDay` partagent 150 lignes par `ServiceDayReconciler`, service `internal` du contrat de `Reliability`. `ServiceDayScenario.cs` construit les agrégats de `Schedule` et `Realtime` par `ScheduleVersion.Import`, `ObservedTrip.FirstSeen` et `CollectionCycle.Record`. `IArchiveBucket`, utilisé par `Schedule` et `Realtime`, vit dans `Shared/Persistence`, et `AppFactory` donne à chaque instance son dossier (`Archive:Path`). Chaque fois, la place a été devinée.
+
+**Périmètre**
+
+- La skill `add-slice` (copies `.claude/` et `.agents/`) : les quatre consignes.
+- `AGENTS.md` du template : la ligne de `Shared/Persistence/` de la carte, et une demi-phrase de la règle d'or 2 si elle doit nommer le service du contrat, sous 150 lignes dans les deux variantes.
+- `HS017.md` : le rôle de `Shared/Persistence` dit de la même façon. `hardslice.json` ne change pas.
+- Le commentaire d'`AppFactory`.
+- Hors périmètre : `AddRecurringCommand` avec une fabrique de commande (section 9), un diagnostic sur un service du contrat qui écrit.
+
+**Cas vérifiés**
+
+- `TemplatePackageTests` : chaque consigne dans `add-slice`, copie `.agents/` comprise, la ligne de la carte, `AGENTS.md` sous 150 lignes.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+Contournement que Ghostline peut retirer : aucun. `ServiceDayReconciler`, `ServiceDayScenario`, `IArchiveBucket` et la transaction de `CollectRealtimeFeeds` ont la forme documentée. La ligne que Ghostline a ajoutée à la carte de son `AGENTS.md` se fusionne avec celle du template à la mise à niveau.
+
+### PB-104 : Générer un filtre lié à la route avec son vrai test
+
+Statut : à faire. Ferme l'entrée « a filtered query whose filter is a route parameter gets a 400 test that cannot happen » de `ghostline/docs/hardslice-friction.md` (arbitrage 20).
+
+**Résultat observable**
+
+`dotnet new hardslice-query --result filtered --route 'days/{date}' --parameter Date:DateOnly` génère un filtre lié depuis la route, un commentaire d'endpoint qui le dit, et un test d'intégration d'une valeur que la liaison refuse (`/days/not-a-date`, 400) à la place du test « Rejects a request without its filter ». Pour un filtre `string`, que la liaison ne refuse jamais, le test est celui d'une valeur que le validateur refuse, marqué `TODO(hardslice):`. Un `{nom}` de `--route` qui ne nomme aucun filtre est refusé avec le code 105.
+
+**Constat**
+
+Ghostline, entrée du 05/11/2026 : `GetDayReliability` (`--route 'days/{date}' --parameter Date:DateOnly`) et `GetWeeklyBulletin` (`--route 'weeks/{week}' --parameter Week:string`). `[AsParameters]` lie bien le filtre depuis la route, mais le test généré appelle la route avec `{date}` littéral : sans le paramètre, la route ne correspond pas (405, `POST /reliability/days` existant). Le commentaire parle encore de « ?date= ». Une date invalide est refusée par la liaison (`BadHttpRequestException`) avant le validateur.
+
+**Périmètre**
+
+- La post-action de `hardslice-query` : la détection de `{<paramètre>}` dans `--route` (insensible à la casse, contrainte de route comprise), le refus d'un nom inconnu, le commentaire et le test.
+- `add-slice` et `docs/item-templates.md` : un filtre de la route.
+- Hors périmètre : plusieurs filtres (PB-105), une commande à paramètre de route.
+
+**Cas vérifiés**
+
+- La sonde de `hardslice-query` : un filtre `DateOnly` lié à la route (test de la valeur refusée vert après complétion), un filtre `string` lié à la route (marqueur à compléter), un `{inconnu}` refusé avec le code 105 sans rien créer.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+Contournement que Ghostline peut retirer : aucun. Ses deux slices ont déjà les tests que le template génère maintenant.
+
+### PB-105 : Nommer et multiplier les paramètres d'une commande et d'une requête avec `--parameters`
+
+Statut : à faire. Ferme les entrées « the generated tests of a command assume a field Id » et « hardslice-query --result filtered takes a single --parameter » de `ghostline/docs/hardslice-friction.md` (arbitrage 21, option B).
+
+**Résultat observable**
+
+- `dotnet new hardslice-command --parameters ServiceDate:DateOnly` génère la commande avec ce champ, une règle du validateur, son test unitaire et la clé `ServiceDate` dans le test d'intégration du 400. `--parameters id` (par défaut) et `--parameters none` gardent leur forme.
+- `dotnet new hardslice-query --result filtered --parameters From:DateOnly,To:DateOnly` génère les deux filtres, chacun avec sa règle `NotNull`, son test du validateur et sa clé dans le test du 400.
+- Le `--parameter` de `hardslice-query` devient `--parameters`. Une liste est refusée avec `--method DELETE` (code 105), comme un nom en double, un type inconnu ou un nom qui n'est pas en PascalCase.
+
+**Constat**
+
+Ghostline, entrées du 05/11/2026 : les tests générés par `hardslice-command` remplissent et vident un champ `Id`, réécrits pour `ReconcileServiceDayCommand(DateOnly? ServiceDate)`. `--parameter From:DateOnly --parameter To:DateOnly` est refusé par `dotnet new` (« expects a single argument but 2 were provided »), et `--parameter From:DateOnly,To:DateOnly` par la post-action. `GetRouteRanking` et `GetRouteReliability` ont reçu `To` et `RouteId` à la main.
+
+**Périmètre**
+
+- `hardslice-command` : `--parameters` passe d'un choix (`id`, `none`) à un texte (`id`, `none` ou une liste), validé par la post-action, avec la même table de types que le filtre de PB-070 et ses valeurs d'exemple dans les tests.
+- `hardslice-query` : `--parameters` à la place de `--parameter`, en liste, pour `--result filtered`, et un filtre de la route (PB-104) pour chaque élément de la liste qui en est un.
+- `add-slice`, `AGENTS.md` (la ligne de l'étape 2 d'« Adding a slice », sous 150 lignes), `docs/item-templates.md`, les README.
+- Hors périmètre : un paramètre de route pour une commande.
+
+**Cas vérifiés**
+
+- La sonde de `hardslice-command` : une liste de deux champs, verte après complétion, `id` et `none` inchangés, les refus (DELETE, doublon, type inconnu) avec le code 105.
+- La sonde de `hardslice-query` : deux filtres, l'un lié à la route, verte après complétion, et l'ancien nom `--parameter` refusé.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items,names
+```
+
+Contournement que Ghostline peut retirer : aucun. Ses slices gardent leur forme, la suivante se génère avec `--parameters`. `AGENTS.md` de Ghostline, s'il cite `--parameter`, suit à la fusion.
+
+### PB-106 : Répondre un DTO, ou 404, depuis une commande et une requête qui agrège
+
+Statut : à faire. Ferme les entrées « hardslice-command has no response "a DTO, or 404" » et « hardslice-query has no result "one DTO that a filter selects", for a query that aggregates » de `ghostline/docs/hardslice-friction.md` (arbitrage 22).
+
+**Résultat observable**
+
+- `dotnet new hardslice-command --response ReconciledDayDto --not-found` génère `ICommand<ReconciledDayDto?>`, un endpoint `Results<Ok<ReconciledDayDto>, NotFound>` et le test du 404. `--not-found` est refusé sans `--response <Dto>` (code 105).
+- `dotnet new hardslice-query --result summary --parameters From:DateOnly,To:DateOnly` génère `IQuery<<Slice>Dto?>`, un handler marqué `TODO(hardslice):` qui calcule un DTO sur les agrégats filtrés et rend `null` quand il n'y a rien, un endpoint `Results<Ok<T>, NotFound>`, le test du 404 et celui du 400. `--parameters` est obligatoire avec `summary`.
+- `add-slice` a un paragraphe « A query that aggregates » : `GroupBy(...).Select(group => group.Count(predicate))` traduit en SQL (`count(*) FILTER (WHERE ...)`), jamais un chargement des lignes pour les compter en mémoire, le comptage partagé par plusieurs requêtes dans le contrat du module, un index couvrant (`IncludeProperties`) pour une lecture par période.
+
+**Constat**
+
+Ghostline, entrées du 05/11/2026 : `ReconcileServiceDay` répond les chiffres du jour ou 404, écrit à la main (requête nullable, endpoint, test du 404). Les quatre requêtes des chiffres du site répondent un DTO calculé par `GROUP BY`, trois avec un 404 : avec `--result filtered`, seuls le validateur, ses tests et le test du 400 sont restés.
+
+**Périmètre**
+
+- `hardslice-command` : `--not-found`, et ses refus.
+- `hardslice-query` : `--result summary`, son handler, son endpoint, ses tests et ses refus.
+- `add-slice`, `AGENTS.md` (sous 150 lignes), `docs/item-templates.md`, les README.
+- Hors périmètre : un `--response <Dto>?`.
+
+**Cas vérifiés**
+
+- La sonde de `hardslice-command` : `--response <Dto> --not-found`, vert après complétion, et le refus sans DTO.
+- La sonde de `hardslice-query` : `--result summary` avec deux filtres, vert après complétion (le 404 et un DTO calculé par `GroupBy`), et le refus sans `--parameters`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+Contournement que Ghostline peut retirer : aucun. `ReconcileServiceDay` et les quatre requêtes ont déjà la forme générée, et `ReliabilityFigures` celle du paragraphe.
+
+### PB-107 : Générer un objet valeur du domaine avec `dotnet new hardslice-value-object`
+
+Statut : à faire. Ferme l'entrée « no template for a value object of the domain » de `ghostline/docs/hardslice-friction.md` (arbitrage 23).
+
+**Résultat observable**
+
+`dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name>` génère `src/MyApp.Domain/<Module>/<Name>.cs`, un `sealed record` dont le constructeur valide et lève `DomainException` (règle marquée `TODO(hardslice):`), et `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs` (une valeur valide, une valeur refusée). Il refuse un module absent ou un nom existant (code 105). `AGENTS.md` dit qu'une règle calculée à partir de valeurs, comme un taux, vit dans un objet valeur.
+
+**Constat**
+
+Ghostline, entrée du 05/11/2026 : `DeliveryCounts` (taux, part perdue, cible de 99,5 %, ordres de classement) et `IsoWeek` (une semaine `2026-W45`), comme `ServiceDay` et `CollectionCoverage` avant eux, écrits à la main faute de template : `hardslice-aggregate` et `hardslice-entity` ne génèrent que des entités.
+
+**Périmètre**
+
+- Le template `hardslice-value-object` et sa post-action, sur le modèle de `hardslice-entity` (les dossiers du domaine et des tests de `Directory.Build.targets`).
+- `add-aggregate` (une section courte qui nomme le template), `AGENTS.md` (sous 150 lignes), `docs/item-templates.md`, les README, la liste des templates dans `Directory.Build.targets` si elle les nomme.
+- Hors périmètre : le mapping d'un objet valeur (PB-101 le documente).
+
+**Cas vérifiés**
+
+- Une sonde `probe_value_object_template`, dans les deux variantes : génération, complétion de référence, vérification verte, refus avec le code 105.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+Contournement que Ghostline peut retirer : aucun. Ses objets valeur écrits à la main ont la forme générée.
+
+### PB-108 : Prouver le 409 d'une commande avec `app.HoldBeforeCommit<TCommand>()`
+
+Statut : à faire. Ferme l'entrée « testing the 409 of a token conflict on a command needs a hand-written pipeline behavior » de `ghostline/docs/hardslice-friction.md` (arbitrage 24).
+
+**Résultat observable**
+
+`AppFactory` a `HoldBeforeCommit<TCommand>()`, qui rend une poignée : la première commande `TCommand` s'arrête après son handler et avant que `TransactionBehavior` ne valide, `WaitUntilHeldAsync()` attend qu'elle y soit, `Release()` la laisse valider. Un test lance une commande, attend qu'elle soit retenue, fait passer la seconde, relâche la première, et vérifie le 409. `add-slice` le nomme, et dit qu'un agrégat inchangé n'écrit rien, donc que la seconde commande doit le changer pour entrer en conflit.
+
+**Constat**
+
+Ghostline, entrée du 05/11/2026 : le test de deux passes concurrentes de `ReconcileServiceDay` enregistre un `IPipelineBehavior` interne (`HoldFirstPass`, environ 20 lignes) et avance un `FakeTimeProvider` partagé de 5 minutes, sans quoi la seconde passe ne change rien et aucun conflit n'arrive. Le test de jeton généré par PB-093 prouve le mapping, pas la réponse de la slice. L'exemple prouve le 409 de `CancelBooking` par un verrou de ligne, qui suppose une ligne existante.
+
+**Périmètre**
+
+- `AppFactory` du template et son comportement interne, enregistré à l'intérieur de `TransactionBehavior`, sans effet tant que le test ne l'appelle pas.
+- Un test du template qui prouve un 409 avec le helper, dans les deux variantes (l'exemple garde son verrou de ligne).
+- `add-slice`, le commentaire d'`AppFactory`.
+- Hors périmètre : un point d'arrêt dans `RecurringCommandCycles`.
+
+**Cas vérifiés**
+
+- Le test du helper : 200 et 409, et aucun doublon en base. Une commande d'un autre type n'est jamais retenue.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+Contournement que Ghostline peut retirer : `HoldFirstPass` du test de `ReconcileServiceDay`, remplacé par `HoldBeforeCommit<ReconcileServiceDayCommand>()` une fois `AppFactory.cs` fusionné. L'avance de l'horloge reste.
+
+### PB-109 : Donner au handler d'une commande planifiée l'instant de son cycle
+
+Statut : à faire. Ferme l'entrée « the handler of a recurring command does not know the instant of its cycle » de `ghostline/docs/hardslice-friction.md` (arbitrage 25).
+
+**Résultat observable**
+
+Le handler d'une commande envoyée par `AddRecurringCommand` injecte `RecurringCycleContext` et lit `Current`, le `RecurringCycle` du cycle (`Due`, `AtStart`, `Retry`). `Current` vaut `null` pour une commande arrivée par son endpoint ou par `IMediator` hors du service. Une trace ou un rapport se date par l'horaire, pas par l'horloge.
+
+**Constat**
+
+Ghostline, entrée du 05/11/2026 : `RecurringCommandService` connaît `RecurringCycle.Due` et le donne à la condition, pas au handler. `CollectRealtimeFeeds` lisait l'instant après la lecture des flux, décalé jusqu'à 15 s, et deux réponses à trois cycles d'écart sont tombées à 90,2 s, juste au-dessus de la règle de couverture. Le handler lit maintenant `TimeProvider` à son début, avec une marge de 5 s.
+
+**Périmètre**
+
+- `Shared/Messaging/RecurringCommand.cs` du template : `RecurringCycleContext` (scoped, enregistré par `AddRecurringCommand`), rempli par le service dans le scope du cycle avant l'envoi.
+- `add-slice` (la puce des commandes planifiées), le commentaire de `RecurringCycle`, `AGENTS.md` si la puce « Background work » doit le nommer, sous 150 lignes.
+- Hors périmètre : un paramètre de la commande, une commande fabriquée (section 9).
+
+**Cas vérifiés**
+
+- `RecurringCommandTests` : le handler lit le `Due` du cycle, à start et à une reprise, et `null` quand la commande est envoyée par `IMediator`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+Contournement que Ghostline peut retirer : `clock.GetUtcNow()` au début du handler de `CollectRealtimeFeeds`, remplacé par le `Due` du cycle une fois `RecurringCommand.cs` repris. La marge de 5 s de `CollectionCoverage` peut alors se réduire, au choix de Ghostline.
+
+### PB-110 : Revalider les paquets après PB-099 à PB-109, pour la mise à niveau de Ghostline
+
+Statut : à faire. Reconstruction sous la même version, `0.3.0-preview.1`, comme PB-097 : rien n'est publié et aucune étiquette n'est posée (décision du mainteneur du 04/11/2026).
+
+**Résultat observable**
+
+Les paquets de `artifacts/packages`, reconstruits sur ce commit, portent PB-099 à PB-109, la CI de la branche `ci/pb-110` est verte sur tous les groupes, et le statut de ce ticket donne à Ghostline la procédure de sa mise à niveau, essayée sur un clone jetable. Ghostline ayant enregistré sa génération (619b84e), c'est la première mise à niveau qui fusionne à trois voies depuis une base.
+
+**Périmètre**
+
+- `CHANGELOG.md` : une ligne par ticket. README racine, de l'outil et du paquet de templates : `hardslice-value-object`, `--parameters`, `--not-found`, `--result summary`, `HoldBeforeCommit`, `CreateIsolatedAsync`, `RecurringCycleContext`.
+- Paquets reconstruits, `scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages`.
+- CI de `ci/pb-110` : chaque groupe vert, puis `main`.
+- Essai sur un clone jetable de Ghostline (jamais le dépôt lui-même), dans un dossier du bloc-notes, avec le home de `isolate_dotnet_cli_home` et un `NUGET_PACKAGES` à lui, comme PB-097 : purge des caches de `CONTRIBUTING.md`, réinstallation du template selon PB-100, `dotnet tool restore`, `dotnet hardslice upgrade`. Attendu : une fusion à trois voies depuis `.hardslice/generation/`, les fichiers que Ghostline n'a pas changés mis à jour d'office, les conflits listés. Une seconde mise à niveau sur le même clone, le résultat fusionné et commité, ne réécrit ni ne liste rien.
+- Statut : la procédure pour Ghostline, les listes vues sur le clone, les contournements que Ghostline peut retirer d'après les statuts de PB-099 à PB-109, et la mise à jour de `docs/hardslice-friction.md` par Ghostline : les entrées fermées par PB-099 à PB-109, les deux entrées différées en section 9 (arbitrage 26) et l'entrée « second run of dotnet hardslice upgrade », écartée.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+CI de ci/pb-110, chaque groupe vert
+scripts/verify-published.sh 0.3.0-preview.1 --source artifacts/packages
+```
+
 ### Définition de fini
 
-L'incrément est terminé lorsque PB-064 à PB-098 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-097, comme il l'a fait sur celui de PB-088. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
+L'incrément est terminé lorsque PB-064 à PB-110 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-110, comme il l'a fait sur ceux de PB-088 et de PB-097. PB-051 reste suspendu jusqu'à ce que le mainteneur décide une publication (décision du 04/11/2026).
 
 ## 8. Incréments suivants
 
@@ -4288,6 +4749,10 @@ L'incrément est terminé lorsque PB-064 à PB-098 sont satisfaits, que les jobs
 | Marqueurs des parties de l'application dans `AGENTS.md` | écarté par l'arbitrage 9 : la base que PB-095 enregistre dans la solution les garde par la fusion à trois voies |
 | Base de la fusion de `dotnet hardslice upgrade` restaurée depuis NuGet.org | écarté par l'arbitrage 9 : la base est enregistrée dans la solution (PB-095), ce qui marche aussi sous une version reconstruite |
 | Diagnostic sur l'écriture d'un agrégat d'un autre module (arbitrage 14, option B), vu par Ghostline | à arbitrer sur un cas réel : aucune écriture entre modules à ce jour, la lecture est documentée par PB-098 dans `HS012.md` |
+| Commande planifiée fabriquée avec ses paramètres (`AddRecurringCommand` avec une fabrique de la commande), vue par Ghostline | à arbitrer sur un second cas réel (arbitrage 26) : le service du contrat du module, documenté par PB-103, sert un cas d'usage à deux déclencheurs |
+| Trace durable de chaque cycle d'une commande récurrente, écrite hors de sa transaction, vue par Ghostline | à arbitrer avec la boîte d'envoi (arbitrage 26) : un cycle en échec ne laisse que son journal |
+| Option `--immutable` de `hardslice-aggregate` | écarté par l'arbitrage 17 : documenté dans `add-aggregate` par PB-101 |
+| Liste à part des diffs sans ligne du template dans `dotnet hardslice upgrade` | écarté par l'arbitrage 26 : ne touche qu'une solution sans génération enregistrée |
 | Mise à niveau d'une solution générée par une construction locale non publiée | couverte par PB-086 (option B), qui ne restaure aucune génération de départ, puis par la fusion de PB-095 une fois la base enregistrée |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
