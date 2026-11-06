@@ -913,6 +913,69 @@ public sealed class TemplatePackageTests
         addAggregate.ShouldContain("The integration test of the 409 comes with the first command that changes the aggregate, as `add-slice` says");
     }
 
+    // PB-099: a name that a template replaces (an aggregate, an entity, an identifier, a module, a slice, an event, the application)
+    // takes a phrase that never depends on its first letter. "an AggregateName" generated "an CollectionCycle" in Ghostline, and
+    // "a" would fail the same way on a name that starts with a vowel. The article may sit at the end of a line of a comment.
+    [Fact]
+    public void Template_content_puts_no_article_a_or_an_before_a_name_that_the_template_replaces()
+    {
+        var content = Path.Combine(FindRepositoryRoot(), "src", "HardSlice.Templates", "content");
+        var found = new List<string>();
+
+        foreach (var templateRoot in Directory.EnumerateDirectories(content).Order(StringComparer.Ordinal))
+        {
+            var pattern = ArticleBeforeReplacedName(Path.Combine(templateRoot, ".template.config", "template.json"));
+            foreach (var file in TextFilesOfTemplate(templateRoot))
+            {
+                var text = File.ReadAllText(file);
+                foreach (Match match in pattern.Matches(text))
+                {
+                    var line = text[..match.Index].Count(character => character == '\n') + 1;
+                    found.Add($"{Path.GetRelativePath(content, file).Replace('\\', '/')}:{line}: {Regex.Replace(match.Value, "\\s+", " ")}");
+                }
+            }
+        }
+
+        found.ShouldBeEmpty(
+            "Write a phrase that does not depend on the first letter of the name, such as \"the aggregate AggregateName\" or "
+            + "\"an identifier AggregateNameId\":\n" + string.Join('\n', found));
+    }
+
+    // "a" or "an", then the spaces, line breaks and comment markers that may follow it, then a name that template.json replaces, its
+    // derived names (AggregateNameId, ResultDtoName...) included.
+    private static Regex ArticleBeforeReplacedName(string templateJson)
+    {
+        using var template = JsonDocument.Parse(File.ReadAllText(templateJson));
+        var names = new List<string>();
+        if (template.RootElement.TryGetProperty("sourceName", out var sourceName))
+            names.Add(sourceName.GetString()!);
+        if (template.RootElement.TryGetProperty("symbols", out var symbols))
+        {
+            foreach (var symbol in symbols.EnumerateObject())
+            {
+                foreach (var property in new[] { "replaces", "fileRename" })
+                {
+                    if (symbol.Value.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String)
+                        names.Add(value.GetString()!);
+                }
+            }
+        }
+
+        var identifiers = names.Where(name => Regex.IsMatch(name, "^[A-Za-z][A-Za-z0-9-]*$")).Distinct()
+            .OrderByDescending(name => name.Length).Select(Regex.Escape).ToList();
+        identifiers.ShouldNotBeEmpty($"{templateJson} replaces no name.");
+
+        return new Regex($"\\b[Aa]n?(?:\\s|//+|\\*|#)+[`'\"]?(?:{string.Join('|', identifiers)})", RegexOptions.CultureInvariant);
+    }
+
+    // The files that the template generates: everything but its configuration, the build output and the binary files.
+    private static IEnumerable<string> TextFilesOfTemplate(string templateRoot) =>
+        Directory.EnumerateFiles(templateRoot, "*", SearchOption.AllDirectories)
+            .Where(file => !Path.GetRelativePath(templateRoot, file).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Any(segment => segment is ".template.config" or "bin" or "obj"))
+            .Where(file => !File.ReadAllBytes(file).Contains((byte)0))
+            .Order(StringComparer.Ordinal);
+
     // PB-081: --require <policy> protects the endpoint of a command or a query: it chains .RequireAuthorization("<policy>"), the tests
     // send the client of the policy that AppFactory holds, except a test of the 401 that sends none. Without the option, the tests keep
     // app.CreateClient(), and a command refuses it with --endpoint none or --every, which have no endpoint.
