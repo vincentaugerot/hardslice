@@ -16,6 +16,9 @@ namespace MyApp.IntegrationTests;
 // packages included, unless the test keeps it with KeepHostedService, and each one it removes is logged before the host starts.
 // ASP.NET Core registers its own after them: they always run.
 // An endpoint that requires an authorization policy is called with app.CreateAuthorizedClient(policy), from AuthorizedClients.
+// A store outside the database that the application registers in Shared/Persistence, such as a file or object store, gets a copy of
+// its own for each instance, given in ConfigureWebHost, such as a temporary folder by builder.UseSetting and deleted with the
+// factory: no test writes to the store of the developer, nor reads what another instance wrote.
 public sealed class AppFactory : WebApplicationFactory<Program>
 {
     public const string TestEnvironment = "IntegrationTests";

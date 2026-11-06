@@ -2214,6 +2214,88 @@ public sealed class TemplatePackageTests
         }
     }
 
+    // PB-103: add-slice says where the cases that Ghostline met in its phases 2.5 to 2.8 go: several aggregates of the module in one
+    // command, a service of the module contract for one use case behind two triggers, the test data shared by the slices of a module
+    // and the isolated database of the tests of a job over every row that matches a rule (PB-102). The project map, HS017 and the
+    // comment of AppFactory place a store outside the database in Shared/Persistence, without any new folder in hardslice.json. The
+    // pack copies add-slice into .agents/skills/ as is, which the test of the pack checks.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_where_a_second_aggregate_a_shared_use_case_shared_test_data_and_a_store_outside_the_database_go(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var addSlice = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-slice", "SKILL.md"));
+        var hs017 = File.ReadAllText(Path.Combine(templateRoot, "docs", "rules", "HS017.md"));
+        var appFactory = File.ReadAllText(Path.Combine(templateRoot, "tests", "MyApp.IntegrationTests", "AppFactory.cs"));
+
+        string[] headings =
+        [
+            "## Several aggregates in one command",
+            "## One use case behind two triggers",
+            "## Test data shared by the slices of a module",
+            "## The tests of a job over every row that matches a rule",
+        ];
+        foreach (var heading in headings)
+        {
+            addSlice.IndexOf($"\n{heading}\n", StringComparison.Ordinal)
+                .ShouldBeInRange(0, addSlice.IndexOf("\n## Protected endpoints\n", StringComparison.Ordinal), $"add-slice has no section '{heading}' before Protected endpoints.");
+            var anchor = heading[3..].ToLowerInvariant().Replace(' ', '-');
+            addSlice.ShouldContain($"](#{anchor})", customMessage: $"The steps of add-slice never send to '{heading}'.");
+        }
+
+        var aggregates = Section(addSlice, headings[0]);
+        aggregates.ShouldContain("A command may create or change several aggregates of its own module in its transaction when they must commit together or not at all");
+        aggregates.ShouldContain("Prefer a domain event and its reaction when the second change is a consequence that another use case owns");
+        aggregates.ShouldContain("The reaction still runs in the transaction of the command, before its commit, so its failure rolls the command back too.");
+        aggregates.ShouldContain("An aggregate of another module is never written by the command, neither added nor changed: its module writes it");
+        aggregates.ShouldContain("`docs/rules/HS012.md`");
+
+        var twoTriggers = Section(addSlice, headings[1]);
+        twoTriggers.ShouldContain("never share it through a type of one slice (HS016), nor by sending one request from the other handler through `IMediator`.");
+        twoTriggers.ShouldContain("- an `internal sealed` class directly in `src/MyApp/Features/<Module>/`, named after the use case");
+        twoTriggers.ShouldContain("- registered by the module in `Add<Module>Module`, as a scoped service");
+        twoTriggers.ShouldContain("- with a comment that names the slices that use it");
+        twoTriggers.ShouldContain("No rule checks the code of such a service as it checks a handler: read with `AsNoTracking()` on each query that loads an entity "
+            + "you do not change, as in a handler (HS006)");
+
+        var testData = Section(addSlice, headings[2]);
+        testData.ShouldContain("`tests/MyApp.IntegrationTests/Features/<Module>/<Name>Scenario.cs`");
+        testData.ShouldContain("It builds the aggregates of another module through their own factories and methods");
+
+        var everyRow = Section(addSlice, headings[3]);
+        everyRow.ShouldContain("`await using var isolated = await database.CreateIsolatedAsync();`, then `await using var app = new AppFactory(isolated);`");
+        everyRow.ShouldContain("Never reserve a span of dates or of keys for these tests, nor put them in one class to run them one after the other");
+
+        var golden = agents.SkipWhile(line => line != "## Golden rules").ToArray();
+        golden.Single(line => line.StartsWith("2. A slice never uses", StringComparison.Ordinal)).ShouldEndWith(
+            "Share through the domain, a domain event or the module public contract, which also holds a service for one use case run by two "
+            + "slices, such as a job and its administration endpoint (`add-slice`).");
+        agents.Single(line => line.StartsWith("| `src/MyApp/Shared/Persistence/` |", StringComparison.Ordinal)).ShouldBe(
+            "| `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations, and the stores outside the database that "
+            + "several modules use, such as a file or object store. It declares no module type. |");
+        agents.Length.ShouldBeLessThan(150);
+
+        hs017.ShouldContain("| `Persistence` | `AppDbContext`, its registration and the migrations, and the stores outside the database that several "
+            + "modules use, such as a file or object store, with their options and their registration.");
+        hs017.ShouldContain("`Persistence` for the database and the stores outside it");
+        appFactory.ShouldContain("// A store outside the database that the application registers in Shared/Persistence, such as a file or object store, gets a copy of\n"
+            + "// its own for each instance");
+
+        var hardsliceJson = File.ReadAllText(Path.Combine(templateRoot, "hardslice.json"));
+        hardsliceJson.ShouldContain("\"allowedFolders\": [\"Messaging\", \"Persistence\", \"Behaviors\", \"Http\"]",
+            customMessage: "A store outside the database goes in Shared/Persistence: hardslice.json gains no folder (arbitrage 19).");
+
+        static string Section(string markdown, string heading)
+        {
+            var start = markdown.IndexOf($"\n{heading}\n", StringComparison.Ordinal);
+            start.ShouldBeGreaterThan(0, $"add-slice has no section '{heading}'.");
+            var end = markdown.IndexOf("\n## ", start + heading.Length + 1, StringComparison.Ordinal);
+            return markdown[start..(end < 0 ? markdown.Length : end)];
+        }
+    }
+
     // PB-063: outside the code blocks that quote a diagnostic, every instruction of the agent kit that asks for an invalid request or
     // for validator tests says which commands it concerns. HS013 is about commands with parameters only, and says so once.
     [Theory]
