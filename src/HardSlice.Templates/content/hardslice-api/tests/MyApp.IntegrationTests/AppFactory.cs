@@ -16,9 +16,18 @@ namespace MyApp.IntegrationTests;
 // packages included, unless the test keeps it with KeepHostedService, and each one it removes is logged before the host starts.
 // ASP.NET Core registers its own after them: they always run.
 // An endpoint that requires an authorization policy is called with app.CreateAuthorizedClient(policy), from AuthorizedClients.
-public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactory<Program>
+public sealed class AppFactory : WebApplicationFactory<Program>
 {
     public const string TestEnvironment = "IntegrationTests";
+
+    private readonly string _connectionString;
+
+    // An instance on the database that the tests share.
+    public AppFactory(PostgresDatabase database) => _connectionString = database.ConnectionString;
+
+    // An instance on a database of one test alone, from database.CreateIsolatedAsync(), as the tests of a job over every row that
+    // matches a rule start it. It behaves as one on the shared database.
+    public AppFactory(IsolatedDatabase database) => _connectionString = database.ConnectionString;
 
     // The client of each authorization policy of the application, by the name of the policy, filled once here: it makes a client of
     // this instance satisfy the policy, such as one that sends the test key that ConfigureWebHost gives the application with
@@ -41,7 +50,7 @@ public sealed class AppFactory(PostgresDatabase database) : WebApplicationFactor
     {
         builder.UseEnvironment(TestEnvironment);
         builder.UseDefaultServiceProvider(options => options.ValidateScopes = options.ValidateOnBuild = true);
-        builder.UseSetting($"ConnectionStrings:{PersistenceServiceCollectionExtensions.ConnectionStringName}", database.ConnectionString);
+        builder.UseSetting($"ConnectionStrings:{PersistenceServiceCollectionExtensions.ConnectionStringName}", _connectionString);
         builder.ConfigureTestServices(services =>
         {
             services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);

@@ -5707,6 +5707,8 @@ echo "==> Checking that each test project of $blank_name runs tests of the found
     "$blank_name.IntegrationTests:Shared.Behaviors.TransactionBehaviorTests.Answers_a_conflict_to_the_second_of_two_concurrent_creations_under_the_same_key" \
     "$blank_name.IntegrationTests:Shared.Behaviors.TransactionBehaviorTests.Keeps_the_exception_of_a_handler_that_translates_a_unique_violation_itself" \
     "$blank_name.IntegrationTests:Shared.Persistence.MigrationsTests.Model_has_no_changes_missing_from_the_migrations" \
+    "$blank_name.IntegrationTests:Shared.Persistence.IsolatedDatabaseTests.Gives_each_test_a_migrated_database_without_the_rows_of_the_shared_database_or_of_another_test" \
+    "$blank_name.IntegrationTests:Shared.Persistence.IsolatedDatabaseTests.Runs_an_AppFactory_on_the_isolated_database_and_drops_it_when_the_test_disposes_of_it" \
     "$blank_name.ArchitectureTests:SliceTests.Slices_never_use_types_of_another_slice" \
     "$blank_name.ArchitectureTests:TestLayoutTests.Every_slice_has_tests_at_its_path"; do
     project="${expected%%:*}"
