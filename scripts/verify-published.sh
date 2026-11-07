@@ -75,10 +75,12 @@ lower_version="$(lowercase "$version")"
 # Dependencies first: the template pins the analyzers and the tool, so it is pointless without them.
 packages=(HardSlice.Analyzers HardSlice.Tool HardSlice.Templates)
 
-# Whether the source lists <package> at the version: in the PackageBaseAddress resource of a V3 feed, which dotnet new install,
-# restore and dotnet tool restore read, or as a .nupkg in a folder.
+# Whether the source lists <package> at the version, or holds it as a .nupkg in a folder. A V3 feed must list it in two resources,
+# which NuGet.org updates one after the other once a package is validated: PackageBaseAddress, from which restore and dotnet
+# tool restore download it, and RegistrationsBaseUrl/3.6.0, the metadata from which dotnet new install resolves it. The second
+# can lag behind by minutes: dotnet new install then answers that the package does not exist.
 is_listed() {
-  local package="$1" id versions
+  local package="$1" id versions registration
   if [[ "$source" != http://* && "$source" != https://* ]]; then
     [[ -f "$source/$package.$version.nupkg" ]]
     return
@@ -86,14 +88,32 @@ is_listed() {
   id="$(lowercase "$package")"
   # 404 until the first version of the package is served.
   versions="$(curl --silent --fail --location "$package_base_address$id/index.json")" || return 1
-  python3 -I -c 'import json, sys; sys.exit(0 if sys.argv[1] in json.load(sys.stdin)["versions"] else 1)' "$lower_version" <<< "$versions"
+  python3 -I -c 'import json, sys; sys.exit(0 if sys.argv[1] in json.load(sys.stdin)["versions"] else 1)' "$lower_version" <<< "$versions" || return 1
+  registration="$(curl --silent --fail --location --compressed "$registrations_base_url$id/index.json")" || return 1
+  # A page of the index lists its versions inline, or only its address when the package has many versions.
+  python3 -I -c '
+import gzip, json, sys, urllib.request
+def versions(page):
+    if "items" not in page:
+        with urllib.request.urlopen(page["@id"]) as response:
+            body = response.read()
+        # NuGet.org serves the pages of RegistrationsBaseUrl/3.6.0 compressed.
+        page = json.loads(gzip.decompress(body) if body[:2] == b"\x1f\x8b" else body)
+    return [leaf["catalogEntry"]["version"].lower() for leaf in page["items"]]
+pages = json.load(sys.stdin)["items"]
+sys.exit(0 if any(sys.argv[1] in versions(page) for page in pages) else 1)' "$lower_version" <<< "$registration"
 }
 
 if [[ "$source" == http://* || "$source" == https://* ]]; then
-  package_base_address="$(curl --silent --fail --location "$source" | python3 -I -c '
+  resources="$(curl --silent --fail --location "$source")"
+  resource() {
+    python3 -I -c '
 import json, sys
 resources = json.load(sys.stdin)["resources"]
-print(next(r["@id"] for r in resources if r["@type"] == "PackageBaseAddress/3.0.0").rstrip("/") + "/")')"
+print(next(r["@id"] for r in resources if r["@type"] == sys.argv[1]).rstrip("/") + "/")' "$1" <<< "$resources"
+  }
+  package_base_address="$(resource PackageBaseAddress/3.0.0)"
+  registrations_base_url="$(resource RegistrationsBaseUrl/3.6.0)"
 fi
 
 echo "==> Waiting until $source lists ${packages[*]} $version (at most $wait_minutes min)"

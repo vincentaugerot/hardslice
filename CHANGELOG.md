@@ -2,7 +2,7 @@
 
 Every version of the three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, which always share one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). While HardSlice is in preview, a version may change its rules, its template and its commands, but a solution keeps the template and the versions it was generated with.
 
-## [0.3.0-preview.1] - unreleased
+## [0.3.0-preview.1] - 2026-11-07
 
 The first preview published on NuGet.org. No earlier version was published.
 
