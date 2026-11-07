@@ -4798,6 +4798,61 @@ dotnet test tests/HardSlice.Analyzers.Tests --no-build --filter ReadmeTests
 
 L'incrément est terminé lorsque PB-064 à PB-110 et PB-112 sont satisfaits, que les jobs CI build, template, démonstration et performance sont verts sur `main`, et que les contournements de Ghostline que ces tickets rendent inutiles sont listés dans leurs résumés. Ghostline se met alors à niveau sur le commit de PB-110, comme il l'a fait sur ceux de PB-088 et de PB-097. PB-051 a publié `0.3.0-preview.1` le 07/11/2026, sur le commit de PB-112.
 
+### Après la publication : vers `0.3.0-preview.2`
+
+Ajouté le 07/11/2026 à partir de l'entrée « moving to the packages published on NuGet.org » de `ghostline/docs/hardslice-friction.md`, la première après la publication. PB-113 ne fait pas partie de l'incrément terminé ci-dessus : il ouvre le travail de `0.3.0-preview.2`.
+
+### Arbitrage validé le 07/11/2026, après PB-051
+
+Validé par le mainteneur le 07/11/2026 : la recommandation, sans écart.
+
+28. **Version d'un build local (PB-113).** L'entrée constate que les paquets publiés (470bc0f) et ceux que ce VPS avait en cache (a7a2478, fe62e7f pour les templates) portent tous `0.3.0-preview.1`. Les builds sont équivalents (seuls `.signature.p7s`, le commit du `.nuspec` et les `.dll` qui l'embarquent diffèrent), mais `~/.nuget/packages/` et le template installé gardaient le build local sans le dire : Ghostline croyait tester le paquet publié. C'est l'entrée du 04/11/2026 « a rebuild under the same version stays invisible to the NuGet cache », que PB-080 a fermée par la purge à la main. Ce choix tenait tant que rien n'était publié. Depuis PB-051, un build local sous le numéro publié laisse sur la machine du mainteneur une copie que NuGet.org ne remplace jamais, et la purge ne marche que si l'on y pense.
+    - Option A : un build local porte toujours `<version>.dev.<n>`, et seul le workflow de release pose la version nue. Un seul script packe les trois paquets avec le même `<n>`, et un `dotnet pack` lancé sans lui échoue en disant d'utiliser le script, sauf dans la release. Rien ne peut plus remettre le numéro publié dans un cache local.
+    - Option B : la version nue reste par défaut, et les commandes de `CONTRIBUTING.md` et des scripts ajoutent le suffixe. Moins de changements, mais un `dotnet pack` tapé à la main refait le cas de l'entrée.
+    - Option C : la version reste la même, et un script packe puis purge les deux caches. Le build local reste indiscernable du paquet publié dans une solution qui le restaure.
+    - Décision : A. Le suffixe s'ajoute à la version de `Directory.Build.props`, qui reste celle de la dernière publication tant que la suivante n'est pas préparée : un build local de `0.3.0-preview.1.dev.<n>` se classe après `0.3.0-preview.1` et avant `0.3.0-preview.2`. Le passage à `0.3.0-preview.2` reste au ticket de la publication suivante, pour que les lignes d'installation des README, que `ReadmeTests` compare à cette version, ne nomment jamais une version absente de NuGet.org. Coût accepté : une solution restaurée depuis un build local épingle une version `.dev.<n>` et a besoin du dossier local pour se restaurer, ce qui dit honnêtement ce qu'elle exécute.
+
+### PB-113 : Donner à chaque build local des paquets une version que NuGet.org n'aura jamais
+
+Statut : à faire. Fermera l'entrée « moving to the packages published on NuGet.org » de `ghostline/docs/hardslice-friction.md` (arbitrage 28, option A). Purge faite à la main le 07/11/2026 sur ce VPS, avant le ticket : `hardslice.analyzers` et `hardslice.tool` retirés de `~/.nuget/packages/`, `hardslice.tool` de `~/.dotnet/toolResolverCache/1/`, template désinstallé puis réinstallé depuis NuGet.org (`dotnet new uninstall | grep -cx '   HardSlice.Templates'` affiche `1`), `dotnet restore` et `dotnet tool restore` de Ghostline sans `nuget.config`. Les trois paquets en cache sont identiques octet pour octet à ceux de NuGet.org (`cmp`).
+
+**Résultat observable**
+
+`scripts/pack-local.sh` packe les trois paquets dans `artifacts/packages` sous `<version>.dev.<n>`, le même `<n>` pour les trois, et imprime la version. Deux packs de suite donnent deux versions, donc ni `~/.nuget/packages/` ni le template installé ne servent l'ancien build sans le dire. Un `dotnet pack` lancé à la main échoue avec un message qui nomme le script. Seul `release.yml` packe la version nue.
+
+**Constat**
+
+Ghostline, entrée du 07/11/2026 : les paquets publiés et ceux de ce VPS portaient le même numéro, `0.3.0-preview.1`, et rien ne disait que le cache servait le build local. Même cas que l'entrée du 04/11/2026, cette fois sur un numéro publié.
+
+**Périmètre**
+
+- `Directory.Build.props` : la version de base, le suffixe `.dev.<n>` par défaut, la version nue quand la release le demande, et l'erreur d'un pack sans `<n>`. `<n>` est fixé une fois par le script et passé aux trois packs : le template écrit à son pack la version des analyseurs et de l'outil qu'il épingle, et trois numéros calculés chacun par son projet divergeraient. `<n>` croît d'un pack au suivant et n'a pas de zéro en tête (SemVer 2.0 le refuse dans un identifiant numérique). Le temps Unix en secondes convient, à vérifier sur le classement de NuGet.
+- `scripts/pack-local.sh` (nouveau), et `scripts/generate-app.sh` et `scripts/test-template.sh`, qui packent par lui ou avec le même `<n>`. Leurs contrôles de version (`hardslice_version`, noms attendus des paquets) lisent la version du pack, et la sonde `upgrade`, qui packe le template d'un commit antérieur sous la même version, lui passe la version courante.
+- `release.yml` : la version nue au pack, et son contrôle de l'étiquette sur la version de base.
+- Les liens de documentation de l'outil et des diagnostics (`blob/v<version>/...`) visent la version de base, jamais une étiquette `.dev.<n>` qui n'existe pas.
+- `VersionTests` et `ReadmeTests` : la version de base, et la version de l'outil d'un build local qui porte le suffixe.
+- `CONTRIBUTING.md`, « Try a local build of the packages » : le script à la place des trois `dotnet pack`, la réinstallation du template sous sa nouvelle version, et plus de purge des caches à chaque reconstruction. `docs/releasing.md`, étape 2 : la vérification locale des paquets de la release dans un dossier à elle, jamais dans `artifacts/packages` ni le cache global.
+- `CHANGELOG.md` : une ligne, sous une section de la prochaine version.
+- Hors périmètre : le passage de `Directory.Build.props` à `0.3.0-preview.2`, qui revient au ticket de cette publication.
+
+**Cas vérifiés**
+
+- Deux `scripts/pack-local.sh` de suite donnent deux versions, chacune portée par les trois paquets, et le template de chacune épingle les analyseurs et l'outil de son propre pack.
+- Une solution générée depuis le second pack, dans un dossier avec le `nuget.config` de `CONTRIBUTING.md`, restaure les paquets du second pack sans purge, et `dotnet hardslice --version` donne sa version.
+- `dotnet new install` du template du second pack remplace celui du premier : `dotnet new uninstall | grep -cx '   HardSlice.Templates'` affiche `1`.
+- `dotnet pack` d'un des trois projets sans le script échoue avec le message qui le nomme, et réussit avec la propriété de la release, sous la version nue.
+- NuGet classe `0.3.0-preview.1` < `0.3.0-preview.1.dev.<n>` < `0.3.0-preview.1.dev.<n+1>` < `0.3.0-preview.2`.
+- Un lien de documentation imprimé par l'outil d'un build local vise `v<version de base>`.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,upgrade
+```
+
+Contournement que Ghostline peut retirer : aucun dans le code. Sa règle de purger les caches à chaque reconstruction disparaît : une mise à niveau sur un build local reçoit une version qu'aucun cache ne connaît.
+
 ## 8. Incréments suivants
 
 | Incrément | Résultat produit | Contenu principal | Acceptation globale |
