@@ -4814,7 +4814,9 @@ Validé par le mainteneur le 07/11/2026 : la recommandation, sans écart.
 
 ### PB-113 : Donner à chaque build local des paquets une version que NuGet.org n'aura jamais
 
-Statut : à faire. Fermera l'entrée « moving to the packages published on NuGet.org » de `ghostline/docs/hardslice-friction.md` (arbitrage 28, option A). Purge faite à la main le 07/11/2026 sur ce VPS, avant le ticket : `hardslice.analyzers` et `hardslice.tool` retirés de `~/.nuget/packages/`, `hardslice.tool` de `~/.dotnet/toolResolverCache/1/`, template désinstallé puis réinstallé depuis NuGet.org (`dotnet new uninstall | grep -cx '   HardSlice.Templates'` affiche `1`), `dotnet restore` et `dotnet tool restore` de Ghostline sans `nuget.config`. Les trois paquets en cache sont identiques octet pour octet à ceux de NuGet.org (`cmp`).
+Statut : fait le 24/11/2026. Ferme l'entrée « moving to the packages published on NuGet.org » de `ghostline/docs/hardslice-friction.md` (arbitrage 28, option A). Purge faite à la main le 07/11/2026 sur ce VPS, avant le ticket : `hardslice.analyzers` et `hardslice.tool` retirés de `~/.nuget/packages/`, `hardslice.tool` de `~/.dotnet/toolResolverCache/1/`, template désinstallé puis réinstallé depuis NuGet.org (`dotnet new uninstall | grep -cx '   HardSlice.Templates'` affiche `1`), `dotnet restore` et `dotnet tool restore` de Ghostline sans `nuget.config`. Les trois paquets en cache sont identiques octet pour octet à ceux de NuGet.org (`cmp`).
+
+`HardSliceVersion` de `Directory.Build.props` tient la version de la release. `-p:HardSliceDevBuild=<n>` lui ajoute `.dev.<n>`, `-p:HardSliceRelease=true` la garde nue, et la cible `RequireTheVersionOfALocalPack` fait échouer avant le nuspec un pack de la version nue sans la propriété de la release, avec un message qui nomme `scripts/pack-local.sh`. Le script prend le temps Unix en secondes, ou un de plus que le dernier pack du clone (`artifacts/.last-local-pack`), et imprime la version seule sur la sortie standard. `generate-app.sh` packe par lui et écrit la version dans `<work>/hardslice-version`, que lit `test-template.sh`, et les deux sondes `upgrade` qui packent un template passent `-p:Version` de ce pack. `ToolVersion.Release` et `RuleSheet` retirent `.dev.<n>` des liens de documentation. Cas vérifiés en local : deux packs de suite ont donné `0.3.0-preview.1.dev.1795542642` et `0.3.0-preview.1.dev.1795542652`, chacun porté par les trois paquets et épinglé par son template. Dans un home et un `NUGET_PACKAGES` isolés, le template du second pack a remplacé le premier (`grep -cx` affiche `1`), la solution générée depuis lui a restauré ses paquets sans purge et `dotnet hardslice --version` a donné sa version. Un `dotnet pack` de l'outil à la main échoue avec le message, et réussit sous la version nue avec `-p:HardSliceRelease=true`. `NuGet.Versioning` du SDK 10.0.401 classe `0.3.0-preview.1` < `.dev.1795542652` < `.dev.1795542653` < `.dev.4294967296` < `0.3.0-preview.2` < `0.3.0`. `VersionTests` couvre le lien d'un build local. Contournement que Ghostline peut retirer : la purge des caches à chaque reconstruction.
 
 **Résultat observable**
 
@@ -4875,7 +4877,9 @@ Critères communs à PB-114 à PB-120, comme pour PB-099 à PB-110 :
 
 ### PB-114 : Générer un objet valeur avec ses champs, `hardslice-value-object --fields`
 
-Statut : à faire. Fermera les entrées « hardslice-value-object, one `decimal Value` for value objects of several fields » (1.3), « ten value objects of a calculation rewritten whole » (1.12, pour la forme), « generated tests that do not compile block the tests of the reference cases written first » (1.14) de `ottawavsgatineau/docs/hardslice-friction.md`, et pour la forme celles de 1.13, 1.15 et 1.16 (arbitrage 29, point 1).
+Statut : fait le 24/11/2026. Ferme les entrées « hardslice-value-object, one `decimal Value` for value objects of several fields » (1.3), « ten value objects of a calculation rewritten whole » (1.12, pour la forme), « generated tests that do not compile block the tests of the reference cases written first » (1.14) de `ottawavsgatineau/docs/hardslice-friction.md`, et pour la forme celles de 1.13, 1.15 et 1.16 (arbitrage 29, point 1).
+
+Correction du périmètre : aucun type du domaine n'a de règle générée. Une énumération dont le membre vaut 0 (`BookingStatus.Confirmed`) serait refusée par `== default`, et le compilateur refuse déjà un `null` passé à un paramètre non nullable (`Nullable` et `TreatWarningsAsErrors`). `add-aggregate` dit de refuser une valeur qu'une énumération ne définit pas avec `Enum.IsDefined`. Seule une chaîne requise vide est refusée par le code généré, avec son test. Contournement qu'Ottawa peut retirer : la réécriture de chaque objet valeur généré et de ses tests, et la mise à l'écart des tests générés le temps d'un run.
 
 **Résultat observable**
 
@@ -4906,7 +4910,9 @@ scripts/test-template.sh --only sample-items,blank-items
 
 ### PB-115 : Construire au démarrage un service qu'un module lit, avec `AddSingletonBuiltAtStart`
 
-Statut : à faire. Fermera les entrées « a store loaded at startup that several modules read, placed in the public contract of a module » (1.4, pour la validation au démarrage), « a module whose registration translates the store that another module loads at startup » (1.12) et, pour l'ordre des modules, « HS012 and HS016, the central query composes three modules » (1.17) de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 2).
+Statut : fait le 24/11/2026. Ferme les entrées « a store loaded at startup that several modules read, placed in the public contract of a module » (1.4, pour la validation au démarrage), « a module whose registration translates the store that another module loads at startup » (1.12) et, pour l'ordre des modules, « HS012 and HS016, the central query composes three modules » (1.17) de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 2).
+
+`AddSingletonBuiltAtStart<TService>(factory)` enregistre la fabrique et un `IStartupFilter` qui reçoit le service : le serveur le construit en démarrant, après l'enregistrement de tous les modules, sous `AppFactory` aussi, qui ne retire que les services hébergés. Cinq tests du template (construit une fois depuis un service enregistré après lui, exception de la fabrique, `null` refusé, construit au démarrage sous `AppFactory`, `CreateClient()` qui lève l'exception de la fabrique). Contournement qu'Ottawa peut retirer : la construction des catalogues pendant l'enregistrement des services et la relecture de l'`IServiceCollection`, donc l'ordre imposé des lignes de `Program.cs`.
 
 **Résultat observable**
 
@@ -4936,7 +4942,9 @@ scripts/test-template.sh --only sample,blank
 
 ### PB-116 : Générer une requête qui calcule sans agrégat stocké, `hardslice-query --result computed`
 
-Statut : à faire. Fermera les entrées « hardslice-query, no form for a query that computes without a stored aggregate » (architecture), « a query without stored aggregate written by hand » (1.5), « the DTO of a list is named in the plural for each of its elements » (1.5) et « the central query written by hand on the form of `--result summary` » (1.17) de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 3).
+Statut : fait le 24/11/2026. Ferme les entrées « hardslice-query, no form for a query that computes without a stored aggregate » (architecture), « a query without stored aggregate written by hand » (1.5), « the DTO of a list is named in the plural for each of its elements » (1.5) et « the central query written by hand on the form of `--result summary` » (1.17) de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 3).
+
+`--result computed` refuse `--aggregate`, que les autres résultats exigent désormais par un refus (`refuseMissingAggregate`), prend `--parameters` en filtres facultatifs et répond `Ok` seul. `--dto <Name>` nomme le DTO de tout résultat, et les deux templates de slice refusent `--route ""`, qui retombait sur le nom de la slice. `add-slice` dit aussi comment rendre un filtre facultatif et comment un validateur reçoit un service. La sonde `probe_computed_query`, jouée seule sur la solution d'exemple, couvre les refus, les deux formes, le check sur leurs seuls tests `TODO(hardslice):` et la complétion de référence. Contournement qu'Ottawa peut retirer : la slice générée contre un agrégat jetable puis recopiée, et le DTO renommé au singulier à la main.
 
 **Résultat observable**
 
@@ -4965,7 +4973,9 @@ scripts/test-template.sh --only sample-items,blank-items
 
 ### PB-117 : Dire où vont un service du domaine, une énumération, un service du contrat et un test de données
 
-Statut : à faire. Fermera les entrées « no place for reference data that several modules read », « hardslice-value-object, no shared kernel for value objects every module uses », « no template nor guidance for the enumerations of the domain », « hardslice-module, a module made only of value objects works », « no template for a service of a module's public contract », « HS018, a test of data that follows no slice », « a domain service that composes several value objects has no form of its own », « a second plan computed like the first is duplicated whole » et « the federal tax of a resident of Quebec duplicates that of Ontario » de `ottawavsgatineau/docs/hardslice-friction.md`, pour la consigne (arbitrage 29, point 4).
+Statut : fait le 24/11/2026. Ferme les entrées « no place for reference data that several modules read », « hardslice-value-object, no shared kernel for value objects every module uses », « no template nor guidance for the enumerations of the domain », « hardslice-module, a module made only of value objects works », « no template for a service of a module's public contract », « HS018, a test of data that follows no slice », « a domain service that composes several value objects has no form of its own », « a second plan computed like the first is duplicated whole » et « the federal tax of a resident of Quebec duplicates that of Ontario » de `ottawavsgatineau/docs/hardslice-friction.md`, pour la consigne (arbitrage 29, point 4).
+
+Sans template de plus : `add-aggregate` a les sections « Enumerations of the domain », « A computation that composes several value objects » (une `static class` pure du domaine, ou un objet valeur que deux autres tiennent, jamais un record de base) et « A value object that several modules use ». `add-module` dit qu'un module peut commencer sans agrégat et a la section « The public contract of a module ». `HS017.md` et `AGENTS.md` placent un stockage qui construit les types du domaine d'un module dans le contrat de ce module, `HS018.md` place le test d'un fichier de données dans le dossier du module qui le lit, ou dans `tests/MyApp.Tests/Data/` tant qu'aucun ne le lit. Contournement qu'Ottawa peut retirer : aucun dans le code, ses compléments de D6 rejoignent la consigne.
 
 **Résultat observable**
 
@@ -4985,7 +4995,9 @@ scripts/test-template.sh --only sample,blank
 
 ### PB-118 : Générer dans un dépôt existant, et ignorer les réglages locaux de Claude Code
 
-Statut : à faire. Fermera les entrées « hardslice-api, the generated `.gitignore` leaves `.claude/settings.local.json` to be committed » et « generating into an existing repository is not documented, and `.claude/` is protected as a whole » de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 5).
+Statut : fait le 24/11/2026. Ferme les entrées « hardslice-api, the generated `.gitignore` leaves `.claude/settings.local.json` to be committed » et « generating into an existing repository is not documented, and `.claude/` is protected as a whole » de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 5).
+
+Vérifié avant d'écrire la section : `dotnet new hardslice-api --output .` dans un dépôt qui tient déjà `README.md` et `docs/` ne touche pas ces fichiers, et avec un `AGENTS.md` et un `.gitignore` déjà là, il les liste en `Overwrite`, sort avec le code 73 et n'écrit rien. La sonde du `.gitignore` vérifie que git ne voit pas `.claude/settings.local.json`. Contournement qu'Ottawa peut retirer : la ligne `.claude/settings.local.json` de son `.gitignore`, une fois la mise à niveau faite.
 
 **Résultat observable**
 
