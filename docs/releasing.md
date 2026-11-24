@@ -38,15 +38,16 @@ No API key is stored. Without trusted publishing, a key limited to pushing `Hard
    `ReadmeTests` fails while the READMEs or `AnalyzerReleases.Shipped.md` do not name the version of `Directory.Build.props`. The commands below read it:
 
    ```text
-   VERSION=$(dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:Version)
+   VERSION=$(dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:HardSliceVersion)
    ```
 
-2. Check the packages locally, on the path of a user, with the full template scenario first:
+2. Check the packages locally, on the path of a user, with the full template scenario first. The packages of the release, at the bare version, go to a folder of their own, never to `artifacts/packages`, which holds the local builds, and `verify-published.sh` restores them in a package folder of its own, never in the global cache:
 
    ```text
    scripts/test-template.sh
-   for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o artifacts/packages; done
-   scripts/verify-published.sh "$VERSION" "$(mktemp -d)" --source artifacts/packages --clean
+   RELEASE_PACKAGES=$(mktemp -d)
+   for p in Analyzers Tool Templates; do dotnet pack src/HardSlice.$p/HardSlice.$p.csproj -c Release -o "$RELEASE_PACKAGES" -p:HardSliceRelease=true; done
+   scripts/verify-published.sh "$VERSION" "$(mktemp -d)" --source "$RELEASE_PACKAGES" --clean
    ```
 
 3. Create and push the tag:

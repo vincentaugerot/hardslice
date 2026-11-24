@@ -40,7 +40,7 @@ jobs:
       - name: Check that the tag names the version of the packages
         id: version
         run: |
-          version="$(dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:Version)"
+          version="$(dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:HardSliceVersion)"
           if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
             echo "::error::The tag $GITHUB_REF_NAME does not name the version of Directory.Build.props, $version: tag v$version instead."
             exit 1
@@ -93,7 +93,8 @@ jobs:
       - name: Pack
         run: |
           for package in HardSlice.Analyzers HardSlice.Tool HardSlice.Templates; do
-            dotnet pack "src/$package/$package.csproj" --configuration Release --output artifacts/packages
+            # The bare version, which only the release packs: a local pack takes <version>.dev.<n> (scripts/pack-local.sh).
+            dotnet pack "src/$package/$package.csproj" --configuration Release --output artifacts/packages -p:HardSliceRelease=true
           done
           expected="$(printf '%s\n' "HardSlice.Analyzers.$VERSION.nupkg" "HardSlice.Templates.$VERSION.nupkg" "HardSlice.Tool.$VERSION.nupkg")"
           packed="$(cd artifacts/packages && printf '%s\n' * | LC_ALL=C sort)"

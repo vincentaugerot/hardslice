@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template, generates a solution in a temporary directory,
+# Packs the three HardSlice packages at the version of a local build, <version>.dev.<n> (scripts/pack-local.sh), installs the hardslice-api template, generates a solution in a temporary directory,
 # verifies it with scripts/check.sh and check.ps1, integration tests included, checks that it holds every v0.1 deliverable and the instruction file of each agent and the skills they read,
 # runs the "Run the API" path of docs/getting-started.md on it (PostgreSQL container, migrations, API, a booking created then read), checks its migrations with the pinned dotnet-ef,
 # checks that commands go through its own mediator and pipeline, two concurrent creations under one unique key answered with a conflict, and that queries read without tracking, proves both scripts name the missing container runtime,
@@ -150,7 +150,14 @@ isolate_dotnet_cli_home "$work"
 source "$repo_root/scripts/item-completion.sh"
 
 "$repo_root/scripts/generate-app.sh" "$work"
-hardslice_version="$(cd "$repo_root" && dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:Version)"
+# The version of the local pack of generate-app.sh, <version>.dev.<n> (PB-113), and the release that it precedes, whose tag the
+# links of the documentation name.
+hardslice_version="$(cat "$work/hardslice-version")"
+hardslice_release="$(cd "$repo_root" && dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:HardSliceVersion)"
+if [[ "$hardslice_version" != "$hardslice_release.dev."* ]]; then
+  echo "error: generate-app.sh packed the HardSlice packages at $hardslice_version, which is not a local build of $hardslice_release." >&2
+  exit 1
+fi
 
 if ! command -v pwsh > /dev/null; then
   echo "error: pwsh is required to verify scripts/check.ps1." >&2
@@ -351,7 +358,7 @@ echo "==> Verifying the generated solution with scripts/check.ps1"
 pwsh -NoProfile -File "$app/scripts/check.ps1"
 
 # The check scripts have restored the tool: it must be the version of the analyzers, and print the sheets of the template as it ships them.
-# Both have the version of Directory.Build.props, which the pack wrote in the template, and come from the local feed, never from nuget.org:
+# Both have the version of the local pack, which the pack wrote in the template, and come from the local feed, never from nuget.org:
 # the packages restored into the private package folder are the very files generate-app.sh packed.
 echo "==> Checking that dotnet hardslice is pinned to the version of the analyzers and explains every rule"
 (
@@ -363,7 +370,7 @@ echo "==> Checking that dotnet hardslice is pinned to the version of the analyze
     exit 1
   fi
   if [[ "$analyzer_version" != "$hardslice_version" ]]; then
-    echo "error: $app_name pins the HardSlice packages at '$analyzer_version' instead of $hardslice_version, the version of Directory.Build.props." >&2
+    echo "error: $app_name pins the HardSlice packages at '$analyzer_version' instead of $hardslice_version, the version of the local pack." >&2
     exit 1
   fi
   for package in HardSlice.Analyzers HardSlice.Tool; do
@@ -6364,7 +6371,7 @@ mv "$work/Directory.Build.props.backup" "$app/Directory.Build.props"
 # PB-076: that error, and the one on a missing Directory.HardSlice.props, give the probable cause, a Fix: that runs dotnet hardslice
 # upgrade (PB-086), and a Doc: to the section of getting-started.md that describes the HardSlice files.
 probe_hardslice_files() {
-  local doc="Doc: https://github.com/vincentaugerot/hardslice/blob/v$hardslice_version/docs/getting-started.md#when-check-stops-on-a-hardslice-file"
+  local doc="Doc: https://github.com/vincentaugerot/hardslice/blob/v$hardslice_release/docs/getting-started.md#when-check-stops-on-a-hardslice-file"
   local upgrade="'dotnet hardslice upgrade', which rewrites the HardSlice files from the template of this version and lists the files of the application to merge"
   local version_mismatch="error: Directory.HardSlice.props references HardSlice.Analyzers 0.0.1, but dotnet hardslice is version" script check_output expected
   echo "==> Checking that another HardSlice.Analyzers version fails both check scripts before the build, with a fix and its doc"
@@ -6924,7 +6931,8 @@ install_earlier_template() {
   mkdir -p "$source"
   git -C "$repo_root" archive --format=tar "$upgrade_base_commit" Directory.Build.props Directory.Packages.props global.json assets src/HardSlice.Templates |
     tar -x -C "$source"
-  dotnet pack "$source/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$work/earlier-feed"
+  # The version of the current pack: the earlier commit names the release in Directory.Build.props, which a local pack never takes.
+  dotnet pack "$source/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$work/earlier-feed" "-p:Version=$hardslice_version"
   dotnet new install "$work/earlier-feed/HardSlice.Templates.$hardslice_version.nupkg" --debug:custom-hive "$earlier_hive"
 }
 
@@ -7101,7 +7109,7 @@ pack_changed_template() {
     echo "error: the copy of the template no longer holds the lines that the three-way upgrade changes." >&2
     exit 1
   fi
-  dotnet pack "$source/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$feed"
+  dotnet pack "$source/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$feed" "-p:Version=$hardslice_version"
   cp "$work/feed/HardSlice.Analyzers.$hardslice_version.nupkg" "$work/feed/HardSlice.Tool.$hardslice_version.nupkg" "$feed/"
 }
 

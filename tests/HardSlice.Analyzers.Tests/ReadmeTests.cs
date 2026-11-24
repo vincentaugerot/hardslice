@@ -288,7 +288,7 @@ public sealed partial class ReadmeTests
     private static string PackageVersion(string repositoryRoot) =>
         XDocument.Load(Path.Combine(repositoryRoot, "Directory.Build.props"))
             .Descendants()
-            .Single(element => element.Name.LocalName == "Version")
+            .Single(element => element.Name.LocalName == "HardSliceVersion")
             .Value;
 
     private static string FindRepositoryRoot()

@@ -7,9 +7,15 @@
   </PropertyGroup>
 
   <!-- Distributable HardSlice packages share the same version and metadata.
-       The single source of the version: HardSlice.Templates writes it at pack time where the template pins the analyzers and the tool. -->
+       HardSliceVersion is the single source of the version of the next release, which names its tag and the links of the
+       documentation. A pack takes it bare only for the release, with -p:HardSliceRelease=true (.github/workflows/release.yml).
+       A local pack, scripts/pack-local.sh, gives the three packages <version>.dev.<n>, with the same <n> passed as
+       -p:HardSliceDevBuild=<n>: a version that NuGet.org never has and that no cache of an earlier build holds.
+       HardSlice.Templates writes the version at pack time where the template pins the analyzers and the tool. -->
   <PropertyGroup>
-    <Version>0.3.0-preview.1</Version>
+    <HardSliceVersion>0.3.0-preview.1</HardSliceVersion>
+    <Version Condition="'$(HardSliceRelease)' != 'true' and '$(HardSliceDevBuild)' != ''">$(HardSliceVersion).dev.$(HardSliceDevBuild)</Version>
+    <Version Condition="'$(Version)' == ''">$(HardSliceVersion)</Version>
     <Authors>Vincent Augerot</Authors>
     <Copyright>Copyright (c) 2026 Vincent Augerot</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -19,7 +25,7 @@
     <!-- Each package ships the README.md of its project, written for its page on NuGet.org: absolute links only. -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
-    <PackageReleaseNotes>https://github.com/vincentaugerot/hardslice/blob/v$(Version)/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>https://github.com/vincentaugerot/hardslice/blob/v$(HardSliceVersion)/CHANGELOG.md</PackageReleaseNotes>
     <EnablePackageValidation>true</EnablePackageValidation>
     <!-- A warning of NuGet or of the package validation fails the pack, like a compiler warning fails the build. -->
     <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
@@ -30,4 +36,10 @@
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
+  <!-- Only the release packs the bare version: a pack of the same number as a published package would be served by the caches
+       of NuGet and of dotnet new in its place, or in place of the next local build, without a word. -->
+  <Target Name="RequireTheVersionOfALocalPack" BeforeTargets="GenerateNuspec" Condition="'$(IsPackable)' != 'false'">
+    <Error Condition="'$(HardSliceRelease)' != 'true' and '$(PackageVersion)' == '$(HardSliceVersion)'"
+           Text="$(MSBuildProjectName) would be packed at $(HardSliceVersion), the version of the release, which NuGet.org serves or will serve. Fix: pack the three HardSlice packages with scripts/pack-local.sh, which gives them the version $(HardSliceVersion).dev.&lt;n&gt; of a local build. Only .github/workflows/release.yml packs the bare version, with -p:HardSliceRelease=true." />
+  </Target>
 </Project>

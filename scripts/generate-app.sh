@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Packs the three HardSlice packages at the version of Directory.Build.props, installs the hardslice-api template into an isolated hive
+# Packs the three HardSlice packages with scripts/pack-local.sh, at the version <version>.dev.<n> of a local build, written to
+# <work-dir>/hardslice-version, installs the hardslice-api template into an isolated hive
 # and generates the <app-name> solution, Demo by default, in <work-dir>/<app-name>, with the options of the template that follow it,
 # such as --no-sample. Shared by test-template.sh, demo-agent-fix.sh, demo-add-feature.sh and measure-analyzers.sh so all exercise
 # the same generated solution.
@@ -20,13 +21,9 @@ app_name="${2:-Demo}"
 template_options=("${@:3}")
 template_hive_args=(--debug:custom-hive "$hive")
 
-# The single version of the HardSlice packages, which the pack of the template writes where it pins the analyzers and the tool.
-version="$(cd "$repo_root" && dotnet msbuild src/HardSlice.Templates/HardSlice.Templates.csproj -getProperty:Version)"
-
-echo "==> Packing HardSlice.Analyzers, HardSlice.Tool and HardSlice.Templates $version"
-dotnet pack "$repo_root/src/HardSlice.Analyzers/HardSlice.Analyzers.csproj" --configuration Release --output "$feed"
-dotnet pack "$repo_root/src/HardSlice.Tool/HardSlice.Tool.csproj" --configuration Release --output "$feed"
-dotnet pack "$repo_root/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$feed"
+# The single version of the three packs, which the pack of the template writes where it pins the analyzers and the tool.
+version="$("$repo_root/scripts/pack-local.sh" --output "$feed")"
+printf '%s\n' "$version" > "$work/hardslice-version"
 
 expected_packages="$(printf '%s\n' "HardSlice.Analyzers.$version.nupkg" "HardSlice.Templates.$version.nupkg" "HardSlice.Tool.$version.nupkg")"
 packed_packages="$(cd "$feed" && ls -1 -- *.nupkg | LC_ALL=C sort)"

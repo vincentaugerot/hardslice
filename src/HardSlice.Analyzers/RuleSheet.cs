@@ -10,7 +10,8 @@ internal static class RuleSheet
 
     private const string SheetsPath = "src/HardSlice.Templates/content/hardslice-api/docs/rules";
 
-    // 'v0.3.0-preview.1' for the informational version '0.3.0-preview.1+<commit>'.
+    // 'v0.3.0-preview.1' for the informational version '0.3.0-preview.1+<commit>', and for '0.3.0-preview.1.dev.<n>+<commit>' of a
+    // local build (scripts/pack-local.sh), whose tag does not exist.
     private static readonly string Tag = "v" + Version();
 
     public static string Uri(string ruleId) => $"{Repository}/blob/{Tag}/{SheetsPath}/{ruleId}.md";
@@ -21,6 +22,13 @@ internal static class RuleSheet
             ?? typeof(RuleSheet).Assembly.GetName().Version?.ToString(3)
             ?? "0.0.0";
         var metadata = version.IndexOf('+');
-        return metadata < 0 ? version : version.Substring(0, metadata);
+        return Release(metadata < 0 ? version : version.Substring(0, metadata));
+    }
+
+    // The version of the release that a local build <version>.dev.<n> precedes, or <version> itself.
+    internal static string Release(string version)
+    {
+        var local = version.LastIndexOf(".dev.", StringComparison.Ordinal);
+        return local > 0 && local + 5 < version.Length && version.Substring(local + 5).All(char.IsDigit) ? version.Substring(0, local) : version;
     }
 }

@@ -17,7 +17,8 @@ public sealed class TemplatePackageTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var repositoryRoot = FindRepositoryRoot();
         var templateRoot = TemplateRoot(repositoryRoot);
-        var version = PackageVersion(repositoryRoot);
+        // A local pack, as scripts/pack-local.sh runs it: <version>.dev.<n> (PB-113).
+        var version = PackageVersion(repositoryRoot) + ".dev.1";
         var templateProject = Path.Combine(repositoryRoot, "src", "HardSlice.Templates", "HardSlice.Templates.csproj");
         var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"hardslice-template-package-{Guid.NewGuid():N}");
         var feedDirectory = Path.Combine(temporaryDirectory, "feed");
@@ -37,7 +38,7 @@ public sealed class TemplatePackageTests
                 repositoryRoot,
                 null,
                 cancellationToken,
-                ["pack", templateProject, "--configuration", "Release", "--no-restore", "--output", feedDirectory, .. isolation]);
+                ["pack", templateProject, "--configuration", "Release", "--no-restore", "--output", feedDirectory, "-p:HardSliceDevBuild=1", .. isolation]);
             pack.ExitCode.ShouldBe(0, pack.Output);
 
             using var archive = ZipFile.OpenRead(
@@ -3580,7 +3581,7 @@ public sealed class TemplatePackageTests
     private static string PackageVersion(string repositoryRoot) =>
         XDocument.Load(Path.Combine(repositoryRoot, "Directory.Build.props"))
             .Descendants()
-            .Single(element => element.Name.LocalName == "Version")
+            .Single(element => element.Name.LocalName == "HardSliceVersion")
             .Value;
 
     // The template keeps the reference in a comment that dotnet new uncomments: the repository builds the template content without the package.
