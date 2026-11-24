@@ -6,15 +6,11 @@ namespace MyApp.Domain.ModuleName;
 // and replaces it whole to change it.
 public sealed record ValueObjectName
 {
-    public ValueObjectName(decimal value)
+    public ValueObjectName(FieldParameters)
     {
-        // TODO(hardslice): replace Value with the values of ValueObjectName, and this rule with its own: throw a DomainException
-        // for each rule that the values break.
-        if (value < 0)
-            throw new DomainException("ValueObjectName cannot be negative.");
+FieldRules        // TODO(hardslice): add the rules of the values of ValueObjectName that their types do not say, such as a positive amount or an order
+        // between two dates, each one throwing a DomainException, with its test, then remove this line.
 
-        Value = value;
-    }
+FieldAssignments    }
 
-    public decimal Value { get; }
-}
+FieldProperties}

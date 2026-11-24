@@ -4,6 +4,10 @@
     "Module": {
       "longName": "module",
       "shortName": ""
+    },
+    "Fields": {
+      "longName": "fields",
+      "shortName": ""
     }
   }
 }

@@ -5242,7 +5242,12 @@ probe_value_object_template() {
     "a value object named as its module|--name '$module' is already the name of a module or of a namespace of the application|--name|$module" \
     "a value object named as a namespace of the application|--name 'Domain' is already the name of a module or of a namespace of the application|--name|Domain" \
     "a value object named as a type of the implicit usings|--name 'Range' is already the name of a type that the files of the application or of its tests import|--name|Range" \
-    "a value object named as a type of the module|--name '$existing' already exists in module '$module': src/$app_name.Domain/$module/$existing.cs or tests/$app_name.Tests/Domain/$module/${existing}Tests.cs exists|--name|$existing"; do
+    "a value object named as a type of the module|--name '$existing' already exists in module '$module': src/$app_name.Domain/$module/$existing.cs or tests/$app_name.Tests/Domain/$module/${existing}Tests.cs exists|--name|$existing" \
+    "a list of fields that is not well formed|--fields 'count' is not a list of <Name>:<Type> separated by commas|--fields|count" \
+    "a field of an unknown type|field 'Count' of --fields has the type 'float'|--fields|Count:float" \
+    "a field given twice|--fields names 'Count' twice, in any case|--fields|Count:int,COUNT:long" \
+    "a field named as the value object|--fields names a field '$name', the name of the value object|--fields|$name:int" \
+    "a field named as a member of every record|--fields names a field 'ToString', a member that every record already has|--fields|ToString:string"; do
     IFS='|' read -r -a fields <<< "$refusal"
     # The valid value of each option that the refusal does not give, and none for --name in the run without name.
     arguments=(--project "$project")
@@ -5283,8 +5288,9 @@ probe_value_object_template() {
     fi
   done
   for expected in "Complete the value object $name of module $module:" \
-    "1. Give it its values in $source, in place of Value: a parameter of its constructor and a property without setter for each." \
-    "2. Test it in $tests: valid values and what it holds, then one test per rule that its constructor refuses, with Should.Throw<DomainException>, and one per rule that it computes."; do
+    "1. Replace the TODO(hardslice): marker of $source with the rules of its values that their types do not say, each one throwing a DomainException, or remove it when they have none." \
+    "2. Test it in $tests: give each field of a type of the domain a valid value where its TODO(hardslice): marker is, then add one test per rule that its constructor refuses, with Should.Throw<DomainException>, and one per rule that it computes." \
+    "Built when the application starts, from its configuration or its reference data, it stops the application."; do
     if [[ "${value_object_output//Manual instructions: /}" != *"$expected"* ]]; then
       printf '%s\n' "$value_object_output" >&2
       echo "error: dotnet new hardslice-value-object did not print '$expected'." >&2
@@ -5294,10 +5300,11 @@ probe_value_object_template() {
   for expected in "$source|namespace $app_name.Domain.$module;" \
     "$source|public sealed record $name" \
     "$source|    public $name(decimal value)" \
-    "$source|            throw new DomainException(\"$name cannot be negative.\");" \
+    "$source|        Value = value;" \
     "$source|    public decimal Value { get; }" \
     "$tests|namespace $app_name.Tests.Domain.$module;" \
-    "$tests|        Should.Throw<DomainException>(() => new $name(-1m));"; do
+    "$tests|        value.Value.ShouldBe(ValidValue);" \
+    "$tests|    private static decimal ValidValue => 1.5m;"; do
     if ! grep -Fxq -- "${expected#*|}" "$app/${expected%%|*}"; then
       cat "$app/${expected%%|*}" >&2
       echo "error: dotnet new hardslice-value-object did not write the line '${expected#*|}' in ${expected%%|*}." >&2
@@ -5395,6 +5402,78 @@ CODE
   fi
 
   echo "==> Checking that $app_name passes the check with the completed value object $name"
+  bash "$app/scripts/check.sh"
+
+  probe_value_object_fields "$module" "$name"
+
+  rm "${app:?}/${source:?}" "${app:?}/${tests:?}"
+}
+
+# PB-114: --fields writes the values of the value object <name>Terms of module <module>, of each kind, beside the completed value
+# object <name>, which it holds as a type of the domain: their parameters, properties and the rule of a required string, its test,
+# and a valid value of each base type. The valid value of the field of a type of the domain is a TODO(hardslice): marker, so that
+# only the tests of <name>Terms fail until the reference completion gives it one.
+probe_value_object_fields() {
+  local module="$1"
+  local held="$2"
+  local name="${held}Terms"
+  local project="src/$app_name/$app_name.csproj"
+  local source="src/$app_name.Domain/$module/$name.cs"
+  local tests="tests/$app_name.Tests/Domain/$module/${name}Tests.cs"
+  local value_object_output
+  local expected
+  local check_output
+  local status
+
+  echo "==> Generating the value object $name of module $module with --fields in $app_name"
+  if ! value_object_output="$(new_item hardslice-value-object --project "$project" --module "$module" --name "$name" \
+    --fields "Label:string,Note:string?,Count:int,Since:DateOnly,Event:Guid,Rate:$held")"; then
+    printf '%s\n' "$value_object_output" >&2
+    echo "error: dotnet new hardslice-value-object --fields failed on the value object $name of module $module in $app_name." >&2
+    exit 1
+  fi
+  for expected in "$source|    public $name(string label, string? note, int count, DateOnly since, Guid @event, $held rate)" \
+    "$source|        if (string.IsNullOrWhiteSpace(label))" \
+    "$source|            throw new DomainException(\"Label cannot be blank.\");" \
+    "$source|        Event = @event;" \
+    "$source|    public string? Note { get; }" \
+    "$source|    public $held Rate { get; }" \
+    "$tests|    public void Refuses_a_blank_Label()" \
+    "$tests|        Should.Throw<DomainException>(() => Create(\" \", ValidNote, ValidCount, ValidSince, ValidEvent, ValidRate));" \
+    "$tests|        value.Rate.ShouldBe(ValidRate);" \
+    "$tests|    private static DateOnly ValidSince => new DateOnly(2026, 11, 24);" \
+    "$tests|        throw new NotImplementedException(\"TODO(hardslice): return a valid $held for Rate.\");"; do
+    if ! grep -Fxq -- "${expected#*|}" "$app/${expected%%|*}"; then
+      cat "$app/${expected%%|*}" >&2
+      echo "error: dotnet new hardslice-value-object --fields did not write the line '${expected#*|}' in ${expected%%|*}." >&2
+      exit 1
+    fi
+  done
+  if grep -q 'Refuses_a_blank_Note\|Refuses_a_.*_Count\|Refuses_a_.*_Rate' "$app/$tests"; then
+    cat "$app/$tests" >&2
+    echo "error: dotnet new hardslice-value-object --fields wrote a refusal test for a field without generated rule in $tests." >&2
+    exit 1
+  fi
+
+  echo "==> Checking that the check of $app_name fails on the tests of $name alone, which wait for a valid $held"
+  status=0
+  check_output="$(run_check check.sh 2>&1)" || status=$?
+  check_output="$(strip_ansi <<< "$check_output")"
+  if [[ "$status" == 0 ]] || grep -Eq '(error|warning) (HS[0-9]{3}|CS[0-9]{4})' <<< "$check_output" ||
+    ! grep -q "^failed .*\.${name}Tests\." <<< "$check_output" ||
+    grep '^failed ' <<< "$check_output" | grep -vq "\.${name}Tests\."; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh did not fail on the tests of $name alone." >&2
+    exit 1
+  fi
+
+  echo "==> Completing the value object $name: a valid $held, and no rule beyond the generated one"
+  sed -i '/TODO(hardslice): add the rules of the values/,+1d' "$app/$source"
+  perl -0pi -e "s/=>\n        throw new NotImplementedException\(\"TODO\(hardslice\): return a valid $held for Rate\.\"\);/=> new $held(3, 4);/" "$app/$tests"
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of the value object $module/$name leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
   bash "$app/scripts/check.sh"
 
   rm "${app:?}/${source:?}" "${app:?}/${tests:?}"

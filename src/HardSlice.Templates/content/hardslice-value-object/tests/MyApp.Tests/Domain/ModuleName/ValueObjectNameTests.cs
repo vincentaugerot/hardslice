@@ -8,16 +8,15 @@ public sealed class ValueObjectNameTests
     [Fact]
     public void Holds_the_values_it_is_built_with_and_equals_another_built_with_the_same()
     {
-        var value = new ValueObjectName(12.5m);
+        var value = Valid();
 
-        value.Value.ShouldBe(12.5m);
-        value.ShouldBe(new ValueObjectName(12.5m));
-        value.ShouldNotBe(new ValueObjectName(13m));
+FieldAssertions        value.ShouldBe(Valid());
     }
 
-    [Fact]
-    public void Refuses_values_that_break_its_rule()
-    {
-        Should.Throw<DomainException>(() => new ValueObjectName(-1m));
-    }
-}
+FieldRefusalTests    // A valid ValueObjectName, built anew at each call from the valid value of each field below.
+    private static ValueObjectName Valid() => Create(FieldValidNames);
+
+    private static ValueObjectName Create(FieldParameters) =>
+        new(FieldArguments);
+
+FieldSamples}

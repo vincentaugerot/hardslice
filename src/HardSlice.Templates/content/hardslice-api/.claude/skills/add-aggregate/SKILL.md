@@ -69,15 +69,30 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
 
 A value object holds values that belong together and the rules on them, without an identity of its own, such as a period, an amount, a week or the counts of a set of trips. A rule computed from values, such as a rate, a share or the order of a ranking, is a property or a method of a value object, never a computation of a handler or a query.
 
-1. The module must exist. Generate the value object in its domain:
+1. The module must exist. List the values of the value object, then generate it in its domain with them:
 
    ```text
-   dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name>
+   dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name> --fields <Name>:<Type>[,<Name>:<Type>...]
    ```
 
-   It refuses an unknown module, and a name that the domain of the module or its tests already have, that of an aggregate, an entity, an identifier or another value object.
-2. Complete `src/MyApp.Domain/<Module>/<Name>.cs`, a `sealed record`: replace `Value` with its values, a parameter of the constructor and a property without setter for each, and the rule marked `TODO(hardslice):` with its own rules, each throwing a `DomainException`. Add each rule computed from the values as a property or a method.
-3. Rewrite `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs` with these values: valid values and what the value object holds, one test per rule that the constructor refuses (`Should.Throw<DomainException>`), and one per computed rule. The generated tests pass on the rule of the template: the check fails on its marker alone.
+   Each field is a parameter of the constructor and a property without setter: a base type (`string`, `bool`, `int`, `long`, `decimal`, `double`, `Guid`, `DateOnly`, `TimeOnly`, `DateTimeOffset`) or a type of the domain, such as another value object or an enum, followed by `?` when the value is optional, such as `--fields Level:InterpretationLevel,Justification:string,Note:string?`. Without `--fields`, it holds `Value:decimal`. It refuses an unknown module, a name that the domain of the module or its tests already have, that of an aggregate, an entity, an identifier or another value object, and a field that the record cannot hold.
+2. Complete `src/MyApp.Domain/<Module>/<Name>.cs`, a `sealed record`: a required `string` is already refused when it is blank, and the compiler refuses a `null` for any required field. Replace the marker `TODO(hardslice):` with the rules that the types do not say, each throwing a `DomainException`, such as a positive amount, an order between two dates or a value of an enum that it does not define (`Enum.IsDefined`), or remove it when there are none. Add each rule computed from the values as a property or a method.
+3. Complete `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs`: give each field of a type of the domain a valid value where its `TODO(hardslice):` marker throws, then add one test per rule that the constructor refuses (`Should.Throw<DomainException>`, with `Create(...)` and the valid value of each other field) and one per computed rule. The generated tests compile as generated, so that tests written first, such as reference cases, run beside them: give the value object its fields at the generation, and change its tests in the same edit when its fields change afterwards. A value object that holds a list, such as `IReadOnlyList<Citation> Citations`, compares the list by reference: write its `Equals` and `GetHashCode`, which the test of equality then proves:
+
+   ```csharp
+   public bool Equals(CitedValue? other) =>
+       other is not null && Amount == other.Amount && Citations.SequenceEqual(other.Citations);
+
+   public override int GetHashCode()
+   {
+       var hash = new HashCode();
+       hash.Add(Amount);
+       foreach (var citation in Citations)
+           hash.Add(citation);
+       return hash.ToHashCode();
+   }
+   ```
+
 4. An aggregate or a child entity holds it as a property, which a method replaces whole, and its mapping stores it in the columns of its row, as [A value object stored in the row of its entity](#a-value-object-stored-in-the-row-of-its-entity) says, then a migration. A value object that a method or a query computes and returns, such as the rate of a set of rows, needs no mapping. Then run the check.
 
 ## Concurrent changes

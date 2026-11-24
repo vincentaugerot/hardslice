@@ -2208,7 +2208,11 @@ public sealed class TemplatePackageTests
         symbols.GetProperty("Module").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
         symbols.GetProperty("Module").GetProperty("replaces").GetString().ShouldBe("ModuleName");
         symbols.GetProperty("Accepted").GetProperty("value").GetString()
-            .ShouldBe("(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && NameIsFree && !NameExists)");
+            .ShouldBe("(AppIsKnown && NameIsGiven && NameIsPascalCase && ModuleIsPascalCase && ModuleExists && NameIsFree && !NameExists"
+                + " && FieldsAreWellFormed && FieldTypesAreKnown && !FieldsHaveDuplicate && !FieldIsTheType && !FieldIsRecordMember)");
+        symbols.GetProperty("Fields").GetProperty("datatype").GetString().ShouldBe("text");
+        var host = File.ReadAllText(Path.Combine(root, ".template.config", "dotnetcli.host.json"));
+        host.ShouldContain("\"Fields\": {\n      \"longName\": \"fields\"");
         var modifiers = config.GetProperty("sources").EnumerateArray().ShouldHaveSingleItem().GetProperty("modifiers");
         modifiers.EnumerateArray().ShouldHaveSingleItem().GetProperty("condition").GetString().ShouldBe("(!Accepted)");
         var targets = File.ReadAllText(Path.Combine(TemplateRoot(repositoryRoot), "Directory.Build.targets"));
@@ -2217,27 +2221,110 @@ public sealed class TemplatePackageTests
         targets.ShouldContain("<HardSliceDomainFiles Condition=\"Exists('$(_HardSliceDomainTestsFolder)')\">$(HardSliceDomainFiles);");
     }
 
-    // The value object is a sealed record of the domain without setter, whose constructor checks a rule marked TODO(hardslice):
-    // and throws DomainException. Its tests build a valid value and refuse one, and pass as generated: the marker fails the check.
+    // PB-114: the value object is a sealed record of the domain without setter, whose constructor takes the values of --fields and
+    // holds each in a property, with a TODO(hardslice): marker for the rules that their types do not say. Without --fields, it holds
+    // Value:decimal. Its tests build a valid value from a valid value of each field, and pass as generated: the marker fails the check.
     [Fact]
-    public void Value_object_item_template_checks_its_rule_in_its_constructor_and_tests_a_valid_and_a_refused_value()
+    public void Value_object_item_template_takes_its_fields_in_its_constructor_and_holds_them_in_properties()
     {
         var root = ValueObjectTemplateRoot(FindRepositoryRoot());
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
         var valueObject = File.ReadAllText(Path.Combine(root, "src", "MyApp.Domain", "ModuleName", "ValueObjectName.cs"));
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.Tests", "Domain", "ModuleName", "ValueObjectNameTests.cs"));
+        var fields = new Dictionary<string, string> { ["Fields"] = "Level:InterpretationLevel, Justification:string,Note:string?,Event:Guid,URLCount:int" };
+        var none = new Dictionary<string, string>();
+
+        Evaluated(symbols, "FieldParameters", none).ShouldBe("decimal value");
+        Evaluated(symbols, "FieldAssignments", none).ShouldBe("        Value = value;\n");
+        Evaluated(symbols, "FieldProperties", none).ShouldBe("    public decimal Value { get; }\n");
+        Evaluated(symbols, "FieldRules", none).ShouldBe("");
+        Evaluated(symbols, "FieldParameters", fields)
+            .ShouldBe("InterpretationLevel level, string justification, string? note, Guid @event, int urlCount");
+        Evaluated(symbols, "FieldArguments", fields).ShouldBe("level, justification, note, @event, urlCount");
+        Evaluated(symbols, "FieldAssignments", fields).ShouldBe(
+            "        Level = level;\n        Justification = justification;\n        Note = note;\n        Event = @event;\n        URLCount = urlCount;\n");
+        Evaluated(symbols, "FieldProperties", fields).ShouldBe(
+            "    public InterpretationLevel Level { get; }\n    public string Justification { get; }\n    public string? Note { get; }\n"
+            + "    public Guid Event { get; }\n    public int URLCount { get; }\n");
+        Evaluated(symbols, "FieldRules", fields)
+            .ShouldBe("        if (string.IsNullOrWhiteSpace(justification))\n            throw new DomainException(\"Justification cannot be blank.\");\n");
+        foreach (var token in new[] { "FieldParameters", "FieldArguments", "FieldAssignments", "FieldProperties", "FieldRules", "FieldValidNames", "FieldAssertions", "FieldSamples", "FieldRefusalTests" })
+            symbols.GetProperty(token).GetProperty("replaces").GetString().ShouldBe(token);
 
         valueObject.ShouldStartWith("namespace MyApp.Domain.ModuleName;\n");
-        valueObject.ShouldContain("\npublic sealed record ValueObjectName\n{\n    public ValueObjectName(decimal value)\n");
-        valueObject.ShouldContain("        // TODO(hardslice): replace Value with the values of ValueObjectName");
-        valueObject.ShouldContain("            throw new DomainException(\"ValueObjectName cannot be negative.\");");
-        valueObject.ShouldContain("    public decimal Value { get; }");
+        valueObject.ShouldContain("\npublic sealed record ValueObjectName\n{\n    public ValueObjectName(FieldParameters)\n    {\nFieldRules        // TODO(hardslice): add the rules of the values of ValueObjectName");
+        valueObject.ShouldContain("\nFieldAssignments    }\n\nFieldProperties}\n");
         valueObject.ShouldNotContain(" set;");
         valueObject.ShouldNotContain(" init;");
         valueObject.ShouldNotContain("IEntity");
         tests.ShouldContain("public sealed class ValueObjectNameTests");
-        tests.ShouldContain("        value.ShouldBe(new ValueObjectName(12.5m));");
-        tests.ShouldContain("        Should.Throw<DomainException>(() => new ValueObjectName(-1m));");
+        tests.ShouldContain("        var value = Valid();\n\nFieldAssertions        value.ShouldBe(Valid());\n");
+        tests.ShouldContain("    private static ValueObjectName Valid() => Create(FieldValidNames);\n");
+        tests.ShouldContain("    private static ValueObjectName Create(FieldParameters) =>\n        new(FieldArguments);\n");
         tests.ShouldNotContain("TODO(hardslice)");
+    }
+
+    // PB-114: the tests hold a valid value of each field: a constant of each base type, the same at each call so that two values
+    // built from them are equal, and for a type of the domain a TODO(hardslice): marker that throws until it returns a valid one. A
+    // required string, the only field with a generated rule, gets the test of its refusal, with the valid value of every other field.
+    [Fact]
+    public void Value_object_item_template_tests_a_valid_value_of_each_field_and_the_refusal_of_a_blank_string()
+    {
+        using var config = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ValueObjectTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
+        var fields = new Dictionary<string, string> { ["Fields"] = "Label:string,Count:int?,Since:DateOnly,Rate:DeliveryRate,Code:string" };
+
+        Evaluated(symbols, "FieldValidNames", fields).ShouldBe("ValidLabel, ValidCount, ValidSince, ValidRate, ValidCode");
+        Evaluated(symbols, "FieldAssertions", fields).ShouldBe(
+            "        value.Label.ShouldBe(ValidLabel);\n        value.Count.ShouldBe(ValidCount);\n        value.Since.ShouldBe(ValidSince);\n"
+            + "        value.Rate.ShouldBe(ValidRate);\n        value.Code.ShouldBe(ValidCode);\n");
+        Evaluated(symbols, "FieldSamples", fields).ShouldBe(
+            "    private static string ValidLabel => \"value\";\n    private static int? ValidCount => 1;\n"
+            + "    private static DateOnly ValidSince => new DateOnly(2026, 11, 24);\n"
+            + "    private static DeliveryRate ValidRate =>\n        throw new NotImplementedException(\"TODO(hardslice): return a valid DeliveryRate for Rate.\");\n"
+            + "    private static string ValidCode => \"value\";\n");
+        Evaluated(symbols, "FieldRefusalTests", fields).ShouldBe(
+            "    [Fact]\n    public void Refuses_a_blank_Label()\n    {\n"
+            + "        Should.Throw<DomainException>(() => Create(\" \", ValidCount, ValidSince, ValidRate, ValidCode));\n    }\n\n"
+            + "    [Fact]\n    public void Refuses_a_blank_Code()\n    {\n"
+            + "        Should.Throw<DomainException>(() => Create(ValidLabel, ValidCount, ValidSince, ValidRate, \" \"));\n    }\n\n");
+        Evaluated(symbols, "FieldRefusalTests", new Dictionary<string, string> { ["Fields"] = "Note:string?,Count:int" }).ShouldBe("");
+        Evaluated(symbols, "FieldRefusalTests", new Dictionary<string, string>()).ShouldBe("");
+    }
+
+    // PB-114: --fields refuses a malformed list, an unknown type, a name given twice in any case, the name of the value object and
+    // the name of a member of every record.
+    [Theory]
+    [InlineData("Level:Kind,Note:string?,Count:int,At:DateTimeOffset", "")]
+    [InlineData("level", "FieldsAreWellFormed")]
+    [InlineData("Level:", "FieldsAreWellFormed")]
+    [InlineData("Level:float", "FieldTypesAreKnown")]
+    [InlineData("Level:My.Kind", "FieldTypesAreKnown")]
+    [InlineData("Level:int,LEVEL:string", "FieldsHaveDuplicate")]
+    [InlineData("ValueObjectName:int", "FieldIsTheType")]
+    [InlineData("Count:int,ToString:string", "FieldIsRecordMember")]
+    public void Value_object_item_template_refuses_fields_that_the_record_cannot_hold(string list, string refusedBy)
+    {
+        using var config = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ValueObjectTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
+        var inputs = new Dictionary<string, string> { ["Fields"] = list, ["name"] = "ValueObjectName" };
+        var expected = new Dictionary<string, string>
+        {
+            ["FieldsAreWellFormed"] = "true",
+            ["FieldTypesAreKnown"] = "true",
+            ["FieldsHaveDuplicate"] = "false",
+            ["FieldIsTheType"] = "false",
+            ["FieldIsRecordMember"] = "false",
+        };
+        if (refusedBy.Length > 0)
+            expected[refusedBy] = expected[refusedBy] == "true" ? "false" : "true";
+
+        foreach (var (symbol, value) in expected)
+            if (symbol == refusedBy || refusedBy.Length == 0 || symbol == "FieldsAreWellFormed")
+                Evaluated(symbols, symbol, inputs).ShouldBe(value, $"{symbol} of --fields {list}");
     }
 
     // Every refusal fails the generation, after excluding every file, and says that nothing was created. The last action prints
@@ -2250,7 +2337,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(8);
+        refusals.Length.ShouldBe(13);
         refusals.Length.ShouldBe(postActions.Length - 1);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
@@ -2260,6 +2347,8 @@ public sealed class TemplatePackageTests
         completion.GetProperty("continueOnError").GetBoolean().ShouldBeTrue();
         var text = completion.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!;
         text.ShouldStartWith("Complete the value object ValueObjectName of module ModuleName:\n");
+        text.ShouldContain("Built by a slice from the fields of its request, a DomainException is answered with 400. Built when the "
+            + "application starts, from its configuration or its reference data, it stops the application.");
         text.ShouldContain("src/MyApp.Domain/ModuleName/ValueObjectName.cs");
         text.ShouldContain("tests/MyApp.Tests/Domain/ModuleName/ValueObjectNameTests.cs");
         text.ShouldContain("A rule computed from them, such as a rate, a share or an order, is a property or a method of ValueObjectName");
@@ -2298,10 +2387,14 @@ public sealed class TemplatePackageTests
 
         agents.Single(line => line.StartsWith("4. Business rules live in the domain", StringComparison.Ordinal))
             .ShouldContain("A rule computed from values, such as a rate, lives in a value object of the module, a `sealed record` that "
-                + "`dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name>` generates with its tests.");
+                + "`dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name> --fields <Name>:<Type>[,...]` "
+                + "generates with its values and their tests.");
         agents.Length.ShouldBeLessThan(150);
         addAggregate.ShouldContain("\n## Value objects\n");
-        addAggregate.ShouldContain("dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name>\n");
+        addAggregate.ShouldContain("dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name> --fields <Name>:<Type>[,<Name>:<Type>...]\n");
+        // PB-114: the rules that the types do not say, an enum checked with Enum.IsDefined, and the equality of a list.
+        addAggregate.ShouldContain("a value of an enum that it does not define (`Enum.IsDefined`)");
+        addAggregate.ShouldContain("Citations.SequenceEqual(other.Citations)");
     }
 
     // The lines of <source> that the template keeps for --link id (<linkIsId>) or --link collection, the only condition of its files.
