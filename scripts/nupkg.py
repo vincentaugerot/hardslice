@@ -5,11 +5,13 @@ in the order of the names, except the repository signature .signature.p7s. NuGet
 accepts, so the file it serves never has the bytes of the file pushed: the content digest is the same for both.
 
 metadata <nupkg> <version>: fails unless the package ships its README and its icon at its root, its nuspec names them, and its
-release notes are the changelog at the tag of the version, never at a branch that moves.
+release notes are the changelog at the tag of the version, never at a branch that moves. A local build <version>.dev.<n>
+(scripts/pack-local.sh) names the tag of the release <version> that it precedes: its own tag does not exist.
 """
 
 import base64
 import hashlib
+import re
 import sys
 import xml.etree.ElementTree as ElementTree
 import zipfile
@@ -40,7 +42,8 @@ def metadata(path, version):
             errors.append(f"{path}: its nuspec names {fields.get(field)!r} as {field} instead of {file}.")
         if file not in names:
             errors.append(f"{path} does not ship {file} at its root.")
-    expected_notes = f"{REPOSITORY}/blob/v{version}/CHANGELOG.md"
+    release = re.sub(r"\.dev\.[0-9]+$", "", version)
+    expected_notes = f"{REPOSITORY}/blob/v{release}/CHANGELOG.md"
     if fields.get("releaseNotes") != expected_notes:
         errors.append(f"{path}: its release notes are {fields.get('releaseNotes')!r} instead of {expected_notes}.")
     return errors

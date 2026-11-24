@@ -85,6 +85,9 @@ public sealed class PublishPackagesTests : IDisposable
 
         exitCode.ShouldBe(1, output);
         output.ShouldContain("does not ship icon.png at its root");
+        // PB-113: a local build <version>.dev.<n> names the tag of the release that it precedes.
+        Run("python3", Repository.Root, "-I", "scripts/nupkg.py", "metadata", complete, Version + ".dev.1795543058");
+        Execute("python3", Repository.Root, "-I", "scripts/nupkg.py", "metadata", complete, "9.9.9-preview.2.dev.1").ExitCode.ShouldBe(1);
     }
 
     public void Dispose()
