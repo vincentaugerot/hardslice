@@ -1,6 +1,6 @@
 ---
 name: add-module
-description: Adds a module to this HardSlice solution with dotnet new hardslice-module, registers it in Program.cs and in the map of AGENTS.md, then runs the check. Use when asked to add a module, a bounded context or a new business area, such as Catalog or Billing, before its aggregates and slices exist. Also use when a module loads a store or builds values when the application starts, such as reference data read from files, from its own store or from that of another module.
+description: Adds a module to this HardSlice solution with dotnet new hardslice-module, registers it in Program.cs and in the map of AGENTS.md, then runs the check. Use when asked to add a module, a bounded context or a new business area, such as Catalog or Billing, before its aggregates and slices exist. Also use when a module loads a store or builds values when the application starts, such as reference data read from files, from its own store or from that of another module, and for a service of its public contract or a module without aggregate.
 ---
 
 # Add a module
@@ -28,7 +28,11 @@ Run every command from the root of the solution, the folder of `MyApp.slnx`. If 
    pwsh scripts/check.ps1    # Windows, PowerShell
    ```
 
-6. Continue with the `add-aggregate` skill for its first aggregate, then `add-slice` for each use case.
+6. Continue with the `add-aggregate` skill for its first aggregate, then `add-slice` for each use case. A module may start without aggregate, with value objects and enumerations of its domain only (`add-aggregate`, [Value objects](../add-aggregate/SKILL.md#value-objects)): the first `hardslice-value-object` creates its domain folder and its test folder, and the group of `Map<Module>Module` stays unused until its first slice.
+
+## The public contract of a module
+
+The contract of a module is what the other modules and its own slices may use, in the namespace `MyApp.Features.<Module>` at the root of `src/MyApp/Features/<Module>/`: `<Module>Module` and its `Route`, its integration events, and the services that several slices or modules read, such as a store of reference data that builds the value objects of its domain, a computation that two slices run, or an interface that another module implements. A slice never belongs to it (HS012). No template generates a service of the contract: write it by hand, register it in `Add<Module>Module`, as a singleton built at start when it loads data (below), and put its unit tests in `tests/MyApp.Tests/Features/<Module>/`, the test folder of the module (HS018). A store that builds the types of the domain of one module belongs to the contract of that module, even when several modules read it: `Shared/Persistence` keeps the stores of bytes, such as a file or object store, that know no type of the domain (HS017).
 
 ## Values built when the application starts
 

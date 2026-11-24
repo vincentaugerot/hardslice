@@ -2489,6 +2489,39 @@ public sealed class TemplatePackageTests
         addAggregate.ShouldContain("Citations.SequenceEqual(other.Citations)");
     }
 
+    // PB-117: add-aggregate says the form of an enumeration of the domain, when a computation leaves the value objects for a domain
+    // service, how two value objects share one and where a value object that several modules use goes. add-module says that a module
+    // may start without aggregate and what its public contract holds, HS017 and AGENTS.md, in both variants, that a store of domain
+    // types goes in that contract, and HS018 where a test of data that mirrors no code goes.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_where_an_enumeration_a_domain_service_a_contract_service_and_a_test_of_data_go(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var addAggregate = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-aggregate", "SKILL.md"));
+        var addModule = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-module", "SKILL.md"));
+        var sharedRule = File.ReadAllText(Path.Combine(templateRoot, "docs", "rules", "HS017.md"));
+        var testRule = File.ReadAllText(Path.Combine(templateRoot, "docs", "rules", "HS018.md"));
+
+        addAggregate.ShouldContain("\n## Enumerations of the domain\n");
+        addAggregate.ShouldContain("Give each member an explicit value starting at 1, so that `default`, 0, is never a valid member");
+        addAggregate.ShouldContain("with `Enum.IsDefined` and a `DomainException`");
+        addAggregate.ShouldContain("\n## A computation that composes several value objects\n");
+        addAggregate.ShouldContain("is a domain service: a `static class` of `src/MyApp.Domain/<Module>/`");
+        addAggregate.ShouldContain("Never a base record that both derive from");
+        addAggregate.ShouldContain("\n## A value object that several modules use\n");
+        addModule.ShouldContain("A module may start without aggregate, with value objects and enumerations of its domain only");
+        addModule.ShouldContain("\n## The public contract of a module\n");
+        addModule.ShouldContain("No template generates a service of the contract: write it by hand, register it in `Add<Module>Module`");
+        sharedRule.ShouldContain("a store that builds the types of the domain of a module, such as reference data read into its value objects, goes in the public contract of that module");
+        testRule.ShouldContain("it goes in `tests/MyApp.Tests/Data/`, outside `Features/`, which this rule does not check");
+        agents.Single(line => line.StartsWith("| `src/MyApp/Shared/Persistence/` |", StringComparison.Ordinal))
+            .ShouldContain("a store that builds the domain types of a module goes in the contract of that module.");
+        agents.Length.ShouldBeLessThan(150);
+    }
+
     // PB-115: AGENTS.md, in both variants, HS017.md and add-module name AddSingletonBuiltAtStart for a service built when the
     // application starts, such as reference data, and add-module forbids reading back the IServiceCollection of another module.
     [Theory]
@@ -3050,7 +3083,7 @@ public sealed class TemplatePackageTests
             + "slices, such as a job and its administration endpoint (`add-slice`).");
         agents.Single(line => line.StartsWith("| `src/MyApp/Shared/Persistence/` |", StringComparison.Ordinal)).ShouldBe(
             "| `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations, and the stores outside the database that "
-            + "several modules use, such as a file or object store. It declares no module type. "
+            + "several modules use, such as a file or object store. It declares no module type, and a store that builds the domain types of a module goes in the contract of that module. "
                 + "`AddSingletonBuiltAtStart` builds a service when the application starts, such as reference data read from files, whose exception stops it (`add-module`). |");
         agents.Length.ShouldBeLessThan(150);
 

@@ -1,6 +1,6 @@
 ---
 name: add-aggregate
-description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, a child entity of an aggregate with dotnet new hardslice-entity, or a value object of a module with dotnet new hardslice-value-object, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape than the one it shows, in private fields, or a value object in the columns of its row, when two commands may change the same aggregate at the same time, for an aggregate written once and never changed, such as a trace, and when a command deletes rows in bulk, such as a purge.
+description: Adds an aggregate to a module of this HardSlice solution with dotnet new hardslice-aggregate, a child entity of an aggregate with dotnet new hardslice-entity, or a value object of a module with dotnet new hardslice-value-object, gives it its state, its invariants and their unit tests, maps it and adds its migration, then runs the check. Use when asked to add an aggregate, an entity, a business object or a table that slices will create, change or read, such as a Product in a Catalog module, or the parts of an aggregate, such as the lines of an order, or children that a command writes in bulk. Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape than the one it shows, in private fields, or a value object in the columns of its row, when two commands may change the same aggregate at the same time, for an aggregate never changed, such as a trace, when a command deletes rows in bulk, and for an enum or a domain service.
 ---
 
 # Add an aggregate
@@ -94,6 +94,36 @@ A value object holds values that belong together and the rules on them, without 
    ```
 
 4. An aggregate or a child entity holds it as a property, which a method replaces whole, and its mapping stores it in the columns of its row, as [A value object stored in the row of its entity](#a-value-object-stored-in-the-row-of-its-entity) says, then a migration. A value object that a method or a query computes and returns, such as the rate of a set of rows, needs no mapping. Then run the check.
+
+## Enumerations of the domain
+
+An enumeration of the domain, such as the level of a source or the status of an order, is written by hand in a file of its own, `src/MyApp.Domain/<Module>/<Name>.cs`, next to the value objects of its module: the templates know the types of a module by their file names. Give each member an explicit value starting at 1, so that `default`, 0, is never a valid member:
+
+```csharp
+public enum InterpretationLevel
+{
+    Literal = 1,
+    Derived = 2,
+    Estimated = 3,
+}
+```
+
+A value object or an entity that holds one refuses a value that it does not define, cast from a number such as `(InterpretationLevel)7`, with `Enum.IsDefined` and a `DomainException`, and its test builds it with that value. An enumeration implements no contract: no rule gives it a role (HS901).
+
+## A computation that composes several value objects
+
+A rule that one value object owns is its property or its method. A computation that composes the results of several value objects, none of which owns it, such as an income tax computed from a schedule of brackets, a basic amount and the contributions of a payroll, is a domain service: a `static class` of `src/MyApp.Domain/<Module>/`, named after what it computes, whose methods take the value objects and return a value object. It is pure: it receives every value, the date included, and reads no store, no clock and no configuration. Its unit tests sit at `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs`, one per case of the computation. No template generates it: write it by hand, with its tests.
+
+Two value objects that compute the same way with other values, such as two pension plans with their own rates and maximums, share the computation instead of repeating it:
+
+- a value object that both hold, such as a `ContributionSchedule` of a maximum, an exemption and rates, whose method computes the contribution, while each plan keeps its own values, names and messages;
+- or a domain service that both call, when the computation composes more than one value object.
+
+Never a base record that both derive from: the value objects are `sealed`, and their equality compares their own values only.
+
+## A value object that several modules use
+
+The domain belongs to no module (HS012): every module may use any type of `src/MyApp.Domain/`. A value object that several modules use, such as an amount of money or a rate, is generated in the module that owns its concept, the one whose rules it carries, and the other modules use it from its namespace, `MyApp.Domain.<Module>`. When none owns it more than the others, it stays in the first module that needed it: moving it later is a rename of its namespace, without a rule to change.
 
 ## Concurrent changes
 
