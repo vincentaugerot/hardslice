@@ -5,7 +5,7 @@
 This is a preview. It holds the `hardslice-api` solution template: an ASP.NET Core API in vertical slices around a rich domain, persisted in PostgreSQL with EF Core, with a `Bookings` sample module, or empty with `--no-sample`.
 
 ```text
-dotnet new install HardSlice.Templates@0.3.0-preview.1
+dotnet new install HardSlice.Templates@0.3.0-preview.2
 dotnet new hardslice-api --name Rooms
 cd Rooms
 bash scripts/check.sh     # macOS, Linux, Git Bash
@@ -33,9 +33,9 @@ Every generated solution references [HardSlice.Analyzers](https://www.nuget.org/
 
 ## Documentation
 
-- [Getting started](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/getting-started.md)
-- [Item templates](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/item-templates.md)
-- [Agent loop: hooks, protected files and skills](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/agent-loop.md)
-- [Rules](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/rules.md)
-- [Changelog](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/CHANGELOG.md)
+- [Getting started](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/getting-started.md)
+- [Item templates](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/item-templates.md)
+- [Agent loop: hooks, protected files and skills](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/agent-loop.md)
+- [Rules](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/rules.md)
+- [Changelog](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/CHANGELOG.md)
 - [License (MIT)](https://github.com/vincentaugerot/hardslice/blob/main/LICENSE)

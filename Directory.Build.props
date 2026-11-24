@@ -13,7 +13,7 @@
        -p:HardSliceDevBuild=<n>: a version that NuGet.org never has and that no cache of an earlier build holds.
        HardSlice.Templates writes the version at pack time where the template pins the analyzers and the tool. -->
   <PropertyGroup>
-    <HardSliceVersion>0.3.0-preview.1</HardSliceVersion>
+    <HardSliceVersion>0.3.0-preview.2</HardSliceVersion>
     <Version Condition="'$(HardSliceRelease)' != 'true' and '$(HardSliceDevBuild)' != ''">$(HardSliceVersion).dev.$(HardSliceDevBuild)</Version>
     <Version Condition="'$(Version)' == ''">$(HardSliceVersion)</Version>
     <Authors>Vincent Augerot</Authors>

@@ -5034,7 +5034,7 @@ scripts/verify-published.sh <version du pack> <dossier> --source artifacts/packa
 
 ### PB-120 : Publier `0.3.0-preview.2`
 
-Statut : à faire. Comme PB-051 : `Directory.Build.props` à `0.3.0-preview.2`, les lignes d'installation des README, la section de `CHANGELOG.md` datée, l'étiquette annotée `v0.3.0-preview.2` sur le commit de PB-119 après l'accord du mainteneur, l'approbation de l'environnement `nuget` par le mainteneur, `verify` vert, et la release GitHub. Ottawa se met ensuite à niveau sur les paquets publiés.
+Statut : en cours le 24/11/2026. Version, lignes d'installation, liens des README à l'étiquette `v0.3.0-preview.2`, paragraphe « Status » du README et section datée de `CHANGELOG.md` dans un seul commit. Aucune règle à déplacer dans `AnalyzerReleases.Shipped.md` : `Unshipped.md` ne tient que son en-tête, et `## Release 0.3.0` couvre les préversions de 0.3.0. Reste l'étiquette, après la CI verte de ce commit et l'accord du mainteneur. Prévu, comme PB-051 : `Directory.Build.props` à `0.3.0-preview.2`, les lignes d'installation des README, la section de `CHANGELOG.md` datée, l'étiquette annotée `v0.3.0-preview.2` sur le commit de PB-119 après l'accord du mainteneur, l'approbation de l'environnement `nuget` par le mainteneur, `verify` vert, et la release GitHub. Ottawa se met ensuite à niveau sur les paquets publiés.
 
 **Acceptation**
 

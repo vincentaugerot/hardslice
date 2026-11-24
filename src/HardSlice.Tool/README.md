@@ -22,8 +22,8 @@ dotnet hardslice upgrade
 
 ## Documentation
 
-- [Getting started](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/getting-started.md)
-- [Agent loop: hooks and protected files](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/agent-loop.md)
-- [Rules](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/docs/rules.md)
-- [Changelog](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.1/CHANGELOG.md)
+- [Getting started](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/getting-started.md)
+- [Agent loop: hooks and protected files](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/agent-loop.md)
+- [Rules](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/rules.md)
+- [Changelog](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/CHANGELOG.md)
 - [License (MIT)](https://github.com/vincentaugerot/hardslice/blob/main/LICENSE)
