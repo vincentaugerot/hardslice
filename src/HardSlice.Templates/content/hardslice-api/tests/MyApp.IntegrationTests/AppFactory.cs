@@ -92,11 +92,14 @@ public sealed class AppFactory : WebApplicationFactory<Program>
         await base.DisposeAsync();
     }
 
-    // As WebApplicationFactory builds and starts the host, with a line for each hosted service of the application that it does not
+    // As WebApplicationFactory builds and starts the host, then a line for each hosted service of the application that it did not
     // start: a test that waits for its work, or for the check of a setting it makes at start, reads why in the logs it captures.
+    // The host starts on the thread of Program, which disposes it when its start fails: Start comes first, so that it waits for
+    // that start before the host can be disposed, and fails with its exception.
     protected override IHost CreateHost(IHostBuilder builder)
     {
         var host = builder.Build();
+        host.Start();
         var logger = host.Services.GetRequiredService<ILogger<AppFactory>>();
         foreach (var service in host.Services.GetRequiredService<RemovedHostedServices>().Types)
         {
@@ -107,7 +110,6 @@ public sealed class AppFactory : WebApplicationFactory<Program>
                 name);
         }
 
-        host.Start();
         return host;
     }
 
