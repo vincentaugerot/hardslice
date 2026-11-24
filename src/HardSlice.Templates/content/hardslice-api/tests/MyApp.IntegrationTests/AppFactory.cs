@@ -94,8 +94,8 @@ public sealed class AppFactory : WebApplicationFactory<Program>
 
     // As WebApplicationFactory builds and starts the host, then a line for each hosted service of the application that it did not
     // start: a test that waits for its work, or for the check of a setting it makes at start, reads why in the logs it captures.
-    // The host starts on the thread of Program, which disposes it when its start fails: Start comes first, so that it waits for
-    // that start before the host can be disposed, and fails with its exception.
+    // The host starts on the thread of Program, which disposes it when its start fails: Start comes first, so that nothing reads
+    // its services after that.
     protected override IHost CreateHost(IHostBuilder builder)
     {
         var host = builder.Build();
