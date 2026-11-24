@@ -4617,7 +4617,8 @@ probe_computed_query() {
       exit 1
     fi
   done
-  if grep -n "AppDbContext\|$aggregate\|StoreAggregate\|Microsoft.EntityFrameworkCore" "$slice" "$test" "$parameterless_slice" "$parameterless_test"; then
+  # The aggregate as a whole word: the module and the names of the slices hold it.
+  if grep -nE "AppDbContext|StoreAggregate|Microsoft\.EntityFrameworkCore|\b$aggregate\b" "$slice" "$test" "$parameterless_slice" "$parameterless_test"; then
     echo "error: a computed query of $app_name reads the database or names an aggregate." >&2
     exit 1
   fi
