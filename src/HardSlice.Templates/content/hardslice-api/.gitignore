@@ -5,3 +5,6 @@ TestResults/
 .vs/
 .idea/
 *.user
+
+# The personal settings that Claude Code writes in each clone, such as the commands it may run.
+.claude/settings.local.json

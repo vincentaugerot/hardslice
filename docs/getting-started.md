@@ -39,6 +39,20 @@ To start from the same foundation without the sample:
 dotnet new hardslice-api --name Rooms --no-sample
 ```
 
+### Generating into an existing repository
+
+A repository that already holds its documentation or other files takes the solution at its root, from that root:
+
+```text
+dotnet new hardslice-api --name Rooms --output .
+```
+
+`dotnet new` changes no file that the template does not write, so `docs/`, a `README.md` and the other files stay as they are. When a file of the template already exists, such as `AGENTS.md`, `GEMINI.md`, `.gitignore` or `.editorconfig`, it lists each one as `Overwrite`, exits with code 73 and writes nothing. Never pass `--force`, which would overwrite them: move them aside, generate, then merge what they held into the files that the application owns, such as `.gitignore`.
+
+The instructions that another tool wrote for the agents, such as an `AGENTS.md` or a `GEMINI.md`, give way to those of the template. Move them to a file that the agent also reads, such as `AGENTS.override.md` for Codex, and keep it out of git through `.git/info/exclude` when it belongs to one machine.
+
+`.claude/` stays protected as a whole: a file of its own there, such as an agent, a skill or the local settings, can declare hooks or turn them off, which would let an agent around the check. A file that another tool writes there, such as its command, stays out of git through `.git/info/exclude`, as the generated `.gitignore` keeps out `.claude/settings.local.json`, the personal settings of Claude Code.
+
 ## 3. Verify it
 
 ```text

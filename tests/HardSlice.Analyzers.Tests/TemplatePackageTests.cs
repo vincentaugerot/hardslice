@@ -90,14 +90,24 @@ public sealed class TemplatePackageTests
         }
     }
 
-    // PB-055: git never tracks the build output, the test results the check writes, nor the files of IDEs.
+    // PB-055: git never tracks the build output, the test results the check writes, nor the files of IDEs. PB-118: nor the personal
+    // settings of Claude Code, in .claude/, which HardSlice protects, and AGENTS.md, in both variants, says that the file of another tool
+    // in .claude/ stays out of git through .git/info/exclude.
     [Fact]
     public void Generated_solution_ignores_its_build_output_test_results_and_IDE_files()
     {
         var gitignore = File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".gitignore"))
             .Where(line => line.Length > 0 && !line.StartsWith('#'));
 
-        gitignore.ShouldBe(["bin/", "obj/", "TestResults/", ".vs/", ".idea/", "*.user"], ignoreOrder: true);
+        gitignore.ShouldBe(["bin/", "obj/", "TestResults/", ".vs/", ".idea/", "*.user", ".claude/settings.local.json"], ignoreOrder: true);
+        foreach (var noSample in new[] { false, true })
+            AgentGuidance(File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), "AGENTS.md")), noSample)
+                .Single(line => line.StartsWith("Protected files: ", StringComparison.Ordinal))
+                .ShouldContain("A file that another tool writes in `.claude/`, such as its command, stays out of git, through `.git/info/exclude`, as `.gitignore` keeps out `.claude/settings.local.json`.");
+        var gettingStarted = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "getting-started.md"));
+        gettingStarted.ShouldContain("\n### Generating into an existing repository\n");
+        gettingStarted.ShouldContain("dotnet new hardslice-api --name Rooms --output .");
+        gettingStarted.ShouldContain("exits with code 73 and writes nothing");
     }
 
     // PB-055: a NuGet security alert published after this version on one of its pinned packages stays a warning: with
