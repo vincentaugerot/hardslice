@@ -208,7 +208,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(33);
+        refusals.Length.ShouldBe(34);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -1065,7 +1065,7 @@ public sealed class TemplatePackageTests
     // app.CreateClient(), and a command refuses it with --endpoint none or --every, which have no endpoint.
     [Theory]
     [InlineData("hardslice-command", 7, 2)]
-    [InlineData("hardslice-query", 4, 3)]
+    [InlineData("hardslice-query", 4, 4)]
     public void Slice_item_templates_protect_their_endpoint_with_the_policy_of_require(string templateName, int endpoints, int unauthorizedTests)
     {
         var repository = FindRepositoryRoot();
@@ -1264,7 +1264,7 @@ public sealed class TemplatePackageTests
 
             Matches(symbols, "RouteIsValid", route).ShouldBe(accepted);
             symbols.GetProperty("SliceRoute").GetProperty("parameters").GetProperty("source").GetString().ShouldBe("RouteOrDefault");
-            symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("RouteIsValid && !RouteHidesId");
+            symbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("RouteIsValid && !RouteIsEmpty && !RouteHidesId");
         }
     }
 
@@ -1378,11 +1378,12 @@ public sealed class TemplatePackageTests
         application.GetProperty("type").GetString().ShouldBe("bind");
         application.GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
         application.GetProperty("replaces").GetString().ShouldBe("MyApp");
-        symbols.GetProperty("Aggregate").GetProperty("isRequired").GetBoolean().ShouldBeTrue();
+        // --aggregate is required by every result but computed (PB-116), which its refusals check.
+        symbols.GetProperty("Aggregate").TryGetProperty("isRequired", out _).ShouldBeFalse();
         // Never list: dotnet new would read '--result list' as its own list command.
         symbols.GetProperty("Result").GetProperty("choices").EnumerateArray()
             .Select(choice => choice.GetProperty("choice").GetString())
-            .ShouldBe(["single", "many", "filtered", "summary"]);
+            .ShouldBe(["single", "many", "filtered", "summary", "computed"]);
         symbols.GetProperty("Result").GetProperty("defaultValue").GetString().ShouldBe("single");
         var modifiers = config.GetProperty("sources")[0].GetProperty("modifiers");
         modifiers[1].GetProperty("condition").GetString().ShouldBe("(!ResultTakesFilters)");
@@ -1402,14 +1403,20 @@ public sealed class TemplatePackageTests
     {
         var root = QueryTemplateRoot(FindRepositoryRoot());
         using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
-        var symbol = template.RootElement.GetProperty("symbols").GetProperty("ResultDto");
+        var symbols = template.RootElement.GetProperty("symbols");
+        var symbol = symbols.GetProperty("DerivedDto");
 
         symbol.GetProperty("parameters").GetProperty("source").GetString().ShouldBe("name");
         symbol.GetProperty("parameters").GetProperty("steps").EnumerateArray()
             .Aggregate(name, (value, step) => Regex.Replace(
                 value, step.GetProperty("regex").GetString()!, step.GetProperty("replacement").GetString()!))
             .ShouldBe(dto);
-        symbol.GetProperty("replaces").GetString().ShouldBe("ResultDtoName");
+        // --dto names it otherwise (PB-116).
+        var resultDto = symbols.GetProperty("ResultDto");
+        resultDto.GetProperty("generator").GetString().ShouldBe("coalesce");
+        resultDto.GetProperty("parameters").GetProperty("sourceVariableName").GetString().ShouldBe("Dto");
+        resultDto.GetProperty("parameters").GetProperty("fallbackVariableName").GetString().ShouldBe("DerivedDto");
+        resultDto.GetProperty("replaces").GetString().ShouldBe("ResultDtoName");
         foreach (var file in QueryTemplateFiles.Where(file => file.EndsWith(".cs", StringComparison.Ordinal)))
             File.ReadAllText(Path.Combine(root, file)).ShouldNotContain("QueryNameDto");
     }
@@ -1771,7 +1778,7 @@ public sealed class TemplatePackageTests
         var postActions = template.RootElement.GetProperty("postActions").EnumerateArray().ToArray();
         var refusals = postActions.Where(action => action.GetProperty("id").GetString()!.StartsWith("refuse", StringComparison.Ordinal)).ToArray();
 
-        refusals.Length.ShouldBe(18);
+        refusals.Length.ShouldBe(22);
         refusals.ShouldAllBe(action => !action.GetProperty("continueOnError").GetBoolean());
         refusals.Select(action => action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!)
             .ShouldAllBe(text => text.StartsWith("error: ") && text.EndsWith(" Nothing was created."));
@@ -1796,7 +1803,7 @@ public sealed class TemplatePackageTests
         foreach (var (symbol, value) in new[]
         {
             ("ResultIsSummary", "(Result == \"summary\")"),
-            ("ResultTakesFilters", "(ResultIsFiltered || ResultIsSummary)"),
+            ("ResultTakesFilters", "(ResultIsFiltered || ResultIsSummary || (ResultIsComputed && ParametersIsGiven))"),
             ("SummaryWithoutParameters", "(ResultIsSummary && !ParametersIsGiven)"),
             ("ParametersIsUnused", "(!ResultTakesFilters && ParametersIsGiven)"),
             ("ParametersIsMalformed", "(ResultTakesFilters && ParametersIsGiven && !ParametersIsWellFormed)"),
@@ -1834,6 +1841,91 @@ public sealed class TemplatePackageTests
         tests.ShouldContain("    public async Task Returns_404_when_its_filters_select_no_aggregate()\n    {\n"
             + "        await using var isolated = await database.CreateIsolatedAsync();\n        await using var app = new AppFactory(isolated);\n");
         tests.ShouldContain("    private static async Task<Guid> StoreAggregateName(IsolatedDatabase isolated)\n    {\n        await using var db = isolated.CreateDbContext();\n");
+    }
+
+    // PB-116: --result computed computes one DTO from the services of the module and the domain, without stored aggregate: it refuses
+    // --aggregate, which the other results require, takes --parameters as optional filters, read and tested as those of --result
+    // filtered, and answers Ok only. Its handler throws with TODO(hardslice): until it receives the services that it reads.
+    [Fact]
+    public void Query_item_template_computes_a_dto_from_the_services_of_its_module_without_aggregate()
+    {
+        var root = QueryTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+
+        foreach (var (symbol, value) in new[]
+        {
+            ("ResultIsComputed", "(Result == \"computed\")"),
+            ("AggregateIsMissing", "(!ResultIsComputed && !AggregateIsGiven)"),
+            ("AggregateIsUnused", "(ResultIsComputed && AggregateIsGiven)"),
+            ("EndpointTakesQuery", "(ResultIsFiltered || (ResultIsComputed && ResultTakesFilters))"),
+            ("ComputedWithoutFilters", "(ResultIsComputed && !ResultTakesFilters)"),
+        })
+            symbols.GetProperty(symbol).GetProperty("value").GetString().ShouldBe(value);
+        Matches(symbols, "AggregateIsGiven", "").ShouldBeFalse();
+        Matches(symbols, "AggregateIsGiven", "Booking").ShouldBeTrue();
+        symbols.GetProperty("Accepted").GetProperty("value").GetString()!
+            .ShouldContain("!AggregateIsMissing && !AggregateIsUnused && (!AggregateIsGiven || AggregateIsPascalCase)");
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        string Refusal(string id, string condition)
+        {
+            var action = postActions.Single(action => action.GetProperty("id").GetString() == id);
+            action.GetProperty("condition").GetString().ShouldBe(condition);
+            return action.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!;
+        }
+        Refusal("refuseMissingAggregate", "(AggregateIsMissing)").ShouldStartWith("error: --aggregate is required: ");
+        Refusal("refuseAggregateOfComputed", "(AggregateIsUnused)").ShouldStartWith("error: --result computed reads no stored aggregate: ");
+        Refusal("refuseInvalidAggregate", "(AggregateIsGiven && !AggregateIsPascalCase)").ShouldStartWith("error: --aggregate 'AggregateName' is not PascalCase");
+        var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        registrations["(ResultIsComputed && ResultTakesFilters)"].ShouldContain(
+            "            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n");
+        registrations["(ComputedWithoutFilters)"].ShouldContain("            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n3.");
+        registrations["(ComputedWithoutFilters)"].ShouldNotContain("FluentValidation");
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
+        slice.ShouldContain("#if (!ResultIsComputed)\nusing Microsoft.EntityFrameworkCore;\n");
+        slice.ShouldContain("public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<ResultDtoName>;");
+        slice.ShouldContain("public sealed record QueryNameQuery : IQuery<ResultDtoName>;");
+        slice.ShouldContain("internal sealed class QueryNameHandler : IRequestHandler<QueryNameQuery, ResultDtoName>\n{\n"
+            + "    public Task<ResultDtoName> Handle(QueryNameQuery query, CancellationToken cancellationToken) =>\n"
+            + "        throw new NotImplementedException(\n            \"TODO(hardslice): receive by the constructor of QueryNameHandler the services of module ModuleName");
+        slice.ShouldContain("#elif (EndpointTakesQuery)\n        group.MapGet");
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "QueryName", "QueryNameTests.cs"));
+        tests.ShouldContain("#elif (ResultIsComputed)\n    [Fact]\n    public async Task Computes_its_dto_from_its_filters()\n");
+        tests.ShouldContain("#elif (ResultIsComputed)\n    [Fact]\n    public async Task Computes_its_dto()\n");
+        tests.ShouldContain("#if (!ResultIsComputed)\n\n#if (ResultIsSummary)\n    // Stores, outside the application,");
+    }
+
+    // PB-116: an empty --route is refused by both slice templates, where it fell back to the name of the slice: --route / maps the
+    // group. --dto names the DTO of a query in PascalCase.
+    [Fact]
+    public void Slice_item_templates_refuse_an_empty_route_and_a_query_an_invalid_dto()
+    {
+        var repository = FindRepositoryRoot();
+        foreach (var root in new[] { CommandTemplateRoot(repository), QueryTemplateRoot(repository) })
+        {
+            using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+            var symbols = template.RootElement.GetProperty("symbols");
+            symbols.GetProperty("RouteIsEmpty").GetProperty("value").GetString().ShouldBe("(Route == \"\")");
+            var refusal = template.RootElement.GetProperty("postActions").EnumerateArray()
+                .Single(action => action.GetProperty("id").GetString() == "refuseEmptyRoute");
+            refusal.GetProperty("condition").GetString().ShouldBe("(RouteIsEmpty)");
+            refusal.GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldStartWith("error: --route is empty: pass / for the group of the module itself");
+        }
+
+        using var query = JsonDocument.Parse(File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), ".template.config", "template.json")));
+        var querySymbols = query.RootElement.GetProperty("symbols");
+        foreach (var (value, accepted) in new[] { ("SourceDto", true), ("Source", true), ("source-dto", false), ("sourceDto", false) })
+            Matches(querySymbols, "DtoIsPascalCase", value).ShouldBe(accepted);
+        querySymbols.GetProperty("Accepted").GetProperty("value").GetString()!.ShouldContain("(!DtoIsGiven || DtoIsPascalCase)");
+        query.RootElement.GetProperty("postActions").EnumerateArray()
+            .Single(action => action.GetProperty("id").GetString() == "refuseInvalidDto")
+            .GetProperty("condition").GetString().ShouldBe("(DtoIsGiven && !DtoIsPascalCase)");
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(QueryTemplateRoot(repository), ".template.config", "dotnetcli.host.json")));
+        host.RootElement.GetProperty("symbolInfo").GetProperty("Dto").GetProperty("longName").GetString().ShouldBe("dto");
     }
 
     // hardslice-module generates the contract of the module alone. dotnet new creates no empty folder and never deletes a file: a

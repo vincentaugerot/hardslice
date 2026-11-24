@@ -4,11 +4,15 @@ using FluentValidation;
 #if (ResultIsSingle || ResultIsSummary)
 using Microsoft.AspNetCore.Http.HttpResults;
 #endif
+#if (!ResultIsComputed)
 using Microsoft.EntityFrameworkCore;
 // --aggregate names a type of this namespace: an unknown aggregate does not compile here.
 using MyApp.Domain.ModuleName;
+#endif
 using MyApp.Shared.Messaging;
+#if (!ResultIsComputed)
 using MyApp.Shared.Persistence;
+#endif
 
 namespace MyApp.Features.ModuleName.QueryName;
 
@@ -24,6 +28,13 @@ public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<IReadOnlyLis
 // Add the other filters of the use case, each with its rule.
 FilterComments
 public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<ResultDtoName?>;
+#elif (ResultIsComputed && ResultTakesFilters)
+// Computes one ResultDtoName from its filters, without stored aggregate. Add the other filters of the use case, each with its rule.
+FilterComments
+public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<ResultDtoName>;
+#elif (ResultIsComputed)
+// Computes one ResultDtoName, without stored aggregate. Add the parameters of the use case, such as a filter, and their validator.
+public sealed record QueryNameQuery : IQuery<ResultDtoName>;
 #else
 // Reads every AggregateName. Add the parameters of the use case, such as a filter, and their validator if any.
 public sealed record QueryNameQuery : IQuery<IReadOnlyList<ResultDtoName>>;
@@ -33,6 +44,10 @@ public sealed record QueryNameQuery : IQuery<IReadOnlyList<ResultDtoName>>;
 // Values only: never an entity, not even in a property. Replace Count with the values the use case computes, such as the count of
 // each state.
 public sealed record ResultDtoName(int Count);
+#elif (ResultIsComputed)
+// Values only: never an entity, not even in a property. Replace Value with the values the use case computes, such as the amount of
+// each line and its total.
+public sealed record ResultDtoName(decimal Value);
 #else
 // Values only: never an entity, not even in a property. Add the values the use case reads.
 public sealed record ResultDtoName(Guid Id);
@@ -49,8 +64,22 @@ internal sealed class QueryNameValidator : AbstractValidator<QueryNameQuery>
 }
 #endif
 
+#if (ResultIsComputed)
+// Computes the DTO from the services of module ModuleName that it receives by its constructor, such as a store that the module
+// builds when the application starts (AddSingletonBuiltAtStart) or TimeProvider, and from the value objects of the domain: it reads
+// no database, never saves, and runs outside any transaction.
+internal sealed class QueryNameHandler : IRequestHandler<QueryNameQuery, ResultDtoName>
+{
+    public Task<ResultDtoName> Handle(QueryNameQuery query, CancellationToken cancellationToken) =>
+        throw new NotImplementedException(
+            "TODO(hardslice): receive by the constructor of QueryNameHandler the services of module ModuleName that the use case reads, "
+            + "then compute ResultDtoName with the value objects and the services of the domain.");
+}
+#else
 // Reads a projection without tracking: a query never loads the aggregate, never saves, and runs outside any transaction.
-#if (ResultIsSingle)
+#endif
+#if (ResultIsComputed)
+#elif (ResultIsSingle)
 internal sealed class QueryNameHandler(AppDbContext db) : IRequestHandler<QueryNameQuery, ResultDtoName?>
 {
     public Task<ResultDtoName?> Handle(QueryNameQuery query, CancellationToken cancellationToken)
@@ -116,7 +145,7 @@ internal static class QueryNameEndpoint
         group.MapGet("/query-route", async Task<Results<Ok<ResultDtoName>, NotFound>> ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
                 await mediator.Send(query, cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound())
             .RequireAuthorization("AuthorizationPolicyName");
-#elif (RequireIsGiven && ResultIsFiltered)
+#elif (RequireIsGiven && EndpointTakesQuery)
         group.MapGet("/query-route", async ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
                 TypedResults.Ok(await mediator.Send(query, cancellationToken)))
             .RequireAuthorization("AuthorizationPolicyName");
@@ -130,7 +159,7 @@ internal static class QueryNameEndpoint
 #elif (ResultIsSummary)
         group.MapGet("/query-route", async Task<Results<Ok<ResultDtoName>, NotFound>> ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
             await mediator.Send(query, cancellationToken) is { } dto ? TypedResults.Ok(dto) : TypedResults.NotFound());
-#elif (ResultIsFiltered)
+#elif (EndpointTakesQuery)
         group.MapGet("/query-route", async ([AsParameters] QueryNameQuery query, IMediator mediator, CancellationToken cancellationToken) =>
             TypedResults.Ok(await mediator.Send(query, cancellationToken)));
 #else

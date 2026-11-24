@@ -3845,7 +3845,8 @@ query_dto() {
 }
 
 # Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and the unit tests of
-# its validator with --result filtered or --result summary only, and leaves the printed instructions in $query_output.
+# its validator with --result filtered, --result summary or --result computed with --parameters only, and leaves the printed
+# instructions in $query_output.
 generate_query() {
   local module="$1"
   local name="$2"
@@ -3866,7 +3867,8 @@ generate_query() {
       exit 1
     fi
   done
-  if [[ " $* " == *" --result filtered "* || " $* " == *" --result summary "* ]]; then
+  if [[ " $* " == *" --result filtered "* || " $* " == *" --result summary "* ||
+    ( " $* " == *" --result computed "* && " $* " == *" --parameters "* ) ]]; then
     if [[ ! -f "$app/$unit_test" ]]; then
       echo "error: dotnet new hardslice-query $* did not create $unit_test in $app_name." >&2
       exit 1
@@ -4533,6 +4535,130 @@ probe_not_found_results() {
   done
   mv "$work/module-not-found.backup" "$module_file"
   rm "$work/module-not-found-query.backup"
+}
+
+# PB-116: a DTO computed from the services of the module, without stored aggregate. In module <module>, which holds the aggregate
+# <aggregate>, the query <name> is generated with --result computed --parameters Year:int --dto <name>Result: a query of one
+# DTO that is never null, its validator and its tests, the 400 of a request without filter, and an endpoint that answers Ok only. The
+# query <parameterless-name> is generated with --result computed alone: an empty record, without validator. Before, --result
+# computed is refused with --aggregate, another result without --aggregate, an invalid --dto, and an empty --route by both slice
+# templates, with exit 105. The check fails on their TODO(hardslice): tests, whose handlers throw, then passes after the reference
+# completion, in which each handler computes its DTO from TimeProvider, a service of the host. The module is left as it was.
+probe_computed_query() {
+  local module="$1"
+  local name="$2"
+  local parameterless_name="$3"
+  local aggregate="$4"
+  local project="src/$app_name/$app_name.csproj"
+  local module_file="$app_src/Features/$module/${module}Module.cs"
+  local dto="${name}Result"
+  local parameterless_dto
+  local slice="$app_src/Features/$module/$name/$name.cs"
+  local test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
+  local parameterless_slice="$app_src/Features/$module/$parameterless_name/$parameterless_name.cs"
+  local parameterless_test="$app/tests/$app_name.IntegrationTests/Features/$module/$parameterless_name/${parameterless_name}Tests.cs"
+  local refusal
+  local generated
+  local -a fields
+
+  parameterless_dto="$(query_dto "$parameterless_name")"
+  cp "$module_file" "$work/module-computed.backup"
+
+  echo "==> Checking that dotnet new hardslice-query refuses --result computed with --aggregate, another result without it and an invalid --dto, and both slice templates an empty --route, in $app_name"
+  for refusal in "hardslice-query|--aggregate with --result computed|--result computed reads no stored aggregate|--result|computed|--aggregate|$aggregate" \
+    "hardslice-query|a single result without --aggregate|--aggregate is required: the aggregate root that the query reads|--route|probes" \
+    "hardslice-query|a --dto that is not PascalCase|--dto 'probe-result' is not PascalCase|--result|computed|--dto|probe-result" \
+    "hardslice-query|an empty --route|--route is empty: pass / for the group of the module itself|--result|computed|--route|" \
+    "hardslice-command|an empty --route|--route is empty: pass / for the group of the module itself|--route|"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    # read drops an empty last field: an empty --route is given back its value.
+    if [[ "${fields[-1]}" == "--route" ]]; then
+      fields+=("")
+    fi
+    expect_item_refused "${fields[0]}" "${fields[1]}" "${fields[2]}" --project "$project" --module "$module" --name "$name" "${fields[@]:3}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new ${fields[0]} refused ${fields[1]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+
+  echo "==> Generating the computed queries $module/$name, with a filter and --dto $dto, and $module/$parameterless_name, without filter, in $app_name"
+  generate_query "$module" "$name" --route computed-figures --result computed --parameters Year:int --dto "$dto"
+  for generated in "            .AddScoped<IRequestHandler<${name}Query, ${dto}>, ${name}Handler>()" \
+    "            .AddScoped<IValidator<${name}Query>, ${name}Validator>()"; do
+    if ! grep -Fxq -- "$generated" <<< "${query_output//Manual instructions: /}"; then
+      printf '%s\n' "$query_output" >&2
+      echo "error: dotnet new hardslice-query --result computed did not print the line '$generated'." >&2
+      exit 1
+    fi
+  done
+  register_slice hardslice-query "$query_output"
+  generate_query "$module" "$parameterless_name" --route computed-archetypes --result computed
+  if ! grep -Fxq "            .AddScoped<IRequestHandler<${parameterless_name}Query, ${parameterless_dto}>, ${parameterless_name}Handler>()" <<< "${query_output//Manual instructions: /}" ||
+    grep -Fq "IValidator<" <<< "$query_output"; then
+    printf '%s\n' "$query_output" >&2
+    echo "error: dotnet new hardslice-query --result computed without --parameters did not print the registration of its handler alone." >&2
+    exit 1
+  fi
+  register_slice hardslice-query "$query_output"
+  for generated in "$slice|public sealed record ${name}Query(int? Year) : IQuery<${dto}>;" \
+    "$slice|public sealed record ${dto}(decimal Value);" \
+    "$slice|internal sealed class ${name}Handler : IRequestHandler<${name}Query, ${dto}>" \
+    "$slice|        group.MapGet(\"/computed-figures\", async ([AsParameters] ${name}Query query, IMediator mediator, CancellationToken cancellationToken) =>" \
+    "$slice|            TypedResults.Ok(await mediator.Send(query, cancellationToken)));" \
+    "$test|    public async Task Computes_its_dto_from_its_filters()" \
+    "$test|        problem.Errors.Keys.ShouldBe([\"year\"]);" \
+    "$parameterless_slice|public sealed record ${parameterless_name}Query : IQuery<${parameterless_dto}>;" \
+    "$parameterless_slice|        group.MapGet(\"/computed-archetypes\", async (IMediator mediator, CancellationToken cancellationToken) =>" \
+    "$parameterless_test|    public async Task Computes_its_dto()"; do
+    if ! grep -Fxq -- "${generated#*|}" "${generated%%|*}"; then
+      cat "${generated%%|*}" >&2
+      echo "error: ${generated%%|*} does not hold the line of a computed query: ${generated#*|}" >&2
+      exit 1
+    fi
+  done
+  if grep -n "AppDbContext\|$aggregate\|StoreAggregate\|Microsoft.EntityFrameworkCore" "$slice" "$test" "$parameterless_slice" "$parameterless_test"; then
+    echo "error: a computed query of $app_name reads the database or names an aggregate." >&2
+    exit 1
+  fi
+  for generated in "$name" "$parameterless_name"; do
+    if grep -rn 'MyApp\|ModuleName\|QueryName\|AggregateName\|ResultDtoName\|DtoOrEmpty\|query-route\|FilterComments\|Parameter[A-Z][A-Za-z]*\|parameter-keys' \
+      "$app_src/Features/$module/$generated" "$app/tests/$app_name.IntegrationTests/Features/$module/$generated"; then
+      echo "error: the slice $module/$generated keeps a placeholder of the template." >&2
+      exit 1
+    fi
+  done
+  echo "    IQuery<${dto}> with its validator, IQuery<${parameterless_dto}> without, TypedResults.Ok, no aggregate"
+
+  echo "==> Checking that $app_name builds the computed queries without HardSlice diagnostic and fails the check on their TODO(hardslice): tests only"
+  expect_check_fails_on_todo_tests_only "the computed queries $module/$name and $module/$parameterless_name" \
+    "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Computes_its_dto_from_its_filters" \
+      "$app_name.IntegrationTests.Features.$module.$parameterless_name.${parameterless_name}Tests.Computes_its_dto" | LC_ALL=C sort)"
+
+  # The reference completion: each handler receives TimeProvider, a service of the host, and computes its DTO from it and the filter.
+  echo "==> Checking that the reference completion of the computed queries $module/$name and $module/$parameterless_name passes the check of $app_name"
+  sed -e "s/^internal sealed class ${name}Handler : /internal sealed class ${name}Handler(TimeProvider time) : /" \
+    -e '/throw new NotImplementedException(/,/services of the domain\.");/c\
+        Task.FromResult(new '"$dto"'(query.Year!.Value - time.GetUtcNow().Year + 1000m));' "$slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$slice"
+  sed -e "s/^internal sealed class ${parameterless_name}Handler : /internal sealed class ${parameterless_name}Handler(TimeProvider time) : /" \
+    -e '/throw new NotImplementedException(/,/services of the domain\.");/c\
+        Task.FromResult(new '"$parameterless_dto"'(time.GetUtcNow().Year));' "$parameterless_slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$parameterless_slice"
+  sed 's/^        Assert\.Fail("TODO(hardslice): assert each value of .*/        dto.Value.ShouldBe(1 - DateTimeOffset.UtcNow.Year + 1000m);/' "$test" > "$work/test.cs"
+  mv "$work/test.cs" "$test"
+  sed 's/^        Assert\.Fail("TODO(hardslice): assert each value of .*/        dto.Value.ShouldBe(DateTimeOffset.UtcNow.Year);/' "$parameterless_test" > "$work/test.cs"
+  mv "$work/test.cs" "$parameterless_test"
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of the computed queries leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+
+  rm -r "${app_src:?}/Features/$module/${name:?}" "$app/tests/$app_name.Tests/Features/$module/${name:?}" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/${name:?}" \
+    "${app_src:?}/Features/$module/${parameterless_name:?}" "$app/tests/$app_name.IntegrationTests/Features/$module/${parameterless_name:?}"
+  mv "$work/module-computed.backup" "$module_file"
 }
 
 # PB-081: --require <policy> protects the endpoint of a slice. In module <module>, the command <name>, the command without parameters
@@ -6327,6 +6453,7 @@ probe_route_filters Bookings GetBookingDayReadings GetBookingDatedReadings GetBo
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_not_found_results Bookings ReconcileBookingTally CountBookingFigures Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
+probe_computed_query Bookings SimulateBookingPrice GetBookingArchetypes Booking
 probe_protected_endpoints Bookings ProtectBooking ImportProtectedBookings GetProtectedBooking Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories

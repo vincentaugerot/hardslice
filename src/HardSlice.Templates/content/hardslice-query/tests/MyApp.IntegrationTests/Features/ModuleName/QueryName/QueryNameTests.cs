@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Http;
 #if (HasBindingRouteFilters)
 using Microsoft.AspNetCore.Mvc;
 #endif
+#if (!ResultIsComputed)
 using MyApp.Domain.ModuleName;
+#endif
 using MyApp.Features.ModuleName;
 using MyApp.Features.ModuleName.QueryName;
 
@@ -116,6 +118,25 @@ public sealed class QueryNameTests(PostgresDatabase database)
 #endif
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+#elif (ResultIsComputed)
+    [Fact]
+    public async Task Computes_its_dto_from_its_filters()
+    {
+        await using var app = new AppFactory(database);
+
+#if (HasRouteFilters && HasQueryStringFilters)
+        var response = await app.CreateClient().GetAsync(RouteWith() + QueryString, TestContext.Current.CancellationToken);
+#elif (HasRouteFilters)
+        var response = await app.CreateClient().GetAsync(RouteWith(), TestContext.Current.CancellationToken);
+#else
+        var response = await app.CreateClient().GetAsync(Route + QueryString, TestContext.Current.CancellationToken);
+#endif
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ResultDtoName>(TestContext.Current.CancellationToken);
+        dto.ShouldNotBeNull();
+        Assert.Fail("TODO(hardslice): assert each value of ResultDtoName that the handler computes for the filters of the request, then add a test for each other case of the use case.");
     }
 #else
     [Fact]
@@ -244,6 +265,34 @@ public sealed class QueryNameTests(PostgresDatabase database)
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 #endif
+#elif (ResultIsComputed)
+    [Fact]
+    public async Task Computes_its_dto()
+    {
+        await using var app = new AppFactory(database);
+
+        var response = await app.CreateClient().GetAsync(Route, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ResultDtoName>(TestContext.Current.CancellationToken);
+        dto.ShouldNotBeNull();
+        Assert.Fail("TODO(hardslice): assert each value of ResultDtoName that the handler computes.");
+    }
+#if (RequireIsGiven)
+
+    // The policy AuthorizationPolicyName refuses a request without authentication before the endpoint: its 401 is not in the signature
+    // of the endpoint (HS015), this test stands for it. The other tests send the client of the policy, which AppFactory holds.
+    [Fact]
+    public async Task Rejects_a_request_without_authentication_before_its_handler()
+    {
+        await using var app = new AppFactory(database);
+        var anonymous = app.CreateClient();
+
+        var response = await anonymous.GetAsync(Route, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+#endif
 #else
     [Fact]
     public async Task Lists_a_stored_aggregate_as_its_dto()
@@ -275,6 +324,7 @@ public sealed class QueryNameTests(PostgresDatabase database)
     }
 #endif
 #endif
+#if (!ResultIsComputed)
 
 #if (ResultIsSummary)
     // Stores, outside the application, the AggregateName that the query reads in the database <isolated>, and returns its identifier.
@@ -291,4 +341,5 @@ public sealed class QueryNameTests(PostgresDatabase database)
             "TODO(hardslice): create the AggregateName through the factory method of its aggregate, add it to db.Set<AggregateName>(), "
             + "save it with db.SaveChangesAsync(TestContext.Current.CancellationToken) and return its identifier.");
     }
+#endif
 }

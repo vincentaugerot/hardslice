@@ -28,6 +28,10 @@
     "Require": {
       "longName": "require",
       "shortName": ""
+    },
+    "Dto": {
+      "longName": "dto",
+      "shortName": ""
     }
   }
 }

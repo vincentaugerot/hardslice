@@ -31,8 +31,7 @@
     "Aggregate": {
       "type": "parameter",
       "datatype": "text",
-      "isRequired": true,
-      "description": "The aggregate that the query reads, in PascalCase, such as Booking: a type of namespace <App>.Domain.<Module>, whose Id property is a <Aggregate>Id that wraps a Guid Value.",
+      "description": "The aggregate that the query reads, in PascalCase, such as Booking: a type of namespace <App>.Domain.<Module>, whose Id property is a <Aggregate>Id that wraps a Guid Value. Required with every --result but computed, refused with it.",
       "replaces": "AggregateName",
       "fileRename": "AggregateName"
     },
@@ -40,7 +39,7 @@
       "type": "parameter",
       "datatype": "choice",
       "defaultValue": "single",
-      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs), filtered (the list of the DTOs that the filters of --parameters select, each read from the query string, or from the route when --route names it, and checked by a validator) or summary (one DTO that the handler computes, such as counts, on the aggregates that the same filters select, null answered with 404 when they select none). Not list: dotnet new would read it as its list command.",
+      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs), filtered (the list of the DTOs that the filters of --parameters select, each read from the query string, or from the route when --route names it, and checked by a validator), summary (one DTO that the handler computes, such as counts, on the aggregates that the same filters select, null answered with 404 when they select none) or computed (one DTO that the handler computes from the services of its module and the domain, without stored aggregate nor --aggregate, from the filters of --parameters if any, always answered with 200). Not list: dotnet new would read it as its list command.",
       "choices": [
         {
           "choice": "single",
@@ -57,13 +56,17 @@
         {
           "choice": "summary",
           "description": "One DTO computed on the aggregates that the filters of --parameters select, read as for filtered; none selected is answered with 404."
+        },
+        {
+          "choice": "computed",
+          "description": "One DTO computed from the services of the module, such as a store built when the application starts, without stored aggregate, from the filters of --parameters if any; always answered with 200."
         }
       ]
     },
     "Parameters": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The filters of --result filtered or --result summary, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly or From:DateOnly,To:DateOnly. The query reads each filter from the query string, such as ?from=2026-11-04&to=2026-11-05, where its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Each filter has a rule of the validator, its unit test, and its test of the 400. Required with --result filtered and --result summary, refused otherwise."
+      "description": "The filters of --result filtered, summary or computed, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly or From:DateOnly,To:DateOnly. The query reads each filter from the query string, such as ?from=2026-11-04&to=2026-11-05, where its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Each filter has a rule of the validator, its unit test, and its test of the 400. Required with --result filtered and --result summary, optional with --result computed, refused otherwise."
     },
     "Route": {
       "type": "parameter",
@@ -80,6 +83,11 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Protects the endpoint with the authorization policy of that name, which the application registers in Shared/Http with its authentication scheme, such as AdminKey: the endpoint chains .RequireAuthorization(\"<policy>\"), an integration test asserts its 401 without authentication, and the other tests send their requests through app.CreateAuthorizedClient(\"<policy>\"), the client of that policy that AppFactory.AuthorizedClients holds. A name of letters, digits, '.', '_', ':' and '-', starting with a letter."
+    },
+    "Dto": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The name of the DTO that the query returns, in PascalCase, such as SourceDto for each element of the list of GetSources. The name of the slice without its verb, followed by Dto, by default."
     },
     "AppName": {
       "type": "bind",
@@ -1199,7 +1207,7 @@
     },
     "ResultTakesFilters": {
       "type": "computed",
-      "value": "(ResultIsFiltered || ResultIsSummary)"
+      "value": "(ResultIsFiltered || ResultIsSummary || (ResultIsComputed && ParametersIsGiven))"
     },
     "FiltersAreGenerated": {
       "type": "computed",
@@ -1266,19 +1274,10 @@
     },
     "ResultDto": {
       "type": "generated",
-      "generator": "regex",
+      "generator": "coalesce",
       "parameters": {
-        "source": "name",
-        "steps": [
-          {
-            "regex": "^[A-Z][a-z0-9]+(?=[A-Z])",
-            "replacement": ""
-          },
-          {
-            "regex": "$",
-            "replacement": "Dto"
-          }
-        ]
+        "sourceVariableName": "Dto",
+        "fallbackVariableName": "DerivedDto"
       },
       "replaces": "ResultDtoName",
       "fileRename": "ResultDtoName"
@@ -1326,7 +1325,7 @@
       "generator": "regexMatch",
       "datatype": "bool",
       "parameters": {
-        "source": "Aggregate",
+        "source": "AggregateOrEmpty",
         "pattern": "^[A-Z][A-Za-z0-9]*$"
       }
     },
@@ -1358,9 +1357,94 @@
       "type": "computed",
       "value": "(FiltersAreGenerated && ParametersHaveDuplicate)"
     },
+    "AggregateOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Aggregate",
+        "fallbackVariableName": "Unbound"
+      }
+    },
+    "AggregateIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "AggregateOrEmpty",
+        "pattern": "."
+      }
+    },
+    "ResultIsComputed": {
+      "type": "computed",
+      "value": "(Result == \"computed\")"
+    },
+    "AggregateIsMissing": {
+      "type": "computed",
+      "value": "(!ResultIsComputed && !AggregateIsGiven)"
+    },
+    "AggregateIsUnused": {
+      "type": "computed",
+      "value": "(ResultIsComputed && AggregateIsGiven)"
+    },
+    "EndpointTakesQuery": {
+      "type": "computed",
+      "value": "(ResultIsFiltered || (ResultIsComputed && ResultTakesFilters))"
+    },
+    "ComputedWithoutFilters": {
+      "type": "computed",
+      "value": "(ResultIsComputed && !ResultTakesFilters)"
+    },
+    "DerivedDto": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "name",
+        "steps": [
+          {
+            "regex": "^[A-Z][a-z0-9]+(?=[A-Z])",
+            "replacement": ""
+          },
+          {
+            "regex": "$",
+            "replacement": "Dto"
+          }
+        ]
+      }
+    },
+    "DtoOrEmpty": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "Dto",
+        "fallbackVariableName": "Unbound"
+      },
+      "fileRename": "DtoOrEmpty"
+    },
+    "DtoIsGiven": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "DtoOrEmpty",
+        "pattern": "."
+      }
+    },
+    "DtoIsPascalCase": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "DtoOrEmpty",
+        "pattern": "^[A-Z][A-Za-z0-9]*$"
+      }
+    },
+    "RouteIsEmpty": {
+      "type": "computed",
+      "value": "(Route == \"\")"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && AggregateIsPascalCase && RouteIsValid && !RouteHidesId && MethodIsGet && !ParametersIsMissing && !SummaryWithoutParameters && !ParametersIsUnused && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !RouteNamesNoFilter && RequireIsValid)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && !AggregateIsMissing && !AggregateIsUnused && (!AggregateIsGiven || AggregateIsPascalCase) && RouteIsValid && !RouteIsEmpty && !RouteHidesId && MethodIsGet && !ParametersIsMissing && !SummaryWithoutParameters && !ParametersIsUnused && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !RouteNamesNoFilter && RequireIsValid && (!DtoIsGiven || DtoIsPascalCase))"
     }
   },
   "sources": [
@@ -1495,8 +1579,46 @@
       "continueOnError": false
     },
     {
+      "id": "refuseMissingAggregate",
+      "condition": "(AggregateIsMissing)",
+      "description": "Refuses a query that reads a stored aggregate without --aggregate.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --aggregate is required: the aggregate root that the query reads, a type of src/MyApp.Domain/ModuleName/, such as --aggregate Booking. A query that computes its DTO from the services of its module, without stored aggregate, takes --result computed instead. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseAggregateOfComputed",
+      "condition": "(AggregateIsUnused)",
+      "description": "Refuses --aggregate with --result computed.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --result computed reads no stored aggregate: its handler computes the DTO from the services of module ModuleName and the domain. Leave --aggregate out, or choose the --result that reads the aggregate. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "refuseInvalidAggregate",
-      "condition": "(!AggregateIsPascalCase)",
+      "condition": "(AggregateIsGiven && !AggregateIsPascalCase)",
       "description": "Refuses an aggregate name that is not PascalCase.",
       "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
       "applyFileRenamesToManualInstructions": true,
@@ -1509,6 +1631,25 @@
       "manualInstructions": [
         {
           "text": "error: --aggregate 'AggregateName' is not PascalCase: pass the aggregate root that the query reads, a type of src/MyApp.Domain/<Module>/, such as --aggregate Booking. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseEmptyRoute",
+      "condition": "(RouteIsEmpty)",
+      "description": "Refuses an empty route, which would fall back to the name of the slice.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --route is empty: pass / for the group of the module itself, such as --route /, or the route of the resource that the query reads under the group. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1622,7 +1763,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --parameters 'ParametersText' lists the filters of --result filtered or --result summary: pass one of them with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
+          "text": "error: --parameters 'ParametersText' lists the filters of --result filtered, summary or computed: pass one of them with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1723,6 +1864,25 @@
       "continueOnError": false
     },
     {
+      "id": "refuseInvalidDto",
+      "condition": "(DtoIsGiven && !DtoIsPascalCase)",
+      "description": "Refuses a name of DTO that is not PascalCase.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-query.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --dto 'DtoOrEmpty' is not PascalCase: it names the DTO that the query returns, such as --dto SourceDto. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
       "id": "registerSlice",
       "condition": "(Accepted)",
       "description": "Lines to add to the module of the slice.",
@@ -1744,6 +1904,14 @@
         {
           "condition": "(ResultIsSummary)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName?>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ResultIsComputed && ResultTakesFilters)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ComputedWithoutFilters)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],
       "continueOnError": true

@@ -1277,9 +1277,13 @@
       "type": "computed",
       "value": "(ParametersIsList && MethodIsDelete)"
     },
+    "RouteIsEmpty": {
+      "type": "computed",
+      "value": "(Route == \"\")"
+    },
     "Accepted": {
       "type": "computed",
-      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule && !AtStartWithoutSchedule && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !ParametersWithDelete && !NotFoundWithoutDto && !NotFoundWithoutEndpoint && !NotFoundWithoutIdentifier)"
+      "value": "(AppIsKnown && NameIsGiven && NameIsPascalCase && !NameHasSuffix && ModuleIsPascalCase && ModuleExists && ResponseIsAccepted && !ResponseNeedsParameters && RouteIsValid && !RouteIsEmpty && !RouteHidesId && MethodIsAccepted && !EndpointOptionsWithoutEndpoint && !EveryContradictsOptions && EveryIsValid && RequireIsValid && !RequireWithoutEndpoint && DailyAtIsValid && TimeZoneIsValid && RetryIsValid && !EveryWithDailyAt && !DailyAtContradictsOptions && !TimeZoneWithoutDailyAt && !RetryWithoutSchedule && !AtStartWithoutSchedule && !ParametersIsMalformed && !ParameterTypeIsUnknown && !ParameterIsDuplicated && !ParametersWithDelete && !NotFoundWithoutDto && !NotFoundWithoutEndpoint && !NotFoundWithoutIdentifier)"
     }
   },
   "sources": [
@@ -1519,6 +1523,25 @@
       "manualInstructions": [
         {
           "text": "error: --not-found answers 404 to an aggregate that does not exist, which a command with --parameters none has no field to name. Keep its parameters with --parameters id or the list of its fields, such as --parameters ServiceDate:DateOnly, or leave --not-found out. Nothing was created."
+        }
+      ],
+      "continueOnError": false
+    },
+    {
+      "id": "refuseEmptyRoute",
+      "condition": "(RouteIsEmpty)",
+      "description": "Refuses an empty route, which would fall back to the name of the slice.",
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "applyFileRenamesToManualInstructions": true,
+      "args": {
+        "jsonFileName": "hardslice-command.refused.json",
+        "parentPropertyPath": "refused",
+        "newJsonPropertyName": "refused",
+        "newJsonPropertyValue": "refused"
+      },
+      "manualInstructions": [
+        {
+          "text": "error: --route is empty: pass / for the group of the module itself, such as --route /, or the route of the resource that the command changes under the group. Nothing was created."
         }
       ],
       "continueOnError": false
