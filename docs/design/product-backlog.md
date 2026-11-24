@@ -4997,7 +4997,7 @@ scripts/test-template.sh --only sample,blank
 
 Statut : fait le 24/11/2026. Ferme les entrées « hardslice-api, the generated `.gitignore` leaves `.claude/settings.local.json` to be committed » et « generating into an existing repository is not documented, and `.claude/` is protected as a whole » de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 5).
 
-Vérifié avant d'écrire la section : `dotnet new hardslice-api --output .` dans un dépôt qui tient déjà `README.md` et `docs/` ne touche pas ces fichiers, et avec un `AGENTS.md` et un `.gitignore` déjà là, il les liste en `Overwrite`, sort avec le code 73 et n'écrit rien. La sonde du `.gitignore` vérifie que git ne voit pas `.claude/settings.local.json`. Contournement qu'Ottawa peut retirer : la ligne `.claude/settings.local.json` de son `.gitignore`, une fois la mise à niveau faite.
+Vérifié avant d'écrire la section : `dotnet new hardslice-api --output .` dans un dépôt qui tient déjà `README.md` et `docs/` ne touche pas ces fichiers, et avec un `AGENTS.md` et un `.gitignore` déjà là, il les liste en `Overwrite`, sort avec le code 73 et n'écrit rien. La sonde du `.gitignore` vérifie que git ne voit pas `.claude/settings.local.json`. Contournement qu'Ottawa peut retirer : la ligne `.claude/settings.local.json` de son `.gitignore`. `dotnet hardslice upgrade` fusionne `.gitignore` en trois voies, et l'essai de PB-119 sur un clone d'Ottawa y a laissé un conflit entre sa ligne et celle du template, résolu en gardant celle du template.
 
 **Résultat observable**
 
@@ -5012,7 +5012,17 @@ scripts/test-template.sh --only sample,blank
 
 ### PB-119 : Revalider les paquets après PB-113 à PB-118, pour la mise à niveau d'Ottawa vs Gatineau
 
-Statut : à faire. Comme PB-110 : README racine, de l'outil et du paquet de templates à jour des tickets, paquets reconstruits par `scripts/pack-local.sh` (PB-113), `scripts/verify-published.sh` sur eux, CI de chaque branche `ci/` lue dans l'ordre, puis `main`. Essai de `dotnet hardslice upgrade` sur un clone jetable d'Ottawa (jamais le dépôt lui-même), avec un home et un `NUGET_PACKAGES` à lui, et la procédure de sa mise à niveau, avec les contournements qu'il peut retirer d'après les statuts de PB-114 à PB-118.
+Statut : en cours le 24/11/2026. Comme PB-110 : README racine, de l'outil et du paquet de templates à jour des tickets, paquets reconstruits par `scripts/pack-local.sh` (PB-113), `scripts/verify-published.sh` sur eux, CI de chaque branche `ci/` lue dans l'ordre, puis `main`. Essai de `dotnet hardslice upgrade` sur un clone jetable d'Ottawa (jamais le dépôt lui-même), avec un home et un `NUGET_PACKAGES` à lui, et la procédure de sa mise à niveau, avec les contournements qu'il peut retirer d'après les statuts de PB-114 à PB-118.
+
+Fait en local le 24/11/2026 : README racine, de l'outil et du paquet de templates à jour de `--fields`, `--result computed`, `--dto` et `AddSingletonBuiltAtStart`. Paquets reconstruits par `scripts/pack-local.sh` sous `0.3.0-preview.1.dev.1795543058`. `verify-published.sh` a d'abord échoué sur les notes de version, qu'il attendait à l'étiquette `v<version du pack>`, qui n'existe pas : `scripts/nupkg.py` vise désormais l'étiquette de la release qu'un build local précède (correctif de PB-113). Branches `ci/pb-113` à `ci/pb-118` poussées le 24/11/2026, chacune sur le commit de son ticket. Le correctif de la sonde de PB-116 a été remonté juste après lui avant la poussée, pour que les branches suivantes n'héritent pas de son échec.
+
+Essai de mise à niveau sur un clone jetable d'Ottawa (commit `0cfa2ab`, ses modifications non commitées restées dans le dépôt), avec un home, un `NUGET_PACKAGES` et un `nuget.config` à lui, au-dessus du clone, qui sert `HardSlice.*` depuis le dossier du pack et nuget.org (l'outil `0.3.0-preview.1` d'avant vient de nuget.org) :
+
+1. `dotnet tool restore`, puis `dotnet tool update hardslice.tool --local --version <version>` : seul `.config/dotnet-tools.json` change.
+2. `dotnet hardslice upgrade`, code 3 : 10 fichiers HardSlice réécrits (les skills `add-aggregate`, `add-module` et `add-slice` dans `.claude/` et `.agents/`, `.config/dotnet-tools.json`, `Directory.HardSlice.props`, `HS017.md`, `HS018.md`), 3 fichiers ajoutés (`BuiltAtStartServiceCollectionExtensions.cs` et ses deux tests), `AGENTS.md` fusionné sans conflit avec les nouvelles consignes, et un conflit dans `.gitignore`, entre la ligne `.claude/settings.local.json` qu'Ottawa avait ajoutée et celle du template. Le résoudre en gardant celle du template.
+3. `dotnet hardslice check` passe : 996 tests unitaires, 91 d'architecture et 43 d'intégration. Il ne lit pas `.gitignore` : seul le code 3 de l'upgrade signale son conflit, à résoudre avant le commit.
+
+Après la mise à niveau sur les paquets publiés de `0.3.0-preview.2`, Ottawa peut retirer : sa ligne de `.gitignore` (PB-118), la construction de ses catalogues pendant l'enregistrement des services et l'ordre imposé de `Program.cs`, au profit de `AddSingletonBuiltAtStart` (PB-115), ses requêtes calculées écrites à la main, qui peuvent rester telles quelles ou être régénérées avec `--result computed` (PB-116), et les compléments de D6 que la consigne reprend (PB-117). Ses objets valeur existants restent tels quels : `--fields` sert aux suivants (PB-114). Reste à faire : lire la CI de chaque branche `ci/` dans l'ordre, puis pousser `main`.
 
 **Acceptation**
 
