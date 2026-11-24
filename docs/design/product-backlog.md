@@ -4853,6 +4853,173 @@ scripts/test-template.sh --only sample,upgrade
 
 Contournement que Ghostline peut retirer : aucun dans le code. Sa règle de purger les caches à chaque reconstruction disparaît : une mise à niveau sur un build local reçoit une version qu'aucun cache ne connaît.
 
+### Arbitrage validé le 24/11/2026, après la phase 1 d'Ottawa vs Gatineau
+
+Ottawa vs Gatineau (`ottawavsgatineau`) est le second projet construit sur HardSlice, sur les paquets publiés de `0.3.0-preview.1`. Ghostline essayait une application chargée de données stockées. Celle-ci calcule : ses données de référence vivent dans des fichiers versionnés, embarqués dans l'API, et sa base ne tient qu'une liste d'attente. Son journal `ottawavsgatineau/docs/hardslice-friction.md` compte 23 entrées au 24/11/2026, toutes ouvertes. Validé par le mainteneur le 24/11/2026 : la recommandation, avec un écart sur `.claude/` (point 5).
+
+29. **Contenu de `0.3.0-preview.2` (PB-114 à PB-120).** Les entrées se ramènent à cinq sujets, un ticket chacun, puis la revalidation et la publication.
+    1. `hardslice-value-object` écrit un seul `decimal Value` (entrées de 1.3, 1.4, 1.12, 1.13, 1.14, 1.15 et 1.16). Aucun des quelque trente objets valeur d'Ottawa n'a cette forme : chaque fichier et chaque test est réécrit en entier, les tests générés cassent le build dès que le constructeur prend sa forme, le hook après édition répète leurs erreurs (une quarantaine de lignes) et l'ordre « tests des cas d'abord » devient impossible. Option A : `--fields <Name>:<Type>[,...]`, sur le modèle de `--parameters`, qui écrit la forme voulue dès la génération, ses règles et leurs tests. Option B : des tests générés qui compilent quelle que soit la forme, donc sans appel au constructeur, qui ne testent plus rien. Décision : A (PB-114). Sans `--fields`, le template garde un champ `Value:decimal`.
+    2. Une valeur construite au démarrage à partir des fichiers d'un module, et lue par un autre (entrées de 1.4, 1.12 et 1.17). Pour qu'une donnée invalide arrête l'application, aussi sous `AppFactory`, qui retire les services hébergés, Ottawa construit ses catalogues pendant l'enregistrement des services et relit dans l'`IServiceCollection` l'instance qu'un autre module a enregistrée : l'ordre des lignes de `Program.cs` devient une règle que seules leurs exceptions font respecter. Option A : documenter ce contournement. Option B : une extension de `Shared/Persistence`, `AddSingletonBuiltAtStart<TService>(factory)`, qui enregistre une fabrique (l'ordre des modules redevient libre) et construit le service quand l'hôte démarre, avant la première requête, en production comme sous `AppFactory`. Décision : B (PB-115).
+    3. Une requête qui calcule sans agrégat stocké (entrées de l'architecture, de 1.5 et de 1.17). Deux fois, l'agent a généré la slice contre un agrégat jetable, dans une copie jetable de la solution, pour recopier sa forme. Décision : `hardslice-query --result computed`, sans `--aggregate`, dont le handler calcule à partir des services du module et répond `Ok` seul, sans 404, avec ou sans filtres, et `--dto <Name>` pour nommer le DTO d'une liste au singulier (PB-116). Un filtre optionnel ne demande pas d'option : les filtres générés sont déjà nullables, `add-slice` dit comment retirer sa règle et son test du 400.
+    4. Ce que la consigne ne dit pas (entrées de l'architecture, de 1.3, 1.4, 1.9, 1.12, 1.13, 1.15 et 1.16) : quand un calcul qui compose plusieurs objets valeur sort d'eux pour aller dans un service du domaine, et sa forme, une énumération du domaine, un service du contrat public d'un module, un objet valeur commun à plusieurs modules, deux objets valeur qui partagent un calcul, l'égalité d'un objet valeur qui tient une liste, le test d'un fichier de données, un module sans agrégat et le validateur qui lit un service. Décision : la consigne, sans template de plus (PB-117). `hardslice-domain-service`, `hardslice-enum` et `hardslice-contract-service` vont en section 9 : la forme qu'Ottawa a fixée tient en une phrase chacune, et un template n'écrirait qu'un fichier vide bien placé.
+    5. Le dépôt existant et `.claude/` (entrées de 1.1). Le `.gitignore` généré n'ignore pas `.claude/settings.local.json`, et `docs/getting-started.md` ne dit rien d'une génération dans un dépôt qui a déjà ses fichiers. L'entrée suggère aussi de ne protéger que les fichiers que HardSlice écrit dans `.claude/`. Écart : la protection reste sur tout le dossier, parce qu'un fichier que HardSlice n'écrit pas peut quand même changer ses garde-fous (`settings.local.json` peut désactiver les hooks par `disableAllHooks`, un sous-agent de `.claude/agents/` ou une skill déclarent leurs propres hooks). La consigne dit où mettre le fichier d'un autre outil, comme Ottawa l'a fait (`.git/info/exclude`). Décision : `.gitignore`, `getting-started.md` et la phrase de `AGENTS.md` (PB-118).
+    6. Hors de `0.3.0-preview.2`, en section 9 : une application sans PostgreSQL, des vérifications hors .NET dans `hardslice.json` (`extraChecks`), un hook de fin de tour qui saute la partie .NET quand rien de .NET n'a changé, un build après l'édition d'une ressource embarquée, l'e-mail d'une commande (la boîte d'envoi, déjà différée).
+    7. PB-113 (arbitrage 28) fait partie de `0.3.0-preview.2` : il passe avant la revalidation. PB-119 revalide les paquets et essaie la mise à niveau sur un clone jetable d'Ottawa. PB-120 publie, l'étiquette n'étant posée qu'après l'accord du mainteneur.
+
+Critères communs à PB-114 à PB-120, comme pour PB-099 à PB-110 :
+
+- Une ligne de `CHANGELOG.md` par ticket qui change ce que les paquets livrent, sous `0.3.0-preview.2`, avec le `git grep` des fichiers déjà générés qu'un ticket change dans un template d'élément (PB-112).
+- `AGENTS.md` généré sous 150 lignes, dans les deux variantes.
+- Vérification : `dotnet build --no-restore`, `dotnet test --no-build` et les groupes `--only` de la zone en local, commits sur `main` en local, poussés en une fois sur `ci/<ticket>` sans attendre la CI (PB-111). PB-119 lit chaque CI dans l'ordre, corrige le premier rouge, attend la sienne et pousse `main`.
+- Le statut de chaque ticket nomme les entrées d'Ottawa qu'il ferme et le contournement qu'Ottawa peut retirer.
+
+### PB-114 : Générer un objet valeur avec ses champs, `hardslice-value-object --fields`
+
+Statut : à faire. Fermera les entrées « hardslice-value-object, one `decimal Value` for value objects of several fields » (1.3), « ten value objects of a calculation rewritten whole » (1.12, pour la forme), « generated tests that do not compile block the tests of the reference cases written first » (1.14) de `ottawavsgatineau/docs/hardslice-friction.md`, et pour la forme celles de 1.13, 1.15 et 1.16 (arbitrage 29, point 1).
+
+**Résultat observable**
+
+`dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module Sources --name Interpretation --fields Level:InterpretationLevel,Justification:string,Note:string?` écrit un `sealed record` dont le constructeur prend `level`, `justification` et `note`, refuse un `Level` à sa valeur par défaut et une `Justification` vide, chaque refus par une `DomainException`, et expose trois propriétés sans setter. Ses tests construisent une valeur valide, vérifient ce qu'elle tient et son égalité avec une autre construite des mêmes valeurs, et testent chaque refus. Ils compilent tels que générés. Sans `--fields`, le template écrit `Value:decimal`.
+
+**Constat**
+
+Ottawa, entrées de 1.3 à 1.16 : chaque objet valeur généré a été réécrit en entier, et ses tests générés ont cassé le build jusqu'à leur réécriture, le hook répétant leurs erreurs après chaque édition.
+
+**Périmètre**
+
+- `--fields` : noms PascalCase, types `string`, `bool`, `int`, `long`, `decimal`, `double`, `Guid`, `DateOnly`, `TimeOnly`, `DateTimeOffset`, ou un type du domaine en PascalCase (un autre objet valeur, une énumération), chacun suivi de `?` quand il est optionnel. Règle générée : une chaîne requise ne peut être vide, un type du domaine requis ne peut valoir sa valeur par défaut (`null` pour un record, `0` pour une énumération). Un type de base autre que `string` et un champ optionnel n'ont pas de règle générée. Le marqueur `TODO(hardslice):` reste, pour les règles propres aux valeurs.
+- Refus avec le code 105 : liste mal formée, nom en double, nom du type lui-même, nom d'un membre de tout record (`Equals`, `GetHashCode`, `ToString`, `GetType`, `Deconstruct`, `EqualityContract`, `PrintMembers`). Un nom dont la forme camelCase est un mot clé de C# devient un paramètre `@<nom>`.
+- Tests générés : une valeur valide de chaque type de base, et pour un type du domaine une propriété du test qui lève `NotImplementedException` avec un marqueur `TODO(hardslice):` tant qu'elle ne rend pas une valeur valide.
+- Les instructions affichées ne supposent plus une requête : une `DomainException` est répondue par 400 quand une slice construit l'objet valeur d'une requête, et arrête l'application quand il est construit au démarrage (PB-115).
+- `add-aggregate` : `--fields`, l'égalité d'un objet valeur qui tient une liste (`Equals` et `GetHashCode` écrits à la main, avec l'exemple) et le changement de forme après la génération (ses tests se réécrivent dans la même édition). `docs/item-templates.md`, `AGENTS.md` (règle d'or 4, sans ligne de plus), `TemplatePackageTests`, la sonde `probe_value_object_template`.
+
+**Cas vérifiés**
+
+- La sonde, dans `sample-items` et `blank-items` : chaque refus avec le code 105, la génération sans `--fields` (`Value:decimal`) et avec des champs de chaque sorte, le build sans diagnostic HardSlice, puis le check qui échoue sur les seuls marqueurs, et la complétion de référence qui le fait passer.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+### PB-115 : Construire au démarrage un service qu'un module lit, avec `AddSingletonBuiltAtStart`
+
+Statut : à faire. Fermera les entrées « a store loaded at startup that several modules read, placed in the public contract of a module » (1.4, pour la validation au démarrage), « a module whose registration translates the store that another module loads at startup » (1.12) et, pour l'ordre des modules, « HS012 and HS016, the central query composes three modules » (1.17) de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 2).
+
+**Résultat observable**
+
+`services.AddSingletonBuiltAtStart(provider => TaxationReference.From(provider.GetRequiredService<ReferenceCatalog>()))`, dans `Add<Module>Module`, enregistre la fabrique, quel que soit l'ordre des modules dans `Program.cs`, et construit le service quand l'hôte démarre : une exception de la fabrique arrête l'application avant sa première requête, et fait échouer la création de chaque `AppFactory` d'un test d'intégration.
+
+**Constat**
+
+Ottawa, entrées de 1.4, 1.12 et 1.17 : `AddTaxationModule` et `AddComparisonModule` relisent dans l'`IServiceCollection` les instances qu'un autre module y a enregistrées, et échouent si `Program.cs` change l'ordre de leurs lignes. Un service hébergé qui validerait au démarrage ne tourne jamais sous `AppFactory`.
+
+**Périmètre**
+
+- `src/MyApp/Shared/Persistence/BuiltAtStartServiceCollectionExtensions.cs` (nouveau) : la fabrique enregistrée en singleton, et un `IStartupFilter` qui la résout, que le serveur web exécute en démarrant, `AppFactory` compris, sans service hébergé.
+- Tests : unitaires dans `tests/MyApp.Tests/Shared/Persistence/`, et d'intégration (une fabrique qui lève fait échouer le démarrage d'une `AppFactory`).
+- `AGENTS.md` (la ligne `Shared/Persistence/` de la carte), `HS017.md` (le rôle de `Persistence`), `add-module` (un module qui construit ses valeurs depuis le contrat d'un autre).
+
+**Cas vérifiés**
+
+- Une fabrique qui lit le service d'un module enregistré après elle est construite au démarrage, une seule fois.
+- Une fabrique qui lève arrête l'hôte au démarrage, et l'`AppFactory` d'un test échoue avec son exception.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+### PB-116 : Générer une requête qui calcule sans agrégat stocké, `hardslice-query --result computed`
+
+Statut : à faire. Fermera les entrées « hardslice-query, no form for a query that computes without a stored aggregate » (architecture), « a query without stored aggregate written by hand » (1.5), « the DTO of a list is named in the plural for each of its elements » (1.5) et « the central query written by hand on the form of `--result summary` » (1.17) de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 3).
+
+**Résultat observable**
+
+`dotnet new hardslice-query --project src/MyApp/MyApp.csproj --module Comparison --name CompareHouseholds --result computed --parameters Year:int,Income:decimal --route /` génère la slice sans `--aggregate` : son handler ne lit pas `AppDbContext` et calcule le DTO à partir des services du module qu'il reçoit (marqueur `TODO(hardslice):`), son endpoint répond `Ok<CompareHouseholdsDto>` seul, son validateur et ses tests du 400 couvrent ses filtres. Sans `--parameters`, la requête n'a ni filtre ni validateur. `--dto <Name>` nomme le DTO de toutes les formes, comme `--dto SourceDto` pour la liste de `GetSources`.
+
+**Constat**
+
+Ottawa, entrées de 1.5 et 1.17 : `GetSources` et `CompareHouseholds`, écrits à la main après une génération contre un agrégat jetable dans une copie jetable de la solution, le 404 de `--result summary` retiré faute de cas, et un DTO au pluriel pour chaque élément d'une liste.
+
+**Périmètre**
+
+- Le template `hardslice-query` : le choix `computed`, `--aggregate` refusé avec lui, `--dto`, et `--route ""` refusé (il retombait sans un mot sur le nom de la slice).
+- `add-slice` : la forme `computed`, un validateur qui reçoit un service de son module par son constructeur et son test unitaire, un filtre rendu optionnel (sa règle et sa clé du test du 400 retirées, un test de la requête sans lui) et `--route /`.
+- `AGENTS.md` (étape 2, sans ligne de plus), `docs/item-templates.md`, `TemplatePackageTests`, la sonde `probe_query_template`.
+
+**Cas vérifiés**
+
+- La sonde, dans `sample-items` et `blank-items` : `--result computed` avec et sans filtres, refusé avec `--aggregate`, `--dto` sur une liste, `--route ""` refusé avec le code 105, le check qui échoue sur les seuls marqueurs puis passe après la complétion de référence.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample-items,blank-items
+```
+
+### PB-117 : Dire où vont un service du domaine, une énumération, un service du contrat et un test de données
+
+Statut : à faire. Fermera les entrées « no place for reference data that several modules read », « hardslice-value-object, no shared kernel for value objects every module uses », « no template nor guidance for the enumerations of the domain », « hardslice-module, a module made only of value objects works », « no template for a service of a module's public contract », « HS018, a test of data that follows no slice », « a domain service that composes several value objects has no form of its own », « a second plan computed like the first is duplicated whole » et « the federal tax of a resident of Quebec duplicates that of Ontario » de `ottawavsgatineau/docs/hardslice-friction.md`, pour la consigne (arbitrage 29, point 4).
+
+**Résultat observable**
+
+`add-aggregate` dit quand un calcul sort des objets valeur pour un service du domaine (il compose les résultats de plusieurs d'entre eux, ou deux objets valeur le partagent) et sa forme, celle d'une énumération du domaine, et où va un objet valeur que plusieurs modules utilisent. `add-module` dit qu'un module peut commencer par des objets valeur seuls, et ce que tient son contrat public, services compris. `HS018.md` dit où va le test d'un fichier de données qui ne suit aucun code.
+
+**Périmètre**
+
+- `add-aggregate`, `add-module`, `HS012.md` ou `HS017.md` (un service qui construit des types du domaine d'un module va dans le contrat de ce module, `Shared/Persistence` garde les stockages d'octets), `HS018.md`, `AGENTS.md` sans ligne de plus.
+- `TemplatePackageTests` : les phrases nouvelles, dans les deux variantes.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+### PB-118 : Générer dans un dépôt existant, et ignorer les réglages locaux de Claude Code
+
+Statut : à faire. Fermera les entrées « hardslice-api, the generated `.gitignore` leaves `.claude/settings.local.json` to be committed » et « generating into an existing repository is not documented, and `.claude/` is protected as a whole » de `ottawavsgatineau/docs/hardslice-friction.md` (arbitrage 29, point 5).
+
+**Résultat observable**
+
+Le `.gitignore` généré ignore `.claude/settings.local.json`. `docs/getting-started.md` a une section « Generating into an existing repository » : `--output .`, les fichiers qui entrent en collision (`dotnet new` refuse et n'écrit rien, code 73), les instructions d'un autre outil à déplacer, et pourquoi `.claude/` reste protégé en entier. `AGENTS.md` dit, dans sa liste des fichiers protégés, qu'un fichier qu'un autre outil écrit dans `.claude/` reste hors de git (`.git/info/exclude`).
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+scripts/test-template.sh --only sample,blank
+```
+
+### PB-119 : Revalider les paquets après PB-113 à PB-118, pour la mise à niveau d'Ottawa vs Gatineau
+
+Statut : à faire. Comme PB-110 : README racine, de l'outil et du paquet de templates à jour des tickets, paquets reconstruits par `scripts/pack-local.sh` (PB-113), `scripts/verify-published.sh` sur eux, CI de chaque branche `ci/` lue dans l'ordre, puis `main`. Essai de `dotnet hardslice upgrade` sur un clone jetable d'Ottawa (jamais le dépôt lui-même), avec un home et un `NUGET_PACKAGES` à lui, et la procédure de sa mise à niveau, avec les contournements qu'il peut retirer d'après les statuts de PB-114 à PB-118.
+
+**Acceptation**
+
+```text
+dotnet build --no-restore && dotnet test --no-build
+CI de ci/pb-119, chaque groupe vert
+scripts/verify-published.sh <version du pack> <dossier> --source artifacts/packages
+```
+
+### PB-120 : Publier `0.3.0-preview.2`
+
+Statut : à faire. Comme PB-051 : `Directory.Build.props` à `0.3.0-preview.2`, les lignes d'installation des README, la section de `CHANGELOG.md` datée, l'étiquette annotée `v0.3.0-preview.2` sur le commit de PB-119 après l'accord du mainteneur, l'approbation de l'environnement `nuget` par le mainteneur, `verify` vert, et la release GitHub. Ottawa se met ensuite à niveau sur les paquets publiés.
+
+**Acceptation**
+
+```text
+scripts/verify-published.sh 0.3.0-preview.2 <dossier> --clean
+```
+
 ## 8. Incréments suivants
 
 | Incrément | Résultat produit | Contenu principal | Acceptation globale |
@@ -4894,5 +5061,9 @@ Contournement que Ghostline peut retirer : aucun dans le code. Sa règle de purg
 | Liste à part des diffs sans ligne du template dans `dotnet hardslice upgrade` | écarté par l'arbitrage 26 : ne touche qu'une solution sans génération enregistrée |
 | Liste, par `dotnet hardslice upgrade`, des fichiers générés par un template d'élément que la nouvelle version écrirait autrement, vue par Ghostline | à arbitrer sur un cas réel qui touche du code et non des commentaires (arbitrage 27) : l'outil ne sait pas quels fichiers viennent d'un template d'élément ni avec quels paramètres, et le `git grep` de la ligne de `CHANGELOG.md` suffit |
 | Mise à niveau d'une solution générée par une construction locale non publiée | couverte par PB-086 (option B), qui ne restaure aucune génération de départ, puis par la fusion de PB-095 une fois la base enregistrée |
+| Application sans PostgreSQL, ou dont la base arrive avec son premier agrégat, vue par Ottawa vs Gatineau | à arbitrer sur un second cas réel (arbitrage 29) : Ottawa garde sa liste d'attente, et PB-102 isole déjà la base d'un test |
+| Vérifications hors .NET dans `hardslice.json` (`extraChecks`), que `check` lance et dont la CI générée hérite, vues par Ottawa vs Gatineau | à arbitrer (arbitrage 29) : l'outil de capture d'Ottawa a sa propre commande, écrite dans son `AGENTS.md` |
+| Hook de fin de tour qui saute la partie .NET quand le tour n'a rien changé de ce qu'elle construit, et build après l'édition d'une ressource embarquée, vus par Ottawa vs Gatineau | à arbitrer (arbitrage 29) |
+| Templates `hardslice-domain-service`, `hardslice-enum` et `hardslice-contract-service`, vus par Ottawa vs Gatineau | écarté pour `0.3.0-preview.2` par l'arbitrage 29 : la forme est documentée par PB-117, à rouvrir si un second projet les écrit autrement |
 
 La recherche utilisateur et la mécanique du benchmark ne sont pas des prérequis aux incréments 1 et 2.
