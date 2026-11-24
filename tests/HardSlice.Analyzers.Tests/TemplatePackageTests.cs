@@ -2397,6 +2397,29 @@ public sealed class TemplatePackageTests
         addAggregate.ShouldContain("Citations.SequenceEqual(other.Citations)");
     }
 
+    // PB-115: AGENTS.md, in both variants, HS017.md and add-module name AddSingletonBuiltAtStart for a service built when the
+    // application starts, such as reference data, and add-module forbids reading back the IServiceCollection of another module.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_builds_a_service_when_the_application_starts_with_AddSingletonBuiltAtStart(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var addModule = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-module", "SKILL.md"));
+        var sharedRule = File.ReadAllText(Path.Combine(templateRoot, "docs", "rules", "HS017.md"));
+        var extension = File.ReadAllText(Path.Combine(templateRoot, "src", "MyApp", "Shared", "Persistence", "BuiltAtStartServiceCollectionExtensions.cs"));
+
+        agents.Single(line => line.StartsWith("| `src/MyApp/Shared/Persistence/` |", StringComparison.Ordinal))
+            .ShouldContain("`AddSingletonBuiltAtStart` builds a service when the application starts, such as reference data read from files, whose exception stops it (`add-module`).");
+        agents.Length.ShouldBeLessThan(150);
+        sharedRule.ShouldContain("`AddSingletonBuiltAtStart` registers a service that the host builds when it starts");
+        addModule.ShouldContain("\n## Values built when the application starts\n");
+        addModule.ShouldContain("services.AddSingletonBuiltAtStart(provider => TaxationReference.From(provider.GetRequiredService<ReferenceCatalog>()));");
+        addModule.ShouldContain("- Build a store while the services are registered, or read back from the `IServiceCollection` an instance that another module registered");
+        extension.ShouldContain("services.AddTransient<IStartupFilter, BuildAtStart<TService>>();");
+    }
+
     // The lines of <source> that the template keeps for --link id (<linkIsId>) or --link collection, the only condition of its files.
     private static string Branch(string source, bool linkIsId)
     {
@@ -2935,7 +2958,8 @@ public sealed class TemplatePackageTests
             + "slices, such as a job and its administration endpoint (`add-slice`).");
         agents.Single(line => line.StartsWith("| `src/MyApp/Shared/Persistence/` |", StringComparison.Ordinal)).ShouldBe(
             "| `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations, and the stores outside the database that "
-            + "several modules use, such as a file or object store. It declares no module type. |");
+            + "several modules use, such as a file or object store. It declares no module type. "
+                + "`AddSingletonBuiltAtStart` builds a service when the application starts, such as reference data read from files, whose exception stops it (`add-module`). |");
         agents.Length.ShouldBeLessThan(150);
 
         hs017.ShouldContain("| `Persistence` | `AppDbContext`, its registration and the migrations, and the stores outside the database that several "
