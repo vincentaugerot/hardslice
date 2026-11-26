@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
@@ -17,6 +18,7 @@ namespace MyApp.IntegrationTests;
 // packages included, unless the test keeps it with KeepHostedService, and each one it removes is logged before the host starts.
 // ASP.NET Core registers its own after them: they always run.
 // An endpoint that requires an authorization policy is called with app.CreateAuthorizedClient(policy), from AuthorizedClients.
+// The test of data that the application refuses when it starts reads why with app.StartFailure<TException>().
 // The test of the 409 of two commands that change the same aggregate holds the first one before its commit with
 // app.HoldBeforeCommit<TCommand>(), lets the second one commit, then releases the first, which saves nothing and throws
 // ConflictException, answered with 409.
@@ -254,5 +256,70 @@ public static class AppFactoryClients
         var client = app.CreateClient();
         authorize(client);
         return client;
+    }
+}
+
+public static class AppFactoryStartFailures
+{
+    // The exception TException that stops the start of the application <app>, an AppFactory or an instance derived from it with
+    // WithWebHostBuilder, such as the exception of the factory of a service registered with AddSingletonBuiltAtStart, with its
+    // message: for the test of data that the application refuses when it starts. It starts an instance derived from <app>, whose
+    // start must fail, and reads the exception in the logs of its host, written before Program disposes of the host on its own
+    // thread, while WebApplicationFactory throws either that exception or ObjectDisposedException. It throws when the application
+    // starts, or when its start fails with no exception TException.
+    public static TException StartFailure<TException>(this WebApplicationFactory<Program> app) where TException : Exception
+    {
+        var logs = new ErrorLogs();
+        using var instance = app.WithWebHostBuilder(builder => builder.ConfigureLogging(logging => logging.AddProvider(logs)));
+        try
+        {
+            _ = instance.Services;
+        }
+        catch (Exception thrown)
+        {
+            var failures = logs.Exceptions.Append(thrown).SelectMany(WithInnerExceptions).ToList();
+            return failures.OfType<TException>().FirstOrDefault()
+                ?? throw new InvalidOperationException(
+                    $"StartFailure: the start of the application failed with no {typeof(TException).Name}, but with "
+                    + string.Join("; ", failures.Select(failure => $"{failure.GetType().Name}: {failure.Message}").Distinct())
+                    + ".",
+                    thrown);
+        }
+
+        throw new InvalidOperationException(
+            $"StartFailure: the application started, without {typeof(TException).Name}. Make its start fail in the test, such as with "
+            + "WithWebHostBuilder and ConfigureTestServices, which give a store data that the factory of a service registered with "
+            + "AddSingletonBuiltAtStart refuses.");
+    }
+
+    private static IEnumerable<Exception> WithInnerExceptions(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+            yield return current;
+    }
+
+    // The exceptions that the application logs as errors.
+    private sealed class ErrorLogs : ILoggerProvider
+    {
+        public ConcurrentQueue<Exception> Exceptions { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new Logger(Exceptions);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Logger(ConcurrentQueue<Exception> exceptions) : ILogger
+        {
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel >= LogLevel.Error && exception is not null)
+                    exceptions.Enqueue(exception);
+            }
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Error;
+
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        }
     }
 }

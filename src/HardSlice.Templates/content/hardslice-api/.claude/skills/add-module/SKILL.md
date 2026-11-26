@@ -44,6 +44,15 @@ services.AddSingletonBuiltAtStart(provider => TaxationReference.From(provider.Ge
 
 The factory runs once every module is registered, so the order of the lines of `Program.cs` does not matter, and it reads the public contract of the other module from the provider. An exception it throws stops the application before its first request, and fails the start of every `AppFactory` of the integration tests: data that the domain refuses never wait for the request that reads them. A setting that a job needs is checked by the condition of its command instead, as `add-slice` says, so that a missing key only holds the job back.
 
+Under test, each `AppFactory` builds these services when it starts, from the stores that its test registers. A test that replaces a store with `WithWebHostBuilder` and `ConfigureTestServices`, such as a small catalog, rebuilds every service built at start from it, in its module and in the others: give that store data that every one of their factories accepts, or register those services too, built from it, otherwise every request of the test fails at `CreateClient()`. The test of data that a factory refuses reads its exception, with its message, through `app.StartFailure<TException>()`:
+
+```csharp
+using var app = new AppFactory(database).WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+    services.AddSingleton(new ReferenceCatalog([new ReferenceFile("data/2026/rates.json", "{}")]))));
+
+app.StartFailure<ReferenceDataException>().Message.ShouldBe("data/2026/rates.json: $.rate is missing.");
+```
+
 ## Never
 
 These are the workarounds of [Forbidden](../../../AGENTS.md#forbidden); if the check cannot pass without one, stop and explain the conflict instead.

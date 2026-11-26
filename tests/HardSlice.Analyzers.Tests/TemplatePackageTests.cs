@@ -2729,6 +2729,37 @@ public sealed class TemplatePackageTests
         extension.ShouldContain("services.AddTransient<IStartupFilter, BuildAtStart<TService>>();");
     }
 
+    // PB-123: a test reads the exception that stopped the start of the application through app.StartFailure<TException>(), on an
+    // AppFactory or an instance derived from it, which reads it in the logs of the host. BuiltAtStartTests uses it and keeps no logger
+    // of its own, and add-module says that a test that replaces a store rebuilds every service built at start from it.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AppFactory_reads_the_exception_that_stopped_the_start_of_the_application(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var integrationTests = Path.Combine(templateRoot, "tests", "MyApp.IntegrationTests");
+        var appFactory = File.ReadAllText(Path.Combine(integrationTests, "AppFactory.cs"));
+        var builtAtStartTests = File.ReadAllText(Path.Combine(integrationTests, "Shared", "Persistence", "BuiltAtStartTests.cs"));
+        var addModule = File.ReadAllText(Path.Combine(templateRoot, ".claude", "skills", "add-module", "SKILL.md"));
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+
+        appFactory.ShouldContain("public static TException StartFailure<TException>(this WebApplicationFactory<Program> app) where TException : Exception");
+        appFactory.ShouldContain("using var instance = app.WithWebHostBuilder(builder => builder.ConfigureLogging(logging => logging.AddProvider(logs)));");
+        appFactory.ShouldContain("$\"StartFailure: the application started, without {typeof(TException).Name}.");
+        appFactory.ShouldContain("$\"StartFailure: the start of the application failed with no {typeof(TException).Name}, but with \"");
+        builtAtStartTests.ShouldContain("app.StartFailure<InvalidDataException>().Message.ShouldBe(\"data/2026/rates.json: $.rate is missing.\");");
+        builtAtStartTests.ShouldContain("public void Tells_a_test_of_a_failed_start_that_the_application_started()");
+        builtAtStartTests.ShouldContain("public void Tells_a_test_of_a_failed_start_the_exceptions_of_another_type_that_stopped_it()");
+        builtAtStartTests.ShouldNotContain("ILoggerProvider");
+        addModule.ShouldContain("rebuilds every service built at start from it, in its module and in the others: give that store data that every one of their "
+            + "factories accepts, or register those services too, built from it");
+        addModule.ShouldContain("app.StartFailure<ReferenceDataException>().Message.ShouldBe(\"data/2026/rates.json: $.rate is missing.\");");
+        agents.Single(line => line.StartsWith("| `tests/MyApp.IntegrationTests/` |", StringComparison.Ordinal))
+            .ShouldContain("`app.StartFailure<TException>()` reads the exception that stopped its start (`add-module`).");
+        agents.Length.ShouldBeLessThan(150);
+    }
+
     // The lines of <source> that the template keeps for --link id (<linkIsId>) or --link collection, the only condition of its files.
     private static string Branch(string source, bool linkIsId)
     {
