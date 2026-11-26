@@ -31,7 +31,7 @@
     "Fields": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The values of the value object, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, or a type of the domain in PascalCase, such as another value object or an enum, followed by ? when the value is optional, such as Level:InterpretationLevel,Justification:string,Note:string?. Each one is a parameter of the constructor and a property without setter. A required string cannot be blank, refused with its test, and the compiler already refuses a null for a required field. Value:decimal by default."
+      "description": "The values of the value object, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, or a type of the domain in PascalCase, such as another value object or an enum, followed by ? when the value is optional, such as Level:InterpretationLevel,Justification:string,Note:string?. A type followed by [] is a list of it, such as Tiers:CreditRateTier[], without ? after it: an empty list says the absence. A type of the domain of another module is prefixed with that module, such as Ceiling:Taxation.Money, which writes its using. Each one is a parameter of the constructor and a property without setter. A required string cannot be blank, a list cannot be missing nor hold a missing value, each refused with its test, and the compiler already refuses a null for a required field. Value:decimal by default."
     },
     "AppName": {
       "type": "bind",
@@ -286,7 +286,7 @@
       "datatype": "bool",
       "parameters": {
         "source": "FieldsList",
-        "pattern": "^[^:,]*:(?:(?:string|bool|int|long|decimal|double)\\??|[A-Z][A-Za-z0-9]*\\??)(?:,[^:,]*:(?:(?:string|bool|int|long|decimal|double)\\??|[A-Z][A-Za-z0-9]*\\??))*$"
+        "pattern": "^[^:,]*:(?:(?:string|bool|int|long|decimal|double)(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?(?!(?:Guid|DateOnly|TimeOnly|DateTimeOffset)\\?)[A-Z][A-Za-z0-9]*\\?\\[\\])(?:,[^:,]*:(?:(?:string|bool|int|long|decimal|double)(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?(?!(?:Guid|DateOnly|TimeOnly|DateTimeOffset)\\?)[A-Z][A-Za-z0-9]*\\?\\[\\]))*$"
       }
     },
     "UnknownFieldName": {
@@ -296,7 +296,7 @@
         "source": "FieldsList",
         "steps": [
           {
-            "regex": "^(?:[^,]*,)*?([^:,]*):(?!(?:(?:string|bool|int|long|decimal|double)\\??|[A-Z][A-Za-z0-9]*\\??)(?:,|$))[^,]*(?:,.*)?$",
+            "regex": "^(?:[^,]*,)*?([^:,]*):(?!(?:(?:string|bool|int|long|decimal|double)(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?(?!(?:Guid|DateOnly|TimeOnly|DateTimeOffset)\\?)[A-Z][A-Za-z0-9]*\\?\\[\\])(?:,|$))[^,]*(?:,.*)?$",
             "replacement": "$1"
           }
         ]
@@ -310,7 +310,7 @@
         "source": "FieldsList",
         "steps": [
           {
-            "regex": "^(?:[^,]*,)*?[^:,]*:(?!(?:(?:string|bool|int|long|decimal|double)\\??|[A-Z][A-Za-z0-9]*\\??)(?:,|$))([^,]*)(?:,.*)?$",
+            "regex": "^(?:[^,]*,)*?[^:,]*:(?!(?:(?:string|bool|int|long|decimal|double)(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*(?:\\?|\\[\\])?|(?:[A-Z][A-Za-z0-9]*\\.)?(?!(?:Guid|DateOnly|TimeOnly|DateTimeOffset)\\?)[A-Z][A-Za-z0-9]*\\?\\[\\])(?:,|$))([^,]*)(?:,.*)?$",
             "replacement": "$1"
           }
         ]
@@ -392,14 +392,144 @@
       },
       "fileRename": "RecordMemberField"
     },
-    "FieldsTriples": {
+    "FieldsNormal": {
       "type": "generated",
       "generator": "regex",
       "parameters": {
         "source": "FieldsList",
         "steps": [
           {
-            "regex": "([A-Za-z0-9]+):([A-Za-z0-9]+\\??)",
+            "regex": "(?<=:)[A-Z][A-Za-z0-9]*\\.",
+            "replacement": ""
+          }
+        ]
+      }
+    },
+    "HasListField": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "FieldsList",
+        "pattern": "\\[\\]"
+      }
+    },
+    "FieldModulesProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "Module"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "FieldsList"
+          }
+        ]
+      }
+    },
+    "OtherModules": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FieldModulesProbe",
+        "steps": [
+          {
+            "regex": "(?<=[|,])[A-Za-z0-9]+:(?:([A-Z][A-Za-z0-9]*)\\.)?[^,]*",
+            "replacement": "$1"
+          },
+          {
+            "regex": "(?<=^([A-Za-z0-9]+)\\|(?:[^,]*,)*)\\1(?=,|$)",
+            "replacement": ""
+          },
+          {
+            "regex": "(?<=[|,])([A-Za-z0-9]+)(?=,(?:[^,]*,)*\\1(?:,|$))",
+            "replacement": ""
+          },
+          {
+            "regex": "^[^|]*\\|",
+            "replacement": ""
+          },
+          {
+            "regex": ",{2,}",
+            "replacement": ","
+          },
+          {
+            "regex": "^,|,$",
+            "replacement": ""
+          }
+        ]
+      }
+    },
+    "HasOtherModuleField": {
+      "type": "generated",
+      "generator": "regexMatch",
+      "datatype": "bool",
+      "parameters": {
+        "source": "OtherModules",
+        "pattern": "^[A-Za-z0-9]"
+      }
+    },
+    "FieldUsingsProbe": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "ref",
+            "value": "AppNameOrEmpty"
+          },
+          {
+            "type": "const",
+            "value": "|"
+          },
+          {
+            "type": "ref",
+            "value": "OtherModules"
+          }
+        ]
+      }
+    },
+    "FieldUsings": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FieldUsingsProbe",
+        "steps": [
+          {
+            "regex": "(?<=^([^|]*)\\|(?:[^,]*,)*)([A-Za-z0-9]+)(?=,|$)",
+            "replacement": "using $1.Domain.$2;\n"
+          },
+          {
+            "regex": "^[^|]*\\|",
+            "replacement": ""
+          },
+          {
+            "regex": ",",
+            "replacement": ""
+          },
+          {
+            "regex": "\n$",
+            "replacement": ""
+          }
+        ]
+      },
+      "replaces": "FieldUsings"
+    },
+    "FieldsTriples": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FieldsNormal",
+        "steps": [
+          {
+            "regex": "([A-Za-z0-9]+):([A-Za-z0-9]+\\??(?:\\[\\])?)",
             "replacement": "$1:$2:$1"
           },
           {
@@ -524,6 +654,10 @@
         "source": "FieldsTriples",
         "steps": [
           {
+            "regex": "([^:,]+):([^:,]+)\\[\\]:([^:,]+)",
+            "replacement": "IEnumerable<$2> $1"
+          },
+          {
             "regex": "([^:,]+):([^:,]+):([^:,]+)",
             "replacement": "$2 $1"
           },
@@ -564,6 +698,10 @@
             "replacement": "\u001e"
           },
           {
+            "regex": "([^:\u001e]+):([^:\u001e]+)\\[\\]:([^:\u001e]+)",
+            "replacement": "        $3 = $1.ToList().AsReadOnly();\n"
+          },
+          {
             "regex": "([^:\u001e]+):([^:\u001e]+):([^:\u001e]+)",
             "replacement": "        $3 = $1;\n"
           },
@@ -586,11 +724,19 @@
             "replacement": "\u001e"
           },
           {
+            "regex": "([^:\u001e]+):([^:\u001e]+)\\[\\]:([^:\u001e]+)",
+            "replacement": "    public IReadOnlyList<$2> $3 { get; }\n"
+          },
+          {
             "regex": "([^:\u001e]+):([^:\u001e]+):([^:\u001e]+)",
             "replacement": "    public $2 $3 { get; }\n"
           },
           {
             "regex": "\u001e",
+            "replacement": ""
+          },
+          {
+            "regex": "\n$",
             "replacement": ""
           }
         ]
@@ -608,6 +754,14 @@
             "replacement": "\u001e"
           },
           {
+            "regex": "(?<=^|\u001e)([^:\u001e]+):(?!(?:bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)\\[\\])[A-Za-z0-9]+\\[\\]:([^:\u001e]+)(?=\u001e|$)",
+            "replacement": "        if ($1 is null)\n            throw new DomainException(\"$2 cannot be missing.\");\n        if ($1.Contains(default!))\n            throw new DomainException(\"$2 cannot hold a missing value.\");\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([^:\u001e]+):[A-Za-z0-9]+\\??\\[\\]:([^:\u001e]+)(?=\u001e|$)",
+            "replacement": "        if ($1 is null)\n            throw new DomainException(\"$2 cannot be missing.\");\n"
+          },
+          {
             "regex": "(?<=^|\u001e)([^:\u001e]+):string:([^:\u001e]+)(?=\u001e|$)",
             "replacement": "        if (string.IsNullOrWhiteSpace($1))\n            throw new DomainException(\"$2 cannot be blank.\");\n"
           },
@@ -623,6 +777,62 @@
       },
       "replaces": "FieldRules"
     },
+    "FieldComparisons": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FieldsTriples",
+        "steps": [
+          {
+            "regex": ",",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "([^:\u001e]+):[^:\u001e]+\\[\\]:([^:\u001e]+)",
+            "replacement": "        && $2.SequenceEqual(other.$2)\n"
+          },
+          {
+            "regex": "([^:\u001e\\n]+):[^:\u001e\\n]+:([^:\u001e]+)",
+            "replacement": "        && Equals($2, other.$2)\n"
+          },
+          {
+            "regex": "\u001e",
+            "replacement": ""
+          },
+          {
+            "regex": "\n$",
+            "replacement": ""
+          }
+        ]
+      },
+      "replaces": "FieldComparisons"
+    },
+    "FieldHashes": {
+      "type": "generated",
+      "generator": "regex",
+      "parameters": {
+        "source": "FieldsTriples",
+        "steps": [
+          {
+            "regex": ",",
+            "replacement": "\u001e"
+          },
+          {
+            "regex": "([^:\u001e]+):[^:\u001e]+\\[\\]:([^:\u001e]+)",
+            "replacement": "        foreach (var item in $2)\n            hash.Add(item);\n"
+          },
+          {
+            "regex": "([^:\u001e\\n]+):[^:\u001e\\n]+:([^:\u001e]+)",
+            "replacement": "        hash.Add($2);\n"
+          },
+          {
+            "regex": "\u001e",
+            "replacement": ""
+          }
+        ]
+      },
+      "replaces": "FieldHashes"
+    },
     "FieldValidNames": {
       "type": "generated",
       "generator": "regex",
@@ -630,7 +840,7 @@
         "source": "FieldsList",
         "steps": [
           {
-            "regex": "([A-Za-z0-9]+):[A-Za-z0-9]+\\??",
+            "regex": "([A-Za-z0-9]+):[^,]+",
             "replacement": "Valid$1"
           },
           {
@@ -652,7 +862,7 @@
             "replacement": "\u001e"
           },
           {
-            "regex": "([A-Za-z0-9]+):[A-Za-z0-9]+\\??",
+            "regex": "([A-Za-z0-9]+):[^\u001e]+",
             "replacement": "        value.$1.ShouldBe(Valid$1);\n"
           },
           {
@@ -667,11 +877,55 @@
       "type": "generated",
       "generator": "regex",
       "parameters": {
-        "source": "FieldsList",
+        "source": "FieldsNormal",
         "steps": [
           {
             "regex": ",",
             "replacement": "\u001e"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):string\\[\\](?=\u001e|$)",
+            "replacement": "    private static string[] Valid$1 => [\"value\"];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):bool\\[\\](?=\u001e|$)",
+            "replacement": "    private static bool[] Valid$1 => [true];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):int\\[\\](?=\u001e|$)",
+            "replacement": "    private static int[] Valid$1 => [1];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):long\\[\\](?=\u001e|$)",
+            "replacement": "    private static long[] Valid$1 => [1L];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):decimal\\[\\](?=\u001e|$)",
+            "replacement": "    private static decimal[] Valid$1 => [1.5m];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):double\\[\\](?=\u001e|$)",
+            "replacement": "    private static double[] Valid$1 => [1.5];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):Guid\\[\\](?=\u001e|$)",
+            "replacement": "    private static Guid[] Valid$1 => [new Guid(\"5d4f1c2a-8b3e-4f6a-9c7d-1e2f3a4b5c6d\")];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):DateOnly\\[\\](?=\u001e|$)",
+            "replacement": "    private static DateOnly[] Valid$1 => [new DateOnly(2026, 11, 24)];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):TimeOnly\\[\\](?=\u001e|$)",
+            "replacement": "    private static TimeOnly[] Valid$1 => [new TimeOnly(8, 30)];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):DateTimeOffset\\[\\](?=\u001e|$)",
+            "replacement": "    private static DateTimeOffset[] Valid$1 => [new DateTimeOffset(2026, 11, 24, 8, 30, 0, TimeSpan.Zero)];\n"
+          },
+          {
+            "regex": "(?<=^|\u001e)([A-Za-z0-9]+):([A-Za-z0-9]+\\??)\\[\\](?=\u001e|$)",
+            "replacement": "    private static $2[] Valid$1 =>\n        throw new NotImplementedException(\"TODO(hardslice): return a valid list of $2 for $1.\");\n"
           },
           {
             "regex": "(?<=^|\u001e)([A-Za-z0-9]+):(string\\??)(?=\u001e|$)",
@@ -729,7 +983,7 @@
       "type": "generated",
       "generator": "regex",
       "parameters": {
-        "source": "FieldsList",
+        "source": "FieldsNormal",
         "steps": [
           {
             "regex": "(?<=^(.*))([^,]+)(?=(.*)$)",
@@ -744,7 +998,7 @@
             "replacement": ""
           },
           {
-            "regex": "(?<=^|\u001d)[^\u001d]*\u0002[A-Za-z0-9]+:(?!string\u0003)[^\u0003]*\u0003[^\u001d]*(?:\u001d|$)",
+            "regex": "(?<=^|\u001d)[^\u001d]*\u0002[A-Za-z0-9]+:(?!string\u0003|[^\u0003]*\\[\\]\u0003)[^\u0003]*\u0003[^\u001d]*(?:\u001d|$)",
             "replacement": ""
           },
           {
@@ -756,12 +1010,20 @@
             "replacement": "\u0002$2\u0003$1\u0004"
           },
           {
-            "regex": "(?<=[\u0003,\u0004])([A-Za-z0-9]+):[A-Za-z0-9]+\\??",
+            "regex": "(?<=[\u0003,\u0004])([A-Za-z0-9]+):[A-Za-z0-9]+\\??(?:\\[\\])?",
             "replacement": "Valid$1"
           },
           {
             "regex": "\u0002([A-Za-z0-9]+):string\u0003([^\u0004\u001d]*)\u0004([^\u001d]*)",
             "replacement": "    [Fact]\n    public void Refuses_a_blank_$1()\n    {\n        Should.Throw<DomainException>(() => Create($2\" \"$3));\n    }\n\n"
+          },
+          {
+            "regex": "\u0002([A-Za-z0-9]+):(?!(?:bool|int|long|decimal|double|Guid|DateOnly|TimeOnly|DateTimeOffset)\\[\\])[A-Za-z0-9]+\\[\\]\u0003([^\u0004\u001d]*)\u0004([^\u001d]*)",
+            "replacement": "    [Fact]\n    public void Refuses_a_missing_$1()\n    {\n        Should.Throw<DomainException>(() => Create($2null!$3));\n    }\n\n    [Fact]\n    public void Refuses_a_missing_value_in_$1()\n    {\n        Should.Throw<DomainException>(() => Create($2[default!]$3));\n    }\n\n"
+          },
+          {
+            "regex": "\u0002([A-Za-z0-9]+):[A-Za-z0-9]+\\??\\[\\]\u0003([^\u0004\u001d]*)\u0004([^\u001d]*)",
+            "replacement": "    [Fact]\n    public void Refuses_a_missing_$1()\n    {\n        Should.Throw<DomainException>(() => Create($2null!$3));\n    }\n\n"
           },
           {
             "regex": ",",
@@ -974,7 +1236,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: field 'UnknownFieldName' of --fields has the type 'UnknownFieldType', which is neither one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset nor a type of the domain in PascalCase, each followed by ? when the value is optional. Nothing was created."
+          "text": "error: field 'UnknownFieldName' of --fields has the type 'UnknownFieldType', which is neither one of string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset nor a type of the domain in PascalCase, each followed by ? when the value is optional. A list is its type followed by [], such as Tiers:CreditRateTier[], without ? after it, and only a type of the domain takes ? before it. A type of the domain of another module is prefixed with that module in PascalCase, such as Ceiling:Taxation.Money. Nothing was created."
         }
       ],
       "continueOnError": false

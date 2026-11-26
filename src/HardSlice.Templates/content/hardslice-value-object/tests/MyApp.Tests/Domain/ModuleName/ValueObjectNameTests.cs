@@ -1,5 +1,8 @@
 using MyApp.Domain;
 using MyApp.Domain.ModuleName;
+#if (HasOtherModuleField)
+FieldUsings
+#endif
 
 namespace MyApp.Tests.Domain.ModuleName;
 

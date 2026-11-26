@@ -2,6 +2,14 @@
 
 Every version of the three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, which always share one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). While HardSlice is in preview, a version may change its rules, its template and its commands, but a solution keeps the template and the versions it was generated with.
 
+## [Unreleased]
+
+The content of `0.3.0-preview.3`, from the friction log of the second project after its move to `0.3.0-preview.2`.
+
+### Changed
+
+- `hardslice-value-object --fields` takes a list, `<Name>:<Type>[]` for a base type or a type of the domain, and a type of the domain of another module, `<Module>.<Type>`, which writes `using <App>.Domain.<Module>;` once in the value object and in its tests: `--fields Tiers:CreditRateTier[],Ceiling:Taxation.Money`. A list is taken as an `IEnumerable<T>`, copied into a read-only list held as an `IReadOnlyList<T>`, refused with `DomainException` when missing or when it holds a missing value, unless its elements take `?` or cannot be missing, and compared element by element by the `Equals` and `GetHashCode` that the template writes. Its tests check each refusal and the equality of two values built from equal but distinct lists. A list followed by `?`, `[]` on an unknown type, a base type followed by `?[]` and a malformed module are refused with the code 105. A value object generated before keeps its shape and needs no change: `git grep -l 'SequenceEqual(other\.' -- 'src/*.Domain/'` finds those whose list and equality were written by hand, which `--fields` can now generate.
+
 ## [0.3.0-preview.2] - 2026-11-24
 
 From the friction log of a second project built on the published packages.

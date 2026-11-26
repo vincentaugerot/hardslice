@@ -5546,6 +5546,7 @@ CODE
   bash "$app/scripts/check.sh"
 
   probe_value_object_fields "$module" "$name"
+  probe_value_object_lists "$module" "$name"
 
   rm "${app:?}/${source:?}" "${app:?}/${tests:?}"
 }
@@ -5618,6 +5619,135 @@ probe_value_object_fields() {
   bash "$app/scripts/check.sh"
 
   rm "${app:?}/${source:?}" "${app:?}/${tests:?}"
+}
+
+# PB-121: --fields writes a list of a base type and of a type of the domain, and a type of the domain of another module, alone and
+# in a list, in the value object LedgerSchedule of a module Ledger generated for it. It holds the completed value object <held> of
+# module <module> through <module>.<held>, which writes the using of <module> once in the value object and in its tests. Each list
+# is copied into a read-only list, refused when missing, and when it holds a missing value unless its elements take ? or cannot be
+# missing, and compared element by element. The build has no HardSlice diagnostic, the check fails on the tests of LedgerSchedule
+# alone until the reference completion gives each type of the domain a valid value, and its tests then pass, the equality of two
+# values built from equal but distinct lists included. The module is removed afterwards.
+probe_value_object_lists() {
+  local module="$1"
+  local held="$2"
+  local other="Ledger"
+  local name="LedgerSchedule"
+  local project="src/$app_name/$app_name.csproj"
+  local source="src/$app_name.Domain/$other/$name.cs"
+  local tests="tests/$app_name.Tests/Domain/$other/${name}Tests.cs"
+  local value_object_output
+  local refusal
+  local -a fields
+  local expected
+  local generated
+  local check_output
+  local status
+
+  cp "$app_src/Program.cs" "$work/Program-lists.cs.backup"
+  echo "==> Generating the module $other of $app_name, whose value object holds lists and a type of module $module"
+  generate_module "$other"
+  register_module "$module_output"
+
+  echo "==> Checking that dotnet new hardslice-value-object refuses a list of an unknown type, a list followed by ?, and a malformed module in $app_name"
+  for refusal in "a list of an unknown type|field 'Counts' of --fields has the type 'float[]'|Counts:float[]" \
+    "a list followed by ?|field 'Counts' of --fields has the type 'int[]?'|Counts:int[]?" \
+    "a list of an optional base type|field 'Counts' of --fields has the type 'int?[]'|Counts:int?[]" \
+    "a module that is not PascalCase|field 'Rate' of --fields has the type 'ledger.$held'|Rate:ledger.$held" \
+    "a type prefixed with two names|field 'Rate' of --fields has the type 'Ledger.$module.$held'|Rate:Ledger.$module.$held"; do
+    IFS='|' read -r -a fields <<< "$refusal"
+    expect_item_refused hardslice-value-object "${fields[0]}" "${fields[1]}" --project "$project" --module "$other" --name "$name" --fields "${fields[2]}"
+    if [[ "$item_refused_status" != 105 ]]; then
+      echo "error: dotnet new hardslice-value-object refused ${fields[0]} with exit $item_refused_status instead of 105." >&2
+      exit 1
+    fi
+  done
+  if [[ "$(new_item hardslice-value-object --project "$project" --module "$other" --name "$name" --fields "Counts:int[]?" || true)" != *"A list is its type followed by [], such as Tiers:CreditRateTier[], without ? after it"*"such as Ceiling:Taxation.Money."* ]]; then
+    echo "error: dotnet new hardslice-value-object did not name the form of a list and of a type of another module when it refused a type." >&2
+    exit 1
+  fi
+
+  echo "==> Generating the value object $name of module $other with lists and the type $module.$held in $app_name"
+  if ! value_object_output="$(new_item hardslice-value-object --project "$project" --module "$other" --name "$name" \
+    --fields "Labels:string[],Counts:int[],Rates:$module.$held[],Rate:$module.$held,Steps:$module.$held?[]")"; then
+    printf '%s\n' "$value_object_output" >&2
+    echo "error: dotnet new hardslice-value-object --fields failed on the lists of the value object $name of module $other in $app_name." >&2
+    exit 1
+  fi
+  for generated in "$source" "$tests"; do
+    if grep -q 'MyApp\|ModuleName\|ValueObjectName\|FieldUsings\|FieldComparisons\|FieldHashes\|#if\|#else\|#endif' "$app/$generated"; then
+      cat "$app/$generated" >&2
+      echo "error: $generated, generated in $app_name, keeps a placeholder or a condition of the template." >&2
+      exit 1
+    fi
+    if [[ "$(grep -c "^using $app_name\.Domain\.$module;\$" "$app/$generated")" != 1 ]] || grep -q "^using $app_name\.Domain\.$other;\$" "$app/$source"; then
+      cat "$app/$generated" >&2
+      echo "error: $generated does not take the using of module $module once, or the value object takes the using of its own module." >&2
+      exit 1
+    fi
+  done
+  for expected in "$source|    public $name(IEnumerable<string> labels, IEnumerable<int> counts, IEnumerable<$held> rates, $held rate, IEnumerable<$held?> steps)" \
+    "$source|        if (labels.Contains(default!))" \
+    "$source|            throw new DomainException(\"Counts cannot be missing.\");" \
+    "$source|        if (rates is null)" \
+    "$source|        if (rates.Contains(default!))" \
+    "$source|            throw new DomainException(\"Rates cannot hold a missing value.\");" \
+    "$source|            throw new DomainException(\"Steps cannot be missing.\");" \
+    "$source|        Rates = rates.ToList().AsReadOnly();" \
+    "$source|    public IReadOnlyList<$held> Rates { get; }" \
+    "$source|    public $held Rate { get; }" \
+    "$source|    public IReadOnlyList<$held?> Steps { get; }" \
+    "$source|    public bool Equals($name? other) =>" \
+    "$source|        && Rates.SequenceEqual(other.Rates)" \
+    "$source|        && Equals(Rate, other.Rate)" \
+    "$source|        && Steps.SequenceEqual(other.Steps);" \
+    "$source|        foreach (var item in Steps)" \
+    "$tests|    public void Refuses_a_missing_Counts()" \
+    "$tests|    public void Refuses_a_missing_value_in_Rates()" \
+    "$tests|        Should.Throw<DomainException>(() => Create(ValidLabels, ValidCounts, [default!], ValidRate, ValidSteps));" \
+    "$tests|        Should.Throw<DomainException>(() => Create(ValidLabels, ValidCounts, ValidRates, ValidRate, null!));" \
+    "$tests|    private static string[] ValidLabels => [\"value\"];" \
+    "$tests|    private static int[] ValidCounts => [1];" \
+    "$tests|        throw new NotImplementedException(\"TODO(hardslice): return a valid list of $held for Rates.\");" \
+    "$tests|        throw new NotImplementedException(\"TODO(hardslice): return a valid $held for Rate.\");"; do
+    if ! grep -Fxq -- "${expected#*|}" "$app/${expected%%|*}"; then
+      cat "$app/${expected%%|*}" >&2
+      echo "error: dotnet new hardslice-value-object --fields did not write the line '${expected#*|}' in ${expected%%|*}." >&2
+      exit 1
+    fi
+  done
+  if grep -q 'counts\.Contains\|steps\.Contains' "$app/$source" || grep -q 'Refuses_a_missing_value_in_Counts\|Refuses_a_missing_value_in_Steps' "$app/$tests"; then
+    cat "$app/$source" "$app/$tests" >&2
+    echo "error: dotnet new hardslice-value-object refuses a missing value in a list whose elements cannot be missing or take ?." >&2
+    exit 1
+  fi
+
+  echo "==> Checking that the check of $app_name fails on the tests of $name alone, which wait for valid values of $held"
+  status=0
+  check_output="$(run_check check.sh 2>&1)" || status=$?
+  check_output="$(strip_ansi <<< "$check_output")"
+  if [[ "$status" == 0 ]] || grep -Eq '(error|warning) (HS[0-9]{3}|CS[0-9]{4})' <<< "$check_output" ||
+    ! grep -q "^failed .*\.${name}Tests\." <<< "$check_output" ||
+    grep '^failed ' <<< "$check_output" | grep -vq "\.${name}Tests\."; then
+    printf '%s\n' "$check_output" >&2
+    echo "error: scripts/check.sh did not fail on the tests of $name alone." >&2
+    exit 1
+  fi
+
+  echo "==> Completing the value object $name: valid values of $held, and no rule beyond the generated ones"
+  sed -i '/TODO(hardslice): add the rules of the values/,+1d' "$app/$source"
+  perl -0pi -e "s/=>\n        throw new NotImplementedException\(\"TODO\(hardslice\): return a valid list of $held for Rates\.\"\);/=> [new $held(3, 4), new $held(1, 2)];/;
+    s/=>\n        throw new NotImplementedException\(\"TODO\(hardslice\): return a valid $held for Rate\.\"\);/=> new $held(3, 4);/;
+    s/=>\n        throw new NotImplementedException\(\"TODO\(hardslice\): return a valid list of $held\? for Steps\.\"\);/=> [new $held(3, 4), null];/" "$app/$tests"
+  if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
+    echo "error: the reference completion of the value object $other/$name leaves TODO(hardslice): markers." >&2
+    exit 1
+  fi
+  bash "$app/scripts/check.sh"
+
+  rm "${app:?}/${source:?}" "${app:?}/${tests:?}"
+  remove_module "$other"
+  mv "$work/Program-lists.cs.backup" "$app_src/Program.cs"
 }
 
 # PB-085: the example of "Mapping private fields" in the add-aggregate skill of the generated solution, applied as it is written

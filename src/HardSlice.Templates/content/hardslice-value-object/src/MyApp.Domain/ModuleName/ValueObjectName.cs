@@ -1,3 +1,7 @@
+#if (HasOtherModuleField)
+FieldUsings
+
+#endif
 namespace MyApp.Domain.ModuleName;
 
 // A value object of module ModuleName: it has no identity, equals any other ValueObjectName that holds the same values, and never
@@ -13,4 +17,19 @@ FieldRules        // TODO(hardslice): add the rules of the values of ValueObject
 
 FieldAssignments    }
 
-FieldProperties}
+FieldProperties
+#if (HasListField)
+
+    // A record compares a list by reference: ValueObjectName compares the elements of its lists, in their order, so that two
+    // ValueObjectName built from equal lists are equal.
+    public bool Equals(ValueObjectName? other) =>
+        other is not null
+FieldComparisons;
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+FieldHashes        return hash.ToHashCode();
+    }
+#endif
+}

@@ -75,20 +75,22 @@ A value object holds values that belong together and the rules on them, without 
    dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name> --fields <Name>:<Type>[,<Name>:<Type>...]
    ```
 
-   Each field is a parameter of the constructor and a property without setter: a base type (`string`, `bool`, `int`, `long`, `decimal`, `double`, `Guid`, `DateOnly`, `TimeOnly`, `DateTimeOffset`) or a type of the domain, such as another value object or an enum, followed by `?` when the value is optional, such as `--fields Level:InterpretationLevel,Justification:string,Note:string?`. Without `--fields`, it holds `Value:decimal`. It refuses an unknown module, a name that the domain of the module or its tests already have, that of an aggregate, an entity, an identifier or another value object, and a field that the record cannot hold.
-2. Complete `src/MyApp.Domain/<Module>/<Name>.cs`, a `sealed record`: a required `string` is already refused when it is blank, and the compiler refuses a `null` for any required field. Replace the marker `TODO(hardslice):` with the rules that the types do not say, each throwing a `DomainException`, such as a positive amount, an order between two dates or a value of an enum that it does not define (`Enum.IsDefined`), or remove it when there are none. Add each rule computed from the values as a property or a method.
-3. Complete `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs`: give each field of a type of the domain a valid value where its `TODO(hardslice):` marker throws, then add one test per rule that the constructor refuses (`Should.Throw<DomainException>`, with `Create(...)` and the valid value of each other field) and one per computed rule. The generated tests compile as generated, so that tests written first, such as reference cases, run beside them: give the value object its fields at the generation, and change its tests in the same edit when its fields change afterwards. A value object that holds a list, such as `IReadOnlyList<Citation> Citations`, compares the list by reference: write its `Equals` and `GetHashCode`, which the test of equality then proves:
+   Each field is a parameter of the constructor and a property without setter: a base type (`string`, `bool`, `int`, `long`, `decimal`, `double`, `Guid`, `DateOnly`, `TimeOnly`, `DateTimeOffset`) or a type of the domain, such as another value object or an enum, followed by `?` when the value is optional, such as `--fields Level:InterpretationLevel,Justification:string,Note:string?`. A type followed by `[]` is a list of it, such as `Tiers:CreditRateTier[]`, without `?` after it: an empty list says the absence, and only a type of the domain takes `?` before it, for a list that may hold a missing value (`Steps:ComputationStep?[]`). A type of the domain of another module is prefixed with that module, such as `Ceiling:Taxation.Money` or `Steps:Taxation.ComputationStep[]`: the value object and its tests then take the `using` of that module. Without `--fields`, it holds `Value:decimal`. It refuses an unknown module, a name that the domain of the module or its tests already have, that of an aggregate, an entity, an identifier or another value object, and a field that the record cannot hold.
+2. Complete `src/MyApp.Domain/<Module>/<Name>.cs`, a `sealed record`: a required `string` is already refused when it is blank, a list when it is missing or holds a missing value, and the compiler refuses a `null` for any required field. A list may be empty: a rule such as at least one element or their order goes where the marker is. Replace the marker `TODO(hardslice):` with the rules that the types do not say, each throwing a `DomainException`, such as a positive amount, an order between two dates or a value of an enum that it does not define (`Enum.IsDefined`), or remove it when there are none. Add each rule computed from the values as a property or a method.
+3. Complete `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs`: give each field of a type of the domain a valid value where its `TODO(hardslice):` marker throws, then add one test per rule that the constructor refuses (`Should.Throw<DomainException>`, with `Create(...)` and the valid value of each other field) and one per computed rule. The generated tests compile as generated, so that tests written first, such as reference cases, run beside them: give the value object its fields at the generation, and change its tests in the same edit when its fields change afterwards. A record compares a list by reference: for a field such as `Citations:Citation[]`, held as `IReadOnlyList<Citation> Citations`, the template writes the `Equals` and `GetHashCode` that compare its elements, which the test of equality proves with two values built from equal but distinct lists. A list added by hand afterwards needs the same, with each other field:
 
    ```csharp
    public bool Equals(CitedValue? other) =>
-       other is not null && Amount == other.Amount && Citations.SequenceEqual(other.Citations);
+       other is not null
+       && Equals(Amount, other.Amount)
+       && Citations.SequenceEqual(other.Citations);
 
    public override int GetHashCode()
    {
        var hash = new HashCode();
        hash.Add(Amount);
-       foreach (var citation in Citations)
-           hash.Add(citation);
+       foreach (var item in Citations)
+           hash.Add(item);
        return hash.ToHashCode();
    }
    ```
@@ -123,7 +125,7 @@ Never a base record that both derive from: the value objects are `sealed`, and t
 
 ## A value object that several modules use
 
-The domain belongs to no module (HS012): every module may use any type of `src/MyApp.Domain/`. A value object that several modules use, such as an amount of money or a rate, is generated in the module that owns its concept, the one whose rules it carries, and the other modules use it from its namespace, `MyApp.Domain.<Module>`. When none owns it more than the others, it stays in the first module that needed it: moving it later is a rename of its namespace, without a rule to change.
+The domain belongs to no module (HS012): every module may use any type of `src/MyApp.Domain/`. A value object that several modules use, such as an amount of money or a rate, is generated in the module that owns its concept, the one whose rules it carries, and the other modules use it from its namespace, `MyApp.Domain.<Module>`. When none owns it more than the others, it stays in the first module that needed it: moving it later is a rename of its namespace, without a rule to change. A value object of another module that holds it names it with its module in `--fields`, such as `Ceiling:Taxation.Money`, and its file and its tests take `using MyApp.Domain.Taxation;`.
 
 ## Concurrent changes
 

@@ -2340,7 +2340,7 @@ public sealed class TemplatePackageTests
 
         Evaluated(symbols, "FieldParameters", none).ShouldBe("decimal value");
         Evaluated(symbols, "FieldAssignments", none).ShouldBe("        Value = value;\n");
-        Evaluated(symbols, "FieldProperties", none).ShouldBe("    public decimal Value { get; }\n");
+        Evaluated(symbols, "FieldProperties", none).ShouldBe("    public decimal Value { get; }");
         Evaluated(symbols, "FieldRules", none).ShouldBe("");
         Evaluated(symbols, "FieldParameters", fields)
             .ShouldBe("InterpretationLevel level, string justification, string? note, Guid @event, int urlCount");
@@ -2349,15 +2349,18 @@ public sealed class TemplatePackageTests
             "        Level = level;\n        Justification = justification;\n        Note = note;\n        Event = @event;\n        URLCount = urlCount;\n");
         Evaluated(symbols, "FieldProperties", fields).ShouldBe(
             "    public InterpretationLevel Level { get; }\n    public string Justification { get; }\n    public string? Note { get; }\n"
-            + "    public Guid Event { get; }\n    public int URLCount { get; }\n");
+            + "    public Guid Event { get; }\n    public int URLCount { get; }");
         Evaluated(symbols, "FieldRules", fields)
             .ShouldBe("        if (string.IsNullOrWhiteSpace(justification))\n            throw new DomainException(\"Justification cannot be blank.\");\n");
-        foreach (var token in new[] { "FieldParameters", "FieldArguments", "FieldAssignments", "FieldProperties", "FieldRules", "FieldValidNames", "FieldAssertions", "FieldSamples", "FieldRefusalTests" })
+        Evaluated(symbols, "HasListField", fields).ShouldBe("false");
+        Evaluated(symbols, "HasOtherModuleField", fields).ShouldBe("false");
+        foreach (var token in new[] { "FieldParameters", "FieldArguments", "FieldAssignments", "FieldProperties", "FieldRules", "FieldValidNames", "FieldAssertions", "FieldSamples", "FieldRefusalTests", "FieldUsings", "FieldComparisons", "FieldHashes" })
             symbols.GetProperty(token).GetProperty("replaces").GetString().ShouldBe(token);
 
-        valueObject.ShouldStartWith("namespace MyApp.Domain.ModuleName;\n");
+        valueObject.ShouldStartWith("#if (HasOtherModuleField)\nFieldUsings\n\n#endif\nnamespace MyApp.Domain.ModuleName;\n");
         valueObject.ShouldContain("\npublic sealed record ValueObjectName\n{\n    public ValueObjectName(FieldParameters)\n    {\nFieldRules        // TODO(hardslice): add the rules of the values of ValueObjectName");
-        valueObject.ShouldContain("\nFieldAssignments    }\n\nFieldProperties}\n");
+        valueObject.ShouldContain("\nFieldAssignments    }\n\nFieldProperties\n#if (HasListField)\n");
+        valueObject.ShouldEndWith("        return hash.ToHashCode();\n    }\n#endif\n}\n");
         valueObject.ShouldNotContain(" set;");
         valueObject.ShouldNotContain(" init;");
         valueObject.ShouldNotContain("IEntity");
@@ -2404,7 +2407,17 @@ public sealed class TemplatePackageTests
     [InlineData("level", "FieldsAreWellFormed")]
     [InlineData("Level:", "FieldsAreWellFormed")]
     [InlineData("Level:float", "FieldTypesAreKnown")]
-    [InlineData("Level:My.Kind", "FieldTypesAreKnown")]
+    [InlineData("Level:my.Kind", "FieldTypesAreKnown")]
+    // PB-121: a list of a type, a type of another module, a list of it, with ? on the elements of a type of the domain only.
+    [InlineData("Tiers:CreditRateTier[],Ceiling:Taxation.Money,Steps:Taxation.ComputationStep?[],Counts:int[],At:DateOnly[]", "")]
+    [InlineData("Tiers:float[]", "FieldTypesAreKnown")]
+    [InlineData("Tiers:CreditRateTier[]?", "FieldTypesAreKnown")]
+    [InlineData("Counts:int?[]", "FieldTypesAreKnown")]
+    [InlineData("Since:DateOnly?[]", "FieldTypesAreKnown")]
+    [InlineData("Tiers:CreditRateTier[][]", "FieldTypesAreKnown")]
+    [InlineData("Ceiling:taxation.Money", "FieldTypesAreKnown")]
+    [InlineData("Ceiling:My.Taxation.Money", "FieldTypesAreKnown")]
+    [InlineData("Ceiling:.Money", "FieldTypesAreKnown")]
     [InlineData("Level:int,LEVEL:string", "FieldsHaveDuplicate")]
     [InlineData("ValueObjectName:int", "FieldIsTheType")]
     [InlineData("Count:int,ToString:string", "FieldIsRecordMember")]
@@ -2428,6 +2441,114 @@ public sealed class TemplatePackageTests
         foreach (var (symbol, value) in expected)
             if (symbol == refusedBy || refusedBy.Length == 0 || symbol == "FieldsAreWellFormed")
                 Evaluated(symbols, symbol, inputs).ShouldBe(value, $"{symbol} of --fields {list}");
+    }
+
+    // PB-121: a field <Type>[] is taken as an IEnumerable<Type>, copied into a read-only list held as an IReadOnlyList<Type>, and
+    // refused when missing or when it holds a missing value, unless its elements take ? or cannot be missing. The value object then
+    // compares its lists element by element, in Equals and GetHashCode. A type <Module>.<Type> is written without its module, whose
+    // using the value object and its tests take once, except for the module of the value object.
+    [Fact]
+    public void Value_object_item_template_holds_a_list_and_a_type_of_another_module()
+    {
+        using var config = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ValueObjectTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
+        var fields = new Dictionary<string, string>
+        {
+            ["Fields"] = "Tiers:CreditRateTier[], Ceiling:Taxation.Money,Counts:int[],Steps:Taxation.ComputationStep?[],Kind:Childcare.CareKind,Base:Benefits.Amount",
+            ["Module"] = "Childcare",
+            ["AppNameOrEmpty"] = "Acme.Rooms",
+        };
+
+        Evaluated(symbols, "HasListField", fields).ShouldBe("true");
+        Evaluated(symbols, "HasOtherModuleField", fields).ShouldBe("true");
+        Evaluated(symbols, "FieldUsings", fields).ShouldBe("using Acme.Rooms.Domain.Taxation;\nusing Acme.Rooms.Domain.Benefits;");
+        Evaluated(symbols, "FieldParameters", fields).ShouldBe(
+            "IEnumerable<CreditRateTier> tiers, Money ceiling, IEnumerable<int> counts, IEnumerable<ComputationStep?> steps, CareKind kind, Amount @base");
+        Evaluated(symbols, "FieldArguments", fields).ShouldBe("tiers, ceiling, counts, steps, kind, @base");
+        Evaluated(symbols, "FieldRules", fields).ShouldBe(
+            "        if (tiers is null)\n            throw new DomainException(\"Tiers cannot be missing.\");\n"
+            + "        if (tiers.Contains(default!))\n            throw new DomainException(\"Tiers cannot hold a missing value.\");\n"
+            + "        if (counts is null)\n            throw new DomainException(\"Counts cannot be missing.\");\n"
+            + "        if (steps is null)\n            throw new DomainException(\"Steps cannot be missing.\");\n");
+        Evaluated(symbols, "FieldAssignments", fields).ShouldBe(
+            "        Tiers = tiers.ToList().AsReadOnly();\n        Ceiling = ceiling;\n        Counts = counts.ToList().AsReadOnly();\n"
+            + "        Steps = steps.ToList().AsReadOnly();\n        Kind = kind;\n        Base = @base;\n");
+        Evaluated(symbols, "FieldProperties", fields).ShouldBe(
+            "    public IReadOnlyList<CreditRateTier> Tiers { get; }\n    public Money Ceiling { get; }\n    public IReadOnlyList<int> Counts { get; }\n"
+            + "    public IReadOnlyList<ComputationStep?> Steps { get; }\n    public CareKind Kind { get; }\n    public Amount Base { get; }");
+        Evaluated(symbols, "FieldComparisons", fields).ShouldBe(
+            "        && Tiers.SequenceEqual(other.Tiers)\n        && Equals(Ceiling, other.Ceiling)\n        && Counts.SequenceEqual(other.Counts)\n"
+            + "        && Steps.SequenceEqual(other.Steps)\n        && Equals(Kind, other.Kind)\n        && Equals(Base, other.Base)");
+        Evaluated(symbols, "FieldHashes", fields).ShouldBe(
+            "        foreach (var item in Tiers)\n            hash.Add(item);\n        hash.Add(Ceiling);\n"
+            + "        foreach (var item in Counts)\n            hash.Add(item);\n        foreach (var item in Steps)\n            hash.Add(item);\n"
+            + "        hash.Add(Kind);\n        hash.Add(Base);\n");
+        Evaluated(symbols, "FieldValidNames", fields).ShouldBe("ValidTiers, ValidCeiling, ValidCounts, ValidSteps, ValidKind, ValidBase");
+        Evaluated(symbols, "FieldAssertions", fields).ShouldContain("        value.Tiers.ShouldBe(ValidTiers);\n        value.Ceiling.ShouldBe(ValidCeiling);\n");
+        Evaluated(symbols, "FieldSamples", fields).ShouldBe(
+            "    private static CreditRateTier[] ValidTiers =>\n        throw new NotImplementedException(\"TODO(hardslice): return a valid list of CreditRateTier for Tiers.\");\n"
+            + "    private static Money ValidCeiling =>\n        throw new NotImplementedException(\"TODO(hardslice): return a valid Money for Ceiling.\");\n"
+            + "    private static int[] ValidCounts => [1];\n"
+            + "    private static ComputationStep?[] ValidSteps =>\n        throw new NotImplementedException(\"TODO(hardslice): return a valid list of ComputationStep? for Steps.\");\n"
+            + "    private static CareKind ValidKind =>\n        throw new NotImplementedException(\"TODO(hardslice): return a valid CareKind for Kind.\");\n"
+            + "    private static Amount ValidBase =>\n        throw new NotImplementedException(\"TODO(hardslice): return a valid Amount for Base.\");\n");
+        Evaluated(symbols, "FieldRefusalTests", fields).ShouldBe(
+            "    [Fact]\n    public void Refuses_a_missing_Tiers()\n    {\n"
+            + "        Should.Throw<DomainException>(() => Create(null!, ValidCeiling, ValidCounts, ValidSteps, ValidKind, ValidBase));\n    }\n\n"
+            + "    [Fact]\n    public void Refuses_a_missing_value_in_Tiers()\n    {\n"
+            + "        Should.Throw<DomainException>(() => Create([default!], ValidCeiling, ValidCounts, ValidSteps, ValidKind, ValidBase));\n    }\n\n"
+            + "    [Fact]\n    public void Refuses_a_missing_Counts()\n    {\n"
+            + "        Should.Throw<DomainException>(() => Create(ValidTiers, ValidCeiling, null!, ValidSteps, ValidKind, ValidBase));\n    }\n\n"
+            + "    [Fact]\n    public void Refuses_a_missing_Steps()\n    {\n"
+            + "        Should.Throw<DomainException>(() => Create(ValidTiers, ValidCeiling, ValidCounts, null!, ValidKind, ValidBase));\n    }\n\n");
+
+        // A list of strings cannot hold a missing string, and a list of a base type has its valid value.
+        var labels = new Dictionary<string, string> { ["Fields"] = "Labels:string[],At:DateOnly[]" };
+        Evaluated(symbols, "FieldRules", labels).ShouldContain("        if (labels.Contains(default!))\n");
+        Evaluated(symbols, "FieldRules", labels).ShouldNotContain("at.Contains");
+        Evaluated(symbols, "FieldSamples", labels).ShouldBe(
+            "    private static string[] ValidLabels => [\"value\"];\n    private static DateOnly[] ValidAt => [new DateOnly(2026, 11, 24)];\n");
+
+        // The module of the value object takes no using, nor a list without a type of another module.
+        foreach (var own in new[] { "Kind:Childcare.CareKind,Tiers:CreditRateTier[]", "Value:decimal" })
+        {
+            var inputs = new Dictionary<string, string> { ["Fields"] = own, ["Module"] = "Childcare", ["AppNameOrEmpty"] = "Acme.Rooms" };
+            Evaluated(symbols, "HasOtherModuleField", inputs).ShouldBe("false", own);
+            Evaluated(symbols, "OtherModules", inputs).ShouldBe("", own);
+        }
+        Evaluated(symbols, "FieldParameters", new Dictionary<string, string> { ["Fields"] = "Kind:Childcare.CareKind" }).ShouldBe("CareKind kind");
+        Evaluated(symbols, "HasListField", new Dictionary<string, string> { ["Fields"] = "Ceiling:Taxation.Money" }).ShouldBe("false");
+
+        // add-aggregate names both forms, where the value object lists its fields, its equality and its place across modules.
+        var addAggregate = File.ReadAllText(Path.Combine(TemplateRoot(FindRepositoryRoot()), ".claude", "skills", "add-aggregate", "SKILL.md"));
+        addAggregate.ShouldContain("A type followed by `[]` is a list of it, such as `Tiers:CreditRateTier[]`, without `?` after it");
+        addAggregate.ShouldContain("A type of the domain of another module is prefixed with that module, such as `Ceiling:Taxation.Money`");
+        addAggregate.ShouldContain("for a field such as `Citations:Citation[]`, held as `IReadOnlyList<Citation> Citations`, the template writes the `Equals` and `GetHashCode`");
+        addAggregate.ShouldContain("A list may be empty: a rule such as at least one element or their order goes where the marker is.");
+        addAggregate.ShouldContain("names it with its module in `--fields`, such as `Ceiling:Taxation.Money`, and its file and its tests take `using MyApp.Domain.Taxation;`.");
+    }
+
+    // PB-121: the refusal of an unknown type names the field and its type, and says the form of a list and of a type of another module.
+    [Theory]
+    [InlineData("Count:int,Tiers:CreditRateTier[]?", "Tiers", "CreditRateTier[]?")]
+    [InlineData("Count:int?[]", "Count", "int?[]")]
+    [InlineData("Ceiling:taxation.Money,Count:int", "Ceiling", "taxation.Money")]
+    public void Value_object_item_template_names_the_forms_of_a_list_and_of_another_module_when_it_refuses_a_type(string list, string field, string type)
+    {
+        using var config = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(ValueObjectTemplateRoot(FindRepositoryRoot()), ".template.config", "template.json")));
+        var symbols = config.RootElement.GetProperty("symbols");
+        var inputs = new Dictionary<string, string> { ["Fields"] = list };
+
+        Evaluated(symbols, "UnknownFieldName", inputs).ShouldBe(field);
+        Evaluated(symbols, "UnknownFieldType", inputs).ShouldBe(type);
+        var refusal = config.RootElement.GetProperty("postActions").EnumerateArray()
+            .Single(action => action.GetProperty("id").GetString() == "refuseUnknownFieldType")
+            .GetProperty("manualInstructions")[0].GetProperty("text").GetString()!;
+        refusal.ShouldStartWith("error: field 'UnknownFieldName' of --fields has the type 'UnknownFieldType', which is neither one of ");
+        refusal.ShouldContain("A list is its type followed by [], such as Tiers:CreditRateTier[], without ? after it");
+        refusal.ShouldContain("A type of the domain of another module is prefixed with that module in PascalCase, such as Ceiling:Taxation.Money.");
     }
 
     // Every refusal fails the generation, after excluding every file, and says that nothing was created. The last action prints
