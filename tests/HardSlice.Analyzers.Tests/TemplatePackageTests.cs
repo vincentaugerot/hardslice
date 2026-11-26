@@ -2759,6 +2759,68 @@ public sealed class TemplatePackageTests
         MarkdownLines(agents).ShouldBeLessThan(150);
     }
 
+    // PB-126: add-aggregate says the third form of a domain service, a stateless sealed class built once at start that holds one
+    // value object of parameters per module, the private records of a domain service, a shared value object that carries the steps
+    // of a trace and a field added to an existing value object. add-slice says a filter that needs another, a repeated filter and
+    // the filter of an enumeration, add-module the class of the codes of a module, the reader shared by the modules of one store
+    // and a module that takes the results of others as parameters, AGENTS.md under 150 lines in both variants.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Agent_guidance_says_the_form_of_a_service_that_holds_its_parameters_and_what_the_phase_2_of_Ottawa_wrote_alone(bool noSample)
+    {
+        var templateRoot = TemplateRoot(FindRepositoryRoot());
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
+        var skills = Path.Combine(templateRoot, ".claude", "skills");
+        var addAggregate = File.ReadAllText(Path.Combine(skills, "add-aggregate", "SKILL.md"));
+        var addSlice = File.ReadAllText(Path.Combine(skills, "add-slice", "SKILL.md"));
+        var addModule = File.ReadAllText(Path.Combine(skills, "add-module", "SKILL.md"));
+
+        var composition = Section(addAggregate, "## A computation that composes several value objects");
+        composition.ShouldContain("are `private` records nested in the class that uses them");
+        composition.ShouldContain("is a stateless service instead: a `sealed class` of `src/MyApp.Domain/<Module>/` with `readonly` fields only, "
+            + "built once when the application starts by a service of the public contract of its module, registered with `AddSingletonBuiltAtStart` (`add-module`)");
+        composition.ShouldContain("Its constructor takes one value object of parameters per module that it composes, such as `BenefitsParameters` "
+            + "for the benefits of a year, generated with `--fields`, never the dozens of values that these parameters hold.");
+        composition.ShouldContain("public HouseholdBudget(TaxationParameters taxation, ChildcareParameters childcare, BenefitsParameters benefits)");
+        composition.ShouldContain("private sealed record AdultFigures(Money NetIncome, ComputationTrace Trace);");
+        composition.ShouldContain("A value object that several computations hold may carry the steps of the trace that the response shows");
+        var addedField = Section(addAggregate, "### A field added to an existing value object");
+        addedField.ShouldContain("No template changes the fields of a value object that exists.");
+        addedField.ShouldContain("an optional last parameter with its default, such as `Workplace? workplace = null`, when its callers must keep their call");
+        addedField.ShouldContain("one test per value that the rule refuses, and one of the default when the parameter is optional");
+
+        addSlice.ShouldContain("- optional filter that needs another, such as `secondWorkplace` that a request gives only with `secondIncome`");
+        addSlice.ShouldContain("`RuleFor(query => query.SecondWorkplace).Cascade(CascadeMode.Stop).Must((query, _) => query.SecondIncome is not null)`, "
+            + "so that the 400 names it, `secondWorkplace`");
+        addSlice.ShouldContain("- repeated filter, such as one `child` per child of a household (`?child=4&child=9`): a `string[]?` property of the query");
+        addSlice.ShouldContain("each element with `RuleForEach`, whose error FluentValidation names with the index of the element, `Child[1]`, written `child[1]` in the 400");
+        addSlice.ShouldContain("- filter of an enumeration of the domain, such as a `workplace` among `ottawa` and `gatineau`: a `string?` of the query, never the enumeration itself");
+
+        addModule.ShouldContain("A static class of the contract, named after the module, such as `ComparisonNames`, holds the code of each member");
+        addModule.ShouldContain("It belongs to the public contract of the module that owns the store, next to the store, such as a `ReferenceReader` beside `ReferenceCatalog`");
+        addModule.ShouldContain("A module whose computation needs the results of other modules, such as benefits computed on the net income that the taxes "
+            + "of a household give, takes them as parameters of its domain, and the service that composes the modules chains them");
+        MarkdownLines(agents).ShouldBeLessThan(150);
+    }
+
+    // The text of <markdown> from the heading <heading> to the next heading of the same level or above.
+    private static string Section(string markdown, string heading)
+    {
+        var start = markdown.IndexOf("\n" + heading + "\n", StringComparison.Ordinal);
+        start.ShouldBeGreaterThanOrEqualTo(0, $"No heading {heading}.");
+        var level = heading.IndexOf(' ', StringComparison.Ordinal);
+        var end = markdown.Length;
+        foreach (var candidate in new[] { "\n## ", "\n### " }.Where(prefix => prefix.Length - 2 <= level))
+        {
+            var next = markdown.IndexOf(candidate, start + heading.Length + 1, StringComparison.Ordinal);
+            if (next >= 0)
+                end = Math.Min(end, next);
+        }
+
+        return markdown[start..end];
+    }
+
     // The lines of <source> that the template keeps for --link id (<linkIsId>) or --link collection, the only condition of its files.
     private static string Branch(string source, bool linkIsId)
     {

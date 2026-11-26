@@ -97,6 +97,16 @@ A value object holds values that belong together and the rules on them, without 
 
 4. An aggregate or a child entity holds it as a property, which a method replaces whole, and its mapping stores it in the columns of its row, as [A value object stored in the row of its entity](#a-value-object-stored-in-the-row-of-its-entity) says, then a migration. A value object that a method or a query computes and returns, such as the rate of a set of rows, needs no mapping. Then run the check.
 
+### A field added to an existing value object
+
+No template changes the fields of a value object that exists. Before any edit of its own, delete its file and its test file, then generate it again with every field. Once it holds rules, methods or callers, add the field by hand, in one edit:
+
+- its parameter and its property, after the others: an optional last parameter with its default, such as `Workplace? workplace = null`, when its callers must keep their call, or a required one when each of them must give it;
+- its rule in the constructor, such as `Enum.IsDefined` for an enumeration, each throwing a `DomainException`;
+- in its tests, the field in `Create(...)` with a valid value, one test per value that the rule refuses, and one of the default when the parameter is optional.
+
+The equality of the record takes a field of a base type or of the domain by itself. A list field changes `Equals` and `GetHashCode` too, as step 3 shows. A value object stored in the row of its entity gains a column, and a migration.
+
 ## Enumerations of the domain
 
 An enumeration of the domain, such as the level of a source or the status of an order, is written by hand in a file of its own, `src/MyApp.Domain/<Module>/<Name>.cs`, next to the value objects of its module: the templates know the types of a module by their file names. Give each member an explicit value starting at 1, so that `default`, 0, is never a valid member:
@@ -115,6 +125,40 @@ A value object or an entity that holds one refuses a value that it does not defi
 ## A computation that composes several value objects
 
 A rule that one value object owns is its property or its method. A computation that composes the results of several value objects, none of which owns it, such as an income tax computed from a schedule of brackets, a basic amount and the contributions of a payroll, is a domain service: a `static class` of `src/MyApp.Domain/<Module>/`, named after what it computes, whose methods take the value objects and return a value object. It is pure: it receives every value, the date included, and reads no store, no clock and no configuration. Its unit tests sit at `tests/MyApp.Tests/Domain/<Module>/<Name>Tests.cs`, one per case of the computation. No template generates it: write it by hand, with its tests.
+
+The records of its work, such as the state of an iteration over the pays of a year, are `private` records nested in the class that uses them: no other type reads them, and no rule gives them a role (HS901). What it returns is a value object of the module, generated.
+
+A computation that holds values that never change between its calls, such as the parameters of a year that each comparison of a household reads, is a stateless service instead: a `sealed class` of `src/MyApp.Domain/<Module>/` with `readonly` fields only, built once when the application starts by a service of the public contract of its module, registered with `AddSingletonBuiltAtStart` (`add-module`), and whose methods take what the request gives, such as a household and a date, and return a value object. Its constructor takes one value object of parameters per module that it composes, such as `BenefitsParameters` for the benefits of a year, generated with `--fields`, never the dozens of values that these parameters hold. A new part of the computation then adds a field to the value object of its module, or one value object more, and the constructor, its callers and its tests keep their shape. It reads no store, no clock and no configuration either, its records of work stay private to it, and its unit tests build it from the value objects of a small year of the test, one test per case of the computation:
+
+```csharp
+// src/MyApp.Domain/Comparison/HouseholdBudget.cs
+namespace MyApp.Domain.Comparison;
+
+// The comparison of a household for one year, built once at start by ComparisonReference: one value object of parameters per module.
+public sealed class HouseholdBudget
+{
+    private readonly TaxationParameters _taxation;
+    private readonly ChildcareParameters _childcare;
+    private readonly BenefitsParameters _benefits;
+
+    public HouseholdBudget(TaxationParameters taxation, ChildcareParameters childcare, BenefitsParameters benefits)
+    {
+        _taxation = taxation;
+        _childcare = childcare;
+        _benefits = benefits;
+    }
+
+    public ComparisonResult Compare(Household household, DateOnly today)
+    {
+        // One private method per part: the taxes of each adult, then the childcare and the benefits, which take their results.
+    }
+
+    // What the couple reads of each adult: a record of work, private to the service.
+    private sealed record AdultFigures(Money NetIncome, ComputationTrace Trace);
+}
+```
+
+A value object that several computations hold may carry the steps of the trace that the response shows, such as the line and the label of the form that gives each amount, beside the amounts: the holder that builds it is the one that knows which form gives the amount, so a computation that reads it never repeats the choice of the situation to trace it again. These texts are values of the domain, as its amounts are, and the handler maps them to its DTO without writing any of its own. A value object of amounts alone fits when no response shows where they come from.
 
 Two value objects that compute the same way with other values, such as two pension plans with their own rates and maximums, share the computation instead of repeating it:
 
