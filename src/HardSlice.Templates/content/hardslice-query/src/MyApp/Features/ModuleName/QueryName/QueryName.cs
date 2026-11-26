@@ -28,6 +28,15 @@ public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<IReadOnlyLis
 // Add the other filters of the use case, each with its rule.
 FilterComments
 public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<ResultDtoName?>;
+#elif (ResultIsComputedMany && ResultTakesFilters)
+// Computes the list of the ResultDtoName from its filters, without stored aggregate. Add the other filters of the use case, each with
+// its rule.
+FilterComments
+public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<IReadOnlyList<ResultDtoName>>;
+#elif (ResultIsComputedMany)
+// Computes the list of the ResultDtoName, without stored aggregate. Add the parameters of the use case, such as a filter, and their
+// validator.
+public sealed record QueryNameQuery : IQuery<IReadOnlyList<ResultDtoName>>;
 #elif (ResultIsComputed && ResultTakesFilters)
 // Computes one ResultDtoName from its filters, without stored aggregate. Add the other filters of the use case, each with its rule.
 FilterComments
@@ -44,6 +53,10 @@ public sealed record QueryNameQuery : IQuery<IReadOnlyList<ResultDtoName>>;
 // Values only: never an entity, not even in a property. Replace Count with the values the use case computes, such as the count of
 // each state.
 public sealed record ResultDtoName(int Count);
+#elif (ResultIsComputedMany)
+// One element of the list. Values only: never an entity, not even in a property. Replace Value with the values the use case computes
+// for each element, such as the code, the name and the amount of each source.
+public sealed record ResultDtoName(decimal Value);
 #elif (ResultIsComputed)
 // Values only: never an entity, not even in a property. Replace Value with the values the use case computes, such as the amount of
 // each line and its total.
@@ -64,7 +77,18 @@ internal sealed class QueryNameValidator : AbstractValidator<QueryNameQuery>
 }
 #endif
 
-#if (ResultIsComputed)
+#if (ResultIsComputedMany)
+// Computes the list of the DTOs from the services of module ModuleName that it receives by its constructor, such as a store that the
+// module builds when the application starts (AddSingletonBuiltAtStart) or TimeProvider, and from the value objects of the domain: it
+// reads no database, never saves, and runs outside any transaction.
+internal sealed class QueryNameHandler : IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>
+{
+    public Task<IReadOnlyList<ResultDtoName>> Handle(QueryNameQuery query, CancellationToken cancellationToken) =>
+        throw new NotImplementedException(
+            "TODO(hardslice): receive by the constructor of QueryNameHandler the services of module ModuleName that the use case reads, "
+            + "then compute each ResultDtoName of the list, in the order of the use case, with the value objects and the services of the domain.");
+}
+#elif (ResultIsComputed)
 // Computes the DTO from the services of module ModuleName that it receives by its constructor, such as a store that the module
 // builds when the application starts (AddSingletonBuiltAtStart) or TimeProvider, and from the value objects of the domain: it reads
 // no database, never saves, and runs outside any transaction.

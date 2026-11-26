@@ -31,7 +31,7 @@
     "Aggregate": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The aggregate that the query reads, in PascalCase, such as Booking: a type of namespace <App>.Domain.<Module>, whose Id property is a <Aggregate>Id that wraps a Guid Value. Required with every --result but computed, refused with it.",
+      "description": "The aggregate that the query reads, in PascalCase, such as Booking: a type of namespace <App>.Domain.<Module>, whose Id property is a <Aggregate>Id that wraps a Guid Value. Required with every --result but computed and computed-many, refused with them.",
       "replaces": "AggregateName",
       "fileRename": "AggregateName"
     },
@@ -39,7 +39,7 @@
       "type": "parameter",
       "datatype": "choice",
       "defaultValue": "single",
-      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs), filtered (the list of the DTOs that the filters of --parameters select, each read from the query string, or from the route when --route names it, and checked by a validator), summary (one DTO that the handler computes, such as counts, on the aggregates that the same filters select, null answered with 404 when they select none) or computed (one DTO that the handler computes from the services of its module and the domain, without stored aggregate nor --aggregate, from the filters of --parameters if any, always answered with 200). Not list: dotnet new would read it as its list command.",
+      "description": "What the query returns: single (one DTO read by its id, null answered with 404, by default), many (the list of the DTOs), filtered (the list of the DTOs that the filters of --parameters select, each read from the query string, or from the route when --route names it, and checked by a validator), summary (one DTO that the handler computes, such as counts, on the aggregates that the same filters select, null answered with 404 when they select none), computed (one DTO that the handler computes from the services of its module and the domain, without stored aggregate nor --aggregate, from the filters of --parameters if any, always answered with 200) or computed-many (the list of the DTOs that the handler computes the same way, --dto naming each element). Not list: dotnet new would read it as its list command.",
       "choices": [
         {
           "choice": "single",
@@ -60,13 +60,17 @@
         {
           "choice": "computed",
           "description": "One DTO computed from the services of the module, such as a store built when the application starts, without stored aggregate, from the filters of --parameters if any; always answered with 200."
+        },
+        {
+          "choice": "computed-many",
+          "description": "The list of the DTOs computed from the services of the module, as for computed, --dto naming each element; always answered with 200."
         }
       ]
     },
     "Parameters": {
       "type": "parameter",
       "datatype": "text",
-      "description": "The filters of --result filtered, summary or computed, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly or From:DateOnly,To:DateOnly. The query reads each filter from the query string, such as ?from=2026-11-04&to=2026-11-05, where its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Each filter has a rule of the validator, its unit test, and its test of the 400. Required with --result filtered and --result summary, optional with --result computed, refused otherwise."
+      "description": "The filters of --result filtered, summary, computed or computed-many, as <Name>:<Type>[,<Name>:<Type>...]: PascalCase names, each with one of the types string, bool, int, long, decimal, double, Guid, DateOnly, TimeOnly and DateTimeOffset, such as Date:DateOnly or From:DateOnly,To:DateOnly. The query reads each filter from the query string, such as ?from=2026-11-04&to=2026-11-05, where its validator answers 400 to a request without it, or from the route when --route names it between braces, such as days/{date}, where a value that its binding refuses is answered with 400. Each filter has a rule of the validator, its unit test, and its test of the 400. Required with --result filtered and --result summary, optional with --result computed and computed-many, refused otherwise."
     },
     "Route": {
       "type": "parameter",
@@ -1376,7 +1380,11 @@
     },
     "ResultIsComputed": {
       "type": "computed",
-      "value": "(Result == \"computed\")"
+      "value": "(Result == \"computed\" || Result == \"computed-many\")"
+    },
+    "ResultIsComputedMany": {
+      "type": "computed",
+      "value": "(Result == \"computed-many\")"
     },
     "AggregateIsMissing": {
       "type": "computed",
@@ -1592,7 +1600,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --aggregate is required: the aggregate root that the query reads, a type of src/MyApp.Domain/ModuleName/, such as --aggregate Booking. A query that computes its DTO from the services of its module, without stored aggregate, takes --result computed instead. Nothing was created."
+          "text": "error: --aggregate is required: the aggregate root that the query reads, a type of src/MyApp.Domain/ModuleName/, such as --aggregate Booking. A query that computes its DTO from the services of its module, without stored aggregate, takes --result computed instead, or --result computed-many for a list of DTOs. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1600,7 +1608,7 @@
     {
       "id": "refuseAggregateOfComputed",
       "condition": "(AggregateIsUnused)",
-      "description": "Refuses --aggregate with --result computed.",
+      "description": "Refuses --aggregate with --result computed or computed-many.",
       "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
       "applyFileRenamesToManualInstructions": true,
       "args": {
@@ -1611,7 +1619,12 @@
       },
       "manualInstructions": [
         {
+          "condition": "(!ResultIsComputedMany)",
           "text": "error: --result computed reads no stored aggregate: its handler computes the DTO from the services of module ModuleName and the domain. Leave --aggregate out, or choose the --result that reads the aggregate. Nothing was created."
+        },
+        {
+          "condition": "(ResultIsComputedMany)",
+          "text": "error: --result computed-many reads no stored aggregate: its handler computes the list of the DTOs from the services of module ModuleName and the domain. Leave --aggregate out, or choose the --result that reads the aggregate, such as --result many or filtered. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1763,7 +1776,7 @@
       },
       "manualInstructions": [
         {
-          "text": "error: --parameters 'ParametersText' lists the filters of --result filtered, summary or computed: pass one of them with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
+          "text": "error: --parameters 'ParametersText' lists the filters of --result filtered, summary, computed or computed-many: pass one of them with it, or leave it out for --result single, which reads its aggregate by its id, or --result many, which lists every aggregate. Nothing was created."
         }
       ],
       "continueOnError": false
@@ -1906,11 +1919,19 @@
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName?>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(ResultIsComputed && ResultTakesFilters)",
+          "condition": "(ResultIsComputedMany && ResultTakesFilters)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ComputedWithoutFilters && ResultIsComputedMany)",
+          "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
+        },
+        {
+          "condition": "(ResultIsComputed && !ResultIsComputedMany && ResultTakesFilters)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing FluentValidation;\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler and the validator by their contracts:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         },
         {
-          "condition": "(ComputedWithoutFilters)",
+          "condition": "(ComputedWithoutFilters && !ResultIsComputedMany)",
           "text": "Register the slice in src/MyApp/Features/ModuleName/ModuleNameModule.cs:\n1. Add the usings that the file does not have yet:\nusing MyApp.Features.ModuleName.QueryName;\nusing MyApp.Shared.Messaging;\n2. In AddModuleNameModule, register the handler by its contract:\n            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n3. In MapModuleNameModule, map the endpoint on the group of the module:\n        QueryNameEndpoint.Map(group);\nThen complete the slice and its tests: each TODO(hardslice): marker fails the check until it is replaced."
         }
       ],

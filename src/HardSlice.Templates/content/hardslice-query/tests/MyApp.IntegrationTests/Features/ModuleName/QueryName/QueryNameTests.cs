@@ -121,7 +121,11 @@ public sealed class QueryNameTests(PostgresDatabase database)
     }
 #elif (ResultIsComputed)
     [Fact]
+#if (ResultIsComputedMany)
+    public async Task Computes_its_dtos_from_its_filters()
+#else
     public async Task Computes_its_dto_from_its_filters()
+#endif
     {
         await using var app = new AppFactory(database);
 
@@ -134,9 +138,15 @@ public sealed class QueryNameTests(PostgresDatabase database)
 #endif
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
+#if (ResultIsComputedMany)
+        var dtos = await response.Content.ReadFromJsonAsync<ResultDtoName[]>(TestContext.Current.CancellationToken);
+        dtos.ShouldNotBeNull();
+        Assert.Fail("TODO(hardslice): assert each ResultDtoName of the list that the handler computes for the filters of the request, and their order, then add a test for each other case of the use case.");
+#else
         var dto = await response.Content.ReadFromJsonAsync<ResultDtoName>(TestContext.Current.CancellationToken);
         dto.ShouldNotBeNull();
         Assert.Fail("TODO(hardslice): assert each value of ResultDtoName that the handler computes for the filters of the request, then add a test for each other case of the use case.");
+#endif
     }
 #else
     [Fact]
@@ -267,16 +277,26 @@ public sealed class QueryNameTests(PostgresDatabase database)
 #endif
 #elif (ResultIsComputed)
     [Fact]
+#if (ResultIsComputedMany)
+    public async Task Computes_its_dtos()
+#else
     public async Task Computes_its_dto()
+#endif
     {
         await using var app = new AppFactory(database);
 
         var response = await app.CreateClient().GetAsync(Route, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
+#if (ResultIsComputedMany)
+        var dtos = await response.Content.ReadFromJsonAsync<ResultDtoName[]>(TestContext.Current.CancellationToken);
+        dtos.ShouldNotBeNull();
+        Assert.Fail("TODO(hardslice): assert each ResultDtoName of the list that the handler computes, and their order.");
+#else
         var dto = await response.Content.ReadFromJsonAsync<ResultDtoName>(TestContext.Current.CancellationToken);
         dto.ShouldNotBeNull();
         Assert.Fail("TODO(hardslice): assert each value of ResultDtoName that the handler computes.");
+#endif
     }
 #if (RequireIsGiven)
 

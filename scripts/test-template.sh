@@ -3859,8 +3859,8 @@ query_dto() {
 }
 
 # Generates the query slice <module>/<name> with the remaining options, checks that its two files exist, and the unit tests of
-# its validator with --result filtered, --result summary or --result computed with --parameters only, and leaves the printed
-# instructions in $query_output.
+# its validator with --result filtered, --result summary, or --result computed or computed-many with --parameters only, and leaves
+# the printed instructions in $query_output.
 generate_query() {
   local module="$1"
   local name="$2"
@@ -3882,7 +3882,7 @@ generate_query() {
     fi
   done
   if [[ " $* " == *" --result filtered "* || " $* " == *" --result summary "* ||
-    ( " $* " == *" --result computed "* && " $* " == *" --parameters "* ) ]]; then
+    ( ( " $* " == *" --result computed "* || " $* " == *" --result computed-many "* ) && " $* " == *" --parameters "* ) ]]; then
     if [[ ! -f "$app/$unit_test" ]]; then
       echo "error: dotnet new hardslice-query $* did not create $unit_test in $app_name." >&2
       exit 1
@@ -3954,7 +3954,7 @@ probe_query_template() {
   expect_item_refused hardslice-query "a name with the Query suffix" "--name '${name}Query' ends with Query" --project "$project" --module "$module" --name "${name}Query" --aggregate "$aggregate"
   expect_item_refused hardslice-query "a module that is not PascalCase" "--module 'payments' is not PascalCase" --project "$project" --module payments --name "$name" --aggregate "$aggregate"
   expect_item_refused hardslice-query "a module that does not exist" "module 'Payments' does not exist: src/$app_name/Features/Payments/PaymentsModule.cs was not found. Create the module first with dotnet new hardslice-module --project src/$app_name/$app_name.csproj --name Payments" --project "$project" --module Payments --name "$name" --aggregate "$aggregate"
-  expect_item_refused hardslice-query "a run without aggregate" "error: --aggregate is required: the aggregate root that the query reads, a type of src/$app_name.Domain/$module/, such as --aggregate Booking. A query that computes its DTO from the services of its module, without stored aggregate, takes --result computed instead." --project "$project" --module "$module" --name "$name"
+  expect_item_refused hardslice-query "a run without aggregate" "error: --aggregate is required: the aggregate root that the query reads, a type of src/$app_name.Domain/$module/, such as --aggregate Booking. A query that computes its DTO from the services of its module, without stored aggregate, takes --result computed instead, or --result computed-many for a list of DTOs." --project "$project" --module "$module" --name "$name"
   expect_item_refused hardslice-query "an aggregate that is not PascalCase" "--aggregate 'room-slot' is not PascalCase" --project "$project" --module "$module" --name "$name" --aggregate room-slot
   # 'list' is not a value: dotnet new would read '--result list' as its list command.
   expect_item_refused hardslice-query "an unknown result" "'list' is not a valid value for --result" --project "$project" --module "$module" --name "$name" --aggregate "$aggregate" --result=list
@@ -4554,32 +4554,46 @@ probe_not_found_results() {
 # PB-116: a DTO computed from the services of the module, without stored aggregate. In module <module>, which holds the aggregate
 # <aggregate>, the query <name> is generated with --result computed --parameters Year:int --dto <name>Result: a query of one
 # DTO that is never null, its validator and its tests, the 400 of a request without filter, and an endpoint that answers Ok only. The
-# query <parameterless-name> is generated with --result computed alone: an empty record, without validator. Before, --result
-# computed is refused with --aggregate, another result without --aggregate, an invalid --dto, and an empty --route by both slice
-# templates, with exit 105. The check fails on their TODO(hardslice): tests, whose handlers throw, then passes after the reference
-# completion, in which each handler computes its DTO from TimeProvider, a service of the host. The module is left as it was.
+# query <parameterless-name> is generated with --result computed alone: an empty record, without validator. PB-122: the query
+# <list-name> is generated with --result computed-many --parameters Year:int --dto <list-name>Element, the list of the DTOs computed
+# the same way, and <parameterless-list-name> with --result computed-many alone: each returns IReadOnlyList<Dto>, its endpoint answers
+# Ok only and its test reads the list. Before, --result computed and computed-many are refused with --aggregate, another result
+# without --aggregate, an invalid --dto, and an empty --route by both slice templates, with exit 105. The check fails on their
+# TODO(hardslice): tests, whose handlers throw, then passes after the reference completion, in which each handler computes its DTO or
+# its list from TimeProvider, a service of the host. The module is left as it was.
 probe_computed_query() {
   local module="$1"
   local name="$2"
   local parameterless_name="$3"
-  local aggregate="$4"
+  local list_name="$4"
+  local parameterless_list_name="$5"
+  local aggregate="$6"
   local project="src/$app_name/$app_name.csproj"
   local module_file="$app_src/Features/$module/${module}Module.cs"
   local dto="${name}Result"
+  local list_dto="${list_name}Element"
   local parameterless_dto
+  local parameterless_list_dto
   local slice="$app_src/Features/$module/$name/$name.cs"
   local test="$app/tests/$app_name.IntegrationTests/Features/$module/$name/${name}Tests.cs"
   local parameterless_slice="$app_src/Features/$module/$parameterless_name/$parameterless_name.cs"
   local parameterless_test="$app/tests/$app_name.IntegrationTests/Features/$module/$parameterless_name/${parameterless_name}Tests.cs"
+  local list_slice="$app_src/Features/$module/$list_name/$list_name.cs"
+  local list_test="$app/tests/$app_name.IntegrationTests/Features/$module/$list_name/${list_name}Tests.cs"
+  local parameterless_list_slice="$app_src/Features/$module/$parameterless_list_name/$parameterless_list_name.cs"
+  local parameterless_list_test="$app/tests/$app_name.IntegrationTests/Features/$module/$parameterless_list_name/${parameterless_list_name}Tests.cs"
   local refusal
   local generated
   local -a fields
 
   parameterless_dto="$(query_dto "$parameterless_name")"
+  parameterless_list_dto="$(query_dto "$parameterless_list_name")"
   cp "$module_file" "$work/module-computed.backup"
 
-  echo "==> Checking that dotnet new hardslice-query refuses --result computed with --aggregate, another result without it and an invalid --dto, and both slice templates an empty --route, in $app_name"
-  for refusal in "hardslice-query|--aggregate with --result computed|--result computed reads no stored aggregate|--result|computed|--aggregate|$aggregate" \
+  echo "==> Checking that dotnet new hardslice-query refuses --result computed and computed-many with --aggregate, another result without it and an invalid --dto, and both slice templates an empty --route, in $app_name"
+  for refusal in "hardslice-query|--aggregate with --result computed|--result computed reads no stored aggregate: its handler computes the DTO|--result|computed|--aggregate|$aggregate" \
+    "hardslice-query|--aggregate with --result computed-many|--result computed-many reads no stored aggregate: its handler computes the list of the DTOs|--result|computed-many|--aggregate|$aggregate" \
+    "hardslice-query|--aggregate with a filtered --result computed-many|--result computed-many reads no stored aggregate|--result|computed-many|--parameters|Year:int|--aggregate|$aggregate" \
     "hardslice-query|a single result without --aggregate|--aggregate is required: the aggregate root that the query reads|--route|probes" \
     "hardslice-query|a --dto that is not PascalCase|--dto 'probe-result' is not PascalCase|--result|computed|--dto|probe-result" \
     "hardslice-query|an empty --route|--route is empty: pass / for the group of the module itself|--result|computed|--route|" \
@@ -4615,6 +4629,26 @@ probe_computed_query() {
     exit 1
   fi
   register_slice hardslice-query "$query_output"
+
+  echo "==> Generating the computed lists $module/$list_name, with a filter and --dto $list_dto, and $module/$parameterless_list_name, without filter, in $app_name"
+  generate_query "$module" "$list_name" --route computed-sources --result computed-many --parameters Year:int --dto "$list_dto"
+  for generated in "            .AddScoped<IRequestHandler<${list_name}Query, IReadOnlyList<${list_dto}>>, ${list_name}Handler>()" \
+    "            .AddScoped<IValidator<${list_name}Query>, ${list_name}Validator>()"; do
+    if ! grep -Fxq -- "$generated" <<< "${query_output//Manual instructions: /}"; then
+      printf '%s\n' "$query_output" >&2
+      echo "error: dotnet new hardslice-query --result computed-many did not print the line '$generated'." >&2
+      exit 1
+    fi
+  done
+  register_slice hardslice-query "$query_output"
+  generate_query "$module" "$parameterless_list_name" --route computed-rates --result computed-many
+  if ! grep -Fxq "            .AddScoped<IRequestHandler<${parameterless_list_name}Query, IReadOnlyList<${parameterless_list_dto}>>, ${parameterless_list_name}Handler>()" <<< "${query_output//Manual instructions: /}" ||
+    grep -Fq "IValidator<" <<< "$query_output" || [[ "$(grep -c "AddScoped<IRequestHandler<" <<< "$query_output")" != 1 ]]; then
+    printf '%s\n' "$query_output" >&2
+    echo "error: dotnet new hardslice-query --result computed-many without --parameters did not print the registration of its handler alone." >&2
+    exit 1
+  fi
+  register_slice hardslice-query "$query_output"
   for generated in "$slice|public sealed record ${name}Query(int? Year) : IQuery<${dto}>;" \
     "$slice|public sealed record ${dto}(decimal Value);" \
     "$slice|internal sealed class ${name}Handler : IRequestHandler<${name}Query, ${dto}>" \
@@ -4624,7 +4658,20 @@ probe_computed_query() {
     "$test|        problem.Errors.Keys.ShouldBe([\"year\"]);" \
     "$parameterless_slice|public sealed record ${parameterless_name}Query : IQuery<${parameterless_dto}>;" \
     "$parameterless_slice|        group.MapGet(\"/computed-archetypes\", async (IMediator mediator, CancellationToken cancellationToken) =>" \
-    "$parameterless_test|    public async Task Computes_its_dto()"; do
+    "$parameterless_test|    public async Task Computes_its_dto()" \
+    "$list_slice|public sealed record ${list_name}Query(int? Year) : IQuery<IReadOnlyList<${list_dto}>>;" \
+    "$list_slice|public sealed record ${list_dto}(decimal Value);" \
+    "$list_slice|internal sealed class ${list_name}Handler : IRequestHandler<${list_name}Query, IReadOnlyList<${list_dto}>>" \
+    "$list_slice|        group.MapGet(\"/computed-sources\", async ([AsParameters] ${list_name}Query query, IMediator mediator, CancellationToken cancellationToken) =>" \
+    "$list_slice|            TypedResults.Ok(await mediator.Send(query, cancellationToken)));" \
+    "$list_test|    public async Task Computes_its_dtos_from_its_filters()" \
+    "$list_test|        var dtos = await response.Content.ReadFromJsonAsync<${list_dto}[]>(TestContext.Current.CancellationToken);" \
+    "$list_test|        problem.Errors.Keys.ShouldBe([\"year\"]);" \
+    "$parameterless_list_slice|public sealed record ${parameterless_list_name}Query : IQuery<IReadOnlyList<${parameterless_list_dto}>>;" \
+    "$parameterless_list_slice|public sealed record ${parameterless_list_dto}(decimal Value);" \
+    "$parameterless_list_slice|        group.MapGet(\"/computed-rates\", async (IMediator mediator, CancellationToken cancellationToken) =>" \
+    "$parameterless_list_test|    public async Task Computes_its_dtos()" \
+    "$parameterless_list_test|        var dtos = await response.Content.ReadFromJsonAsync<${parameterless_list_dto}[]>(TestContext.Current.CancellationToken);"; do
     if ! grep -Fxq -- "${generated#*|}" "${generated%%|*}"; then
       cat "${generated%%|*}" >&2
       echo "error: ${generated%%|*} does not hold the line of a computed query: ${generated#*|}" >&2
@@ -4632,26 +4679,30 @@ probe_computed_query() {
     fi
   done
   # The aggregate as a whole word: the module and the names of the slices hold it.
-  if grep -nE "AppDbContext|StoreAggregate|Microsoft\.EntityFrameworkCore|\b$aggregate\b" "$slice" "$test" "$parameterless_slice" "$parameterless_test"; then
+  if grep -nE "AppDbContext|StoreAggregate|Microsoft\.EntityFrameworkCore|\b$aggregate\b" "$slice" "$test" "$parameterless_slice" "$parameterless_test" \
+    "$list_slice" "$list_test" "$parameterless_list_slice" "$parameterless_list_test"; then
     echo "error: a computed query of $app_name reads the database or names an aggregate." >&2
     exit 1
   fi
-  for generated in "$name" "$parameterless_name"; do
+  for generated in "$name" "$parameterless_name" "$list_name" "$parameterless_list_name"; do
     if grep -rn 'MyApp\|ModuleName\|QueryName\|AggregateName\|ResultDtoName\|DtoOrEmpty\|query-route\|FilterComments\|Parameter[A-Z][A-Za-z]*\|parameter-keys' \
       "$app_src/Features/$module/$generated" "$app/tests/$app_name.IntegrationTests/Features/$module/$generated"; then
       echo "error: the slice $module/$generated keeps a placeholder of the template." >&2
       exit 1
     fi
   done
-  echo "    IQuery<${dto}> with its validator, IQuery<${parameterless_dto}> without, TypedResults.Ok, no aggregate"
+  echo "    IQuery<${dto}> and IQuery<IReadOnlyList<${list_dto}>> with their validators, IQuery<${parameterless_dto}> and IQuery<IReadOnlyList<${parameterless_list_dto}>> without, TypedResults.Ok, no aggregate"
 
-  echo "==> Checking that $app_name builds the computed queries without HardSlice diagnostic and fails the check on their TODO(hardslice): tests only"
-  expect_check_fails_on_todo_tests_only "the computed queries $module/$name and $module/$parameterless_name" \
+  echo "==> Checking that $app_name builds the computed queries and lists without HardSlice diagnostic and fails the check on their TODO(hardslice): tests only"
+  expect_check_fails_on_todo_tests_only "the computed queries $module/$name and $module/$parameterless_name and the computed lists $module/$list_name and $module/$parameterless_list_name" \
     "$(printf '%s\n' "$app_name.IntegrationTests.Features.$module.$name.${name}Tests.Computes_its_dto_from_its_filters" \
-      "$app_name.IntegrationTests.Features.$module.$parameterless_name.${parameterless_name}Tests.Computes_its_dto" | LC_ALL=C sort)"
+      "$app_name.IntegrationTests.Features.$module.$parameterless_name.${parameterless_name}Tests.Computes_its_dto" \
+      "$app_name.IntegrationTests.Features.$module.$list_name.${list_name}Tests.Computes_its_dtos_from_its_filters" \
+      "$app_name.IntegrationTests.Features.$module.$parameterless_list_name.${parameterless_list_name}Tests.Computes_its_dtos" | LC_ALL=C sort)"
 
-  # The reference completion: each handler receives TimeProvider, a service of the host, and computes its DTO from it and the filter.
-  echo "==> Checking that the reference completion of the computed queries $module/$name and $module/$parameterless_name passes the check of $app_name"
+  # The reference completion: each handler receives TimeProvider, a service of the host, and computes its DTO or its list from it and
+  # the filter.
+  echo "==> Checking that the reference completion of the computed queries and lists of $module passes the check of $app_name"
   sed -e "s/^internal sealed class ${name}Handler : /internal sealed class ${name}Handler(TimeProvider time) : /" \
     -e '/throw new NotImplementedException(/,/services of the domain\.");/c\
         Task.FromResult(new '"$dto"'(query.Year!.Value - time.GetUtcNow().Year + 1000m));' "$slice" > "$work/slice.cs"
@@ -4660,10 +4711,22 @@ probe_computed_query() {
     -e '/throw new NotImplementedException(/,/services of the domain\.");/c\
         Task.FromResult(new '"$parameterless_dto"'(time.GetUtcNow().Year));' "$parameterless_slice" > "$work/slice.cs"
   mv "$work/slice.cs" "$parameterless_slice"
+  sed -e "s/^internal sealed class ${list_name}Handler : /internal sealed class ${list_name}Handler(TimeProvider time) : /" \
+    -e '/throw new NotImplementedException(/,/services of the domain\.");/c\
+        Task.FromResult<IReadOnlyList<'"$list_dto"'>>([new '"$list_dto"'(query.Year!.Value), new '"$list_dto"'(time.GetUtcNow().Year)]);' "$list_slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$list_slice"
+  sed -e "s/^internal sealed class ${parameterless_list_name}Handler : /internal sealed class ${parameterless_list_name}Handler(TimeProvider time) : /" \
+    -e '/throw new NotImplementedException(/,/services of the domain\.");/c\
+        Task.FromResult<IReadOnlyList<'"$parameterless_list_dto"'>>([new '"$parameterless_list_dto"'(time.GetUtcNow().Year)]);' "$parameterless_list_slice" > "$work/slice.cs"
+  mv "$work/slice.cs" "$parameterless_list_slice"
   sed 's/^        Assert\.Fail("TODO(hardslice): assert each value of .*/        dto.Value.ShouldBe(1 - DateTimeOffset.UtcNow.Year + 1000m);/' "$test" > "$work/test.cs"
   mv "$work/test.cs" "$test"
   sed 's/^        Assert\.Fail("TODO(hardslice): assert each value of .*/        dto.Value.ShouldBe(DateTimeOffset.UtcNow.Year);/' "$parameterless_test" > "$work/test.cs"
   mv "$work/test.cs" "$parameterless_test"
+  sed 's/^        Assert\.Fail("TODO(hardslice): assert each .* of the list .*/        dtos.Select(dto => dto.Value).ToArray().ShouldBe(new decimal[] { 1, DateTimeOffset.UtcNow.Year });/' "$list_test" > "$work/test.cs"
+  mv "$work/test.cs" "$list_test"
+  sed 's/^        Assert\.Fail("TODO(hardslice): assert each .* of the list .*/        dtos.Select(dto => dto.Value).ToArray().ShouldBe(new decimal[] { DateTimeOffset.UtcNow.Year });/' "$parameterless_list_test" > "$work/test.cs"
+  mv "$work/test.cs" "$parameterless_list_test"
   if grep -rl 'TODO(hardslice):' "$app/src" "$app/tests" --include='*.cs'; then
     echo "error: the reference completion of the computed queries leaves TODO(hardslice): markers." >&2
     exit 1
@@ -4672,7 +4735,10 @@ probe_computed_query() {
 
   rm -r "${app_src:?}/Features/$module/${name:?}" "$app/tests/$app_name.Tests/Features/$module/${name:?}" \
     "$app/tests/$app_name.IntegrationTests/Features/$module/${name:?}" \
-    "${app_src:?}/Features/$module/${parameterless_name:?}" "$app/tests/$app_name.IntegrationTests/Features/$module/${parameterless_name:?}"
+    "${app_src:?}/Features/$module/${parameterless_name:?}" "$app/tests/$app_name.IntegrationTests/Features/$module/${parameterless_name:?}" \
+    "${app_src:?}/Features/$module/${list_name:?}" "$app/tests/$app_name.Tests/Features/$module/${list_name:?}" \
+    "$app/tests/$app_name.IntegrationTests/Features/$module/${list_name:?}" \
+    "${app_src:?}/Features/$module/${parameterless_list_name:?}" "$app/tests/$app_name.IntegrationTests/Features/$module/${parameterless_list_name:?}"
   mv "$work/module-computed.backup" "$module_file"
 }
 
@@ -6598,7 +6664,7 @@ probe_route_filters Bookings GetBookingDayReadings GetBookingDatedReadings GetBo
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_not_found_results Bookings ReconcileBookingTally CountBookingFigures Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
-probe_computed_query Bookings SimulateBookingPrice GetBookingArchetypes Booking
+probe_computed_query Bookings SimulateBookingPrice GetBookingArchetypes GetBookingSources ListBookingRates Booking
 probe_protected_endpoints Bookings ProtectBooking ImportProtectedBookings GetProtectedBooking Booking \
   "Booking.Confirm(Guid.NewGuid(), new BookingPeriod(new DateTimeOffset(2099, 11, 2, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2099, 11, 2, 10, 0, 0, TimeSpan.Zero)), [])"
 probe_aggregate_template Bookings BookingCategory BookingCategories remove --table BookingCategories
@@ -6920,6 +6986,8 @@ probe_query_template Rooms GetRoomSummary ListRoomSummaries GetRoomsOnDate Room 
 probe_slice_routes Timetable schedule ImportSchedule PurgeSchedule Rooms GetRoomTrip Room 'Room.Create()'
 probe_route_filters Rooms GetRoomDayReadings GetRoomDatedReadings GetRoomWeekReadings GetRoomDayNeighbourReadings Room 'Room.Create()'
 probe_not_found_results Rooms ReconcileRoomTally CountRoomFigures Room 'Room.Create()'
+# PB-122: the computed queries and lists of Rooms, without stored aggregate.
+probe_computed_query Rooms SimulateRoomPrice GetRoomArchetypes GetRoomSources ListRoomRates Room
 probe_protected_endpoints Rooms ProtectRoom ImportProtectedRooms GetProtectedRoom Room 'Room.Create()'
 # The events of Rooms are generated by dotnet new hardslice-event, with a reaction in Rooms and one in a second module, both
 # completed with the aggregate Room.

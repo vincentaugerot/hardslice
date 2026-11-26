@@ -1389,12 +1389,12 @@ public sealed class TemplatePackageTests
         application.GetProperty("type").GetString().ShouldBe("bind");
         application.GetProperty("binding").GetString().ShouldBe("msbuild:RootNamespace");
         application.GetProperty("replaces").GetString().ShouldBe("MyApp");
-        // --aggregate is required by every result but computed (PB-116), which its refusals check.
+        // --aggregate is required by every result but computed (PB-116) and computed-many (PB-122), which its refusals check.
         symbols.GetProperty("Aggregate").TryGetProperty("isRequired", out _).ShouldBeFalse();
         // Never list: dotnet new would read '--result list' as its own list command.
         symbols.GetProperty("Result").GetProperty("choices").EnumerateArray()
             .Select(choice => choice.GetProperty("choice").GetString())
-            .ShouldBe(["single", "many", "filtered", "summary", "computed"]);
+            .ShouldBe(["single", "many", "filtered", "summary", "computed", "computed-many"]);
         symbols.GetProperty("Result").GetProperty("defaultValue").GetString().ShouldBe("single");
         var modifiers = config.GetProperty("sources")[0].GetProperty("modifiers");
         modifiers[1].GetProperty("condition").GetString().ShouldBe("(!ResultTakesFilters)");
@@ -1867,7 +1867,7 @@ public sealed class TemplatePackageTests
 
         foreach (var (symbol, value) in new[]
         {
-            ("ResultIsComputed", "(Result == \"computed\")"),
+            ("ResultIsComputed", "(Result == \"computed\" || Result == \"computed-many\")"),
             ("AggregateIsMissing", "(!ResultIsComputed && !AggregateIsGiven)"),
             ("AggregateIsUnused", "(ResultIsComputed && AggregateIsGiven)"),
             ("EndpointTakesQuery", "(ResultIsFiltered || (ResultIsComputed && ResultTakesFilters))"),
@@ -1891,10 +1891,10 @@ public sealed class TemplatePackageTests
         var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
             .GetProperty("manualInstructions").EnumerateArray()
             .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
-        registrations["(ResultIsComputed && ResultTakesFilters)"].ShouldContain(
+        registrations["(ResultIsComputed && !ResultIsComputedMany && ResultTakesFilters)"].ShouldContain(
             "            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n");
-        registrations["(ComputedWithoutFilters)"].ShouldContain("            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n3.");
-        registrations["(ComputedWithoutFilters)"].ShouldNotContain("FluentValidation");
+        registrations["(ComputedWithoutFilters && !ResultIsComputedMany)"].ShouldContain("            .AddScoped<IRequestHandler<QueryNameQuery, ResultDtoName>, QueryNameHandler>()\n3.");
+        registrations["(ComputedWithoutFilters && !ResultIsComputedMany)"].ShouldNotContain("FluentValidation");
 
         var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
         slice.ShouldContain("#if (!ResultIsComputed)\nusing Microsoft.EntityFrameworkCore;\n");
@@ -1905,9 +1905,61 @@ public sealed class TemplatePackageTests
             + "        throw new NotImplementedException(\n            \"TODO(hardslice): receive by the constructor of QueryNameHandler the services of module ModuleName");
         slice.ShouldContain("#elif (EndpointTakesQuery)\n        group.MapGet");
         var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "QueryName", "QueryNameTests.cs"));
-        tests.ShouldContain("#elif (ResultIsComputed)\n    [Fact]\n    public async Task Computes_its_dto_from_its_filters()\n");
-        tests.ShouldContain("#elif (ResultIsComputed)\n    [Fact]\n    public async Task Computes_its_dto()\n");
+        tests.ShouldContain("#elif (ResultIsComputed)\n    [Fact]\n#if (ResultIsComputedMany)\n    public async Task Computes_its_dtos_from_its_filters()\n"
+            + "#else\n    public async Task Computes_its_dto_from_its_filters()\n#endif\n");
+        tests.ShouldContain("#elif (ResultIsComputed)\n    [Fact]\n#if (ResultIsComputedMany)\n    public async Task Computes_its_dtos()\n"
+            + "#else\n    public async Task Computes_its_dto()\n#endif\n");
         tests.ShouldContain("#if (!ResultIsComputed)\n\n#if (ResultIsSummary)\n    // Stores, outside the application,");
+    }
+
+    // PB-122: --result computed-many computes the list of the DTOs from the services of the module and the domain, without stored
+    // aggregate, as --result computed computes one: it refuses --aggregate with a message of its own, takes --parameters as optional
+    // filters, and its endpoint answers Ok<IReadOnlyList<Dto>> only, --dto naming each element. Its handler throws with
+    // TODO(hardslice): until it receives the services that it reads, and its tests read the list.
+    [Fact]
+    public void Query_item_template_computes_a_list_of_dtos_from_the_services_of_its_module_without_aggregate()
+    {
+        var root = QueryTemplateRoot(FindRepositoryRoot());
+        using var template = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".template.config", "template.json")));
+        var config = template.RootElement;
+        var symbols = config.GetProperty("symbols");
+
+        symbols.GetProperty("ResultIsComputedMany").GetProperty("value").GetString().ShouldBe("(Result == \"computed-many\")");
+        symbols.GetProperty("ResultIsComputed").GetProperty("value").GetString()!.ShouldContain("Result == \"computed-many\"");
+        var postActions = config.GetProperty("postActions").EnumerateArray().ToArray();
+        var refusal = postActions.Single(action => action.GetProperty("id").GetString() == "refuseAggregateOfComputed");
+        refusal.GetProperty("condition").GetString().ShouldBe("(AggregateIsUnused)");
+        var messages = refusal.GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        messages.Keys.ShouldBe(["(!ResultIsComputedMany)", "(ResultIsComputedMany)"]);
+        messages["(!ResultIsComputedMany)"].ShouldStartWith("error: --result computed reads no stored aggregate: ");
+        messages["(ResultIsComputedMany)"].ShouldStartWith("error: --result computed-many reads no stored aggregate: its handler computes the list of the DTOs");
+        messages["(ResultIsComputedMany)"].ShouldEndWith(" Nothing was created.");
+        postActions.Single(action => action.GetProperty("id").GetString() == "refuseMissingAggregate")
+            .GetProperty("manualInstructions")[0].GetProperty("text").GetString()!.ShouldContain("or --result computed-many for a list of DTOs");
+        var registrations = postActions.Single(action => action.GetProperty("id").GetString() == "registerSlice")
+            .GetProperty("manualInstructions").EnumerateArray()
+            .ToDictionary(instruction => instruction.GetProperty("condition").GetString()!, instruction => instruction.GetProperty("text").GetString()!);
+        registrations["(ResultIsComputedMany && ResultTakesFilters)"].ShouldContain(
+            "            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n            .AddScoped<IValidator<QueryNameQuery>, QueryNameValidator>()\n");
+        registrations["(ComputedWithoutFilters && ResultIsComputedMany)"].ShouldContain(
+            "            .AddScoped<IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>, QueryNameHandler>()\n3.");
+        registrations["(ComputedWithoutFilters && ResultIsComputedMany)"].ShouldNotContain("FluentValidation");
+
+        var slice = File.ReadAllText(Path.Combine(root, "src", "MyApp", "Features", "ModuleName", "QueryName", "QueryName.cs"));
+        // The branches of the list come first: ResultIsComputed holds for both.
+        slice.ShouldContain("#elif (ResultIsComputedMany && ResultTakesFilters)\n// Computes the list of the ResultDtoName from its filters, without stored aggregate.");
+        slice.ShouldContain("public sealed record QueryNameQuery(ParameterDeclarations) : IQuery<IReadOnlyList<ResultDtoName>>;\n#elif (ResultIsComputedMany)\n");
+        slice.ShouldContain("public sealed record QueryNameQuery : IQuery<IReadOnlyList<ResultDtoName>>;\n#elif (ResultIsComputed && ResultTakesFilters)\n");
+        slice.ShouldContain("#elif (ResultIsComputedMany)\n// One element of the list.");
+        slice.ShouldContain("#if (ResultIsComputedMany)\n// Computes the list of the DTOs from the services of module ModuleName");
+        slice.ShouldContain("internal sealed class QueryNameHandler : IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>\n{\n"
+            + "    public Task<IReadOnlyList<ResultDtoName>> Handle(QueryNameQuery query, CancellationToken cancellationToken) =>\n"
+            + "        throw new NotImplementedException(\n            \"TODO(hardslice): receive by the constructor of QueryNameHandler the services of module ModuleName");
+        slice.ShouldNotContain("AppDbContext db) : IRequestHandler<QueryNameQuery, IReadOnlyList<ResultDtoName>>\n{\n    public Task<");
+        var tests = File.ReadAllText(Path.Combine(root, "tests", "MyApp.IntegrationTests", "Features", "ModuleName", "QueryName", "QueryNameTests.cs"));
+        Regex.Matches(tests, @"#if \(ResultIsComputedMany\)\n        var dtos = await response\.Content\.ReadFromJsonAsync<ResultDtoName\[\]>\(TestContext\.Current\.CancellationToken\);\n"
+            + @"        dtos\.ShouldNotBeNull\(\);\n        Assert\.Fail\(""TODO\(hardslice\): assert each ResultDtoName of the list that the handler computes").Count.ShouldBe(2);
     }
 
     // PB-116: an empty --route is refused by both slice templates, where it fell back to the name of the slice: --route / maps the
