@@ -15,14 +15,14 @@ HardSlice adds nothing to the runtime of your application: its analyzers run at 
 
 ## Status
 
-**Preview.** The latest preview on NuGet.org is `0.3.0-preview.2`. To try the code of `main` before the next one, [build the packages locally](CONTRIBUTING.md#try-a-local-build-of-the-packages). The three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, share one version. A preview may change its rules, its template and its commands from one preview to the next, but a generated solution keeps the template and the versions it was generated with. The [changelog](CHANGELOG.md) says what each version brings.
+**Preview.** The latest preview on NuGet.org is `0.3.0-preview.3`. To try the code of `main` before the next one, [build the packages locally](CONTRIBUTING.md#try-a-local-build-of-the-packages). The three packages, `HardSlice.Templates`, `HardSlice.Analyzers` and `HardSlice.Tool`, share one version. A preview may change its rules, its template and its commands from one preview to the next, but a generated solution keeps the template and the versions it was generated with. The [changelog](CHANGELOG.md) says what each version brings.
 
 ## Getting started
 
 You need the .NET 10 SDK, a Docker-compatible container runtime for the integration tests, and Bash or PowerShell 7.
 
 ```text
-dotnet new install HardSlice.Templates@0.3.0-preview.2
+dotnet new install HardSlice.Templates@0.3.0-preview.3
 dotnet new hardslice-api --name Rooms
 cd Rooms
 bash scripts/check.sh     # or: pwsh scripts/check.ps1

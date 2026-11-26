@@ -17,7 +17,7 @@ The package is a development dependency: it adds nothing to the runtime of the a
 
 ## Documentation
 
-- [Rules, analysis modes and known limitations](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/rules.md)
-- [Getting started](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/docs/getting-started.md)
-- [Changelog](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.2/CHANGELOG.md)
+- [Rules, analysis modes and known limitations](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.3/docs/rules.md)
+- [Getting started](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.3/docs/getting-started.md)
+- [Changelog](https://github.com/vincentaugerot/hardslice/blob/v0.3.0-preview.3/CHANGELOG.md)
 - [License (MIT)](https://github.com/vincentaugerot/hardslice/blob/main/LICENSE)
