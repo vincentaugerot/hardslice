@@ -102,8 +102,7 @@ public sealed class TemplatePackageTests
 
         gitignore.ShouldBe(["bin/", "obj/", "TestResults/", ".vs/", ".idea/", "*.user", ".claude/settings.local.json"], ignoreOrder: true);
         foreach (var noSample in new[] { false, true })
-            AgentGuidance(File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), "AGENTS.md")), noSample)
-                .Single(line => line.StartsWith("Protected files: ", StringComparison.Ordinal))
+            ProtectedFilesParagraph(AgentGuidance(File.ReadAllLines(Path.Combine(TemplateRoot(FindRepositoryRoot()), "AGENTS.md")), noSample))
                 .ShouldContain("A file that another tool writes in `.claude/`, such as its command, stays out of git, through `.git/info/exclude`, as `.gitignore` keeps out `.claude/settings.local.json`.");
         var gettingStarted = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "getting-started.md"));
         gettingStarted.ShouldContain("\n### Generating into an existing repository\n");
@@ -693,7 +692,7 @@ public sealed class TemplatePackageTests
         var sheet = File.ReadAllText(Path.Combine(template, "docs", "rules", "HS006.md"));
         const string noEntity = "such as `AnyAsync`, `CountAsync` or a projection to values";
 
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
         agents.SkipWhile(line => line != "## Golden rules").Single(line => line.StartsWith("5. A command handler", StringComparison.Ordinal)).ShouldContain(
             "A query handler never writes, never calls `Find` nor `AsTracking`, starts each query that loads an entity with `AsNoTracking()`, "
             + $"and projects to a DTO of values: a read that loads no entity, {noEntity}, needs no `AsNoTracking()` (HS006).");
@@ -726,7 +725,7 @@ public sealed class TemplatePackageTests
         var addSlice = File.ReadAllText(Path.Combine(template, ".claude", "skills", "add-slice", "SKILL.md"));
         var sheet = File.ReadAllText(Path.Combine(template, "docs", "rules", "HS012.md"));
 
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
         agents.SkipWhile(line => line != "## Golden rules").Single(line => line.StartsWith("3. A module uses", StringComparison.Ordinal)).ShouldBe(
             "3. A module uses another module only through its public contract: the types directly in `MyApp.Features.<Module>` (HS012). "
             + "A slice may still read the aggregates of another module with `AsNoTracking()`, joined to its own, but never writes them (`docs/rules/HS012.md`).");
@@ -2665,7 +2664,7 @@ public sealed class TemplatePackageTests
             .ShouldContain("A rule computed from values, such as a rate, lives in a value object of the module, a `sealed record` that "
                 + "`dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name> --fields <Name>:<Type>[,...]` "
                 + "generates with its values and their tests.");
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
         addAggregate.ShouldContain("\n## Value objects\n");
         addAggregate.ShouldContain("dotnet new hardslice-value-object --project src/MyApp/MyApp.csproj --module <Module> --name <Name> --fields <Name>:<Type>[,<Name>:<Type>...]\n");
         // PB-114: the rules that the types do not say, an enum checked with Enum.IsDefined, and the equality of a list.
@@ -2703,7 +2702,7 @@ public sealed class TemplatePackageTests
         testRule.ShouldContain("it goes in `tests/MyApp.Tests/Data/`, outside `Features/`, which this rule does not check");
         agents.Single(line => line.StartsWith("| `src/MyApp/Shared/Persistence/` |", StringComparison.Ordinal))
             .ShouldContain("a store that builds the domain types of a module goes in the contract of that module.");
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
     }
 
     // PB-115: AGENTS.md, in both variants, HS017.md and add-module name AddSingletonBuiltAtStart for a service built when the
@@ -2721,7 +2720,7 @@ public sealed class TemplatePackageTests
 
         agents.Single(line => line.StartsWith("| `src/MyApp/Shared/Persistence/` |", StringComparison.Ordinal))
             .ShouldContain("`AddSingletonBuiltAtStart` builds a service when the application starts, such as reference data read from files, whose exception stops it (`add-module`).");
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
         sharedRule.ShouldContain("`AddSingletonBuiltAtStart` registers a service that the host builds when it starts");
         addModule.ShouldContain("\n## Values built when the application starts\n");
         addModule.ShouldContain("services.AddSingletonBuiltAtStart(provider => TaxationReference.From(provider.GetRequiredService<ReferenceCatalog>()));");
@@ -2757,7 +2756,7 @@ public sealed class TemplatePackageTests
         addModule.ShouldContain("app.StartFailure<ReferenceDataException>().Message.ShouldBe(\"data/2026/rates.json: $.rate is missing.\");");
         agents.Single(line => line.StartsWith("| `tests/MyApp.IntegrationTests/` |", StringComparison.Ordinal))
             .ShouldContain("`app.StartFailure<TException>()` reads the exception that stopped its start (`add-module`).");
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
     }
 
     // The lines of <source> that the template keeps for --link id (<linkIsId>) or --link collection, the only condition of its files.
@@ -2881,6 +2880,45 @@ public sealed class TemplatePackageTests
         templateVersions["Microsoft.EntityFrameworkCore.Relational"].ShouldBe(toolVersion);
     }
 
+    // PB-125: the paragraph of the protected files writes one sentence per line, rendered as one paragraph, so that a project that
+    // changed one sentence meets at its upgrade a conflict of that sentence alone, never of the whole paragraph (Ottawa vs Gatineau,
+    // 2.H: two versions of 900 characters). An agent runs the upgrade when its task asks for it, on the conditions of Ottawa, and
+    // the help of the tool, Getting started and Agent loop say the same: none of them keeps "a maintainer runs it, never an agent".
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Protected_files_paragraph_holds_one_sentence_per_line_and_lets_an_agent_run_the_upgrade_its_task_asks_for(bool noSample)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var agents = AgentGuidance(File.ReadAllLines(Path.Combine(TemplateRoot(repositoryRoot), "AGENTS.md")), noSample);
+        var paragraph = ProtectedFilesParagraph(agents);
+
+        paragraph.Length.ShouldBe(9);
+        foreach (var sentence in paragraph)
+        {
+            sentence.ShouldEndWith(".");
+            Regex.IsMatch(sentence, @"\. [A-Z]").ShouldBeFalse($"'{sentence}' holds more than one sentence.");
+        }
+
+        paragraph[4..8].ShouldBe([
+            "Run `dotnet hardslice upgrade`, which rewrites them from a newer template, only when the task asks for it, from a git tree without changes, then the `dotnet new install` of its last line.",
+            "Resolve its conflicts in the files of the application alone, and never edit a protected file by hand.",
+            "Commit its result alone, in a commit that lists every protected file it changed, for a maintainer to review.",
+            "Never run it on your own initiative.",
+        ]);
+        MarkdownLines(paragraph).ShouldBe(1);
+        MarkdownLines(agents).ShouldBe(agents.Length - paragraph.Length + 1);
+
+        foreach (var page in new[] { "docs/getting-started.md", "docs/agent-loop.md", "src/HardSlice.Tool/README.md", "src/HardSlice.Templates/README.md" })
+        {
+            var text = File.ReadAllText(Path.Combine(repositoryRoot, page));
+            text.ShouldNotContain("never an agent", Case.Sensitive, $"{page} still reserves the upgrade to a maintainer.");
+            text.ShouldContain("only when its task asks for it", Case.Sensitive, $"{page} does not say when an agent runs the upgrade.");
+        }
+
+        string.Join('\n', agents).ShouldNotContain("a maintainer does");
+    }
+
     // AGENTS.md as generated with and without --no-sample: test-template.sh checks the paths of each generated variant.
     [Theory]
     [InlineData(false)]
@@ -2891,7 +2929,7 @@ public sealed class TemplatePackageTests
         var lines = AgentGuidance(File.ReadAllLines(Path.Combine(templateRoot, "AGENTS.md")), noSample);
         var agents = string.Join('\n', lines);
 
-        lines.Length.ShouldBeLessThan(150, "AGENTS.md must stay short enough for an agent to keep in context.");
+        MarkdownLines(lines).ShouldBeLessThan(150, "AGENTS.md must stay short enough for an agent to keep in context.");
         agents.ShouldNotContain("<!--#", customMessage: "AGENTS.md uses a template condition other than (NoSample) or (!NoSample).");
         if (noSample)
             agents.ShouldNotContain("Booking", Case.Insensitive, "AGENTS.md generated with --no-sample must not mention the Bookings sample.");
@@ -3131,7 +3169,7 @@ public sealed class TemplatePackageTests
             .ShouldContain("Read the migration before applying it: the change of a table that holds rows comes as drops and adds that lose them, "
                 + "to rewrite as a conversion in both directions, and a state stored in another shape than the one the entity shows maps "
                 + "private fields, as `add-aggregate` details.");
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
 
         addAggregate.ShouldContain("Also use when a mapping changes a table that already holds rows, when an entity stores its state in another shape");
         addAggregate.ShouldContain("A change of a table that already holds rows follows [Changing the shape of stored rows](#changing-the-shape-of-stored-rows).");
@@ -3197,7 +3235,7 @@ public sealed class TemplatePackageTests
         database.Single(line => line.StartsWith("1. Map a new aggregate", StringComparison.Ordinal))
             .ShouldEndWith("An aggregate that never changes, a value object stored in the row of its entity and rows deleted in bulk, such as a purge, "
                 + "follow `add-aggregate`.");
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
 
         var neverChanges = Section(addAggregate, headings[0]);
         neverChanges.ShouldContain("- Keep the line `builder.Property<uint>(\"Version\").IsRowVersion();` of its mapping and `<Aggregate>ConfigurationTests` as generated.");
@@ -3300,7 +3338,7 @@ public sealed class TemplatePackageTests
             "| `src/MyApp/Shared/Persistence/` | `AppDbContext`, its registration and the migrations, and the stores outside the database that "
             + "several modules use, such as a file or object store. It declares no module type, and a store that builds the domain types of a module goes in the contract of that module. "
                 + "`AddSingletonBuiltAtStart` builds a service when the application starts, such as reference data read from files, whose exception stops it (`add-module`). |");
-        agents.Length.ShouldBeLessThan(150);
+        MarkdownLines(agents).ShouldBeLessThan(150);
 
         hs017.ShouldContain("| `Persistence` | `AppDbContext`, its registration and the migrations, and the stores outside the database that several "
             + "modules use, such as a file or object store, with their options and their registration.");
@@ -3780,6 +3818,33 @@ public sealed class TemplatePackageTests
 
         branch.ShouldBeNull("AGENTS.md has a template condition without its <!--#endif -->.");
         return [.. kept];
+    }
+
+    // PB-125: the paragraph of the protected files in "Forbidden" of AGENTS.md, one sentence per line, from its list to the blank
+    // line that ends it.
+    private static string[] ProtectedFilesParagraph(string[] lines) =>
+        [.. lines.SkipWhile(line => !line.StartsWith("Protected files: ", StringComparison.Ordinal)).TakeWhile(line => line.Length > 0)];
+
+    // The lines of a Markdown file as it renders them: a line that continues a paragraph, written one sentence per line so that a
+    // three-way merge sees each sentence alone (PB-125), counts with the line it continues. A heading, a table row, a list item, a
+    // template condition, an indented line and each line of a code block count alone.
+    private static int MarkdownLines(string[] lines)
+    {
+        var count = 0;
+        var inParagraph = false;
+        var inCode = false;
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("```", StringComparison.Ordinal))
+                inCode = !inCode;
+            var paragraph = !inCode && !line.StartsWith("```", StringComparison.Ordinal) && line.Length > 0
+                && !Regex.IsMatch(line, @"^(#{1,6} |\||[-*] |\d+\. |<!--|\s)");
+            if (!(paragraph && inParagraph))
+                count++;
+            inParagraph = paragraph;
+        }
+
+        return count;
     }
 
     private static string PackageVersion(string repositoryRoot) =>

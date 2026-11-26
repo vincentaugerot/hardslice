@@ -31,8 +31,11 @@ internal static class Cli
                           diff against the new file. Each diff has the headers of git and applies with git apply. Then
                           records the new generation there. Leaves out the sample when the solution has no
                           src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless --sample or --no-sample
-                          says. Writes protected files: a maintainer runs it, never an agent. Its last line gives the
-                          dotnet new install that brings the item templates of dotnet new to the version of the tool.
+                          says. Its last line gives the dotnet new install that brings the item templates of dotnet new
+                          to the version of the tool. Writes protected files: an agent runs it only when its task asks
+                          for it, resolves the conflicts in the files of the application alone, never edits a protected
+                          file by hand, and commits the result alone, listing every protected file it changed, for a
+                          maintainer to review and approve with the label hardslice-approved.
           hook <cli> <event>
                           The hooks of an agent: reads the payload of the CLI on the standard input, refuses the edit
                           of a protected file, runs check --build after the edit of a .cs file and check before the
@@ -112,7 +115,7 @@ internal static class Cli
     {
         switch (args)
         {
-            // --help or -h alone after a command, which never runs it: a maintainer reads what upgrade writes before running it.
+            // --help or -h alone after a command, which never runs it: whoever runs upgrade reads what it writes before running it.
             case [var command, "--help" or "-h"] when Commands.Contains(command):
                 output.WriteLine(HelpOf(command));
                 return 0;

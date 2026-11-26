@@ -7328,7 +7328,8 @@ probe_upgrade() {
 
 # PB-095: the copy of the template of this commit, changed as a later template would be, packed under the same version into the
 # feed three-way-feed-<step> with the analyzers and the tool, once. <step> 2 changes a line of AGENTS.md far from the parts of an
-# application, a line of Program.cs and Mediator.cs, <step> 3 also changes the first paragraph of AGENTS.md.
+# application, the sentence of the hooks in the paragraph of the protected files (PB-125), a line of Program.cs and Mediator.cs,
+# <step> 3 also changes the first paragraph of AGENTS.md and the sentence of the upgrade that an application changed.
 pack_changed_template() {
   local step="$1"
   local source="$work/three-way-source-$step"
@@ -7340,12 +7341,16 @@ pack_changed_template() {
   (cd "$repo_root" && tar -c --exclude=bin --exclude=obj --exclude=TestResults Directory.Build.props Directory.Packages.props global.json assets src/HardSlice.Templates) |
     tar -x -C "$source"
   sed -i 's/^\*\*You are not done until the check script exits 0\.\*\*/**You are not done until the check script exits 0, whatever the template changed.**/' "$content/AGENTS.md"
+  sed -i 's/^The hooks refuse any edit of one, its creation included, /The hooks refuse any edit of one, its creation and its deletion included, /' "$content/AGENTS.md"
   sed -i 's|^// The clock handlers inject instead of reading DateTime.UtcNow (HS010); the host does not register it\.$|// The clock that handlers inject instead of reading DateTime.UtcNow (HS010), which the host does not register.|' "$content/src/MyApp/Program.cs"
   printf '// The mediator of the application, as a later template writes it.\n' >> "$content/src/MyApp/Shared/Messaging/Mediator.cs"
   if [[ "$step" == 3 ]]; then
     sed -i '3s/.*/MyApp is an API in vertical slices, as a later template says./' "$content/AGENTS.md"
+    sed -i 's/^Never run it on your own initiative\.$/Never run it on your own initiative, as a later template says./' "$content/AGENTS.md"
   fi
-  if [[ "$(grep -c 'whatever the template changed' "$content/AGENTS.md")" != 1 || "$(grep -c '^// The clock that handlers inject' "$content/src/MyApp/Program.cs")" != 1 ]]; then
+  if [[ "$(grep -c 'whatever the template changed' "$content/AGENTS.md")" != 1 || "$(grep -c '^// The clock that handlers inject' "$content/src/MyApp/Program.cs")" != 1 ||
+    "$(grep -c '^The hooks refuse any edit of one, its creation and its deletion included, ' "$content/AGENTS.md")" != 1 ||
+    ( "$step" == 3 && "$(grep -c '^Never run it on your own initiative, as a later template says\.$' "$content/AGENTS.md")" != 1 ) ]]; then
     echo "error: the copy of the template no longer holds the lines that the three-way upgrade changes." >&2
     exit 1
   fi
@@ -7382,10 +7387,12 @@ CONFIG
 }
 
 # Generates <name> with the template of this commit and its options, which records its generation, completes it as an application
-# (a module, AGENTS.md rewritten at its first paragraph and completed at its end, Program.cs changed by the registration), then
-# upgrades it to a template that changes a line of AGENTS.md far from those parts, a line of Program.cs and Mediator.cs, which the
-# application never changed: the three changes are applied, the parts of the application stay, nothing is listed to merge, code 0,
-# and the check passes. A template that then changes the first paragraph of AGENTS.md ends in a conflict, code 3.
+# (a module, AGENTS.md rewritten at its first paragraph and at the sentence of the upgrade in the paragraph of the protected files,
+# as Ottawa vs Gatineau did, and completed at its end, Program.cs changed by the registration), then upgrades it to a template that
+# changes a line of AGENTS.md far from those parts, another sentence of that paragraph, a line of Program.cs and Mediator.cs, which
+# the application never changed: the changes are applied, the parts of the application stay, nothing is listed to merge, code 0,
+# and the check passes. A template that then changes the first paragraph of AGENTS.md and the sentence of the upgrade ends in a
+# conflict, code 3, of these two parts alone: the paragraph of the protected files holds one sentence per line (PB-125).
 probe_three_way_upgrade() {
   local name="$1"
   shift
@@ -7404,6 +7411,11 @@ probe_three_way_upgrade() {
   module_output="$(cd "$app" && dotnet new hardslice-module --project "src/$name/$name.csproj" --name Fleet --debug:custom-hive "$work/template-hive" 2>&1)"
   register_module "$module_output"
   sed -i "3s/.*/$name runs the fleet of vehicles./" "$app/AGENTS.md"
+  sed -i 's/^Never run it on your own initiative\.$/Never run it on your own initiative: the roadmap says when./' "$app/AGENTS.md"
+  if [[ "$(grep -c '^Never run it on your own initiative: the roadmap says when\.$' "$app/AGENTS.md")" != 1 ]]; then
+    echo "error: the AGENTS.md of $name no longer holds the sentence of the upgrade that the application changes." >&2
+    exit 1
+  fi
   printf '\n## %s\n\nThe fleet of vehicles, kept by the upgrade.\n' "$name" >> "$app/AGENTS.md"
   git -C "$app" init --quiet
   app_git add --all
@@ -7421,7 +7433,8 @@ probe_three_way_upgrade() {
     exit 1
   fi
   for path in "AGENTS.md|^\*\*You are not done until the check script exits 0, whatever the template changed\.\*\*" "AGENTS.md|^$name runs the fleet of vehicles\.$" \
-    "AGENTS.md|^The fleet of vehicles, kept by the upgrade\.$" "src/$name/Program.cs|^// The clock that handlers inject " "src/$name/Program.cs|^builder\.Services\.AddFleetModule();$" \
+    "AGENTS.md|^The fleet of vehicles, kept by the upgrade\.$" "AGENTS.md|^The hooks refuse any edit of one, its creation and its deletion included, " \
+    "AGENTS.md|^Never run it on your own initiative: the roadmap says when\.$" "src/$name/Program.cs|^// The clock that handlers inject " "src/$name/Program.cs|^builder\.Services\.AddFleetModule();$" \
     "src/$name/Program.cs|^app\.MapFleetModule();$" "src/$name/Shared/Messaging/Mediator.cs|^// The mediator of the application, as a later template writes it\.$" \
     ".hardslice/generation/AGENTS.md|whatever the template changed"; do
     if [[ "$(grep -c -- "${path#*|}" "$app/${path%%|*}")" != 1 ]]; then
@@ -7436,7 +7449,7 @@ probe_three_way_upgrade() {
   bash "$app/scripts/check.sh"
   echo "    the three changes of the template applied, the parts of the application kept, nothing to merge, the check passes"
 
-  echo "==> Upgrading $name to a template that changes the first paragraph of AGENTS.md, which the application rewrote"
+  echo "==> Upgrading $name to a template that changes the first paragraph of AGENTS.md and the sentence of the upgrade, which the application rewrote"
   app_git add --all
   app_git commit --quiet -m "Upgrade $name"
   use_three_way_feed 3
@@ -7448,7 +7461,13 @@ probe_three_way_upgrade() {
     echo "error: dotnet hardslice upgrade did not write the conflict of AGENTS.md of $name between the markers of git with code 3 (code $upgrade_status)." >&2
     exit 1
   fi
-  echo "    AGENTS.md holds the conflict between the markers of git, code 3"
+  if [[ "$(grep -c '^<<<<<<< ' "$app/AGENTS.md")" != 2 ||
+    "$(awk '/^<<<<<<< solution$/ { conflict++ } conflict == 2 && shown < 7 { print; shown++ }' "$app/AGENTS.md")" != "<<<<<<< solution"$'\n'"Never run it on your own initiative: the roadmap says when."$'\n'"||||||| generation $hardslice_version"$'\n'"Never run it on your own initiative."$'\n'"======="$'\n'"Never run it on your own initiative, as a later template says."$'\n'">>>>>>> template $hardslice_version" ]]; then
+    grep -n -A7 '^<<<<<<< ' "$app/AGENTS.md" >&2
+    echo "error: the conflict of AGENTS.md of $name on the paragraph of the protected files holds more than the sentence of the upgrade that both changed." >&2
+    exit 1
+  fi
+  echo "    AGENTS.md holds the conflicts between the markers of git, code 3, the one of the protected files on the sentence of the upgrade alone"
   rm -rf "${app:?}"
 }
 

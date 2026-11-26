@@ -214,8 +214,11 @@ public sealed class CliTests
                               diff against the new file. Each diff has the headers of git and applies with git apply. Then
                               records the new generation there. Leaves out the sample when the solution has no
                               src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless --sample or --no-sample
-                              says. Writes protected files: a maintainer runs it, never an agent. Its last line gives the
-                              dotnet new install that brings the item templates of dotnet new to the version of the tool.
+                              says. Its last line gives the dotnet new install that brings the item templates of dotnet new
+                              to the version of the tool. Writes protected files: an agent runs it only when its task asks
+                              for it, resolves the conflicts in the files of the application alone, never edits a protected
+                              file by hand, and commits the result alone, listing every protected file it changed, for a
+                              maintainer to review and approve with the label hardslice-approved.
 
             Exit codes of upgrade: 0 nothing left to merge (merged files listed, to review), 1 the upgrade failed (with a change in the
             git tree, nothing is written), 2 a wrong command line, 3 conflicts to resolve or files left to merge or to review, listed.

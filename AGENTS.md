@@ -17,7 +17,7 @@ dotnet test --no-build
 ## Do not break
 
 - Everything the packages ship is frozen once published: the generated code, the agent kit, the rule sheets, the texts of the diagnostics, the package READMEs, the format of `hardslice.json`, the exit codes of `dotnet hardslice` and the list of protected files. Change them deliberately, with a test.
-- The generated `AGENTS.md` stays under 150 lines, with and without the sample.
+- The generated `AGENTS.md` stays under 150 lines, with and without the sample, a paragraph written one sentence per line counting for one.
 - The generated solution takes no runtime dependency on HardSlice.
 - The rule table of `README.md` lists every sheet of `docs/rules/` and no other, and every relative link of the documentation exists (`ReadmeTests`).
 - `docs/agents/support.md` and `docs/performance/analyzers.md` keep their paths: tests and `scripts/measure-analyzers.sh` read them.
