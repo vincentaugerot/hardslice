@@ -10,7 +10,8 @@ namespace HardSlice.Tool;
 // merge-file, its conflicts written between git markers. A file without a recorded generation, as in a solution generated before
 // it was recorded, is never written over: it is listed with its diff, in the format of git, for a maintainer or the agent to
 // merge. A file that the template may have moved is listed with its diff against its new path. Last, the generation of the
-// template replaces .hardslice/generation/, the base of the next upgrade.
+// template replaces .hardslice/generation/, the base of the next upgrade. Its last line is the dotnet new install that brings the
+// item templates of the machine to the same version (InstalledTemplates).
 internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator generator, TextWriter output, TextWriter error)
 {
     // The upgrade wrote what it could, and conflicts or files of the application are left to merge, or HardSlice files are no
@@ -231,6 +232,7 @@ internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator g
         if (left + plan.Conflicts.Count == 0)
         {
             output.WriteLine($"==> Upgrade done: {summary}. Review the changes with 'git diff', then run 'dotnet hardslice check'.");
+            output.WriteLine(InstalledTemplates.AfterUpgrade(version));
             return 0;
         }
 
@@ -241,6 +243,7 @@ internal sealed class UpgradeCommand(ICommandRunner runner, ITemplateGenerator g
             _ => "Merge the files listed above",
         };
         output.WriteLine($"==> Upgrade done: {summary}. {todo}, review the changes with 'git diff', then run 'dotnet hardslice check'.");
+        output.WriteLine(InstalledTemplates.AfterUpgrade(version));
         return MergeLeft;
     }
 

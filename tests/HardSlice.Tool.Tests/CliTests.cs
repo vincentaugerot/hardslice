@@ -179,6 +179,7 @@ public sealed class CliTests
               check           Builds the solution, then runs its unit, architecture and integration tests,
                               and fails while a TODO(hardslice): marker is left in src/ or tests/.
                               Stops at the first step that fails, its output left as is. The only verdict on the work.
+                              Warns, without failing, when the item templates of dotnet new are not at its version.
               check --build   The incremental build alone, errors only, then the TODO(hardslice): markers:
                               the verification after an edit. Its success does not mean the work is done.
 
@@ -213,7 +214,8 @@ public sealed class CliTests
                               diff against the new file. Each diff has the headers of git and applies with git apply. Then
                               records the new generation there. Leaves out the sample when the solution has no
                               src/<name>/Features/Bookings/ nor src/<name>.Domain/Bookings/, unless --sample or --no-sample
-                              says. Writes protected files: a maintainer runs it, never an agent.
+                              says. Writes protected files: a maintainer runs it, never an agent. Its last line gives the
+                              dotnet new install that brings the item templates of dotnet new to the version of the tool.
 
             Exit codes of upgrade: 0 nothing left to merge (merged files listed, to review), 1 the upgrade failed (with a change in the
             git tree, nothing is written), 2 a wrong command line, 3 conflicts to resolve or files left to merge or to review, listed.

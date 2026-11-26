@@ -7151,12 +7151,35 @@ run_upgrade() {
   upgrade_output="$(cd "$app" && dotnet hardslice upgrade "$@" 2>&1)" || upgrade_status=$?
 }
 
+# PB-124: the last line of an upgrade that wrote the solution, the dotnet new install of the item templates at the version of the tool.
+upgrade_install_line() {
+  printf '%s' "==> Before generating anything with dotnet new, run 'dotnet new install HardSlice.Templates@$hardslice_version' from the root of the solution: " \
+    "otherwise dotnet new serves the item templates of the version installed before, and an option that already existed generates the code of that version without a word."
+}
+
+# PB-124: the version of HardSlice.Templates that install_other_templates installs, never that of the tool.
+other_templates_version=0.0.1-installed
+
+# Packs the template of the earlier commit under another version than the tool, once, and installs it in the hive of dotnet new of
+# the run, under the DOTNET_CLI_HOME of isolate_dotnet_cli_home: the item templates of the probes never read it, each of them names
+# a hive of its own. The caller uninstalls it.
+install_other_templates() {
+  local feed="$work/other-templates-feed"
+  install_earlier_template
+  if [[ ! -d "$feed" ]]; then
+    dotnet pack "$work/earlier-template-source/src/HardSlice.Templates/HardSlice.Templates.csproj" --configuration Release --output "$feed" \
+      "-p:Version=$other_templates_version" > /dev/null
+  fi
+  dotnet new install "$feed/HardSlice.Templates.$other_templates_version.nupkg" > /dev/null
+}
+
 # Generates <name> with the earlier template and its options, completes it as an application would (a module and a command slice of
 # the item templates of that build, AGENTS.md completed, a protected file changed by hand and approved), commits it, then:
 # the upgrade refuses a tree with a change; it rewrites every file that the template owns as the current template generates it,
 # adds the new files, lists the files the template moved with their diff against the new file, which says that they differ only by
 # their namespace, and lists AGENTS.md and Program.cs with their diff in the format of git, left as is. Merged with git apply from
-# the listed diffs, the solution passes the check, and a second upgrade rewrites and adds nothing.
+# the listed diffs, the solution passes the check, and a second upgrade rewrites and adds nothing. PB-124: each upgrade ends with the
+# dotnet new install of the item templates at the version of the tool, and the check warns while those installed are at another one.
 probe_upgrade() {
   local name="$1"
   shift
@@ -7164,7 +7187,7 @@ probe_upgrade() {
   local app_name="$name"
   local app_src="$work/$name/src/$name"
   local fresh="$work/$name-fresh"
-  local module_output command_output path old expected protected_paths
+  local module_output command_output path old expected protected_paths check_output check_status
 
   install_earlier_template
   echo "==> Generating $name $* with the template of commit ${upgrade_base_commit:0:7}, then completing it as an application"
@@ -7199,6 +7222,10 @@ probe_upgrade() {
   printf '%s\n' "$upgrade_output"
   if [[ "$upgrade_status" != 3 ]]; then
     echo "error: dotnet hardslice upgrade exited with code $upgrade_status on $name instead of 3, files left to merge." >&2
+    exit 1
+  fi
+  if [[ "$(tail -n 1 <<< "$upgrade_output")" != "$(upgrade_install_line)" ]]; then
+    echo "error: the last line of dotnet hardslice upgrade on $name is not the dotnet new install of HardSlice.Templates $hardslice_version." >&2
     exit 1
   fi
   dotnet new hardslice-api --name "$name" --output "$fresh" "$@" --debug:custom-hive "$work/template-hive" > /dev/null
@@ -7267,7 +7294,18 @@ probe_upgrade() {
       "src/$name/Program.cs") register_module "$module_output" ;;
     esac
   done < <(upgrade_list "Files of the application that differ from the template")
-  bash "$app/scripts/check.sh"
+  # PB-124: the item templates of dotnet new still at another version, as after an upgrade without the dotnet new install of its
+  # last line: the check passes, then warns with that command.
+  install_other_templates
+  check_status=0
+  check_output="$(bash "$app/scripts/check.sh" 2>&1)" || check_status=$?
+  dotnet new uninstall HardSlice.Templates > /dev/null
+  printf '%s\n' "$check_output"
+  if [[ "$check_status" != 0 || "$(tail -n 1 <<< "$check_output")" != "warning: the item templates of dotnet new are those of HardSlice.Templates $other_templates_version, not $hardslice_version as dotnet hardslice: dotnet new hardslice-module, hardslice-command and the other item templates generate the code of $other_templates_version. Run 'dotnet new install HardSlice.Templates@$hardslice_version' from the root of the solution before generating anything. The check does not fail on it." ]]; then
+    echo "error: the check of $name merged exited with code $check_status, or did not end with the warning on HardSlice.Templates $other_templates_version installed." >&2
+    exit 1
+  fi
+  echo "    the check passes, then warns that the item templates installed are HardSlice.Templates $other_templates_version"
 
   echo "==> Checking that a second upgrade of $name rewrites and lists nothing"
   app_git add --all
@@ -7278,6 +7316,10 @@ probe_upgrade() {
     "$(grep -c '^    ' <<< "$upgrade_output")" != 0 || -n "$(git -C "$app" status --porcelain)" ]]; then
     printf '%s\n' "$upgrade_output" >&2
     echo "error: a second upgrade of $name changed the solution or listed a file (code $upgrade_status)." >&2
+    exit 1
+  fi
+  if [[ "$(tail -n 1 <<< "$upgrade_output")" != "$(upgrade_install_line)" ]]; then
+    echo "error: the last line of the second upgrade of $name is not the dotnet new install of HardSlice.Templates $hardslice_version." >&2
     exit 1
   fi
   echo "    code 0, nothing rewritten, added nor listed"

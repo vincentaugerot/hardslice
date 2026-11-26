@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 
 namespace HardSlice.Tool;
@@ -13,8 +14,9 @@ internal interface ICommandRunner
     bool Succeeds(string fileName, IReadOnlyList<string> arguments, string workingDirectory);
 
     // Runs a command and returns its exit code with its output and its errors, read in UTF-8, never shown: a command that cannot
-    // start exits with CheckCommand.Failure and says why in its errors.
-    CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory);
+    // start exits with CheckCommand.Failure and says why in its errors. With a timeout, a command still running after it is killed
+    // with the processes it started, and exits with CheckCommand.Failure, its errors saying so.
+    CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory, TimeSpan? timeout = null);
 
     // The same runner, except that Run writes the output and the errors of its commands to the writer, line by line, instead of
     // the console: a hook hands them to the agent on its own streams.
@@ -107,7 +109,7 @@ internal sealed class ProcessRunner(Func<string, string?> environment, TextWrite
         }
     }
 
-    public CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory)
+    public CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory, TimeSpan? timeout = null)
     {
         var startInfo = StartInfo(fileName, arguments, workingDirectory);
         startInfo.RedirectStandardOutput = true;
@@ -122,6 +124,13 @@ internal sealed class ProcessRunner(Func<string, string?> environment, TextWrite
             // Both streams are read at once so that a verbose command never blocks on a full pipe.
             var standardOutput = process.StandardOutput.ReadToEndAsync();
             var standardError = process.StandardError.ReadToEndAsync();
+            if (timeout is { } limit && !process.WaitForExit(limit))
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit();
+                return new CommandOutput(CheckCommand.Failure, "", $"error: '{fileName}' did not exit within {limit.TotalSeconds.ToString("0.#", CultureInfo.InvariantCulture)} seconds and was stopped.");
+            }
+
             process.WaitForExit();
             return new CommandOutput(process.ExitCode, standardOutput.GetAwaiter().GetResult(), standardError.GetAwaiter().GetResult());
         }

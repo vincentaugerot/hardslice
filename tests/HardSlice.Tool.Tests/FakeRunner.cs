@@ -49,9 +49,13 @@ internal sealed class FakeRunner : ICommandRunner
     public bool Succeeds(string fileName, IReadOnlyList<string> arguments, string workingDirectory) =>
         Record(fileName, arguments, workingDirectory) == 0;
 
+    // The timeout of each command run by Capture, in order.
+    public List<TimeSpan?> Timeouts { get; } = [];
+
     // The output given with the command is its standard output.
-    public CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory)
+    public CommandOutput Capture(string fileName, IReadOnlyList<string> arguments, string workingDirectory, TimeSpan? timeout = null)
     {
+        Timeouts.Add(timeout);
         var exitCode = Record(fileName, arguments, workingDirectory, write: false);
         var command = Commands[^1];
         return new CommandOutput(exitCode, _outputs.FirstOrDefault(output => command.StartsWith(output.Key, StringComparison.Ordinal)).Value ?? "", "");

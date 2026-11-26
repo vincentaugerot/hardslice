@@ -9,6 +9,12 @@ public sealed class UpgradeCommandTests : IDisposable
     private readonly TemporarySolution _solution = new();
     private readonly FakeGenerator _generator = new();
 
+    // PB-124: the last line of every upgrade that wrote the solution, the dotnet new install that brings the item templates of the
+    // machine to the version of the tool.
+    private static readonly string InstallLine =
+        $"==> Before generating anything with dotnet new, run 'dotnet new install HardSlice.Templates@{ToolVersion.Current}' from the root of the solution: "
+        + "otherwise dotnet new serves the item templates of the version installed before, and an option that already existed generates the code of that version without a word.";
+
     public UpgradeCommandTests()
     {
         // The solution as an earlier template generated it, then completed by the application.
@@ -84,6 +90,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "+- None yet.",
             "==> The generation of the template is recorded in .hardslice/generation/ (8 files): the next upgrade merges the files of the application from it.",
             "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 0 updated, 0 merged, 0 removed, 0 conflicts to resolve, 1 file left to merge or to review. Merge the files listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.",
+            InstallLine,
         ]);
         // PB-095: the solution recorded no generation, as Ghostline before its first upgrade: it now records the one of the template.
         Read(".hardslice/generation/AGENTS.md").ShouldBe(_generator.Files["AGENTS.md"]);
@@ -128,6 +135,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "    tests/Demo.ArchitectureTests/SliceTests.cs",
             "==> The generation of the template is recorded in .hardslice/generation/ (7 files): the next upgrade merges the files of the application from it.",
             "==> Upgrade done: 1 HardSlice file rewritten, 0 files added, 0 updated, 0 merged, 0 removed, 0 conflicts to resolve, 0 files left to merge or to review. Review the changes with 'git diff', then run 'dotnet hardslice check'.",
+            InstallLine,
         ]);
     }
 
@@ -248,7 +256,7 @@ public sealed class UpgradeCommandTests : IDisposable
         Lines(output).ShouldContain(
             "==> HardSlice files that the template does not generate, left as is (1). Delete each one that an older template generated, keep one that a maintainer added:");
         Lines(output).ShouldContain("    tests/Demo.ArchitectureTests/SliceTests.cs");
-        Lines(output)[^1].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
+        Lines(output)[^2].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
     }
 
     // Ghostline: the template moved the HTTP answers from Shared/Behaviors to Shared/Http. The new file is added, and the old one,
@@ -286,7 +294,7 @@ public sealed class UpgradeCommandTests : IDisposable
         ]);
         lines[title + 11].ShouldBe(
             "==> src/Demo/Shared/Behaviors/DomainExceptionHandler.cs differs from src/Demo/Shared/Http/DomainExceptionHandler.cs only by its namespace declaration: nothing to merge, delete it.");
-        lines[^1].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
+        lines[^2].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
     }
 
     // A moved file that the application changed has its diff, without the line of the namespace: what the application changed is
@@ -450,6 +458,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "    src/Demo/Program.cs",
             "==> .hardslice/generation/ now holds the generation of the template " + ToolVersion.Current + ", the base of the next upgrade.",
             "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 1 updated, 2 merged, 0 removed, 0 conflicts to resolve, 0 files left to merge or to review. Review the changes with 'git diff', then run 'dotnet hardslice check'.",
+            InstallLine,
         ]);
         foreach (var path in new[] { "AGENTS.md", "src/Demo/Program.cs", "src/Demo/Shared/Messaging/Mediator.cs", "src/Demo/Shared/Persistence/AppDbContext.cs", "src/Demo/Shared/Http/DomainExceptionHandler.cs" })
             Read(".hardslice/generation/" + path).ShouldBe(_generator.Files[path], path);
@@ -469,6 +478,7 @@ public sealed class UpgradeCommandTests : IDisposable
         error.ShouldBeEmpty();
         Lines(output)[2..].ShouldBe([
             "==> Upgrade done: 0 HardSlice files rewritten, 0 files added, 0 updated, 0 merged, 0 removed, 0 conflicts to resolve, 0 files left to merge or to review. Review the changes with 'git diff', then run 'dotnet hardslice check'.",
+            InstallLine,
         ]);
         Runner.Capture("git", ["status", "--porcelain"], _solution.Root).Output.ShouldBeEmpty();
     }
@@ -499,9 +509,10 @@ public sealed class UpgradeCommandTests : IDisposable
             $"==> Conflicts to resolve (1). Each file holds both changes between git conflict markers: '<<<<<<< solution', then '||||||| generation {ToolVersion.Current}' "
             + $"before the lines as the template generated them, then '=======' before '>>>>>>> template {ToolVersion.Current}'. Keep what each side needs, then remove the markers:");
         lines.ShouldContain("    AGENTS.md");
-        lines[^1].ShouldBe(
+        lines[^2].ShouldBe(
             "==> Upgrade done: 1 HardSlice file rewritten, 2 files added, 1 updated, 1 merged, 0 removed, 1 conflict to resolve, 0 files left to merge or to review. "
             + "Resolve the conflicts listed above, review the changes with 'git diff', then run 'dotnet hardslice check'.");
+        lines[^1].ShouldBe(InstallLine);
         Read(".hardslice/generation/AGENTS.md").ShouldBe(_generator.Files["AGENTS.md"]);
     }
 
@@ -549,7 +560,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "==> Files that the application deleted and the template changed, left deleted (1). Restore one that the application needs from .hardslice/generation/, which holds the new generation:");
         lines.ShouldContain("    src/Demo/Shared/Messaging/Mediator.cs");
         output.ShouldNotContain("LoggingBehavior.cs");
-        lines[^1].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
+        lines[^2].ShouldContain(" 1 file left to merge or to review. Merge the files listed above");
         Read(".hardslice/generation/src/Demo/Shared/Messaging/Mediator.cs").ShouldBe(_generator.Files["src/Demo/Shared/Messaging/Mediator.cs"]);
     }
 
@@ -576,7 +587,7 @@ public sealed class UpgradeCommandTests : IDisposable
             "==> Files of the application that the template no longer generates, changed by the application, left as is (1). Delete each one that the application no longer needs:");
         lines.ShouldContain("    src/Demo/Shared/Behaviors/ValidationBehavior.cs");
         output.ShouldNotContain("may have moved");
-        lines[^1].ShouldContain(", 1 removed, 0 conflicts to resolve, 1 file left to merge or to review.");
+        lines[^2].ShouldContain(", 1 removed, 0 conflicts to resolve, 1 file left to merge or to review.");
         Directory.Exists(Path.Combine(_solution.Root, ".hardslice/generation/src/Demo/Shared/Behaviors")).ShouldBeFalse();
     }
 

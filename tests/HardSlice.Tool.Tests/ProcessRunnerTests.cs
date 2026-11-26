@@ -30,6 +30,34 @@ public sealed class ProcessRunnerTests
         output.ToString().ShouldStartWith("error: 'hardslice-no-such-command' cannot start: ");
     }
 
+    // PB-124: the check reads the item templates of dotnet new with a timeout: a command that does not answer within it is stopped,
+    // and fails, instead of holding the check.
+    [Fact]
+    public void A_captured_command_still_running_after_its_timeout_is_stopped_and_fails()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Skip("sleep is a command of Linux and macOS.");
+
+        var watch = Stopwatch.StartNew();
+        var result = new ProcessRunner(_ => null).Capture("sleep", ["30"], Path.GetTempPath(), TimeSpan.FromMilliseconds(200));
+
+        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(10));
+        result.ExitCode.ShouldBe(CheckCommand.Failure);
+        result.Error.ShouldBe("error: 'sleep' did not exit within 0.2 seconds and was stopped.");
+    }
+
+    [Fact]
+    public void A_captured_command_that_exits_within_its_timeout_keeps_its_code_and_output()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Skip("sh is a command of Linux and macOS.");
+
+        var result = new ProcessRunner(_ => null).Capture("sh", ["-c", "echo listed; exit 3"], Path.GetTempPath(), TimeSpan.FromSeconds(30));
+
+        result.ExitCode.ShouldBe(3);
+        result.Output.ShouldBe("listed\n");
+    }
+
     // A folder of the user: the first account that runs a hook never owns the state of the others.
     [Fact]
     public void The_state_of_the_hooks_lives_in_a_folder_of_the_user()

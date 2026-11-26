@@ -4,6 +4,8 @@ namespace HardSlice.Tool.Tests;
 // the code 1, then fails on the TODO(hardslice): markers left. check --build is the incremental build alone, then the same markers.
 public sealed class CheckCommandTests
 {
+    // PB-124: the full check reads first the version of the item templates that dotnet new serves.
+    private const string ListTemplates = "dotnet new uninstall";
     private const string Build = "dotnet build Demo.slnx";
     private const string UnitTests = "dotnet test --project tests/Demo.Tests/Demo.Tests.csproj --no-build";
     private const string ArchitectureTests = "dotnet test --project tests/Demo.ArchitectureTests/Demo.ArchitectureTests.csproj --no-build";
@@ -29,7 +31,7 @@ public sealed class CheckCommandTests
         var (exitCode, output, error) = Check(runner, solution.Root);
 
         exitCode.ShouldBe(0);
-        runner.Commands.ShouldBe([Build, UnitTests, ArchitectureTests, ContainerRuntime, IntegrationTests]);
+        runner.Commands.ShouldBe([ListTemplates, Build, UnitTests, ArchitectureTests, ContainerRuntime, IntegrationTests]);
         runner.WorkingDirectories.ShouldAllBe(directory => directory == solution.Root);
         Lines(output).ShouldBe([
             "==> Building Demo.slnx",
@@ -57,7 +59,7 @@ public sealed class CheckCommandTests
         var (exitCode, output, error) = Check(runner, solution.Root);
 
         exitCode.ShouldBe(1);
-        runner.Commands.ShouldBe([Build, UnitTests, ArchitectureTests, ContainerRuntime, IntegrationTests]);
+        runner.Commands.ShouldBe([ListTemplates, Build, UnitTests, ArchitectureTests, ContainerRuntime, IntegrationTests]);
         output.ShouldNotContain("Check passed");
         Lines(error).ShouldBe([
             "error: 2 TODO(hardslice): markers are left in src/ and tests/: each one is work a generated element leaves to do. "
@@ -343,18 +345,18 @@ public sealed class CheckCommandTests
 
         Check(runner, folder).ExitCode.ShouldBe(0);
 
-        runner.Commands[0].ShouldBe("dotnet build Rooms.slnx");
+        runner.Commands[1].ShouldBe("dotnet build Rooms.slnx");
         runner.WorkingDirectories.ShouldAllBe(directory => directory == solution.Root);
     }
 
     // The contract of the exit codes: 0 the check passed, 1 a step failed, whatever the code of the step, and 2 a wrong command
     // line only. Microsoft.Testing.Platform exits 2 when a test fails: that code never reaches the caller.
     [Theory]
-    [InlineData(Build, 1, 1)]
-    [InlineData(UnitTests, 2, 2)]
-    [InlineData(ArchitectureTests, 8, 3)]
-    [InlineData(IntegrationTests, 5, 5)]
-    [InlineData(IntegrationTests, 2, 5)]
+    [InlineData(Build, 1, 2)]
+    [InlineData(UnitTests, 2, 3)]
+    [InlineData(ArchitectureTests, 8, 4)]
+    [InlineData(IntegrationTests, 5, 6)]
+    [InlineData(IntegrationTests, 2, 6)]
     public void Check_stops_at_the_first_failing_step_with_exit_code_1(string failingStep, int stepExitCode, int commandsRun)
     {
         using var solution = new TemporarySolution();
@@ -564,7 +566,7 @@ public sealed class CheckCommandTests
         var (exitCode, output, error) = Check(runner, solution.Root);
 
         exitCode.ShouldBe(CheckCommand.Failure);
-        runner.Commands.ShouldBe([Build]);
+        runner.Commands.ShouldBe([ListTemplates, Build]);
         Lines(output).ShouldBe(["==> Building Demo.slnx", AnalyzersReceived]);
         Lines(error)[0].ShouldBe($"error: src/Demo/Demo.csproj does not receive HardSlice.Analyzers {ToolVersion.Current}: {reason}.");
         Lines(error)[1].ShouldStartWith("error: a project without HardSlice.Analyzers builds without the HardSlice rules. Directory.HardSlice.props, imported by Directory.Packages.props");
@@ -628,7 +630,7 @@ public sealed class CheckCommandTests
         var (exitCode, output, error) = Check(runner, solution.Root);
 
         exitCode.ShouldBe(CheckCommand.Failure);
-        runner.Commands.ShouldBeEmpty();
+        runner.Commands.ShouldBe([ListTemplates]);
         output.ShouldBeEmpty();
         error.ShouldBe(
             $"error: Demo.slnx does not build {solution.TestProjects[left]}: its tests would run on the binaries of an older build. "
@@ -645,7 +647,7 @@ public sealed class CheckCommandTests
         var (exitCode, _, error) = Check(runner, solution.Root);
 
         exitCode.ShouldBe(CheckCommand.Failure);
-        runner.Commands.ShouldBeEmpty();
+        runner.Commands.ShouldBe([ListTemplates]);
         error.ShouldStartWith("error: Demo.slnx is not valid XML");
     }
 
@@ -682,6 +684,122 @@ public sealed class CheckCommandTests
         {
             Directory.Delete(directory);
         }
+    }
+
+    // PB-124: the list of 'dotnet new uninstall', as the SDK 10.0.401 prints it, with the version of HardSlice.Templates installed
+    // in the hive of the machine.
+    private static string TemplatesListing(string version, string language = "en") => language == "fr"
+        ? $"""
+            Éléments actuellement installés :
+               HardSlice.Templates
+                  Version : {version}
+                  Détails :
+                     NuGetSource: https://api.nuget.org/v3/index.json
+                  Modèles :
+                     HardSlice API (hardslice-api) C#
+                  Commande de désinstallation :
+                     dotnet new uninstall HardSlice.Templates
+
+            """
+        : $"""
+            Currently installed items:
+               Microsoft.DotNet.Common.ProjectTemplates.10.0
+                  Version: 10.0.100
+                  Details:
+                     Author: Microsoft
+                  Templates:
+                     Class Library (classlib) C#
+                  Uninstall Command:
+                     dotnet new uninstall Microsoft.DotNet.Common.ProjectTemplates.10.0
+               HardSlice.Templates
+                  Version: {version}
+                  Details:
+                     NuGetSource: https://api.nuget.org/v3/index.json
+                  Templates:
+                     HardSlice API (hardslice-api) C#
+                     HardSlice module (hardslice-module) C#
+                  Uninstall Command:
+                     dotnet new uninstall HardSlice.Templates
+
+            """;
+
+    private static string TemplatesWarning(string installed) =>
+        $"warning: the item templates of dotnet new are those of HardSlice.Templates {installed}, not {ToolVersion.Current} as dotnet hardslice: "
+        + $"dotnet new hardslice-module, hardslice-command and the other item templates generate the code of {installed}. "
+        + $"Run 'dotnet new install HardSlice.Templates@{ToolVersion.Current}' from the root of the solution before generating anything. The check does not fail on it.";
+
+    // Ottawa vs Gatineau, after its upgrade to 0.3.0-preview.2: dotnet new kept the item templates of 0.3.0-preview.1, and an
+    // option that already existed would have generated the old code without a word.
+    [Theory]
+    [InlineData("en")]
+    [InlineData("fr")]
+    public void A_passing_check_warns_after_its_verdict_when_the_item_templates_installed_are_at_another_version(string language)
+    {
+        using var solution = new TemporarySolution();
+        var runner = new FakeRunner().Failing(ListTemplates, 0, TemplatesListing("0.3.0-preview.1", language));
+
+        var (exitCode, output, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldBe([ListTemplates, Build, UnitTests, ArchitectureTests, ContainerRuntime, IntegrationTests]);
+        runner.Timeouts.ShouldBe([TimeSpan.FromSeconds(5)]);
+        Lines(output)[^1].ShouldBe("==> Check passed");
+        Lines(error).ShouldBe([TemplatesWarning("0.3.0-preview.1")]);
+    }
+
+    [Fact]
+    public void A_failing_check_warns_too_and_keeps_its_code()
+    {
+        using var solution = new TemporarySolution();
+        var runner = new FakeRunner().Failing(ListTemplates, 0, TemplatesListing("0.2.0")).Failing(UnitTests, 2);
+
+        var (exitCode, _, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(CheckCommand.Failure);
+        Lines(error)[^1].ShouldBe(TemplatesWarning("0.2.0"));
+    }
+
+    // The same version, in any case, and every listing that does not give one: nothing installed, dotnet new failing or
+    // stopped after its timeout, or a list that the tool cannot read. A CI runner never installs the item templates.
+    [Theory]
+    [InlineData(0, "same version")]
+    [InlineData(0, "same version in upper case")]
+    [InlineData(0, "")]
+    [InlineData(0, "Currently installed items:\n   Microsoft.DotNet.Common.ProjectTemplates.10.0\n      Version: 10.0.100\n")]
+    [InlineData(0, "Currently installed items:\n   HardSlice.Templates\n      Details:\n")]
+    [InlineData(0, "Currently installed items:\n   HardSlice.Templates\n      Version: unknown\n")]
+    [InlineData(0, "Uninstall Command:\n   dotnet new uninstall HardSlice.Templates\n      Version: 0.1.0\n")]
+    [InlineData(1, "listing of another version")]
+    public void Check_says_nothing_of_the_item_templates_when_they_are_at_its_version_or_their_version_cannot_be_read(int listExitCode, string listing)
+    {
+        using var solution = new TemporarySolution();
+        var output = listing switch
+        {
+            "same version" => TemplatesListing(ToolVersion.Current),
+            "same version in upper case" => TemplatesListing(ToolVersion.Current.ToUpperInvariant()),
+            "listing of another version" => TemplatesListing("0.1.0"),
+            _ => listing,
+        };
+        var runner = new FakeRunner().Failing(ListTemplates, listExitCode, output);
+
+        var (exitCode, _, error) = Check(runner, solution.Root);
+
+        exitCode.ShouldBe(0);
+        error.ShouldBeEmpty();
+    }
+
+    // check --build runs after each edit: it never starts dotnet new.
+    [Fact]
+    public void Check_build_never_reads_the_item_templates()
+    {
+        using var solution = new TemporarySolution();
+        var runner = new FakeRunner().Failing(ListTemplates, 0, TemplatesListing("0.1.0"));
+
+        var (exitCode, _, error) = Check(runner, solution.Root, "--build");
+
+        exitCode.ShouldBe(0);
+        runner.Commands.ShouldNotContain(ListTemplates);
+        error.ShouldBeEmpty();
     }
 
     private static (int ExitCode, string Output, string Error) Check(FakeRunner runner, string currentDirectory, params string[] mode)

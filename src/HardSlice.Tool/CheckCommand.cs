@@ -49,11 +49,22 @@ internal sealed class CheckCommand(ICommandRunner runner, TextWriter output, Tex
         if (!AnalyzerVersion.Imports(solution, ToolVersion.Current, error))
             return Failure;
 
-        return mode switch
-        {
-            CheckMode.Build => RunBuild(solution),
-            _ => RunFull(solution),
-        };
+        if (mode == CheckMode.Build)
+            return RunBuild(solution);
+
+        var installed = InstalledTemplates.Version(runner, solution.Root);
+        var exitCode = RunFull(solution);
+        TemplatesWarning(installed);
+        return exitCode;
+    }
+
+    // The full check warns, after its verdict and without changing it, when the item templates that dotnet new serves are not
+    // at the version of the tool, as after an upgrade without the dotnet new install of its last line. It says nothing when it
+    // cannot read their version, as on a CI runner that never installed them. check --build, run after each edit, never reads it.
+    private void TemplatesWarning(string? installed)
+    {
+        if (installed is not null && !InstalledTemplates.Matches(installed, ToolVersion.Current))
+            error.WriteLine(InstalledTemplates.Warning(installed, ToolVersion.Current));
     }
 
     // The suffixes of the test projects that the full check runs with --no-build, after the build of the .slnx.

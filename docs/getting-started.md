@@ -96,12 +96,15 @@ After a build, `check` also fails when a project did not receive `HardSlice.Anal
 
 ### Upgrading a generated solution
 
-`dotnet hardslice upgrade` brings a solution to the template of the version of the tool. From a git tree without changes, update the tool, then run it:
+`dotnet hardslice upgrade` brings a solution to the template of the version of the tool. From a git tree without changes, update the tool, run it, then bring the item templates of `dotnet new` to the same version before generating anything:
 
 ```text
 dotnet tool update hardslice.tool --version <new version>
 dotnet hardslice upgrade
+dotnet new install HardSlice.Templates@<new version>
 ```
+
+The upgrade generates in a template hive of its own, so the item templates that `dotnet new` serves on the machine stay at the version installed before. Until you install the new one, `dotnet new hardslice-module`, `hardslice-command` and the other item templates refuse an option that this version added, and an option that already existed generates the code of the previous version without a word. The last line of the upgrade gives that `dotnet new install`, to run from the root of the solution so that its `nuget.config` files choose the source, as for the upgrade. `dotnet new` replaces the installed version without `--force`. Then `dotnet hardslice check` warns, without failing, while the item templates installed are at another version than the tool, with the same command, and says nothing when it cannot read their version, as on a CI runner that never installed them.
 
 - It generates `hardslice-api` again at the version of the tool, under the name of the solution, in a temporary folder and a template hive of its own, from the package sources of the `nuget.config` files of the solution. It leaves out the sample when the solution has neither `src/<App>/Features/Bookings/` nor `src/<App>.Domain/Bookings/`: `--sample` or `--no-sample` says otherwise.
 - It rewrites the files that the template owns, the [protected files](agent-loop.md#protected-files) and the rule sheets of `docs/rules/`, and lists them. A change that a maintainer made to one of them is gone: `git diff` shows it, to put back while it still applies.
